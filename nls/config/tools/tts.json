@@ -1,0 +1,74 @@
+{
+  "name": "tts",
+  "description": "Convert text to speech and save as an audio file. Uses pyttsx3 (offline) or an API.",
+  "version": "1.0.0",
+  "category": "create",
+  "hormone_affinity": "oxytocin",
+  "base_effort": 0.3,
+  "learning_yield": "low",
+  "risk_level": "write",
+  "platform": "desktop",
+  "permissions": [
+    "filesystem.write"
+  ],
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "text": {
+        "type": "string",
+        "description": "Text to speak"
+      },
+      "output_path": {
+        "type": "string",
+        "description": "Path to save audio file",
+        "default": "speech.mp3"
+      },
+      "rate": {
+        "type": "integer",
+        "description": "Speech rate (words per minute)",
+        "default": 150
+      }
+    },
+    "required": [
+      "text"
+    ]
+  },
+  "manual": {
+    "overview": "Use when you need to convert text to spoken audio—accessibility, voiceovers, or audio versions of content. Uses pyttsx3 offline by default.",
+    "examples": [
+      {
+        "input": {
+          "text": "Welcome to our application. Log in to continue.",
+          "output_path": "welcome.mp3"
+        },
+        "description": "Generate a welcome message for an app"
+      },
+      {
+        "input": {
+          "text": "The quick brown fox jumps over the lazy dog.",
+          "rate": 120,
+          "output_path": "slow_speech.mp3"
+        },
+        "description": "Create slower-paced narration for readability"
+      }
+    ],
+    "tips": [
+      "Keep chunks under ~500 chars for stable output; split long text into segments",
+      "Adjust rate (default 150) lower for clarity, higher for brisk narration",
+      "Output format depends on backend; pyttsx3 may produce WAV instead of MP3"
+    ],
+    "edge_cases": [
+      "Special characters or emoji in text can cause synthesis errors or be skipped",
+      "pyttsx3 quality varies by OS; Windows often sounds better than Linux"
+    ],
+    "related_tools": [
+      "audio_transcribe",
+      "translate",
+      "image_generate"
+    ]
+  },
+  "executor": {
+    "type": "shell",
+    "command": "python -c \"import pyttsx3; e=pyttsx3.init(); e.setProperty('rate',{{args.rate}}); e.save_to_file('{{args.text}}','{{args.output_path}}'); e.runAndWait(); print('Saved to {{args.output_path}}')\""
+  }
+}

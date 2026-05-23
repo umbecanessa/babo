@@ -1,0 +1,66 @@
+{
+  "name": "slack_webhook",
+  "description": "Send messages to a Slack channel via incoming webhook",
+  "category": "communication",
+  "difficulty": "basic",
+  "prerequisites": [
+    "curl available in PATH",
+    "Slack webhook URL from the user"
+  ],
+  "steps": [
+    {
+      "description": "Test the webhook with a simple message",
+      "tool": "bash",
+      "example_params": {
+        "command": "curl -s -X POST \"$SLACK_WEBHOOK_URL\" -H \"Content-Type: application/json\" -d '{\"text\": \"Hello from NLS agent!\"}'"
+      },
+      "expected_outcome": "ok",
+      "error_patterns": [
+        "invalid_payload - malformed JSON",
+        "channel_not_found - webhook URL is invalid or expired",
+        "Connection refused - no internet access"
+      ],
+      "recovery_hints": [
+        "Verify the webhook URL with the user",
+        "Ensure JSON payload has 'text' field"
+      ]
+    },
+    {
+      "description": "Send a formatted message with blocks",
+      "tool": "bash",
+      "example_params": {
+        "command": "curl -s -X POST \"$SLACK_WEBHOOK_URL\" -H \"Content-Type: application/json\" -d '{\"blocks\": [{\"type\": \"header\", \"text\": {\"type\": \"plain_text\", \"text\": \"Status Update\"}}, {\"type\": \"section\", \"text\": {\"type\": \"mrkdwn\", \"text\": \"*Task completed* successfully.\\nAll tests passing.\"}}]}'"
+      },
+      "expected_outcome": "ok",
+      "error_patterns": [],
+      "recovery_hints": []
+    },
+    {
+      "description": "Create a reusable notification script",
+      "tool": "write",
+      "example_params": {
+        "path": "notify_slack.sh",
+        "content": "#!/bin/bash\nMSG=\"${1:-No message provided}\"\ncurl -s -X POST \"$SLACK_WEBHOOK_URL\" \\\n  -H \"Content-Type: application/json\" \\\n  -d \"{\\\"text\\\": \\\"$MSG\\\"}\"\n"
+      },
+      "expected_outcome": "Script created",
+      "error_patterns": [],
+      "recovery_hints": []
+    },
+    {
+      "description": "Make the script executable",
+      "tool": "bash",
+      "example_params": {
+        "command": "chmod +x notify_slack.sh"
+      },
+      "expected_outcome": "Script is now executable",
+      "error_patterns": [],
+      "recovery_hints": []
+    }
+  ],
+  "learning_signals": [
+    "Slack webhooks accept POST requests to https://hooks.slack.com/services/...",
+    "Payload must include 'text' or 'blocks' field",
+    "Block Kit allows rich formatting: headers, sections, dividers, buttons",
+    "Webhook returns 'ok' on success, error string on failure"
+  ]
+}

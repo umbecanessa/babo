@@ -1,0 +1,89 @@
+{
+  "name": "cron_scheduler",
+  "description": "Schedule and manage recurring tasks using cron-like syntax. Tasks persist across agent restarts.",
+  "version": "1.0.0",
+  "category": "act",
+  "hormone_affinity": "serotonin",
+  "base_effort": 0.3,
+  "learning_yield": "medium",
+  "risk_level": "execute",
+  "platform": "desktop",
+  "permissions": [
+    "shell.execute",
+    "filesystem.write"
+  ],
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": [
+          "add",
+          "list",
+          "remove"
+        ],
+        "description": "Scheduler action"
+      },
+      "name": {
+        "type": "string",
+        "description": "Task name"
+      },
+      "schedule": {
+        "type": "string",
+        "description": "Cron expression (e.g. '0 9 * * *' for daily at 9am)"
+      },
+      "command": {
+        "type": "string",
+        "description": "Command to execute"
+      }
+    },
+    "required": [
+      "action"
+    ]
+  },
+  "manual": {
+    "overview": "Use when you need to schedule recurring tasks—daily backups, periodic checks, or timed workflows. Tasks persist across restarts.",
+    "examples": [
+      {
+        "input": {
+          "action": "add",
+          "name": "daily-backup",
+          "schedule": "0 9 * * *",
+          "command": "tar -czf backup.tar.gz /data"
+        },
+        "description": "Daily backup at 9am"
+      },
+      {
+        "input": {
+          "action": "list"
+        },
+        "description": "List all scheduled tasks"
+      },
+      {
+        "input": {
+          "action": "remove",
+          "name": "daily-backup"
+        },
+        "description": "Remove a scheduled task"
+      }
+    ],
+    "tips": [
+      "Cron format: minute hour day-of-month month day-of-week",
+      "Test command manually before scheduling",
+      "Use absolute paths in commands for reliability"
+    ],
+    "edge_cases": [
+      "Malformed cron expressions may fail silently or misbehave",
+      "Tasks run in background; ensure command has correct env (paths, cwd)"
+    ],
+    "related_tools": [
+      "note_memory",
+      "calendar",
+      "terminal"
+    ]
+  },
+  "executor": {
+    "type": "python",
+    "handler": "nls.engine.tools_extended.CronSchedulerTool"
+  }
+}

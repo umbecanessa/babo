@@ -1,0 +1,110 @@
+{
+  "version": "1.0",
+  "description": "NLS Autonomic Nervous System configuration. Maps to the human ANS: sympathetic (fight-or-flight, error-driven emergency sleep) and parasympathetic (rest-and-digest, scheduled maintenance sleep). Sleep stages: Triage (NREM1), Consolidation (SWS), Integration (REM).",
+
+  "state_machine": {
+    "states": ["awake", "drowsy", "sleeping", "waking"],
+    "initial": "awake",
+    "drowsy_timeout_seconds": 30.0,
+    "max_sleep_duration_seconds": 300.0
+  },
+
+  "signal_collection": {
+    "watched_signals": [
+      "LEARN", "UNKNOWN", "LOOKUP",
+      "REFLECT", "CONNECT", "DOUBT",
+      "EVALUATE",
+      "user_correction", "user_positive", "task_completed"
+    ],
+    "signals_config": "signals.json",
+    "buffer_max_size": 1000,
+    "buffer_persistence": true,
+    "description": "The vagus nerve -- intercepts every response and extracts behavioral signals into a timestamped buffer with hormonal context."
+  },
+
+  "circadian": {
+    "enabled": true,
+    "timezone": "UTC",
+    "bedtime": "02:00",
+    "wake_time": "07:00",
+    "nap_windows": [
+      {"start": "14:00", "end": "14:30", "condition": "signal_pressure"}
+    ],
+    "wake_on_user_message": true,
+    "max_nightly_cycles": 5,
+    "signal_pressure_cap_multiplier": 3.0,
+    "description": "Circadian schedule. Agent sleeps at bedtime, wakes at wake_time. Nap windows are optional daytime consolidation opportunities. When disabled, falls back to legacy reactive triggers."
+  },
+
+  "sleep_triggers": {
+    "signal_count": {
+      "base_threshold": 14,
+      "role": "nap_eligibility",
+      "description": "Determines whether a nap window is worth using and how many nightly cycles to run. No longer triggers sleep directly -- circadian schedule handles timing.",
+      "hormone_modulation": {
+        "cortisol":       { "weight": -0.30, "description": "Stress LOWERS threshold (sleep sooner to fix errors)" },
+        "serotonin":      { "weight":  0.20, "description": "Stability RAISES threshold (no rush, things are working)" },
+        "norepinephrine": { "weight": -0.15, "description": "Curiosity LOWERS threshold (consolidate discoveries faster)" }
+      }
+    },
+    "error_rate": {
+      "window_turns": 30,
+      "threshold": 0.90,
+      "min_turns": 30,
+      "description": "SYMPATHETIC activation -- emergency sleep if >90% of last 30 error/success entries were errors AND at least 30 real turns have elapsed. v1.4: raised from 0.85/25 — agentic team loops produce many recoverable errors. Also deferred when user is active (global guard)."
+    },
+    "idle_timeout_seconds": 600,
+    "periodic_seconds": 3600,
+    "manual_trigger": true,
+    "description": "Legacy triggers (idle_timeout, periodic) only used when circadian.enabled is false. signal_count now serves as nap eligibility. error_rate always active."
+  },
+
+  "sleep_phases": {
+    "triage": {
+      "description": "NREM Stage 1 (light sleep) -- sort and prioritize collected signals. Error corrections first, then new knowledge, then behavior reinforcement.",
+      "priority_order": ["error_correction", "new_knowledge", "behavior_reinforcement"],
+      "max_signals_per_cycle": 150
+    },
+    "consolidation": {
+      "description": "NREM Stage 3 (SWS / deep sleep) — LLM-based memory consolidation. Triage signals, store durable facts, summarize themes (no weight training).",
+      "max_aku_per_cycle": 150,
+      "training": {
+        "learning_rate": 5e-5,
+        "epochs": 3,
+        "batch_size": 2
+      },
+      "merge_strategy": "weighted_ties",
+      "merge_after_n_deltas": 5
+    },
+    "integration": {
+      "description": "REM sleep -- integration and pruning. TIES-merge accumulated deltas into epoch, recalibrate thalamus routing bands, run regression check.",
+      "recalibrate_thalamus": true,
+      "run_regression_check": true,
+      "regression_threshold": 0.10
+    }
+  },
+
+  "post_sleep": {
+    "hormone_reset": {
+      "cortisol":  "baseline",
+      "serotonin": 0.60,
+      "dopamine":  0.55,
+      "description": "Sleep reduces stress to baseline, boosts stability and reward sensitivity. The agent wakes up refreshed -- cortisol gone, serotonin elevated."
+    },
+    "clear_signal_buffer": true,
+    "generate_sleep_report": true,
+    "self_test_prompts": 5,
+    "description": "Post-sleep morning routine. Reset hormones, clear buffer, generate consolidation report, run quick self-test."
+  },
+
+  "sleep_mode_thresholds": {
+    "sympathetic": {
+      "cortisol_above_baseline": 0.50,
+      "error_rate_above": 0.65,
+      "description": "Emergency mode: high cortisol or high error rate. Prioritizes error correction, caps non-error signals. v1.4: raised from 0.40/0.50 — agentic team loops produce many recoverable errors; sympathetic mode was triggering too easily and causing repeated sleep cycles."
+    },
+    "parasympathetic": {
+      "description": "Maintenance mode: default when not in emergency. Full three-phase sleep with balanced priorities."
+    }
+  }
+}

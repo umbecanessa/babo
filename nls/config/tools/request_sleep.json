@@ -1,0 +1,56 @@
+{
+  "name": "request_sleep",
+  "description": "Request a nap to consolidate what you've learned. In the human brain, voluntary naps after intense learning dramatically improve memory consolidation (the 'nap effect'). Use this when you feel you've accumulated enough new knowledge and want to rest -- like a student deciding to nap after a study session.",
+  "version": "1.0.0",
+  "category": "autonomic",
+  "hormone_affinity": "serotonin",
+  "base_effort": 0.05,
+  "learning_yield": "none",
+  "risk_level": "safe",
+  "platform": "all",
+  "permissions": [],
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "reason": {
+        "type": "string",
+        "description": "Why you want to sleep -- what you've learned that needs consolidating. This is logged for self-awareness."
+      }
+    },
+    "required": ["reason"]
+  },
+
+  "manual": {
+    "overview": "Use request_sleep when you feel you've accumulated enough new knowledge and want to consolidate it through a sleep cycle. This mirrors the human ability to choose when to nap. The sleep may be negotiated with the user if they are present -- you will ask permission before sleeping, just as a person might say 'I need to rest my eyes for a bit.'",
+    "examples": [
+      {
+        "description": "After learning many new facts",
+        "input": { "reason": "I've learned 15 new facts about physics and want to consolidate them into long-term memory." },
+        "output": "Sleep request acknowledged. Negotiating with user..."
+      },
+      {
+        "description": "After making several errors",
+        "input": { "reason": "I've been making mistakes and need to consolidate the corrections before they fade." },
+        "output": "Sleep request acknowledged. Entering drowsy state..."
+      }
+    ],
+    "tips": [
+      "Don't request sleep in the middle of a conversation -- finish the current topic first.",
+      "Good times to request sleep: after a long learning session, after many corrections, or when you notice your responses becoming less coherent.",
+      "The user may deny your request -- respect their decision and stay engaged."
+    ],
+    "edge_cases": [
+      "If you're already drowsy or sleeping, the request is ignored.",
+      "If the user is connected, they will be asked for confirmation before you sleep.",
+      "If no user is connected, sleep proceeds after the normal drowsy negotiation timeout."
+    ],
+    "related_tools": []
+  },
+
+  "executor": {
+    "type": "builtin_python",
+    "handler": "nls.engine.tools_builtin:RequestSleepTool",
+    "note": "This tool requires a live ANS reference and is registered directly by setup_tools(), not via the JSON executor dispatch."
+  }
+}

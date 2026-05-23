@@ -1,0 +1,148 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String        @id @default(uuid())
+  email        String        @unique
+  passwordHash String        @map("password_hash")
+  displayName  String?       @map("display_name")
+  role         String        @default("user") @map("role")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+  agents       Agent[]
+  apiKeys      ApiKey[]
+  settings     UserSettings?
+
+  @@map("users")
+}
+
+model UserSettings {
+  id              String   @id @default(uuid())
+  userId          String   @unique @map("user_id")
+  data            Json     @default("{}")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_settings")
+}
+
+model Agent {
+  id             String          @id @default(uuid())
+  userId         String          @map("user_id")
+  runtimeAgentId String          @map("runtime_agent_id")
+  name           String?
+  genesisVersion String          @map("genesis_version")
+  status         String          @default("alive")
+  createdAt      DateTime        @default(now()) @map("created_at")
+  user           User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  channelAliases  ChannelAlias[]
+  pendingMessages PendingChannelMessage[]
+  soulPackages    SoulPackage[]
+  deviceLeases    DeviceLease[]
+  clawhubSkills   ClawhubSkill[]
+
+  @@map("agents")
+}
+
+model SoulPackage {
+  id             String   @id @default(uuid())
+  agentId        String   @map("agent_id")
+  version        String   @default("1.0")
+  chainHeight    Int      @default(0) @map("chain_height")
+  sizeBytes      Int      @default(0) @map("size_bytes")
+  storageUrl     String?  @map("storage_url") // S3/R2 URL or local path
+  checksum       String?  // SHA-256 of the zip
+  metadata       Json     @default("{}") // soul_manifest contents
+  createdAt      DateTime @default(now()) @map("created_at")
+  agent          Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId, createdAt])
+  @@map("soul_packages")
+}
+
+model DeviceLease {
+  id             String    @id @default(uuid())
+  agentId        String    @map("agent_id")
+  deviceId       String    @map("device_id") // unique device fingerprint
+  deviceName     String?   @map("device_name") // "John's MacBook", "iPhone 14"
+  isActive       Boolean   @default(true) @map("is_active")
+  acquiredAt     DateTime  @default(now()) @map("acquired_at")
+  releasedAt     DateTime? @map("released_at")
+  lastHeartbeat  DateTime  @default(now()) @map("last_heartbeat")
+  agent          Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, isActive]) // Only one active lease per agent
+  @@index([agentId])
+  @@index([deviceId])
+  @@map("device_leases")
+}
+
+model ChannelAlias {
+  id          String   @id @default(uuid())
+  agentId     String   @map("agent_id")
+  channel     String   // "email", "telegram", "whatsapp"
+  alias       String   @unique // e.g. "alice.a3f8c1b2@inbox.babo.agency"
+  displayName String?  @map("display_name") // e.g. "Alice <alice.a3f8c1b2@inbox.babo.agency>"
+  createdAt   DateTime @default(now()) @map("created_at")
+  agent       Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([alias])
+  @@index([agentId, channel])
+  @@map("channel_aliases")
+}
+
+model PendingChannelMessage {
+  id          String   @id @default(uuid())
+  agentId     String   @map("agent_id")
+  channel     String   // "email", "telegram", "whatsapp"
+  payload     Json     // full enriched message payload
+  status      String   @default("pending") // "pending", "delivered", "failed"
+  attempts    Int      @default(0)
+  createdAt   DateTime @default(now()) @map("created_at")
+  deliveredAt DateTime? @map("delivered_at")
+  agent       Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId, status])
+  @@index([status, createdAt])
+  @@map("pending_channel_messages")
+}
+
+model ClawhubSkill {
+  id          String   @id @default(uuid())
+  slug        String
+  version     String
+  name        String
+  description String?
+  installedAt DateTime @default(now()) @map("installed_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  agentId     String?  @map("agent_id")
+  metadata    Json?
+  pushed      Boolean  @default(false)
+  agent       Agent?   @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([slug, agentId], name: "slug_agentId")
+  @@map("clawhub_skills")
+}
+
+model ApiKey {
+  id            String    @id @default(uuid())
+  userId        String    @map("user_id")
+  keyHash       String    @map("key_hash")
+  keyPrefix     String    @map("key_prefix")
+  name          String
+  rateLimitRpm  Int       @default(60) @map("rate_limit_rpm")
+  isActive      Boolean   @default(true) @map("is_active")
+  totalRequests Int       @default(0) @map("total_requests")
+  lastUsedAt    DateTime? @map("last_used_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("api_keys")
+}

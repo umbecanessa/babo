@@ -1,0 +1,19 @@
+{
+  "name": "gx10-70b-standard",
+  "description": "Llama 3.1 70B on NVIDIA GB10 Blackwell (128GB unified) with standard timing. Direct comparison to 8B overnight endurance runs.",
+
+  "runtime": {
+    "inference": {
+      "hf_model": "unsloth/Meta-Llama-3.1-70B-Instruct-bnb-4bit",
+      "attn_implementation": "sdpa",
+      "generation": {
+        "max_new_tokens": 4096
+      }
+    },
+    "training": {
+      "lora_rank": 32,
+      "lora_alpha": 64,
+      "batch_size": 4
+    }
+  }
+}

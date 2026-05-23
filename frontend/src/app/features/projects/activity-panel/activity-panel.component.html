@@ -1,0 +1,81 @@
+<div class="activity-panel">
+  <div class="panel-header">
+    <span class="panel-dot"></span>
+    <span class="panel-title">Activity</span>
+    @if (entries.length > 0) {
+      <span class="entry-count">{{ entries.length }}</span>
+    }
+  </div>
+
+  @if (entries.length === 0) {
+    <div class="empty-state">
+      <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#374151" stroke-width="1.5">
+        <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+      </svg>
+      <span>Activity will appear here as the agent works.</span>
+    </div>
+  } @else {
+    <div class="entry-list">
+      @for (entry of entries; track entry.id) {
+        <div class="entry-row"
+             [class]="'cat-' + entry.category"
+             [class.expanded]="isExpanded(entry.id)"
+             [class.has-detail]="!!entry.detail || !!entry.resultSummary"
+             (click)="toggleExpand(entry.id)">
+
+          <div class="entry-dot-col">
+            <span class="entry-dot" [style.background]="categoryColor(entry.category)"></span>
+            @if (!$last) {
+              <span class="entry-line"></span>
+            }
+          </div>
+
+          <div class="entry-content">
+            <div class="entry-header">
+              <span class="entry-icon">{{ entry.icon }}</span>
+              <span class="entry-text">{{ entry.text }}</span>
+              <span class="entry-time">{{ formatTime(entry.time) }}</span>
+              @if (entry.detail || entry.resultSummary) {
+                <span class="entry-expand-hint">&#9662;</span>
+              }
+            </div>
+
+            <!-- Expanded detail card -->
+            @if (isExpanded(entry.id)) {
+              <div class="entry-detail-card">
+                @if (entry.teamName && entry.category === 'member') {
+                  <span class="detail-team-pill" [style.border-color]="categoryColor(entry.category)">{{ entry.teamName }}</span>
+                }
+
+                @if (entry.detail) {
+                  <p class="detail-text">{{ entry.detail }}</p>
+                }
+
+                @if (entry.resultSummary && entry.category === 'member') {
+                  <div class="detail-result">
+                    <span class="detail-result-label">Result</span>
+                    <p class="detail-result-text">{{ entry.resultSummary }}</p>
+                  </div>
+                }
+
+                @if (entry.iterations || entry.toolCalls || entry.elapsed) {
+                  <div class="detail-chips">
+                    @if (entry.iterations) {
+                      <span class="detail-chip">{{ entry.iterations }} iterations</span>
+                    }
+                    @if (entry.toolCalls) {
+                      <span class="detail-chip">{{ entry.toolCalls }} tool calls</span>
+                    }
+                    @if (entry.elapsed) {
+                      <span class="detail-chip detail-chip--mono">{{ formatElapsed(entry.elapsed) }}</span>
+                    }
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        </div>
+      }
+    </div>
+  }
+</div>

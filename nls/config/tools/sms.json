@@ -1,0 +1,88 @@
+{
+  "name": "sms",
+  "description": "Send SMS messages via Twilio. Requires NLS_TWILIO_SID, NLS_TWILIO_TOKEN, and NLS_TWILIO_FROM.",
+  "version": "1.0.0",
+  "category": "communicate",
+  "hormone_affinity": "oxytocin",
+  "base_effort": 0.3,
+  "learning_yield": "low",
+  "risk_level": "write",
+  "platform": "desktop",
+  "permissions": [
+    "network.outbound",
+    "keychain"
+  ],
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "to": {
+        "type": "string",
+        "description": "Phone number (E.164 format, e.g. +1234567890)"
+      },
+      "body": {
+        "type": "string",
+        "description": "Message text"
+      }
+    },
+    "required": [
+      "to",
+      "body"
+    ]
+  },
+  "manual": {
+    "overview": "Use SMS when you need guaranteed delivery to a phone number for alerts, OTPs, or urgent notifications. Works without internet on the recipient side and has high open rates. Requires Twilio account and credentials.",
+    "examples": [
+      {
+        "input": {
+          "to": "+15551234567",
+          "body": "Your code is 847392"
+        },
+        "description": "Send a verification code"
+      },
+      {
+        "input": {
+          "to": "+441234567890",
+          "body": "Appointment confirmed for tomorrow at 2pm"
+        },
+        "description": "Send an appointment confirmation"
+      },
+      {
+        "input": {
+          "to": "+31612345678",
+          "body": "Alert: Server downtime detected"
+        },
+        "description": "Send an urgent system alert"
+      }
+    ],
+    "tips": [
+      "Use E.164 format for to: +country_code + number, no spaces (e.g. +15551234567)",
+      "SMS has a 160-character limit for single-segment; longer messages split and may cost more",
+      "NLS_TWILIO_FROM must be a verified Twilio number or short code",
+      "Reserve SMS for high-priority messages; costs apply per segment"
+    ],
+    "edge_cases": [
+      "Invalid or unverified Twilio numbers cause immediate failure; check NLS_TWILIO_SID, NLS_TWILIO_TOKEN, NLS_TWILIO_FROM",
+      "Some countries have carrier restrictions; verify Twilio supports the destination country",
+      "NLS_TWILIO_AUTH may need to be base64(SID:TOKEN); check how your executor expects it"
+    ],
+    "related_tools": [
+      "whatsapp",
+      "telegram",
+      "notification"
+    ]
+  },
+  "executor": {
+    "type": "http",
+    "method": "POST",
+    "url": "https://api.twilio.com/2010-04-01/Accounts/{{env.NLS_TWILIO_SID}}/Messages.json",
+    "headers": {
+      "Content-Type": "application/x-www-form-urlencoded",
+      "Authorization": "Basic {{env.NLS_TWILIO_AUTH}}"
+    },
+    "body": {
+      "To": "{{args.to}}",
+      "From": "{{env.NLS_TWILIO_FROM}}",
+      "Body": "{{args.body}}"
+    }
+  }
+}

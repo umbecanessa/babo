@@ -1,0 +1,531 @@
+<div class="chat-layout">
+  <!-- Agent browser side panel — LEFT (always in DOM for CDP, hidden when collapsed) -->
+  <div class="browser-sidebar" [class.browser-sidebar-hidden]="!browserExpanded()">
+    <app-agent-browser
+      [command]="browserCommand()"
+      (commandResult)="onBrowserResult($event)"
+      (collapseRequest)="collapseBrowser()"
+    />
+  </div>
+
+  @if (workbench.panelOpen()) {
+    <div
+      class="workbench-sidebar-backdrop"
+      (click)="workbench.closePanel()"
+      aria-hidden="true"
+    ></div>
+  }
+
+  <!-- Workbench — left column (same collapse pattern as in-app browser) -->
+  <div
+    class="workbench-sidebar"
+    [class.workbench-sidebar-hidden]="!workbench.panelOpen()"
+    [attr.aria-hidden]="workbench.panelOpen() ? 'false' : 'true'"
+  >
+    <app-chat-workbench />
+  </div>
+
+  <!-- Chat area -->
+  <div class="chat-main">
+    <!-- Agent header -->
+    <div class="chat-header">
+      @if (agent()) {
+        <div class="agent-info">
+          <div class="agent-dot" [class.agentic-pulse]="agenticActive()"></div>
+          <span class="agent-name">{{ agent()!.name || agent()!.runtimeAgentId.substring(0, 8) }}</span>
+          <span class="agent-id desktop-only">{{ agent()!.runtimeAgentId.substring(0, 12) }}...</span>
+        </div>
+      }
+
+      <!-- Activity status badge -->
+      @if (activityStatus()) {
+        <span class="activity-badge">
+          <span class="activity-badge-dot"></span>
+          {{ activityStatus() }}
+        </span>
+      }
+
+      <!-- Agentic progress indicator -->
+      @if (agenticActive()) {
+        <div class="agentic-progress">
+          <div class="agentic-progress-dot"></div>
+          <span class="agentic-progress-label">
+            @if (agenticStopping()) {
+              Stopping...
+            } @else {
+              Step {{ agenticStep() }}/{{ agenticMaxSteps() }}
+            }
+          </span>
+        </div>
+      }
+
+      <!-- Info + Desktop: sidebar toggle -->
+      <div class="header-right">
+        <!-- Last agentic run summary chip — shown when idle, hidden while running -->
+        @if (lastAgenticResult() && !agenticActive()) {
+          <button
+            type="button"
+            class="agentic-result-chip"
+            (click)="workbench.togglePanel()"
+            [title]="lastAgenticResult()!.aborted ? 'Task was stopped — open workbench' : 'Task completed — open workbench'">
+            <span class="arc-badge" [class.arc-done]="!lastAgenticResult()!.aborted" [class.arc-stopped]="lastAgenticResult()!.aborted">
+              {{ lastAgenticResult()!.aborted ? 'Stopped' : 'Done' }}
+            </span>
+            <span class="arc-text">
+              {{ lastAgenticResult()!.steps }} steps
+              @if (lastAgenticResult()!.durationMs > 0) {
+                · {{ formatMs(lastAgenticResult()!.durationMs) }}
+              }
+            </span>
+          </button>
+        }
+        <button
+          type="button"
+          class="info-btn workbench-header-btn"
+          [class.active]="workbench.panelOpen()"
+          (click)="workbench.togglePanel()"
+          title="Workbench — tools &amp; steps (left panel)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <line x1="3" y1="17" x2="21" y2="17"/>
+            <line x1="8" y1="8" x2="16" y2="8"/>
+          </svg>
+        </button>
+        <button class="info-btn" (click)="onboardingModal?.show()" title="About this page">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+        </button>
+        <button (click)="toggleSidebar()" class="brain-toggle desktop-only">
+          <span class="brain-dot" [class.active]="sidebarOpen()"></span>
+          {{ sidebarOpen() ? 'Hide' : 'Show' }} Brain
+        </button>
+      </div>
+    </div>
+
+    <!-- Mobile: condensed status strip (tap to open bottom sheet) -->
+    @if (nlsMetadata()) {
+      <button class="mobile-status-strip mobile-only" (click)="openBottomSheet()">
+        <div class="strip-items">
+          @if (condensedFacts > 0) {
+            <span class="strip-chip">
+              <span class="strip-dot" style="background:#38bdf8"></span>
+              {{ condensedFacts }} facts
+            </span>
+          }
+          @if (condensedAns) {
+            <span class="strip-chip">
+              <span class="strip-dot" style="background:#34d399"></span>
+              {{ condensedAns }}
+            </span>
+          }
+          @if (topHormone) {
+            <span class="strip-chip">
+              <span class="strip-dot" [style.background]="topHormone.color"></span>
+              {{ topHormone.name }} {{ topHormone.value | number:'1.1-1' }}
+            </span>
+          }
+        </div>
+        <svg class="strip-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="6 9 12 15 18 9"></polyline>
+        </svg>
+      </button>
+    }
+
+    <!-- Connection banner -->
+    @if (ws.reconnectState()) {
+      <div class="connection-banner" [class.restarting]="ws.reconnectState() === 'restarting'">
+        <span class="connection-spinner"></span>
+        @if (ws.reconnectState() === 'restarting') {
+          Server restarting&hellip;
+        } @else {
+          Reconnecting&hellip;
+        }
+      </div>
+    }
+
+    <!-- Thread bar (below header) -->
+    <div class="thread-bar">
+      <div class="thread-switcher" (click)="toggleThreadDropdown()">
+        <span class="thread-icon-current" [attr.data-channel]="activeThreadIcon()">
+          @switch (activeThreadIcon()) {
+            @case ('email') {
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+            }
+            @case ('telegram') {
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2 11 13"/><path d="m22 2-7 20-4-9-9-4z"/></svg>
+            }
+            @case ('whatsapp') {
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+            }
+            @default {
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            }
+          }
+        </span>
+        <span class="thread-current">{{ activeThreadLabel() }}</span>
+        @if (activeThreadMeta()?.sender) {
+          <span class="thread-sender">{{ activeThreadMeta()!.sender }}</span>
+        }
+        @if (threadCount() > 1) {
+          <span class="thread-badge">{{ threadCount() }}</span>
+        }
+        <svg class="thread-chevron" [class.open]="threadDropdownOpen()" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+
+        @if (threadDropdownOpen()) {
+          <div class="thread-backdrop" (click)="threadDropdownOpen.set(false); $event.stopPropagation()"></div>
+          <div class="thread-dropdown" (click)="$event.stopPropagation()">
+            @for (group of groupedThreads(); track group.channel) {
+              @if (group.threads.length > 0) {
+                <div class="thread-group">
+                  <div class="thread-group-header">
+                    <span class="thread-group-icon" [attr.data-channel]="group.channel">
+                      @switch (group.icon) {
+                        @case ('email') {
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                        }
+                        @case ('telegram') {
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2 11 13"/><path d="m22 2-7 20-4-9-9-4z"/></svg>
+                        }
+                        @case ('whatsapp') {
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+                        }
+                        @default {
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                        }
+                      }
+                    </span>
+                    <span class="thread-group-label">{{ group.label }}</span>
+                    <span class="thread-group-count">{{ group.threads.length }}</span>
+                  </div>
+                  @for (thread of group.threads; track thread.key) {
+                    <button
+                      class="thread-option"
+                      [class.active]="thread.key === currentThread()"
+                      (click)="switchThread(thread.key)"
+                    >
+                      <span class="thread-dot" [class.active]="thread.key === currentThread()"></span>
+                      <span class="thread-label">{{ thread.label }}</span>
+                      @if (thread.sender) {
+                        <span class="thread-sender-hint">{{ thread.sender }}</span>
+                      }
+                    </button>
+                  }
+                </div>
+              }
+            }
+            <div class="thread-new-divider"></div>
+            <button class="thread-option thread-new-btn" (click)="createNewThread()">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              <span class="thread-label">New Thread</span>
+            </button>
+          </div>
+        }
+      </div>
+
+      @if (currentThread() !== 'websocket:main') {
+        <button class="thread-back-btn" (click)="switchThread('websocket:main')">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+          Main
+        </button>
+      }
+    </div>
+
+    <!-- Email thread context banner -->
+    @if (activeThreadMeta()?.channel === 'email') {
+      <div class="email-thread-banner">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+        <div class="email-thread-info">
+          <span class="email-thread-subject">{{ activeThreadMeta()!.subject || activeThreadMeta()!.label || 'Email thread' }}</span>
+          @if (activeThreadMeta()!.sender) {
+            <span class="email-thread-from">from {{ activeThreadMeta()!.sender }}</span>
+          }
+        </div>
+      </div>
+    }
+
+    <!-- Telegram/WhatsApp thread context banner -->
+    @if (activeThreadMeta()?.channel === 'telegram' || activeThreadMeta()?.channel === 'whatsapp') {
+      <div class="channel-thread-banner" [attr.data-channel]="activeThreadMeta()!.channel">
+        @if (activeThreadMeta()!.channel === 'telegram') {
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2 11 13"/><path d="m22 2-7 20-4-9-9-4z"/></svg>
+        } @else {
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+        }
+        <span class="channel-thread-name">{{ activeThreadMeta()!.sender || activeThreadMeta()!.label }}</span>
+      </div>
+    }
+
+    <!-- Desktop offline banner (remote mode) -->
+    @if (platform.isRemote && !agentOnline()) {
+      <div class="offline-banner">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M1 1l22 22M16.72 11.06A10.94 10.94 0 0 1 19 12.55M5 12.55a10.94 10.94 0 0 1 5.17-2.39M10.71 5.05A16 16 0 0 1 22.56 9M1.42 9a15.91 15.91 0 0 1 4.7-2.88M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01"/>
+        </svg>
+        <div>
+          <strong>Desktop offline</strong>
+          <p>Start the Babo desktop app on your computer to chat with this agent.</p>
+        </div>
+      </div>
+    }
+
+    <!-- Messages -->
+    <div class="chat-messages">
+      <app-message-list
+        [messages]="filteredMessages()"
+        [streamingText]="streamingText()"
+        [streamingReasoning]="streamingReasoning()"
+        [agenticActive]="agenticActive()"
+        [agentId]="agentId"
+        (drowsyAction)="onDrowsyAction($event)"
+        (expandBrowser)="onExpandBrowser($event)"
+        (openUrl)="onOpenUrl($event)"
+        (delegateToggle)="toggleDelegateExpanded($event)"
+        (messageFeedback)="onMessageFeedback($event)"
+      />
+    </div>
+
+    <!-- Floating plan checklist -->
+    @if (planSteps().length > 0) {
+      <div class="plan-panel">
+        <div class="plan-panel-inner" [class.expanded]="planExpanded()">
+          <button class="plan-panel-bar" (click)="togglePlanExpanded()">
+            <span class="plan-panel-icon">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M9 11l3 3L22 4"></path>
+                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+              </svg>
+            </span>
+            <span class="plan-panel-summary">{{ planDoneCount }}/{{ planTotalCount }} steps done</span>
+            @if (agenticActive() && planDoneCount < planTotalCount) {
+              <span class="plan-panel-spinner"></span>
+            }
+            <span class="plan-panel-chevron">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                @if (planExpanded()) {
+                  <polyline points="6 15 12 9 18 15"></polyline>
+                } @else {
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                }
+              </svg>
+            </span>
+          </button>
+          @if (planExpanded()) {
+            <div class="plan-panel-body">
+              @for (step of planSteps(); track $index) {
+                <div class="plan-step" [class.pending]="step.status === 'pending'"
+                     [class.active]="step.status === 'active'"
+                     [class.done]="step.status === 'done'"
+                     [class.error]="step.status === 'error'">
+                  <span class="plan-step-icon">
+                    @if (step.status === 'pending') {
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" opacity="0.3"><circle cx="12" cy="12" r="10"></circle></svg>
+                    } @else if (step.status === 'active') {
+                      <span class="plan-spinner"></span>
+                    } @else if (step.status === 'done') {
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="16 9 10.5 15 8 12.5"></polyline></svg>
+                    } @else {
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                    }
+                  </span>
+                  <span class="plan-step-label">{{ step.label }}</span>
+                </div>
+              }
+            </div>
+          }
+        </div>
+      </div>
+    }
+
+    <!-- Input area (hidden when desktop is offline in remote mode) -->
+    <div class="chat-input-area"
+         [class.disabled-offline]="platform.isRemote && !agentOnline()"
+         (dragover)="onDragOver($event)"
+         (dragleave)="onDragLeave($event)"
+         (drop)="onDrop($event)"
+         [class.drag-over]="isDragOver()">
+
+      <!-- Hidden file input (display:none, triggered programmatically) -->
+      <input #fileInput type="file" multiple
+             style="display:none"
+             (change)="onFilesSelected($event)" />
+
+      <!-- Drag overlay -->
+      @if (isDragOver()) {
+        <div class="drop-overlay">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="17 8 12 3 7 8"></polyline>
+            <line x1="12" y1="3" x2="12" y2="15"></line>
+          </svg>
+          <span>Drop files here</span>
+        </div>
+      }
+
+      <!-- Pending attachment chips -->
+      @if (pendingAttachments().length > 0) {
+        <div class="attachments-bar">
+          @for (att of pendingAttachments(); track att.path) {
+            <div class="attachment-chip" [class.is-image]="att.mime_type.startsWith('image/')">
+              @if (att.mime_type.startsWith('image/')) {
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                  <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                  <polyline points="21 15 16 10 5 21"></polyline>
+                </svg>
+              } @else {
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                  <polyline points="14 2 14 8 20 8"></polyline>
+                </svg>
+              }
+              <span class="attachment-name">{{ att.name }}</span>
+              <button class="attachment-remove" (click)="removeAttachment(att.path)" title="Remove">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
+            </div>
+          }
+        </div>
+      }
+
+      @if (fileUploading()) {
+        <div class="attachments-bar">
+          <div class="attachment-chip uploading">
+            <span class="upload-spinner"></span>
+            <span class="attachment-name">Uploading...</span>
+          </div>
+        </div>
+      }
+
+      @if (voice.state() === 'recording') {
+        <!-- Recording mode -->
+        <div class="input-wrapper recording-active">
+          <button (click)="cancelVoice()" class="voice-cancel-btn" title="Cancel">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+          <div class="waveform-container">
+            <canvas #waveformCanvas class="waveform-canvas" width="400" height="40"></canvas>
+          </div>
+          <span class="recording-timer">{{ formatDuration(voice.duration()) }}</span>
+          <button (click)="stopVoice()" class="stop-btn" title="Stop & Transcribe">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <rect x="4" y="4" width="16" height="16" rx="2"></rect>
+            </svg>
+          </button>
+        </div>
+      } @else if (voice.state() === 'transcribing') {
+        <!-- Transcribing mode -->
+        <div class="input-wrapper transcribing">
+          <div class="transcribing-indicator">
+            <div class="transcribing-dot"></div>
+            <span>Transcribing...</span>
+          </div>
+        </div>
+      } @else if (agenticActive()) {
+        <!-- Agentic mode: show cancel button -->
+        <div class="input-wrapper agentic-active">
+          <button (click)="fileInput.click()" class="attach-btn" title="Attach files">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+            </svg>
+          </button>
+          <textarea #messageInput
+            [(ngModel)]="inputText"
+            (keydown)="onKeyDown($event)"
+            (input)="adjustTextareaHeight()"
+            rows="1"
+            placeholder="Send guidance to the agent while it works..."
+            class="chat-textarea"
+          ></textarea>
+          @if (inputText.trim() || pendingAttachments().length) {
+            <button (click)="sendMessage()" class="send-btn copilot-send" title="Send guidance">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="22" y1="2" x2="11" y2="13"></line>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+              </svg>
+            </button>
+          }
+          <button (click)="cancelAgentic()" class="cancel-btn" [class.stopping]="agenticStopping()" title="Stop task">
+            @if (agenticStopping()) {
+              <div class="cancel-spinner"></div>
+            } @else {
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="4" y="4" width="16" height="16" rx="2"></rect>
+              </svg>
+            }
+          </button>
+        </div>
+      } @else {
+        <!-- Normal input mode -->
+        <div class="input-wrapper">
+          <button (click)="fileInput.click()" class="attach-btn" title="Attach files">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+            </svg>
+          </button>
+          <textarea #messageInput
+            [(ngModel)]="inputText"
+            (keydown)="onKeyDown($event)"
+            (input)="adjustTextareaHeight()"
+            rows="1"
+            placeholder="Message this agent..."
+            class="chat-textarea"
+          ></textarea>
+          @if (inputText.trim() || pendingAttachments().length) {
+            <button (click)="sendMessage()" class="send-btn has-text">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="22" y1="2" x2="11" y2="13"></line>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+              </svg>
+            </button>
+          } @else {
+            <button (click)="startVoice()" class="mic-btn" title="Voice input">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                <line x1="12" y1="19" x2="12" y2="23"></line>
+                <line x1="8" y1="23" x2="16" y2="23"></line>
+              </svg>
+            </button>
+          }
+        </div>
+      }
+    </div>
+  </div>
+
+  <!-- Desktop: Sidebar -->
+  @if (sidebarOpen()) {
+    <div class="sidebar-desktop">
+      <app-signal-sidebar [metadata]="nlsMetadata()" [agent]="agent()" [daydreams]="daydreams()" [activities]="activities()" [connectedChannels]="connectedChannels()" (channelThreadSelect)="switchThread($event)" />
+    </div>
+  }
+
+  <!-- Mobile: Bottom Sheet -->
+  @if (bottomSheetOpen()) {
+    <div class="sheet-backdrop" (click)="closeBottomSheet()"></div>
+    <div class="bottom-sheet">
+      <div class="sheet-handle-area" (click)="closeBottomSheet()">
+        <div class="sheet-handle"></div>
+      </div>
+      <div class="sheet-content">
+        <app-signal-sidebar [metadata]="nlsMetadata()" [agent]="agent()" [daydreams]="daydreams()" [activities]="activities()" [connectedChannels]="connectedChannels()" (channelThreadSelect)="switchThread($event)" />
+      </div>
+    </div>
+  }
+
+  <app-google-connect-modal
+    [open]="googleModalOpen()"
+    [agentId]="agentId"
+    (closed)="onGoogleModalClosed()"
+    (connected)="onGoogleConnected($event)" />
+
+  <app-onboarding-modal #onboardingModal [config]="onboardingConfig" />
+</div>

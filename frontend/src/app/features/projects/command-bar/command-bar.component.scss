@@ -1,0 +1,49 @@
+.command-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.02);
+  transition: border-color 0.15s;
+
+  &:focus-within {
+    border-color: rgba(129, 140, 248, 0.3);
+  }
+}
+
+.cmd-icon {
+  color: #6b7280;
+  flex-shrink: 0;
+}
+
+.cmd-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: #e0e0f0;
+  font-size: 13px;
+  padding: 4px 0;
+  min-width: 0;
+
+  &::placeholder { color: #5a5a6a; }
+  &:disabled { opacity: 0.5; }
+}
+
+.cmd-send {
+  padding: 4px 14px;
+  border-radius: 6px;
+  border: none;
+  background: rgba(129, 140, 248, 0.15);
+  color: #818cf8;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s;
+
+  &:hover:not(:disabled) { background: rgba(129, 140, 248, 0.25); }
+  &:disabled { opacity: 0.4; cursor: default; }
+}

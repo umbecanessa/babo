@@ -1,0 +1,154 @@
+<div class="waves-dashboard">
+  @if (waves.length === 0) {
+    <div class="empty-state">
+      <span class="empty-icon">☰</span>
+      <span>No waves or teams yet. Create a plan with delegation to get started.</span>
+    </div>
+  }
+
+  @for (wave of waves; track wave.waveIndex) {
+    <div class="wave-card" [class]="'wave-' + wave.state" [style.--accent]="waveAccent(wave.state)">
+      <!-- Wave header strip -->
+      <div class="wave-header">
+        <div class="wave-accent-bar"></div>
+        <div class="wave-info">
+          <span class="wave-label">{{ wave.label }}</span>
+          @if (wave.team) {
+            <span class="wave-team-name">{{ wave.team.name }}</span>
+          }
+        </div>
+        <div class="wave-stats">
+          @if (wave.state === 'active') {
+            <span class="wave-stat wave-stat--live">
+              <span class="live-dot"></span>
+              {{ wave.progress.done }}/{{ wave.progress.total }}
+            </span>
+            @if (wave.elapsed > 0) {
+              <span class="wave-stat wave-stat--time">{{ formatDuration(wave.elapsed) }}</span>
+            }
+          } @else if (wave.state === 'completed') {
+            <span class="wave-stat wave-stat--done">✓ {{ wave.progress.done }}/{{ wave.progress.total }}</span>
+            @if (wave.elapsed > 0) {
+              <span class="wave-stat wave-stat--time">{{ formatDuration(wave.elapsed) }}</span>
+            }
+          } @else if (wave.state === 'failed') {
+            <span class="wave-stat wave-stat--fail">✗ Failed</span>
+          } @else {
+            <span class="wave-stat wave-stat--planned">Planned</span>
+          }
+        </div>
+        <!-- Actions -->
+        @if (wave.team && wave.state === 'active') {
+          <div class="wave-actions">
+            <button class="wave-action-btn" (click)="onPause(wave.team!.id)" title="Pause">⏸</button>
+            <button class="wave-action-btn wave-action-btn--danger" (click)="onDisband(wave.team!.id)" title="Disband">✕</button>
+          </div>
+        }
+        @if (wave.team?.status === 'paused') {
+          <div class="wave-actions">
+            <button class="wave-action-btn wave-action-btn--primary" (click)="onResume(wave.team!.id)" title="Resume">▶</button>
+            <button class="wave-action-btn wave-action-btn--danger" (click)="onDisband(wave.team!.id)" title="Disband">✕</button>
+          </div>
+        }
+        @if (!wave.team && wave.state === 'planned') {
+          <div class="wave-actions">
+            <button class="wave-action-btn wave-action-btn--primary" (click)="onForceStart(wave.waveIndex)" title="Force start this wave">▶ Start</button>
+          </div>
+        }
+      </div>
+
+      <!-- Progress bar for active/completed waves -->
+      @if (wave.state !== 'planned' && wave.progress.total > 0) {
+        <div class="wave-progress-track">
+          @for (member of wave.team?.members ?? []; track member.delegate_number) {
+            <div
+              class="wave-progress-seg"
+              [class]="'seg-' + member.status"
+              [style.width.%]="100 / wave.progress.total"
+            ></div>
+          }
+        </div>
+      }
+
+      <!-- Member tiles for active waves -->
+      @if (wave.team && (wave.state === 'active' || wave.state === 'completed' || wave.state === 'failed')) {
+        <div class="member-tiles">
+          @for (member of wave.team.members; let i = $index; track member.delegate_number) {
+            <div
+              class="member-tile"
+              [class]="'tile-' + member.status"
+              [class.tile-expanded]="isMemberExpanded(wave.team!.id, i)"
+              (click)="toggleMember(wave.team!.id, i)"
+            >
+              <div class="tile-row">
+                <span class="tile-icon" [style.color]="memberStatusColor(member.status)">
+                  @if (member.status === 'running') {
+                    <span class="tile-spinner"></span>
+                  } @else {
+                    {{ memberIcon(member.status) }}
+                  }
+                </span>
+                <span class="tile-task">{{ taskLabel(member.task) }}</span>
+                <div class="tile-metrics">
+                  @if (member.iterations > 0) {
+                    <span class="tile-metric">i{{ member.iterations }}</span>
+                  }
+                  @if (member.tool_calls > 0) {
+                    <span class="tile-metric">{{ member.tool_calls }}t</span>
+                  }
+                  @if (member.elapsed_seconds > 0) {
+                    <span class="tile-metric tile-metric--time">{{ formatElapsed(member.elapsed_seconds) }}</span>
+                  }
+                </div>
+              </div>
+
+              <!-- Expanded detail row -->
+              @if (isMemberExpanded(wave.team!.id, i)) {
+                <div class="tile-detail" (click)="$event.stopPropagation()">
+                  @if (member.result_summary) {
+                    <p class="tile-result">{{ member.result_summary }}</p>
+                  }
+                  <div class="tile-detail-stats">
+                    <span>Iterations: <strong>{{ member.iterations }}</strong></span>
+                    <span>Tools: <strong>{{ member.tool_calls }}</strong></span>
+                    <span>Elapsed: <strong>{{ formatElapsed(member.elapsed_seconds) || '—' }}</strong></span>
+                  </div>
+                  @if (member.status === 'running') {
+                    <button class="tile-hint-btn" (click)="$event.stopPropagation(); openHint(wave.team!.id, i)">Send Hint</button>
+                  }
+                </div>
+              }
+
+              <!-- Inline hint input -->
+              @if (hintTarget?.teamId === wave.team!.id && hintTarget?.memberIdx === i) {
+                <div class="hint-row" (click)="$event.stopPropagation()">
+                  <input
+                    class="hint-input"
+                    [(ngModel)]="hintText"
+                    placeholder="Hint for this agent..."
+                    (keydown.enter)="sendHint()"
+                    (keydown.escape)="cancelHint()"
+                  />
+                  <button class="hint-send" (click)="sendHint()">↵</button>
+                  <button class="hint-cancel" (click)="cancelHint()">×</button>
+                </div>
+              }
+            </div>
+          }
+        </div>
+      }
+
+      <!-- Step tiles for planned waves (no team yet) -->
+      @if (wave.state === 'planned' && wave.steps.length > 0) {
+        <div class="step-tiles">
+          @for (step of wave.steps; track step.id) {
+            <div class="step-tile">
+              <span class="step-icon" [style.color]="stepStatusColor(step.status)">{{ stepIcon(step.status) }}</span>
+              <span class="step-label">{{ step.label }}</span>
+            </div>
+          }
+        </div>
+      }
+    </div>
+  }
+</div>

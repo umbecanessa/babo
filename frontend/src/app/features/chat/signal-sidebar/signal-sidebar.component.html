@@ -1,0 +1,604 @@
+<aside class="sidebar">
+  <div class="sidebar-inner">
+    <!-- Brain header -->
+    <div class="brain-header">
+      <div class="brain-orb">
+        <div class="brain-core"></div>
+        <div class="brain-ring"></div>
+      </div>
+      <span class="brain-label">Neural State</span>
+      <button class="section-info-btn" (click)="infoNeural?.show()" title="What is Neural State?">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Channel status strip -->
+    @if (connectedChannels.length > 0) {
+      <div class="channel-strip">
+        <span class="channel-strip-label">Channels</span>
+        <div class="channel-pills">
+          @for (ch of connectedChannels; track ch) {
+            <span class="channel-pill" [attr.data-channel]="ch">
+              @switch (ch) {
+                @case ('email') {
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                }
+                @case ('telegram') {
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2 11 13"/><path d="m22 2-7 20-4-9-9-4z"/></svg>
+                }
+                @case ('whatsapp') {
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+                }
+              }
+              <span class="channel-pill-name">{{ ch | titlecase }}</span>
+              <span class="channel-pill-dot"></span>
+            </span>
+          }
+        </div>
+      </div>
+    }
+
+    <!-- Heartbeat + Temporal Self -->
+    @if (hasHeartbeatSection) {
+      <div class="heartbeat-section">
+        @if (bpm > 0) {
+        <div class="heartbeat-row">
+          <div class="heartbeat-pulse-wrap">
+            <div class="heartbeat-pulse"
+                 [style.animation-duration]="heartbeatPeriod"
+                 [class.flow]="inFlow">
+            </div>
+            <div class="heartbeat-pulse-ring"
+                 [style.animation-duration]="heartbeatPeriod">
+            </div>
+          </div>
+          <div class="heartbeat-info">
+            <span class="heartbeat-bpm">{{ bpm | number:'1.0-0' }}</span>
+            <span class="heartbeat-unit">BPM</span>
+          </div>
+          <div class="heartbeat-state">
+            <span class="heartbeat-state-label" [class.flow]="inFlow">{{ stateLabel }}</span>
+            @if (moodLabel) {
+              <span class="heartbeat-mood">{{ moodLabel }}</span>
+            }
+            <span class="heartbeat-beats">beat #{{ beatCount }}
+              @if (momentum) {
+                <span class="momentum-indicator" [title]="'momentum: ' + momentum">{{ momentumIcon }}</span>
+              }
+            </span>
+          </div>
+        </div>
+        }
+
+        <!-- Energy bar -->
+        @if (energy > 0) {
+          <div class="energy-bar-wrap" title="Energy: {{ energyPercent }}%">
+            <span class="energy-icon">&#9889;</span>
+            <div class="energy-bar-track">
+              <div class="energy-bar-fill"
+                   [style.width.%]="energyPercent"
+                   [style.background]="energyColor">
+              </div>
+            </div>
+            <span class="energy-val">{{ energyPercent }}%</span>
+          </div>
+        }
+
+        <!-- Digested fields (mini bar indicators) with trajectory arrows -->
+        <div class="heartbeat-fields">
+          <div class="hb-field" title="Valence: how the agent feels (-1 bad → +1 good)">
+            <span class="hb-field-label">Valence</span>
+            <div class="hb-bar-track valence-track">
+              <div class="hb-bar-fill valence-fill"
+                   [style.width.%]="((valence + 1) / 2) * 100"
+                   [style.background]="valenceColor">
+              </div>
+              <div class="hb-bar-center-mark"></div>
+            </div>
+            <span class="hb-field-val">{{ valence | number:'1.2-2' }}</span>
+            @if (deltaArrow(deltaValence)) {
+              <span class="hb-delta" [style.color]="deltaColor(deltaValence)">{{ deltaArrow(deltaValence) }}{{ (deltaValence > 0 ? '+' : '') }}{{ deltaValence | number:'1.2-2' }}</span>
+            }
+          </div>
+          <div class="hb-field" title="Arousal: calm (0) → activated (1)">
+            <span class="hb-field-label">Arousal</span>
+            <div class="hb-bar-track">
+              <div class="hb-bar-fill arousal-fill"
+                   [style.width.%]="arousal * 100">
+              </div>
+            </div>
+            <span class="hb-field-val">{{ arousal | number:'1.2-2' }}</span>
+            @if (deltaArrow(deltaArousal)) {
+              <span class="hb-delta" [style.color]="deltaColor(deltaArousal)">{{ deltaArrow(deltaArousal) }}{{ (deltaArousal > 0 ? '+' : '') }}{{ deltaArousal | number:'1.2-2' }}</span>
+            }
+          </div>
+          <div class="hb-field" title="Engagement: bored (0) → absorbed (1)">
+            <span class="hb-field-label">Engage</span>
+            <div class="hb-bar-track">
+              <div class="hb-bar-fill engage-fill"
+                   [style.width.%]="engagement * 100">
+              </div>
+            </div>
+            <span class="hb-field-val">{{ engagement | number:'1.2-2' }}</span>
+          </div>
+          <div class="hb-field" title="Bonding: alone (0) → connected (1)">
+            <span class="hb-field-label">Bond</span>
+            <div class="hb-bar-track">
+              <div class="hb-bar-fill bond-fill"
+                   [style.width.%]="bonding * 100">
+              </div>
+            </div>
+            <span class="hb-field-val">{{ bonding | number:'1.2-2' }}</span>
+          </div>
+          <div class="hb-field" title="Coherence: confused (0) → aligned (1)">
+            <span class="hb-field-label">Cohere</span>
+            <div class="hb-bar-track">
+              <div class="hb-bar-fill cohere-fill"
+                   [style.width.%]="coherence * 100">
+              </div>
+            </div>
+            <span class="hb-field-val">{{ coherence | number:'1.2-2' }}</span>
+            @if (deltaArrow(deltaCoherence)) {
+              <span class="hb-delta" [style.color]="deltaColor(deltaCoherence)">{{ deltaArrow(deltaCoherence) }}{{ (deltaCoherence > 0 ? '+' : '') }}{{ deltaCoherence | number:'1.2-2' }}</span>
+            }
+          </div>
+        </div>
+
+        @if (feltIdle) {
+          <div class="felt-idle-label">felt idle: {{ feltIdle }}</div>
+        }
+      </div>
+    }
+
+    <!-- Network Dynamics (compact) -->
+    @if (dominantNetwork) {
+      <div class="section network-section">
+        <div class="network-dominant">
+          <span class="network-label">Network Dynamics</span>
+          <button class="section-info-btn" (click)="infoNetwork?.show()" title="What is Network Dynamics?">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+            </svg>
+          </button>
+          <span class="network-dominant-value">{{ dominantNetwork }}</span>
+        </div>
+        <div class="network-bars">
+          <div class="network-bar" title="Executive Control Network – task-focused attention and reasoning">
+            <span class="network-bar-label">ECN <span class="network-bar-hint">Executive</span></span>
+            <div class="network-bar-track">
+              <div class="network-bar-fill ecn-fill" [style.width.%]="networkEcn * 100"></div>
+            </div>
+            <span class="network-bar-pct">{{ (networkEcn * 100) | number:'1.0-0' }}%</span>
+          </div>
+          <div class="network-bar" title="Salience Network – detects important events and switches attention">
+            <span class="network-bar-label">SN <span class="network-bar-hint">Salience</span></span>
+            <div class="network-bar-track">
+              <div class="network-bar-fill sn-fill" [style.width.%]="networkSn * 100"></div>
+            </div>
+            <span class="network-bar-pct">{{ (networkSn * 100) | number:'1.0-0' }}%</span>
+          </div>
+          <div class="network-bar" title="Default Mode Network – mind-wandering, reflection and daydreaming">
+            <span class="network-bar-label">DMN <span class="network-bar-hint">Default</span></span>
+            <div class="network-bar-track">
+              <div class="network-bar-fill dmn-fill" [style.width.%]="networkDmn * 100"></div>
+            </div>
+            <span class="network-bar-pct">{{ (networkDmn * 100) | number:'1.0-0' }}%</span>
+          </div>
+        </div>
+      </div>
+    }
+
+    <!-- Brain stats -->
+    <div class="section">
+      <h3 class="section-title section-title-row">
+        Memory
+        <button class="section-info-btn" (click)="infoMemory?.show()" title="What is Memory?">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+        </button>
+      </h3>
+      <div class="stat-row">
+        <span class="stat-key">Facts</span>
+        <span class="stat-val">{{ factsCount }}</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-key">Sleep Cycles</span>
+        <span class="stat-val">{{ sleepCount }}</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-key">ANS State</span>
+        <span class="stat-val ans-state">{{ ansState }}</span>
+      </div>
+      @if (narrativeCoherence > 0) {
+        <div class="stat-row">
+          <span class="stat-key">Coherence</span>
+          <span class="stat-val">{{ (narrativeCoherence * 100) | number:'1.0-0' }}%
+            @if (narrativeCoherenceLabel) {
+              <span class="stat-sublabel">{{ narrativeCoherenceLabel }}</span>
+            }
+          </span>
+        </div>
+      }
+      @if (predictionError > 0) {
+        <div class="stat-row">
+          <span class="stat-key">Pred. Error</span>
+          <span class="stat-val">{{ predictionError | number:'1.3-3' }}</span>
+        </div>
+      }
+      @if (metaWeight > 0) {
+        <div class="stat-row">
+          <span class="stat-key">Meta Weight</span>
+          <span class="stat-val">{{ metaWeight | number:'1.2-2' }}</span>
+        </div>
+      }
+    </div>
+
+    <!-- Current Episode -->
+    @if (currentEpisode) {
+      <div class="section episode-section">
+        <div class="episode-header-row">
+          <span class="episode-dot" [style.background]="episodeMoodColor"></span>
+          <span class="episode-label">{{ currentEpisode.title }}</span>
+          <span class="episode-live-badge">LIVE</span>
+        </div>
+        <div class="episode-detail-grid">
+          @if (episodeArc) {
+            <span class="episode-detail"><span class="episode-detail-key">Arc</span> {{ episodeArc }}</span>
+          }
+          @if (currentEpisode.turns > 0) {
+            <span class="episode-detail"><span class="episode-detail-key">Turns</span> {{ currentEpisode.turns }}</span>
+          }
+          @if (currentEpisode.peak_resonance > 0) {
+            <span class="episode-detail"><span class="episode-detail-key">Resonance</span> {{ currentEpisode.peak_resonance.toFixed(2) }}</span>
+          }
+          @if (currentEpisode.peak_engagement > 0) {
+            <span class="episode-detail"><span class="episode-detail-key">Engagement</span> {{ currentEpisode.peak_engagement.toFixed(2) }}</span>
+          }
+        </div>
+        @if (currentEpisode.topics?.length) {
+          <div class="episode-topics">
+            @for (t of currentEpisode.topics.slice(0, 3); track t) {
+              <span class="episode-topic-pill">{{ t }}</span>
+            }
+          </div>
+        }
+        @if (currentEpisode.domains?.length) {
+          <div class="episode-domains">
+            @for (d of currentEpisode.domains.slice(0, 3); track d) {
+              <span class="episode-domain-pill">{{ d }}</span>
+            }
+          </div>
+        }
+      </div>
+    }
+
+    <!-- User Model -->
+    @if (userModel) {
+      <div class="section user-model-section">
+        <h3 class="section-title">User Model</h3>
+        @if (userModel.style) {
+          <div class="stat-row">
+            <span class="stat-key">Style</span>
+            <span class="stat-val">{{ userModel.style }}</span>
+          </div>
+        }
+        <div class="stat-row">
+          <span class="stat-key">Temperature</span>
+          <div class="user-temp-bar">
+            <div class="user-temp-fill" [style.width.%]="convTemperature * 100"></div>
+          </div>
+          <span class="stat-val">{{ convTemperatureLabel || (convTemperature | number:'1.2-2') }}</span>
+        </div>
+        @if (userModel.top_interests?.length > 0) {
+          <div class="stat-row user-interests">
+            <span class="stat-key">Interests</span>
+            <span class="stat-val">
+              @for (interest of userModel.top_interests; track interest) {
+                <span class="interest-pill">{{ interest[0] || interest }}</span>
+              }
+            </span>
+          </div>
+        }
+        @if (userModel.expertise && (userModel.expertise | keyvalue)?.length) {
+          <div class="user-expertise">
+            @for (entry of (userModel.expertise | keyvalue); track entry.key) {
+              <div class="expertise-row">
+                <span class="expertise-domain">{{ entry.key }}</span>
+                <div class="expertise-bar-track">
+                  <div class="expertise-bar-fill" [style.width.%]="(+entry.value) * 100"></div>
+                </div>
+              </div>
+            }
+          </div>
+        }
+        @if (userModel.patience > 0) {
+          <div class="stat-row">
+            <span class="stat-key">Patience</span>
+            <div class="user-temp-bar">
+              <div class="user-temp-fill patience-fill" [style.width.%]="userModel.patience * 100"></div>
+            </div>
+            <span class="stat-val">{{ userModel.patience | number:'1.2-2' }}</span>
+          </div>
+        }
+      </div>
+    }
+
+    <!-- Hormones -->
+    <div class="section">
+      <h3 class="section-title section-title-row">
+        Hormones
+        <button class="section-info-btn" (click)="infoHormones?.show()" title="What are Hormones?">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+        </button>
+      </h3>
+      <app-hormone-panel [hormones]="hormones" />
+    </div>
+
+    <!-- Activity feed (dreams, drives, reach-outs, findings) -->
+    <div class="section">
+      <h3 class="section-title section-title-row">
+        <span class="activity-title-dot"></span>
+        Activity
+        @if (activityList.length > 0) {
+          <span class="activity-count">{{ activityList.length }}</span>
+        }
+        <button class="section-info-btn" (click)="infoActivity?.show()" title="What is Activity?">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+        </button>
+      </h3>
+      @if (activityList.length === 0) {
+        <p class="no-activity">No activity yet...</p>
+      } @else {
+        <div class="activity-list">
+          @for (item of activityList; track item.id) {
+            <div class="activity-item"
+                 [class]="'activity-item kind-' + item.kind"
+                 [class.entering]="item.state === 'entering'"
+                 [class.exiting]="item.state === 'exiting'"
+                 [class.expanded]="expandedActivityId === item.id"
+                 [class.clickable-channel]="item.kind === 'channel' && item.metadata?.['sessionKey']"
+                 (click)="onActivityClick(item, $event)">
+              <div class="activity-header">
+                <span class="activity-icon">{{ activityIcon(item.kind) }}</span>
+                <span class="activity-kind-label">{{ activityLabel(item.kind) }}</span>
+                <span class="activity-text">{{ item.text }}</span>
+                @if (item.kind === 'channel' && item.metadata?.['sessionKey']) {
+                  <span class="activity-thread-link" title="Open thread">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                  </span>
+                }
+                <span class="activity-time">{{ formatTime(item.timestamp) }}</span>
+              </div>
+              @if (item.detail && item.metadata?.['autonomous']) {
+                <div class="activity-live-detail">{{ item.detail }}</div>
+              }
+              @if (expandedActivityId === item.id) {
+                <div class="activity-details">
+                  <p class="activity-full-text">{{ item.text }}</p>
+
+                  <!-- Drive-specific: query + result preview -->
+                  @if (item.drive) {
+                    <div class="activity-drive-info">
+                      @if (item.drive.query) {
+                        <div class="drive-query">
+                          <span class="drive-label">Query:</span> {{ item.drive.query }}
+                        </div>
+                      }
+                      @if (item.drive.resultPreview) {
+                        <div class="drive-preview">{{ item.drive.resultPreview }}</div>
+                      }
+                      @if (item.drive.domain) {
+                        <span class="drive-domain-pill">{{ item.drive.domain }}</span>
+                      }
+                      <span class="drive-status-pill" [class.success]="item.drive.success" [class.fail]="!item.drive.success">
+                        {{ item.drive.success ? 'OK' : 'Failed' }}
+                      </span>
+                    </div>
+                  }
+
+                  <!-- Todo/background task detail -->
+                  @if (item.kind === 'todo' && item.detail) {
+                    <p class="activity-detail">{{ item.detail }}</p>
+                  }
+
+                  <!-- Finding-specific: detail + sources + relevance -->
+                  @if (item.kind === 'finding' || item.kind === 'active_dream') {
+                    @if (item.detail) {
+                      <p class="activity-detail">{{ item.detail }}</p>
+                    }
+                    @if (item.sources && item.sources.length) {
+                      <div class="activity-sources">
+                        @for (src of item.sources; track src) {
+                          <span class="source-pill" [title]="src">{{ src }}</span>
+                        }
+                      </div>
+                    }
+                    @if (item.relevance != null) {
+                      <div class="activity-relevance">
+                        <span class="relevance-label">Relevance</span>
+                        <div class="relevance-bar">
+                          <div class="relevance-fill" [style.width.%]="item.relevance * 100"></div>
+                        </div>
+                        <span class="relevance-val">{{ item.relevance | number:'1.0-0' }}%</span>
+                      </div>
+                    }
+                  }
+
+                  <!-- Signal tags (shared, from daydreams/active dreams) -->
+                  @if (item.tags.length) {
+                    <div class="activity-tags">
+                      @for (tag of item.tags; track tag.raw) {
+                        <span class="activity-tag-pill" [title]="tag.raw">
+                          <span class="activity-tag-dot" [style.background]="signalColor(tag.type)"></span>
+                          <span class="activity-tag-type">{{ humanType(tag.type) }}</span>
+                          <span class="activity-tag-label">{{ tag.label }}</span>
+                        </span>
+                      }
+                    </div>
+                  }
+
+                  <!-- Meta chips -->
+                  <div class="activity-meta">
+                    @if (item.signals > 0) {
+                      <span class="activity-meta-chip">{{ item.signals }} signals</span>
+                    }
+                    @if (item.factsStored > 0) {
+                      <span class="activity-meta-chip">{{ item.factsStored }} facts stored</span>
+                    }
+                  </div>
+                </div>
+              }
+            </div>
+          }
+        </div>
+      }
+    </div>
+
+    <!-- Orchestration Status -->
+    @if (hasOrchState) {
+      <div class="orch-strip">
+        <span class="orch-strip-label">Orchestration</span>
+        <div class="orch-pills">
+          @if (wmOrchTeams.length > 0) {
+            <span class="orch-pill orch-pill--teams">
+              <span class="orch-pill-val">{{ wmOrchTeams.length }}</span>
+              <span class="orch-pill-key">{{ wmOrchTeams.length === 1 ? 'team' : 'teams' }}</span>
+            </span>
+          }
+          @if (wmOrchEscalations.length > 0) {
+            <span class="orch-pill orch-pill--escalations">
+              <span class="orch-pill-val">{{ wmOrchEscalations.length }}</span>
+              <span class="orch-pill-key">{{ wmOrchEscalations.length === 1 ? 'escalation' : 'escalations' }}</span>
+            </span>
+          }
+          @if (wmOrchDecisionCount > 0) {
+            <span class="orch-pill orch-pill--decisions">
+              <span class="orch-pill-val">{{ wmOrchDecisionCount }}</span>
+              <span class="orch-pill-key">{{ wmOrchDecisionCount === 1 ? 'decision' : 'decisions' }}</span>
+            </span>
+          }
+        </div>
+      </div>
+    }
+
+    <!-- Cryptex Context Engine -->
+    <div class="section cryptex-primary">
+      <h3 class="section-title cryptex-title">
+        <span class="cryptex-title-icon">&#128272;</span>
+        Cryptex
+        @if (cryptexActiveProject) {
+          <span class="cryptex-project-badge">{{ cryptexActiveProject }}</span>
+        }
+        <button class="section-info-btn" (click)="infoWm?.show()" title="What is the Cryptex?">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
+        </button>
+        <button class="cryptex-refresh" (click)="loadContext()" [disabled]="contextLoading" title="Refresh">
+          <span class="cryptex-refresh-icon" [class.spinning]="contextLoading">&#8635;</span>
+        </button>
+      </h3>
+
+      <!-- Token budget bar -->
+      @if (tokenBudgetPercent > 0) {
+        <div class="token-budget-bar" [title]="tokenBudgetLabel">
+          <div class="token-budget-track">
+            <div class="token-budget-fill"
+                 [style.width.%]="tokenBudgetPercent"
+                 [style.background]="tokenBudgetColor">
+            </div>
+          </div>
+          <span class="token-budget-label">{{ tokenBudgetLabel }}</span>
+        </div>
+      }
+
+      <!-- Cryptex Card Visualization -->
+      @if (hasCryptexState) {
+        <app-cryptex-viz
+          [rings]="cryptexRingsRaw"
+          [activeProject]="cryptexActiveProject"
+          [selectedRingId]="selectedRingId"
+          (ringSelect)="onRingSelect($event)"
+        />
+
+        <!-- Project pills -->
+        @if (cryptexProjects.length > 1) {
+          <div class="cryptex-projects">
+            @for (p of cryptexProjects; track p) {
+              <span class="cryptex-project-pill" [class.active]="p === cryptexActiveProject">{{ p }}</span>
+            }
+          </div>
+        }
+
+        <!-- Selected ring detail panel -->
+        @if (selectedRingData) {
+          <div class="cryptex-ring-detail" [attr.data-category]="selectedRingData.category">
+            <div class="ring-detail-header">
+              <span class="ring-detail-name">{{ selectedRingData.display_name }}</span>
+              <span class="ring-detail-category">{{ selectedRingData.category }}</span>
+              <span class="ring-detail-count">{{ selectedRingData.totalSlots }} slots</span>
+              <button class="ring-detail-close" (click)="onRingSelect(selectedRingData.ring_id)">&#215;</button>
+            </div>
+            <div class="cryptex-position-tabs">
+              @for (pos of selectedRingData.positionList; track pos.id) {
+                <button
+                  class="cryptex-pos-pill"
+                  [class.active]="selectedRingPosition === pos.id"
+                  [class.is-ring-active]="pos.isActive"
+                  (click)="selectRingPosition(pos.id)">
+                  {{ pos.id }}
+                  <span class="pos-pill-count">{{ pos.count }}</span>
+                </button>
+              }
+            </div>
+            @if (selectedRingPosition) {
+              @for (pos of selectedRingData.positionList; track pos.id) {
+                @if (pos.id === selectedRingPosition) {
+                  <div class="cryptex-slot-list">
+                    @for (slot of pos.slots; track $index) {
+                      <div class="cryptex-slot-item"
+                           [attr.data-type]="slot.slot_type"
+                           [attr.data-access]="slot.access || 'malleable'"
+                           [style.opacity]="slotSalienceOpacity(slot.salience)">
+                        <div class="slot-header">
+                          <span class="access-badge" [title]="accessLabel(slot.access || 'malleable')">{{ accessIcon(slot.access || 'malleable') }}</span>
+                          <span class="slot-type-badge">{{ slot.slot_type }}</span>
+                          @if (slot.domain) {
+                            <span class="slot-domain">{{ slot.domain }}</span>
+                          }
+                          <span class="slot-source-pill">{{ slot.source }}</span>
+                          <span class="slot-age">{{ formatSlotAge(slot.age_s) }}</span>
+                        </div>
+                        <div class="slot-content">{{ slot.content }}</div>
+                      </div>
+                    }
+                    @if (pos.slots.length === 0) {
+                      <div class="cryptex-slot-empty">No slots in this position</div>
+                    }
+                  </div>
+                }
+              }
+            }
+          </div>
+        }
+      } @else if (!contextLoading) {
+        <p class="cryptex-empty">No active context — start a conversation to populate the Cryptex</p>
+      }
+    </div>
+  </div>
+</aside>
+
+<!-- Info modals (outside sidebar to escape backdrop-filter containing block) -->
+<app-info-modal #infoNeural [config]="neuralStateInfo" />
+<app-info-modal #infoMemory [config]="memoryInfo" />
+<app-info-modal #infoHormones [config]="hormonesInfo" />
+<app-info-modal #infoActivity [config]="activityInfo" />
+<app-info-modal #infoWm [config]="workingMemoryInfo" />
+<app-info-modal #infoNetwork [config]="networkInfo" />

@@ -1,0 +1,52 @@
+{
+  "name": "file_search",
+  "description": "Search for a text pattern across files in a directory. Supports regex. Uses ripgrep if available.",
+  "version": "1.0.0",
+  "category": "sense",
+  "hormone_affinity": "norepinephrine",
+  "base_effort": 0.2,
+  "learning_yield": "medium",
+  "risk_level": "read",
+  "platform": "desktop",
+  "permissions": ["filesystem.read"],
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "pattern": { "type": "string", "description": "Search pattern (regex)" },
+      "path": { "type": "string", "description": "Directory to search in" },
+      "glob": { "type": "string", "description": "File glob filter (e.g. '*.py')" },
+      "max_results": { "type": "integer", "description": "Max results", "default": 50 }
+    },
+    "required": ["pattern", "path"]
+  },
+
+  "manual": {
+    "overview": "Use file_search to find patterns across a codebase. Works like grep/ripgrep — search by regex, filter by file type, and get results with line numbers. Essential for understanding unfamiliar code.",
+    "examples": [
+      { "description": "Find all TODO comments in Python files", "input": { "pattern": "TODO|FIXME", "path": "/project/src", "glob": "*.py" } },
+      { "description": "Find function definitions", "input": { "pattern": "def process_", "path": "/project" } },
+      { "description": "Find imports of a module", "input": { "pattern": "import requests", "path": "/project", "max_results": 20 } }
+    ],
+    "tips": [
+      "Use glob filters to narrow results (e.g. '*.py' for Python only).",
+      "Start with broad patterns and narrow down if too many results.",
+      "Regex is supported: use '\\bword\\b' for whole-word matching."
+    ],
+    "edge_cases": [
+      "Binary files are skipped automatically.",
+      "Very large directories may be slow; use glob to limit scope.",
+      "The pattern is case-sensitive by default."
+    ],
+    "related_tools": ["file_read", "code_analyze", "regex_tool"]
+  },
+
+  "executor": {
+    "type": "shell",
+    "command": "rg --no-heading --line-number --max-count {{args.max_results}} {{args.glob ? '--glob ' + args.glob : ''}} '{{args.pattern}}' '{{args.path}}'",
+    "fallback": {
+      "type": "python",
+      "handler": "nls.engine.tools_builtin.FileSearchTool"
+    }
+  }
+}

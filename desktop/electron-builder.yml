@@ -1,0 +1,88 @@
+appId: com.babo.desktop
+productName: Babo
+copyright: Copyright © 2026 Babo
+
+publish:
+  provider: github
+  owner: umbecanessa
+  repo: babo
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist-electron/**/*
+  - package.json
+
+extraResources:
+  # Angular frontend build
+  - from: ../frontend/browser
+    to: renderer
+    filter:
+      - "**/*"
+
+  # Python agent runtime source
+  - from: ../nls
+    to: nls-source/nls
+    filter:
+      - "**/*.py"
+      - "**/*.json"
+      - "**/*.yaml"
+      - "**/*.yml"
+      - "**/*.txt"
+      - "**/*.md"
+      - "**/*.js"
+      - "!**/__pycache__/**"
+      - "!**/*.pyc"
+      - "!**/node_modules/**"
+
+  - from: ../server
+    to: nls-source/server
+    filter:
+      - "**/*.py"
+      - "**/*.json"
+      - "!**/__pycache__/**"
+      - "!**/*.pyc"
+
+  # Requirements for venv setup
+  - from: ../requirements-desktop.txt
+    to: nls-source/requirements-desktop.txt
+
+  # Genesis templates are bundled or fetched at runtime
+  # via GenesisSyncClient -- no local bundle needed.
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  artifactName: "Babo-Setup-${version}.${ext}"
+  icon: build/icon.ico
+
+mac:
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+    - target: zip
+      arch: [x64, arm64]
+  artifactName: "Babo-${version}-mac-${arch}.${ext}"
+  icon: build/icon.png
+  category: public.app-category.productivity
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  notarize: true
+
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+  icon: build/icon.png
+  category: Utility
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true

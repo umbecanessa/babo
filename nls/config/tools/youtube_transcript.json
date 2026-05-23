@@ -1,0 +1,47 @@
+{
+  "name": "youtube_transcript",
+  "description": "Extract the transcript/subtitles from a YouTube video. Useful for learning from video content without watching.",
+  "version": "1.0.0",
+  "category": "sense",
+  "hormone_affinity": "norepinephrine",
+  "base_effort": 0.3,
+  "learning_yield": "high",
+  "risk_level": "read",
+  "platform": "all",
+  "permissions": ["network.outbound"],
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "video_url": { "type": "string", "description": "YouTube video URL or video ID" },
+      "language": { "type": "string", "description": "Language code (e.g. 'en')", "default": "en" }
+    },
+    "required": ["video_url"]
+  },
+
+  "manual": {
+    "overview": "Use youtube_transcript to extract subtitles/captions from YouTube videos. This lets you learn from video content without watching. Great for tutorials, lectures, and educational content.",
+    "examples": [
+      { "description": "Get transcript of a video", "input": { "video_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ" } },
+      { "description": "Get Italian transcript", "input": { "video_url": "https://www.youtube.com/watch?v=abc123", "language": "it" } }
+    ],
+    "tips": [
+      "You can pass either the full URL or just the video ID.",
+      "Not all videos have captions — auto-generated ones may have errors.",
+      "For educational videos, combine with note_memory to save key points."
+    ],
+    "edge_cases": [
+      "Private or age-restricted videos cannot be accessed.",
+      "Some videos have no captions at all.",
+      "Auto-generated captions may have inaccuracies, especially for technical terms."
+    ],
+    "related_tools": ["web_search", "audio_transcribe", "note_memory"]
+  },
+
+  "_note": "Requires youtube-transcript-api package. Install with: pip install youtube-transcript-api",
+
+  "executor": {
+    "type": "shell",
+    "command": "python -c \"from youtube_transcript_api import YouTubeTranscriptApi; import sys, json; vid='{{args.video_url}}'.split('v=')[-1].split('&')[0]; t=YouTubeTranscriptApi.get_transcript(vid, languages=['{{args.language}}']); print(' '.join(e['text'] for e in t))\""
+  }
+}

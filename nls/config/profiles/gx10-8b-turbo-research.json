@@ -1,0 +1,38 @@
+{
+  "name": "gx10-8b-turbo-research",
+  "description": "Llama 3.1 8B on NVIDIA GB10 — research-grade turbo mode. Tighter sleep triggers, faster drives, maximum data collection density.",
+
+  "runtime": {
+    "inference": {
+      "attn_implementation": "sdpa"
+    }
+  },
+
+  "drives": {
+    "drive_tick_seconds": 10,
+    "max_autonomous_actions_per_hour": 120,
+    "drives": {
+      "homeostasis":    { "cooldown_seconds": 20 },
+      "curiosity":      { "cooldown_seconds": 10 },
+      "competence":     { "cooldown_seconds": 15 },
+      "social":         { "cooldown_seconds": 60 },
+      "self_direction": { "cooldown_seconds": 120 }
+    },
+    "experience_tracker": {
+      "domain_search_cooldown_seconds": 120
+    }
+  },
+
+  "autonomic": {
+    "state_machine": {
+      "drowsy_timeout_seconds": 8.0
+    },
+    "sleep_triggers": {
+      "signal_count": {
+        "base_threshold": 8
+      },
+      "idle_timeout_seconds": 120,
+      "periodic_seconds": 600
+    }
+  }
+}

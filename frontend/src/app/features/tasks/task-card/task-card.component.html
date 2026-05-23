@@ -1,0 +1,186 @@
+<div
+  class="task-card"
+  [class]="priorityClass"
+  [class.expanded]="expanded"
+  [class.done]="task.status === 'done'"
+  [class.blocked]="task.status === 'blocked'"
+  [class.editing]="editMode"
+  (click)="toggleExpand()"
+>
+  <!-- ── Normal view header ─────────────────────────── -->
+  @if (!editMode) {
+    <div class="card-header">
+      <div class="card-left">
+        @if (task.status !== 'done') {
+          <button class="check-btn" (click)="onComplete($event)" title="Mark complete">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <circle cx="8" cy="8" r="7" />
+            </svg>
+          </button>
+        } @else {
+          <span class="check-done">
+            <svg viewBox="0 0 16 16" fill="currentColor">
+              <path d="M8 0a8 8 0 110 16A8 8 0 018 0zm3.41 5.59a1 1 0 00-1.42 0L7 8.59 6.01 7.59a1 1 0 00-1.42 1.42l1.5 1.5a1 1 0 001.42 0l3.5-3.5a1 1 0 000-1.42z"/>
+            </svg>
+          </span>
+        }
+        <span class="card-title" [class.strike]="task.status === 'done'">{{ task.title }}</span>
+      </div>
+      <div class="card-badges">
+        @if (children.length > 0) {
+          <span class="badge badge-members" [title]="childDoneCount + '/' + children.length + ' members done'">
+            &#9654; {{ childDoneCount }}/{{ children.length }}
+          </span>
+        }
+        @if (plan && planTotalCount > 0) {
+          <span class="badge badge-plan" [title]="plan.progress">
+            &#9776; {{ planDoneCount }}/{{ planTotalCount }}
+          </span>
+        }
+        @if (dueDateLabel) {
+          <span class="badge badge-due" [class.overdue]="dueDateOverdue" [title]="task.due_date">
+            {{ dueDateLabel }}
+          </span>
+        }
+        @if (task.idle_eligible) {
+          <span class="badge badge-idle" title="Idle eligible">&#9889;</span>
+        }
+        <span class="badge badge-priority" [class]="'bp-' + task.priority">
+          {{ task.priority }}
+        </span>
+        <span class="badge badge-list" [style.border-color]="listColor">
+          {{ listName }}
+        </span>
+        @if (task.description || plan || children.length > 0) {
+          <span class="badge badge-expand" [class.rotated]="expanded">&#9662;</span>
+        }
+      </div>
+    </div>
+
+    @if (expanded) {
+      <div class="card-details">
+        @if (task.description) {
+          <p class="detail-desc">{{ task.description }}</p>
+        }
+
+        @if (plan && plan.steps.length > 0) {
+          <div class="plan-progress">
+            <div class="plan-header">
+              <span class="plan-title">{{ plan.title || 'Execution Plan' }}</span>
+              <span class="plan-count">{{ planDoneCount }}/{{ planTotalCount }}</span>
+            </div>
+            <div class="plan-bar">
+              <div class="plan-bar-fill" [style.width.%]="planProgressPercent"></div>
+            </div>
+            <div class="plan-steps">
+              @for (step of plan.steps; track step.id) {
+                <div class="plan-step-row" [class.step-done]="step.status === 'done'"
+                     [class.step-active]="step.status === 'in_progress'"
+                     [class.step-failed]="step.status === 'failed'">
+                  <span class="step-icon">
+                    @if (step.status === 'done') { &#10003; }
+                    @else if (step.status === 'in_progress') { &#9654; }
+                    @else if (step.status === 'failed') { &#10007; }
+                    @else { &#9675; }
+                  </span>
+                  <span class="step-label">{{ step.label }}</span>
+                </div>
+              }
+            </div>
+          </div>
+        }
+
+        @if (children.length > 0) {
+          <div class="member-progress">
+            <div class="member-header">
+              <span class="member-title">Team Members</span>
+              <span class="member-count">{{ childDoneCount }}/{{ children.length }}</span>
+            </div>
+            <div class="member-bar">
+              <div class="member-bar-fill" [style.width.%]="childProgressPercent"></div>
+            </div>
+            <div class="member-rows">
+              @for (child of children; track child.id) {
+                <div class="member-row"
+                     [class.member-done]="child.status === 'done'"
+                     [class.member-active]="child.status === 'in_progress'"
+                     [class.member-failed]="child.status === 'blocked' || child.status === 'failed'">
+                  <span class="member-icon">{{ childStatusIcon(child.status) }}</span>
+                  <span class="member-label">{{ child.title }}</span>
+                  <span class="member-status">{{ child.status }}</span>
+                </div>
+              }
+            </div>
+          </div>
+        }
+
+        @if (task.notes) {
+          <div class="detail-notes">
+            <span class="detail-label">Progress notes:</span>
+            <p>{{ task.notes }}</p>
+          </div>
+        }
+        @if (task.tags?.length) {
+          <div class="detail-tags">
+            @for (tag of task.tags; track $index) {
+              <span class="tag-pill">{{ tag }}</span>
+            }
+          </div>
+        }
+        <div class="detail-meta">
+          <span class="source-icon" [title]="task.source">{{ sourceIcon }}</span>
+          <span class="meta-time">Created {{ formatTime(task.created_at) }}</span>
+          @if (task.completed_at) {
+            <span class="meta-time">Done {{ formatTime(task.completed_at) }}</span>
+          }
+        </div>
+        <div class="detail-actions">
+          <button class="action-btn" (click)="startEdit($event)">Edit</button>
+          <button class="action-btn danger" (click)="onRemove($event)">Delete</button>
+        </div>
+      </div>
+    }
+  }
+
+  <!-- ── Edit mode ──────────────────────────────────── -->
+  @if (editMode) {
+    <div class="edit-form" (click)="$event.stopPropagation()">
+      <input
+        #editTitleInput
+        class="edit-input edit-title"
+        [(ngModel)]="editTitle"
+        placeholder="Task title"
+        (keydown.enter)="saveEdit($event)"
+        (keydown.escape)="cancelEdit($event)"
+      />
+      <textarea
+        class="edit-input edit-desc"
+        [(ngModel)]="editDescription"
+        placeholder="Description (optional)"
+        rows="2"
+      ></textarea>
+      <div class="edit-row">
+        <select class="edit-select" [(ngModel)]="editPriority">
+          <option value="low">Low</option>
+          <option value="normal">Normal</option>
+          <option value="high">High</option>
+          <option value="urgent">Urgent</option>
+        </select>
+        <input
+          class="edit-input edit-date"
+          type="date"
+          [(ngModel)]="editDueDate"
+          title="Due date"
+        />
+      </div>
+      <label class="edit-idle">
+        <input type="checkbox" [(ngModel)]="editIdleEligible" />
+        <span>&#9889; Pick up during idle time</span>
+      </label>
+      <div class="edit-actions">
+        <button class="action-btn primary" (click)="saveEdit($event)">Save</button>
+        <button class="action-btn" (click)="cancelEdit($event)">Cancel</button>
+      </div>
+    </div>
+  }
+</div>

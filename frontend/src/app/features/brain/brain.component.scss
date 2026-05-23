@@ -1,0 +1,2125 @@
+$bg-main: #050508;
+$bg-card: rgba(255, 255, 255, 0.03);
+$border: rgba(255, 255, 255, 0.06);
+$accent: #38bdf8;
+$accent-green: #34d399;
+$accent-purple: #a78bfa;
+$accent-red: #f87171;
+$accent-amber: #fbbf24;
+$text-heading: #e5e5e5;
+$text-primary: #c5c5d0;
+$text-secondary: #a0a0b0;
+$text-muted: #787890;
+$text-dim: #4a4a5a;
+$font-mono: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+$radius-sm: 6px;
+$radius-md: 8px;
+$radius-lg: 12px;
+
+:host {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+}
+
+.brain-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: $bg-main;
+  color: $text-primary;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.brain-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  border-bottom: 1px solid $border;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.agent-name {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: $text-heading;
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.action-btn {
+  padding: 8px 16px;
+  border-radius: $radius-sm;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid $border;
+  background: $bg-card;
+  color: $text-primary;
+  transition: background 0.2s, border-color 0.2s;
+
+  &:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.06);
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+}
+
+.sleep-btn {
+  color: $accent;
+  border-color: rgba(56, 189, 248, 0.3);
+
+  &:hover:not(:disabled) {
+    background: rgba(56, 189, 248, 0.1);
+    border-color: rgba(56, 189, 248, 0.5);
+  }
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 12px 24px 0;
+  border-bottom: 1px solid $border;
+}
+
+.tab-btn {
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: $text-muted;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
+
+  &:hover {
+    color: $text-primary;
+  }
+
+  &.active {
+    color: $accent;
+    border-bottom-color: $accent;
+  }
+}
+
+.brain-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.tab-panel {
+  max-width: 1200px;
+}
+
+// =================================================================
+// Overview
+// =================================================================
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.stat-card {
+  background: $bg-card;
+  border: 1px solid $border;
+  border-radius: $radius-md;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stat-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: $text-muted;
+}
+
+.stat-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: $text-heading;
+
+  &.mono {
+    font-family: $font-mono;
+    font-size: 12px;
+  }
+
+  &.truncated {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &.in-vram {
+    color: $accent-green;
+  }
+}
+
+.section {
+  margin-bottom: 24px;
+
+  h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: $text-muted;
+    margin: 0 0 12px 0;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+}
+
+// =================================================================
+// Hormones
+// =================================================================
+
+.hormone-gauges {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.hormone-gauge {
+  display: grid;
+  grid-template-columns: 120px 1fr 60px;
+  align-items: center;
+  gap: 12px;
+}
+
+.hormone-label {
+  font-size: 13px;
+  color: $text-primary;
+}
+
+.gauge-bar-container {
+  height: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  position: relative;
+  overflow: visible;
+}
+
+.gauge-bar {
+  height: 100%;
+  border-radius: 6px;
+  transition: width 0.3s ease;
+}
+
+.baseline {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  background: $text-dim;
+  transform: translateX(-50%);
+}
+
+.hormone-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: $text-heading;
+  text-align: right;
+}
+
+// =================================================================
+// ANS
+// =================================================================
+
+.ans-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: $bg-card;
+  border: 1px solid $border;
+  border-radius: $radius-md;
+
+  .ans-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+  }
+
+  .ans-label {
+    font-size: 14px;
+    font-weight: 600;
+    text-transform: capitalize;
+  }
+
+  .ans-meta {
+    font-size: 12px;
+    color: $text-muted;
+    margin-left: 8px;
+  }
+
+  &.awake .ans-dot {
+    background: $accent-green;
+    box-shadow: 0 0 8px rgba(52, 211, 153, 0.5);
+  }
+
+  &.drowsy .ans-dot {
+    background: $accent-amber;
+    box-shadow: 0 0 8px rgba(251, 191, 36, 0.5);
+  }
+
+  &.sleeping .ans-dot {
+    background: $accent-purple;
+    box-shadow: 0 0 8px rgba(167, 139, 250, 0.5);
+  }
+
+  &.unknown .ans-dot {
+    background: $text-dim;
+  }
+}
+
+.history-placeholder {
+  margin-top: 24px;
+  padding: 24px;
+  background: $bg-card;
+  border: 1px solid $border;
+  border-radius: $radius-md;
+  color: $text-muted;
+  font-size: 13px;
+  text-align: center;
+}
+
+// =================================================================
+// Signals
+// =================================================================
+
+.signals-header {
+  margin-bottom: 16px;
+}
+
+.ans-badge {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: $radius-sm;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: capitalize;
+
+  &.awake {
+    background: rgba(52, 211, 153, 0.15);
+    color: $accent-green;
+  }
+
+  &.drowsy {
+    background: rgba(251, 191, 36, 0.15);
+    color: $accent-amber;
+  }
+
+  &.sleeping {
+    background: rgba(167, 139, 250, 0.15);
+    color: $accent-purple;
+  }
+
+  &.unknown {
+    background: rgba(255, 255, 255, 0.06);
+    color: $text-muted;
+  }
+}
+
+.signal-type-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.pill {
+  padding: 4px 10px;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: $radius-sm;
+  color: $text-primary;
+}
+
+.signal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.signal-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: $bg-card;
+  border: 1px solid $border;
+  border-radius: $radius-sm;
+  font-size: 13px;
+}
+
+.signal-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: $accent;
+  flex-shrink: 0;
+}
+
+.signal-type {
+  min-width: 100px;
+  color: $text-heading;
+}
+
+.signal-path {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: $font-mono;
+  font-size: 12px;
+  color: $text-primary;
+}
+
+.signal-ts,
+.muted {
+  font-size: 12px;
+  color: $text-muted;
+}
+
+.mono {
+  font-family: $font-mono;
+}
+
+// =================================================================
+// Events
+// =================================================================
+
+.events-toolbar {
+  margin-bottom: 16px;
+}
+
+.filter-select {
+  padding: 8px 12px;
+  border-radius: $radius-sm;
+  border: 1px solid $border;
+  background: $bg-card;
+  color: $text-primary;
+  font-size: 13px;
+  cursor: pointer;
+  min-width: 180px;
+}
+
+.event-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.event-item {
+  background: $bg-card;
+  border: 1px solid $border;
+  border-radius: $radius-md;
+  overflow: hidden;
+}
+
+.event-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 16px;
+  background: none;
+  border: none;
+  color: $text-primary;
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.2s;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.04);
+  }
+}
+
+.event-ts {
+  min-width: 80px;
+  font-size: 12px;
+}
+
+.event-name {
+  font-weight: 500;
+  color: $text-heading;
+}
+
+.event-details {
+  padding: 12px 16px;
+  border-top: 1px solid $border;
+  background: $bg-main;
+
+  pre {
+    margin: 0;
+    padding: 12px;
+    overflow-x: auto;
+    font-family: $font-mono;
+    font-size: 12px;
+    color: $text-primary;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: $radius-sm;
+  }
+}
+
+// =================================================================
+// Config - Toolbar
+// =================================================================
+
+.config-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-bottom: 16px;
+}
+
+.view-toggle-btn {
+  padding: 6px 14px;
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid $border;
+  border-radius: $radius-sm;
+  color: $text-muted;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover {
+    color: $accent;
+    border-color: rgba(56, 189, 248, 0.3);
+    background: rgba(56, 189, 248, 0.04);
+  }
+}
+
+// =================================================================
+// Config - Card View
+// =================================================================
+
+.config-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.config-card {
+  background: $bg-card;
+  border: 1px solid $border;
+  border-radius: $radius-md;
+  overflow: hidden;
+  transition: border-color 0.2s, box-shadow 0.2s;
+
+  &[open] {
+    border-color: rgba(255, 255, 255, 0.1);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+  }
+}
+
+.config-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  cursor: pointer;
+  list-style: none;
+  transition: background 0.2s;
+
+  &::-webkit-details-marker {
+    display: none;
+  }
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.02);
+  }
+}
+
+.config-card-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+  width: 32px;
+  text-align: center;
+}
+
+.config-card-title-group {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-shrink: 0;
+  min-width: 120px;
+}
+
+.config-card-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: $text-heading;
+  text-transform: capitalize;
+}
+
+.config-card-version {
+  font-size: 10px;
+  color: $text-dim;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 1px 6px;
+  border-radius: 6px;
+}
+
+.config-card-desc {
+  font-size: 12px;
+  color: $text-muted;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.config-card-body {
+  padding: 0 20px 20px;
+}
+
+.config-card-full-desc {
+  font-size: 12px;
+  color: $text-secondary;
+  line-height: 1.6;
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: $radius-sm;
+  border-left: 2px solid rgba(56, 189, 248, 0.3);
+}
+
+.config-field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.config-field {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: $radius-sm;
+  transition: border-color 0.2s;
+
+  &:hover {
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+}
+
+.config-field-label {
+  font-size: 11px;
+  color: $text-muted;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-field-value {
+  font-size: 12px;
+  color: $text-primary;
+  font-family: $font-mono;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 120px;
+}
+
+.config-bool {
+  font-weight: 600;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 10px;
+  border-radius: 10px;
+
+  &.config-bool-on {
+    color: $accent-green;
+    background: rgba(52, 211, 153, 0.12);
+  }
+
+  &.config-bool-off {
+    color: $accent-red;
+    background: rgba(248, 113, 113, 0.08);
+  }
+}
+
+.config-number {
+  color: $accent;
+}
+
+// Nested JSON toggle inside a card
+.config-json-toggle {
+  margin-top: 4px;
+}
+
+.config-json-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 11px;
+  color: $text-muted;
+  cursor: pointer;
+  border-radius: $radius-sm;
+  transition: color 0.2s, background 0.2s;
+  list-style: none;
+
+  &::-webkit-details-marker {
+    display: none;
+  }
+
+  &::before {
+    content: '{ }';
+    font-size: 10px;
+    font-family: $font-mono;
+    color: $text-dim;
+  }
+
+  &:hover {
+    color: $accent;
+    background: rgba(56, 189, 248, 0.04);
+  }
+}
+
+.json-tree-container {
+  margin-top: 8px;
+  max-height: 500px;
+  overflow: auto;
+}
+
+// =================================================================
+// Config - JSON View (original)
+// =================================================================
+
+.config-section {
+  margin-bottom: 20px;
+
+  h4 {
+    font-size: 13px;
+    font-weight: 500;
+    color: $text-heading;
+    margin: 0 0 8px 0;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  }
+}
+
+.config-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: $text-heading;
+  margin-bottom: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.config-code {
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid $border;
+  border-radius: $radius-sm;
+  overflow-x: auto;
+  margin: 0;
+
+  code {
+    font-family: $font-mono;
+    font-size: 12px;
+    line-height: 1.6;
+    color: $text-secondary;
+    white-space: pre;
+  }
+}
+
+// =================================================================
+// Schedule
+// =================================================================
+
+.schedule-section {
+  padding: 4px 0;
+}
+
+.section-heading {
+  font-size: 13px;
+  font-weight: 600;
+  color: $text-heading;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0 0 4px;
+}
+
+.section-desc {
+  font-size: 12px;
+  color: $text-muted;
+  margin: 0 0 16px;
+}
+
+.schedule-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.schedule-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.schedule-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: $text-secondary;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.schedule-input {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid $border;
+  border-radius: $radius-sm;
+  color: $text-primary;
+  font-size: 13px;
+  padding: 8px 10px;
+  outline: none;
+  transition: border-color 0.15s;
+
+  &:focus {
+    border-color: $accent;
+  }
+
+  option {
+    background: #1a1a2e;
+    color: $text-primary;
+  }
+}
+
+.schedule-toggle-field {
+  flex-direction: row;
+  align-items: center;
+  gap: 10px;
+}
+
+.schedule-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+
+  input[type="checkbox"] {
+    accent-color: $accent;
+    width: 14px;
+    height: 14px;
+  }
+}
+
+.schedule-toggle-label {
+  font-size: 12px;
+  color: $text-secondary;
+}
+
+.schedule-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+}
+
+.schedule-save-btn {
+  background: $accent;
+  color: #050508;
+  border: none;
+  border-radius: $radius-sm;
+  padding: 8px 20px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+
+  &:hover:not(:disabled) {
+    opacity: 0.9;
+  }
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+}
+
+.schedule-saved-msg {
+  font-size: 12px;
+  color: $accent-green;
+  font-weight: 500;
+}
+
+// =================================================================
+// Empty state
+// =================================================================
+
+.empty-state {
+  padding: 32px;
+  text-align: center;
+  color: $text-dim;
+  font-size: 13px;
+}
+
+// =================================================================
+// Tab separator (visual group divider)
+// =================================================================
+
+.tab-separator {
+  display: inline-block;
+  width: 1px;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.1);
+  margin: 0 4px;
+  vertical-align: middle;
+}
+
+// =================================================================
+// Network Dominance (overview)
+// =================================================================
+
+.network-dominance-section {
+  margin-top: 16px;
+}
+
+.network-overview-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.network-overview-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.net-label {
+  font-size: 12px;
+  color: $text-dim;
+  width: 32px;
+  text-align: right;
+}
+
+.net-bar-track {
+  flex: 1;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.net-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.6s ease;
+
+  &.ecn { background: #38bdf8; }
+  &.sn  { background: #fbbf24; }
+  &.dmn { background: #c084fc; }
+}
+
+.net-val {
+  font-size: 11px;
+  color: $text-dim;
+  width: 32px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.net-state-label {
+  font-size: 12px;
+  color: $text-dim;
+  margin-top: 8px;
+}
+
+// =================================================================
+// Self-State tab
+// =================================================================
+
+.self-state-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.self-state-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ss-label {
+  font-size: 12px;
+  color: $text-dim;
+  width: 70px;
+  text-align: right;
+}
+
+.ss-bar-track {
+  flex: 1;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.ss-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.6s ease;
+
+  &.energy     { background: #34d399; }
+  &.valence    { background: #6ee7b7; }
+  &.arousal    { background: #fbbf24; }
+  &.coherence  { background: #38bdf8; }
+  &.engagement { background: #818cf8; }
+  &.bonding    { background: #a78bfa; }
+}
+
+.ss-val {
+  font-size: 11px;
+  color: $text-dim;
+  width: 40px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.ss-delta {
+  font-size: 10px;
+  width: 48px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+
+  &.positive { color: #34d399; }
+  &.negative { color: #f87171; }
+}
+
+.self-state-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.ss-chip {
+  font-size: 11px;
+  padding: 2px 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  color: $text-dim;
+}
+
+// =================================================================
+// Network Dynamics tab
+// =================================================================
+
+.network-detail-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.nd-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.nd-label {
+  font-size: 12px;
+  color: $text-dim;
+  width: 160px;
+}
+
+.nd-track {
+  flex: 1;
+  height: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.nd-fill {
+  height: 100%;
+  border-radius: 5px;
+  transition: width 0.6s ease;
+
+  &.ecn { background: #38bdf8; }
+  &.sn  { background: #fbbf24; }
+  &.dmn { background: #c084fc; }
+}
+
+.nd-val {
+  font-size: 12px;
+  color: $text-dim;
+  width: 36px;
+  text-align: right;
+}
+
+.nd-state {
+  margin-top: 12px;
+  font-size: 13px;
+  color: $text-dim;
+}
+
+.transition-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.transition-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.transition-arrow {
+  color: $text-dim;
+}
+
+.transition-trigger {
+  margin-left: auto;
+  font-size: 11px;
+}
+
+// =================================================================
+// Working Memory tab
+// =================================================================
+
+.wm-overview-stats {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.wm-ws-switcher {
+  display: flex;
+  gap: 2px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  padding: 2px;
+}
+
+.wm-ws-btn {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 4px 12px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.4);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+
+  &:hover {
+    color: rgba(255, 255, 255, 0.65);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  &.active {
+    color: rgba(255, 255, 255, 0.9);
+    background: rgba(139, 92, 246, 0.18);
+  }
+}
+
+.wm-ws-active-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #34d399;
+  flex-shrink: 0;
+}
+
+.wm-stat {
+  font-size: 13px;
+  color: $text-dim;
+  padding: 4px 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+}
+
+.wm-card {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  border-left: 3px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 6px;
+  transition: opacity 0.3s ease;
+}
+
+.goal-card    { border-left-color: #f59e0b; }
+.slot-card    { border-left-color: #34d399; }
+.intention-card { border-left-color: #2dd4bf; }
+
+.wm-card-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  color: $text-dim;
+  text-transform: uppercase;
+}
+
+.wm-card-content {
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.8);
+  flex: 1;
+}
+
+.wm-card-domain {
+  font-size: 11px;
+}
+
+.ctx-list {
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.ctx-card {
+  border-left-color: rgba(56, 189, 248, 0.3);
+
+  &.ctx-learn    { border-left-color: #34d399; }
+  &.ctx-bond     { border-left-color: #38bdf8; }
+  &.ctx-evaluate { border-left-color: #fbbf24; }
+}
+
+.ctx-card .wm-card-badge {
+  &.badge-learn    { background: rgba(52, 211, 153, 0.15); color: #34d399; }
+  &.badge-bond     { background: rgba(56, 189, 248, 0.15); color: #38bdf8; }
+  &.badge-evaluate { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+}
+
+.wm-workspace-pill {
+  font-size: 10px;
+  font-weight: 600;
+  color: #a78bfa;
+  background: rgba(167, 139, 250, 0.12);
+  padding: 2px 8px;
+  border-radius: 8px;
+  text-transform: capitalize;
+}
+
+.wm-consolidation-block {
+  font-size: 12px;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(129, 140, 248, 0.06);
+  border-left: 3px solid #818cf8;
+  padding: 10px 14px;
+  border-radius: 6px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.other-ws-card {
+  border-left-color: #64748b;
+  background: rgba(255, 255, 255, 0.015);
+}
+
+// =================================================================
+// Theory of Mind tab
+// =================================================================
+
+.tom-header {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: $text-dim;
+}
+
+.tom-temp-bar {
+  height: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 5px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+
+.tom-temp-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #38bdf8, #f59e0b, #f87171);
+  border-radius: 5px;
+  transition: width 0.6s ease;
+}
+
+.tom-temp-label {
+  font-size: 12px;
+  color: $text-dim;
+}
+
+.tom-user-card {
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.tom-user-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.tom-user-id {
+  font-size: 13px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.tom-user-turns {
+  font-size: 12px;
+}
+
+.tom-field {
+  font-size: 12px;
+  color: $text-dim;
+  margin-bottom: 4px;
+}
+
+.tom-key {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.tom-interests {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+.tom-interest-pill {
+  font-size: 10px;
+  padding: 2px 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  color: $text-dim;
+}
+
+.tom-expertise {
+  margin-top: 8px;
+}
+
+.tom-expertise-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.tom-exp-domain {
+  font-size: 11px;
+  color: $text-dim;
+  width: 80px;
+  text-align: right;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tom-exp-track {
+  flex: 1;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.tom-exp-fill {
+  height: 100%;
+  background: #38bdf8;
+  border-radius: 3px;
+}
+
+// =================================================================
+// Narrative tab
+// =================================================================
+
+// ─── Narrative Header ───
+.narrative-header {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.narr-stat {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  min-width: 80px;
+}
+
+.narr-stat-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.narr-stat-label {
+  font-size: 10px;
+  color: $text-dim;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.narr-stat.active-strategy .narr-stat-value {
+  color: #fbbf24;
+  font-size: 14px;
+  text-transform: capitalize;
+}
+
+// Soul wish card
+.soul-wish-card {
+  background: rgba(56, 189, 248, 0.04);
+  border: 1px solid rgba(56, 189, 248, 0.15);
+  border-radius: 10px;
+  padding: 14px 18px;
+  margin-bottom: 16px;
+}
+
+.soul-wish-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: rgba(56, 189, 248, 0.6);
+  margin-bottom: 6px;
+}
+
+.soul-wish-text {
+  font-size: 14px;
+  color: #d0e8f8;
+  line-height: 1.5;
+  font-weight: 300;
+}
+
+// Narrative timeline
+.narrative-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.narrative-block {
+  background: $bg-card;
+  border: 1px solid $border;
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+
+.nb-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.nb-type-badge {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: $text-dim;
+
+  &.nb-type-task { color: #34d399; border-color: rgba(52, 211, 153, 0.2); background: rgba(52, 211, 153, 0.06); }
+  &.nb-type-exploration { color: #38bdf8; border-color: rgba(56, 189, 248, 0.2); background: rgba(56, 189, 248, 0.06); }
+  &.nb-type-episode { color: #a78bfa; border-color: rgba(167, 139, 250, 0.2); background: rgba(167, 139, 250, 0.06); }
+  &.nb-type-connection { color: #fbbf24; border-color: rgba(251, 191, 36, 0.2); background: rgba(251, 191, 36, 0.06); }
+  &.nb-type-reflection { color: #f472b6; border-color: rgba(244, 114, 182, 0.2); background: rgba(244, 114, 182, 0.06); }
+}
+
+.nb-time {
+  font-size: 10px;
+  color: $text-dim;
+  margin-left: auto;
+}
+
+.nb-content {
+  font-size: 12px;
+  color: $text-muted;
+  line-height: 1.4;
+}
+
+.nb-domains {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.show-more-btn {
+  display: block;
+  margin: 12px auto 0;
+  background: transparent;
+  border: 1px solid $border;
+  border-radius: 6px;
+  color: $text-dim;
+  font-size: 12px;
+  padding: 6px 16px;
+  cursor: pointer;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.04);
+    color: $text-muted;
+  }
+}
+
+.narr-values {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.narr-values-label {
+  font-size: 11px;
+  color: $text-dim;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.narr-value-pill {
+  font-size: 11px;
+  padding: 2px 10px;
+  background: rgba(167, 139, 250, 0.1);
+  border: 1px solid rgba(167, 139, 250, 0.2);
+  border-radius: 12px;
+  color: #a78bfa;
+  text-transform: capitalize;
+}
+
+// ─── Episode Cards ───
+.episode-card {
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  border-left: 3px solid rgba(255, 255, 255, 0.1);
+  margin-bottom: 8px;
+  transition: background 0.2s ease;
+}
+
+.ep-current { border-left-color: #34d399; }
+
+.ep-closed {
+  cursor: pointer;
+  &:hover { background: rgba(255, 255, 255, 0.05); }
+}
+
+.ep-expanded { background: rgba(255, 255, 255, 0.05); }
+
+.ep-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ep-number {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.5);
+  min-width: 24px;
+}
+
+.ep-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.85);
+  flex: 1;
+}
+
+.ep-meta-inline {
+  font-size: 11px;
+  color: $text-dim;
+  white-space: nowrap;
+}
+
+.ep-badge {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ep-active {
+  background: rgba(52, 211, 153, 0.15);
+  color: #34d399;
+}
+
+.ep-mood-badge {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  color: #fff;
+  text-transform: capitalize;
+}
+
+.ep-chevron {
+  font-size: 12px;
+  color: $text-dim;
+  margin-left: 4px;
+}
+
+.ep-live-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background: #34d399;
+  border-radius: 50%;
+  margin-right: 6px;
+  animation: pulse-dot 1.5s infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+// ─── Episode Body (expanded detail) ───
+.ep-body {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.ep-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.ep-key {
+  font-size: 11px;
+  color: $text-dim;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  min-width: 140px;
+}
+
+// ─── Emotional Arc Visualization ───
+.ep-arc-visual {
+  margin-top: 12px;
+  padding: 10px;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 8px;
+}
+
+.ep-arc-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: $text-dim;
+  margin-bottom: 8px;
+}
+
+.ep-arc-track {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  height: 40px;
+  position: relative;
+}
+
+.ep-arc-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  position: relative;
+  flex-shrink: 0;
+  cursor: help;
+  transition: transform 0.2s;
+  &:hover { transform: scale(1.5); }
+}
+
+.ep-arc-moods {
+  display: flex;
+  gap: 4px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+
+.ep-arc-mood-label {
+  font-size: 10px;
+  text-transform: capitalize;
+}
+
+// ─── Domains ───
+.ep-domains {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.domain-pill {
+  font-size: 10px;
+  padding: 2px 8px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  color: $text-dim;
+}
+
+.ep-summary {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.65);
+  line-height: 1.5;
+  padding: 8px 10px;
+  margin: 8px 0;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 6px;
+  border-left: 2px solid rgba(167, 139, 250, 0.4);
+}
+
+.ep-topics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 8px;
+  align-items: center;
+}
+
+.ep-topics-label {
+  font-size: 10px;
+  color: $text-dim;
+  margin-right: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.topic-pill {
+  font-size: 11px;
+  padding: 2px 8px;
+  background: rgba(167, 139, 250, 0.1);
+  border-radius: 10px;
+  color: #a78bfa;
+  max-width: 250px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+// =================================================================
+// Predictions tab
+// =================================================================
+
+.predictions-header {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: $text-dim;
+}
+
+.prediction-detail {
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+}
+
+.pred-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+
+  &:last-child { border-bottom: none; }
+}
+
+.pred-key {
+  color: $text-dim;
+}
+
+.uncertainty-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.uncertainty-domain {
+  font-size: 12px;
+  width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.uncertainty-track {
+  flex: 1;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.uncertainty-fill {
+  height: 100%;
+  background: #fb923c;
+  border-radius: 3px;
+}
+
+.uncertainty-val {
+  font-size: 11px;
+  color: $text-dim;
+  width: 40px;
+  text-align: right;
+}
+
+// ─── Visual Cortex Tab ───────────────────────────────────────────
+
+.vc-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.vc-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid $border;
+}
+
+.vc-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.vc-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.vc-status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+
+  &.running {
+    background: rgba($accent-green, 0.15);
+    color: $accent-green;
+  }
+
+  &.stopped {
+    background: rgba($accent-red, 0.12);
+    color: $accent-red;
+  }
+
+  &.active {
+    background: rgba($accent, 0.15);
+    color: $accent;
+  }
+}
+
+.vc-meta {
+  font-size: 11px;
+  color: $text-muted;
+  font-family: $font-mono;
+}
+
+.vc-event-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: calc(100vh - 260px);
+  overflow-y: auto;
+  padding-right: 4px;
+
+  &::-webkit-scrollbar {
+    width: 4px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 2px;
+  }
+}
+
+.vc-event {
+  background: $bg-card;
+  border: 1px solid $border;
+  border-radius: $radius-md;
+  padding: 10px 14px;
+  transition: border-color 0.15s;
+
+  &:hover {
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+
+  &.agent {
+    border-left: 3px solid rgba($accent, 0.5);
+  }
+
+  &.user {
+    border-left: 3px solid rgba($accent-purple, 0.5);
+  }
+}
+
+.vc-event-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.vc-channel-badge {
+  display: inline-flex;
+  padding: 1px 7px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+
+  &.agent {
+    background: rgba($accent, 0.15);
+    color: $accent;
+  }
+  &.user {
+    background: rgba($accent-purple, 0.15);
+    color: $accent-purple;
+  }
+}
+
+.vc-tool-badge {
+  display: inline-flex;
+  padding: 1px 7px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  background: rgba($accent-amber, 0.12);
+  color: $accent-amber;
+}
+
+.vc-app {
+  font-size: 12px;
+  font-weight: 600;
+  color: $text-primary;
+}
+
+.vc-title {
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 240px;
+}
+
+.vc-ts {
+  font-size: 10px;
+  font-family: $font-mono;
+  margin-left: auto;
+}
+
+.vc-confidence {
+  font-size: 10px;
+  font-family: $font-mono;
+}
+
+.vc-description {
+  font-size: 12px;
+  color: $text-secondary;
+  line-height: 1.5;
+  padding: 4px 0 2px;
+}
+
+.vc-change {
+  font-size: 11px;
+  color: $accent-green;
+  padding: 2px 0;
+}
+
+.vc-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: $text-muted;
+  cursor: pointer;
+}
+
+.vc-ocr-details {
+  margin-top: 4px;
+}
+
+.vc-ocr {
+  font-size: 11px;
+  font-family: $font-mono;
+  color: $text-secondary;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: $radius-sm;
+  padding: 8px 10px;
+  margin-top: 4px;
+  max-height: 160px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+// Neural activity section
+.neural-activity-section {
+  h3 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+}
+
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: $text-muted;
+  display: inline-block;
+
+  &.active {
+    background: $accent-green;
+    box-shadow: 0 0 6px $accent-green;
+    animation: pulse-dot 1s ease-in-out infinite;
+  }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.probe-fired-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+
+.probe-pill {
+  display: inline-flex;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+
+  &.fired {
+    background: rgba($accent-green, 0.15);
+    color: $accent-green;
+    border: 1px solid rgba($accent-green, 0.3);
+  }
+}
+
+.probe-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.probe-bar-row {
+  display: grid;
+  grid-template-columns: 100px 1fr 36px;
+  align-items: center;
+  gap: 8px;
+}
+
+.probe-bar-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: $text-secondary;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.probe-bar-track {
+  height: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.probe-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: rgba($accent, 0.5);
+  transition: width 0.3s ease;
+
+  &.fired {
+    background: $accent-green;
+    box-shadow: 0 0 4px rgba($accent-green, 0.4);
+  }
+}
+
+.probe-bar-value {
+  font-size: 10px;
+  font-family: $font-mono;
+  color: $text-muted;
+  text-align: right;
+}
+
+.action-btn.active {
+  background: rgba($accent, 0.15);
+  color: $accent;
+  border-color: rgba($accent, 0.3);
+}

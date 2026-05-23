@@ -1,0 +1,109 @@
+[
+  {
+    "id": "essentials",
+    "name": "Essentials",
+    "icon": "star",
+    "description": "The basics every agent should have",
+    "tools": [
+      "calculator",
+      "file_read",
+      "file_write",
+      "terminal",
+      "web_search",
+      "note_memory",
+      "system_info"
+    ]
+  },
+  {
+    "id": "developer",
+    "name": "Developer",
+    "icon": "code",
+    "description": "Code, debug, test, and manage repos",
+    "tools": [
+      "terminal",
+      "git",
+      "file_read",
+      "file_write",
+      "file_edit",
+      "file_tree",
+      "file_search",
+      "code_analyze",
+      "test_runner",
+      "diff_patch",
+      "env_manager"
+    ]
+  },
+  {
+    "id": "researcher",
+    "name": "Researcher",
+    "icon": "science",
+    "description": "Search, read papers, take notes, translate",
+    "tools": [
+      "web_search",
+      "wikipedia",
+      "arxiv_search",
+      "pdf_tools",
+      "note_memory",
+      "translate",
+      "youtube_transcript",
+      "rss_reader"
+    ]
+  },
+  {
+    "id": "data_engineer",
+    "name": "Data Engineer",
+    "icon": "database",
+    "description": "Query databases, transform data, visualize",
+    "tools": [
+      "sql_query",
+      "local_db",
+      "json_transform",
+      "spreadsheet",
+      "calculator",
+      "regex_tool",
+      "chart_generate"
+    ]
+  },
+  {
+    "id": "devops",
+    "name": "DevOps",
+    "icon": "cloud",
+    "description": "Containers, processes, scheduling, monitoring",
+    "tools": [
+      "docker",
+      "process_manager",
+      "system_info",
+      "terminal",
+      "git",
+      "env_manager",
+      "cron_scheduler"
+    ]
+  },
+  {
+    "id": "creative",
+    "name": "Creative",
+    "icon": "palette",
+    "description": "Generate images, audio, charts, screenshots",
+    "tools": [
+      "image_generate",
+      "tts",
+      "chart_generate",
+      "screenshot",
+      "browser"
+    ]
+  },
+  {
+    "id": "communicator",
+    "name": "Communicator",
+    "icon": "chat",
+    "description": "Email, messaging, notifications, calendar",
+    "tools": [
+      "email",
+      "notification",
+      "calendar",
+      "slack",
+      "discord",
+      "telegram"
+    ]
+  }
+]

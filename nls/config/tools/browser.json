@@ -1,0 +1,133 @@
+{
+  "name": "browser",
+  "description": "Automated web browser for navigating pages, clicking, filling forms, and extracting content. Uses Playwright headless browser.",
+  "version": "1.0.0",
+  "category": "act",
+  "hormone_affinity": "dopamine",
+  "base_effort": 0.5,
+  "learning_yield": "high",
+  "risk_level": "execute",
+  "platform": "all",
+  "permissions": [
+    "network.outbound",
+    "shell.execute"
+  ],
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": [
+          "navigate",
+          "snapshot",
+          "click",
+          "fill",
+          "type",
+          "screenshot",
+          "evaluate",
+          "press",
+          "close"
+        ],
+        "description": "Browser action to perform"
+      },
+      "url": {
+        "type": "string",
+        "description": "URL to navigate to"
+      },
+      "ref": {
+        "type": "string",
+        "description": "Element ref from snapshot (e.g., 'e3') for click/fill/type actions"
+      },
+      "value": {
+        "type": "string",
+        "description": "Value for fill action"
+      },
+      "script": {
+        "type": "string",
+        "description": "JavaScript to evaluate (for evaluate action)"
+      },
+      "key": {
+        "type": "string",
+        "description": "Key name for press action (e.g., 'Enter', 'Tab')"
+      },
+      "submit": {
+        "type": "boolean",
+        "description": "Press Enter after typing (for type action)"
+      },
+      "full_page": {
+        "type": "boolean",
+        "description": "Capture full page screenshot (not just viewport)"
+      },
+      "output_path": {
+        "type": "string",
+        "description": "Screenshot save path"
+      }
+    },
+    "required": [
+      "action"
+    ]
+  },
+  "manual": {
+    "overview": "Interactive web browser for agentic automation. Navigate to pages, read AI snapshots of interactive elements (with semantic refs like e3), then click/fill/type using those refs. Essential for web automation, form filling, admin panels, and any task requiring web interaction.",
+    "examples": [
+      {
+        "input": {
+          "action": "navigate",
+          "url": "https://example.com"
+        },
+        "description": "Navigate to a page and get an AI snapshot of interactive elements"
+      },
+      {
+        "input": {
+          "action": "click",
+          "ref": "e3"
+        },
+        "description": "Click the element with ref e3 from the last snapshot"
+      },
+      {
+        "input": {
+          "action": "fill",
+          "ref": "e1",
+          "value": "user@example.com"
+        },
+        "description": "Fill a text input identified by ref e1"
+      },
+      {
+        "input": {
+          "action": "type",
+          "ref": "e5",
+          "value": "search query",
+          "submit": true
+        },
+        "description": "Type into a search box and press Enter"
+      },
+      {
+        "input": {
+          "action": "screenshot"
+        },
+        "description": "Take a screenshot of the current page"
+      }
+    ],
+    "tips": [
+      "Always navigate first to get a snapshot of interactive elements on the page",
+      "Use refs from the snapshot (e.g., e3) to target elements -- never use CSS selectors",
+      "Take a new snapshot if a click causes the page to change significantly",
+      "Use 'type' instead of 'fill' for search boxes that need autocomplete/JS events",
+      "Use 'press' with key='Enter' to submit forms after filling fields"
+    ],
+    "edge_cases": [
+      "CAPTCHA pages will block automation -- report to user and ask for help",
+      "SPAs may need a snapshot refresh after navigation",
+      "Auth pages: always ask the user for credentials, never guess",
+      "Elements may shift after dynamic content loads -- re-snapshot if actions fail"
+    ],
+    "related_tools": [
+      "web_search",
+      "screenshot"
+    ]
+  },
+  "executor": {
+    "type": "python",
+    "handler": "nls.engine.tools_browser.BrowserTool"
+  }
+}

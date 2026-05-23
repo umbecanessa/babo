@@ -1,0 +1,48 @@
+{
+  "name": "file_write",
+  "description": "Write content to a file. Creates parent directories if needed.",
+  "version": "1.0.0",
+  "category": "act",
+  "hormone_affinity": "dopamine",
+  "base_effort": 0.3,
+  "learning_yield": "low",
+  "risk_level": "write",
+  "platform": "desktop",
+  "permissions": ["filesystem.write"],
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "path": { "type": "string", "description": "Absolute path to the file" },
+      "content": { "type": "string", "description": "Content to write" },
+      "append": { "type": "boolean", "description": "Append instead of overwrite", "default": false }
+    },
+    "required": ["path", "content"]
+  },
+
+  "manual": {
+    "overview": "Use file_write to create new files or overwrite existing ones. It can also append to files like logs. Parent directories are created automatically.",
+    "examples": [
+      { "description": "Create a new Python script", "input": { "path": "/home/user/hello.py", "content": "print('Hello world')" } },
+      { "description": "Append to a log file", "input": { "path": "/tmp/app.log", "content": "2024-01-01 Error occurred\n", "append": true } },
+      { "description": "Write a JSON config", "input": { "path": "/home/user/.config/app.json", "content": "{\"theme\": \"dark\"}" } }
+    ],
+    "tips": [
+      "Use append mode for log files to avoid losing previous entries.",
+      "Always double-check the path before writing to avoid overwriting important files.",
+      "For editing existing files, prefer file_edit over file_write to make surgical changes."
+    ],
+    "edge_cases": [
+      "Writing to a read-only file will fail with a permission error.",
+      "Without append mode, the entire file is replaced — not just updated."
+    ],
+    "related_tools": ["file_read", "file_edit"]
+  },
+
+  "executor": {
+    "type": "file_write",
+    "path": "{{args.path}}",
+    "content": "{{args.content}}",
+    "append": "{{args.append}}"
+  }
+}

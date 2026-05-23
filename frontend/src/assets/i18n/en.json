@@ -1,0 +1,106 @@
+{
+  "onboarding": {
+    "dashboard": {
+      "title": "Welcome to Babo",
+      "p1": "You're about to create something that has never existed before — an AI that <b>actually remembers you</b>. Not through a prompt file. Through its own neural weights, shaped by every conversation you'll have together.",
+      "p2": "Babo agents have <b>personality</b>, <b>values</b>, <b>mood</b>, and <b>curiosity</b>. They sleep to consolidate what they learned. They dream. They browse the web on their own when something sparks their interest. This isn't a chatbot — it's a mind that grows.",
+      "p3": "Hit <b>Create Agent</b> to bring your first one to life. Give it a direction, talk to it, challenge it — and watch it become something uniquely yours."
+    },
+    "create": {
+      "title": "Creating a Mind",
+      "p1": "Your new agent starts with base knowledge and a set of values, but no personal memory. Everything it learns from you will become part of its <b>neural identity</b> — permanently encoded, not pasted into a prompt.",
+      "p2": "Choose an education path that fits your needs. A <b>Scientifico</b> mind thinks analytically; a <b>Classico</b> mind thinks deeply about meaning. Or start from scratch with <b>Tabula Rasa</b>."
+    },
+    "chat": {
+      "title": "Talking to a Living Agent",
+      "p1": "Your agent has its own mood, curiosity, and memory. It might search the web on its own, tell you what it learned while you were away, or ask you questions. This is a conversation with something that <b>evolves</b>.",
+      "p2": "For complex tasks — building, debugging, researching — the agent enters <b>agentic mode</b>: planning steps, using tools, and iterating autonomously. You can see its progress in real time and guide it mid-task.",
+      "p3": "The agent <b>sleeps</b> to consolidate what it learned. If you see a sleep indicator, it will be back shortly with updated knowledge."
+    },
+    "brain": {
+      "title": "Inside the Agent's Mind",
+      "p1": "This dashboard lets you observe your agent's inner life: <b>hormones</b> that shape its mood, <b>signals</b> that track what it's learning, and a <b>circadian schedule</b> that governs when it sleeps.",
+      "p2": "You don't need to manage any of this — it runs autonomously. It's here so you can understand <b>why</b> your agent behaves the way it does."
+    },
+    "tools": {
+      "title": "Actions, Not Just Words",
+      "p1": "Your agent can read files, write code, run commands, and browse the web. These <b>core tools</b> are always available.",
+      "p2": "What's unique: your agent can create its own <b>skills</b> — Python extensions that add new capabilities. When it does, they'll appear here for your review. Nothing runs without your approval."
+    }
+  },
+  "onboarding_btn": {
+    "got_it": "Got it",
+    "lets_go": "Let's go"
+  },
+  "info": {
+    "neural_state": {
+      "title": "Neural State",
+      "p1": "Your agent has a virtual <b>heartbeat</b> that reflects its cognitive activity. BPM rises when the agent is thinking, conversing, or exploring — and drops when it rests or sleeps. The state label (<b>Active</b>, <b>Resting</b>, <b>Drowsy</b>, <b>Deep Sleep</b>) is derived directly from BPM.",
+      "p2": "<b>Valence</b> is the agent's emotional tone — negative (red) to positive (green). <b>Arousal</b> measures activation intensity. <b>Engagement</b> tracks how absorbed the agent is in the current topic. <b>Bonding</b> reflects how connected it feels to you. <b>Coherence</b> indicates how aligned its internal reasoning is.",
+      "p3": "These aren't cosmetic — they <b>modulate behavior</b>. A low-valence, high-cortisol agent responds differently than a relaxed, high-dopamine one. You're watching a mind regulate itself in real time."
+    },
+    "memory": {
+      "title": "Memory & State",
+      "p1": "<b>Facts</b> are persistent learned items stored in the agent's long-term memory — things it picked up from conversations, web browsing, or autonomous exploration. Unlike context-window tricks, these survive across sessions.",
+      "p2": "<b>Sleep Cycles</b> count how many times the agent has entered deep sleep to consolidate knowledge. Each cycle strengthens important memories and lets weaker ones decay naturally — just like biological sleep.",
+      "p3": "<b>ANS State</b> shows the current mode of the Autonomic Nervous System: <b>Sympathetic</b> (alert, active) or <b>Parasympathetic</b> (resting, consolidating). This governs whether the agent is ready to engage or quietly processing in the background."
+    },
+    "hormones": {
+      "title": "Hormones",
+      "p1": "The agent's behavior is shaped by a virtual <b>hormonal system</b> inspired by human neurochemistry. These are live values that shift with every interaction and autonomously over time — together they create <b>emergent personality</b>.",
+      "legend": {
+        "dopamine": "Dopamine",
+        "dopamine_desc": "Reward & curiosity — drives exploration and learning motivation",
+        "serotonin": "Serotonin",
+        "serotonin_desc": "Mood stability & contentment — keeps the agent emotionally balanced",
+        "norepinephrine": "Norepinephrine",
+        "norepinephrine_desc": "Alertness & focus — sharpens attention during complex tasks",
+        "cortisol": "Cortisol",
+        "cortisol_desc": "Stress response — rises under uncertainty or repeated failures",
+        "oxytocin": "Oxytocin",
+        "oxytocin_desc": "Social bonding & trust — deepens with meaningful conversations"
+      }
+    },
+    "activity": {
+      "title": "Activity Feed",
+      "p1": "This feed shows what your agent does <b>autonomously</b> — actions it takes on its own, without being asked. Each type appears color-coded in the feed.",
+      "legend": {
+        "dream": "✦ Daydream",
+        "dream_desc": "Passive memory replay — the agent revisits and reconnects past experiences",
+        "active_dream": "🔭 Active Dream",
+        "active_dream_desc": "Active exploration — the agent browses the web, practices skills, or digs into topics",
+        "drive": "⚡ Drive",
+        "drive_desc": "Curiosity-driven autonomous action — web searches, Wikipedia, investigations",
+        "reach_out": "💬 Reach Out",
+        "reach_out_desc": "Proactive social initiative — the agent decides to contact you on its own",
+        "finding": "📋 Finding",
+        "finding_desc": "A discovery the agent considers worth sharing with you"
+      }
+    },
+    "working_memory": {
+      "title": "Working Memory",
+      "p1": "The agent's <b>active context</b> — what it's \"thinking about\" right now. These items rotate dynamically based on conversation flow. You can <b>edit</b> or <b>delete</b> items to steer what the agent focuses on.",
+      "legend": {
+        "learn": "Learn",
+        "learn_desc": "New knowledge being processed — facts, insights, and patterns the agent is absorbing",
+        "bond": "Bond",
+        "bond_desc": "Social & emotional context — relationship signals, preferences, and personal details",
+        "evaluate": "Evaluate",
+        "evaluate_desc": "Active assessment — things the agent is questioning, comparing, or critically examining"
+      }
+    },
+    "network": {
+      "title": "Network Dynamics",
+      "p1": "Inspired by neuroscience, the agent's brain switches between three large-scale neural networks that compete for dominance, just like in the human brain.",
+      "p2": "The <b>Salience Network (SN)</b> acts as a gatekeeper — it detects important events and decides which of the other two networks should take control.",
+      "legend": {
+        "ecn": "ECN – Executive Control",
+        "ecn_desc": "Task-focused attention, reasoning, and problem solving. Dominant during active conversation and tool use.",
+        "sn": "SN – Salience",
+        "sn_desc": "Detects important events (new messages, surprising information) and triggers network switching. Spikes when the user sends a message.",
+        "dmn": "DMN – Default Mode",
+        "dmn_desc": "Mind-wandering, reflection, and daydreaming. Active when the agent is idle, enabling creative associations and memory consolidation."
+      }
+    }
+  }
+}

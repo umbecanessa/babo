@@ -1,0 +1,440 @@
+$glass-bg: rgba(14, 14, 18, 0.55);
+$glass-border: rgba(255, 255, 255, 0.05);
+$glass-blur: blur(24px);
+$radius: 12px;
+$indigo: #818cf8;
+$green: #34d399;
+$amber: #fbbf24;
+$red: #f87171;
+$slate: #94a3b8;
+
+.waves-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.empty-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #4b5563;
+  font-size: 12px;
+  padding: 32px 0;
+}
+
+.empty-icon {
+  font-size: 16px;
+  opacity: 0.4;
+}
+
+// ── Wave Card ────────────────────────────────────
+
+.wave-card {
+  --accent: #{$indigo};
+  background: $glass-bg;
+  backdrop-filter: $glass-blur;
+  border: 1px solid $glass-border;
+  border-radius: $radius;
+  overflow: hidden;
+  animation: wave-in 0.3s ease-out both;
+  transition: border-color 0.2s, box-shadow 0.2s;
+
+  &:hover {
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 4px 20px -4px rgba(0, 0, 0, 0.3);
+  }
+
+  &.wave-completed {
+    opacity: 0.7;
+    &:hover { opacity: 0.85; }
+  }
+
+  &.wave-planned {
+    opacity: 0.6;
+    border-style: dashed;
+    &:hover { opacity: 0.75; }
+  }
+}
+
+@keyframes wave-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+// ── Wave Header ──────────────────────────────────
+
+.wave-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px 10px 0;
+  min-height: 40px;
+}
+
+.wave-accent-bar {
+  width: 3px;
+  align-self: stretch;
+  background: var(--accent);
+  border-radius: 0 2px 2px 0;
+  flex-shrink: 0;
+}
+
+.wave-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.wave-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #d0d0e0;
+  white-space: nowrap;
+}
+
+.wave-team-name {
+  font-size: 11px;
+  color: #6b7280;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.wave-stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.wave-stat {
+  font-size: 11px;
+  font-weight: 600;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  padding: 2px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+
+  &--live {
+    color: $indigo;
+    background: rgba($indigo, 0.1);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  &--done {
+    color: $green;
+    background: rgba($green, 0.1);
+  }
+
+  &--fail {
+    color: $red;
+    background: rgba($red, 0.1);
+  }
+
+  &--planned {
+    color: #4b5563;
+    background: rgba(255, 255, 255, 0.03);
+    font-weight: 500;
+    font-family: inherit;
+    text-transform: uppercase;
+    font-size: 9px;
+    letter-spacing: 0.5px;
+  }
+
+  &--time {
+    color: #6b7280;
+    background: transparent;
+    padding: 0;
+    font-weight: 500;
+  }
+}
+
+.live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: $indigo;
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { box-shadow: 0 0 4px rgba($indigo, 0.4); opacity: 1; }
+  50% { box-shadow: 0 0 10px rgba($indigo, 0.8); opacity: 0.7; }
+}
+
+.wave-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.wave-action-btn {
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+  color: #9ca3af;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+  line-height: 1;
+
+  &:hover { background: rgba(255, 255, 255, 0.06); color: #d0d0e0; }
+
+  &--primary {
+    border-color: rgba($indigo, 0.2);
+    color: $indigo;
+    &:hover { background: rgba($indigo, 0.12); }
+  }
+
+  &--danger {
+    border-color: rgba($red, 0.15);
+    color: $red;
+    &:hover { background: rgba($red, 0.1); }
+  }
+}
+
+// ── Progress Track ───────────────────────────────
+
+.wave-progress-track {
+  display: flex;
+  height: 3px;
+  gap: 1px;
+  margin: 0 14px;
+}
+
+.wave-progress-seg {
+  height: 100%;
+  border-radius: 1px;
+  transition: background 0.3s;
+
+  &.seg-done { background: $green; }
+  &.seg-running { background: $indigo; animation: seg-pulse 1.5s ease-in-out infinite; }
+  &.seg-failed { background: $red; }
+  &.seg-cancelled { background: rgba(255, 255, 255, 0.06); }
+  &.seg-pending { background: rgba(255, 255, 255, 0.06); }
+}
+
+@keyframes seg-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+// ── Member Tiles ─────────────────────────────────
+
+.member-tiles {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 10px 8px;
+}
+
+.member-tile {
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.12s;
+
+  &:hover { background: rgba(255, 255, 255, 0.025); }
+
+  &.tile-running { border-left: 2px solid $indigo; }
+  &.tile-done { border-left: 2px solid $green; }
+  &.tile-failed { border-left: 2px solid $red; }
+  &.tile-cancelled { border-left: 2px solid rgba(255, 255, 255, 0.06); }
+  &.tile-pending { border-left: 2px solid rgba(255, 255, 255, 0.06); }
+}
+
+.tile-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  min-height: 28px;
+}
+
+.tile-icon {
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  flex-shrink: 0;
+}
+
+.tile-spinner {
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid rgba($indigo, 0.25);
+  border-top-color: $indigo;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.tile-task {
+  flex: 1;
+  font-size: 11px;
+  color: #b0b0c8;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.tile-metrics {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.tile-metric {
+  font-size: 9px;
+  color: #6b7280;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  white-space: nowrap;
+
+  &--time {
+    color: #818cf8;
+    background: rgba($indigo, 0.08);
+  }
+}
+
+// ── Tile Detail (expanded) ───────────────────────
+
+.tile-detail {
+  padding: 4px 8px 8px 28px;
+  animation: detail-in 0.15s ease-out;
+}
+
+@keyframes detail-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.tile-result {
+  font-size: 11px;
+  color: #8b8ba0;
+  line-height: 1.45;
+  margin: 0 0 6px;
+  max-height: 80px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.tile-detail-stats {
+  display: flex;
+  gap: 12px;
+  font-size: 10px;
+  color: #6b7280;
+  margin-bottom: 4px;
+
+  strong {
+    color: #b0b0c8;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+  }
+}
+
+.tile-hint-btn {
+  padding: 3px 10px;
+  border-radius: 5px;
+  border: 1px solid rgba($indigo, 0.2);
+  background: rgba($indigo, 0.06);
+  color: $indigo;
+  font-size: 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+  margin-top: 4px;
+
+  &:hover { background: rgba($indigo, 0.14); }
+}
+
+// ── Hint Input ───────────────────────────────────
+
+.hint-row {
+  display: flex;
+  gap: 4px;
+  padding: 4px 8px 6px;
+}
+
+.hint-input {
+  flex: 1;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba($indigo, 0.2);
+  background: rgba(0, 0, 0, 0.3);
+  color: #e0e0f0;
+  font-size: 11px;
+  outline: none;
+
+  &::placeholder { color: #4b5563; }
+  &:focus { border-color: rgba($indigo, 0.4); }
+}
+
+.hint-send {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: none;
+  background: $indigo;
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+  &:hover { background: #6366f1; }
+}
+
+.hint-cancel {
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  font-size: 14px;
+  cursor: pointer;
+  line-height: 1;
+  &:hover { color: $red; }
+}
+
+// ── Step Tiles (planned waves) ───────────────────
+
+.step-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 14px 10px;
+}
+
+.step-tile {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.step-icon {
+  font-size: 9px;
+  flex-shrink: 0;
+}
+
+.step-label {
+  font-size: 10px;
+  color: #6b7280;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}

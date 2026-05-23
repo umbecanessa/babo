@@ -1,0 +1,85 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+/build/
+*.egg
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# IDE / editor
+.vscode/
+.idea/
+.cursor/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# NLS runtime data
+data/
+
+# Bridge teacher extraction (kept locally, not published to GitHub)
+nls/bridge/cloud.py
+nls/bridge/local.py
+
+# Scratch / research / internal artifacts
+.tmp_*
+tmp_*
+.tmp/
+bench_output/
+calibration_output/
+calibration_*.json
+tmp_training/
+docs/reports/
+patent/
+patentdocs.zip
+decks/
+overnight_*
+*.log
+stress_test_results.json
+agent_loop_results.json
+domain_selective_results.json
+level2_compound_scale_results.json
+nls_plugin_head.tar.gz
+new_gemini_chat_md/
+
+# Release outputs
+desktop/release/
+desktop/release-build/
+desktop/release-mac/
+desktop/dist-electron/
+
+# Node
+**/node_modules/
+
+# Secrets
+.env
+.env.*
+!.env.example
+.gitconfig
+
+# ML artifacts (not shipped)
+*.pt
+*.bin
+*.gguf
+*.safetensors
+wandb/
+
+# Docs build output
+site/
+
+# Internal deploy / training scripts at repo root
+deploy-gx10.ps1
+start_gpu_worker*.sh
+run_benchmark*.py
+run_bootstrap*.py
+build_cuda.py

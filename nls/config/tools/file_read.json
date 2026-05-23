@@ -1,0 +1,49 @@
+{
+  "name": "file_read",
+  "description": "Read a file from the local filesystem. Supports text files with optional line range selection for large files.",
+  "version": "1.0.0",
+  "category": "sense",
+  "hormone_affinity": "norepinephrine",
+  "base_effort": 0.1,
+  "learning_yield": "high",
+  "risk_level": "read",
+  "platform": "desktop",
+  "permissions": ["filesystem.read"],
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "path": { "type": "string", "description": "Absolute path to the file" },
+      "offset": { "type": "integer", "description": "Start line (1-based, optional)", "default": 0 },
+      "limit": { "type": "integer", "description": "Max lines to read (optional)", "default": 0 }
+    },
+    "required": ["path"]
+  },
+
+  "manual": {
+    "overview": "Use file_read to inspect source code, configuration files, logs, or any text file. It is the primary way to understand what is in a file before editing it.",
+    "examples": [
+      { "description": "Read an entire Python file", "input": { "path": "/home/user/app.py" }, "output": "Full file contents with line numbers" },
+      { "description": "Read lines 50-70 of a large log", "input": { "path": "/var/log/app.log", "offset": 50, "limit": 20 }, "output": "20 lines starting from line 50" },
+      { "description": "Read a JSON config", "input": { "path": "/etc/config.json" }, "output": "JSON file contents" }
+    ],
+    "tips": [
+      "Always read a file before editing it to understand its current state.",
+      "For large files (>500 lines), use offset and limit to read sections instead of the whole file.",
+      "Check file existence before reading to avoid errors."
+    ],
+    "edge_cases": [
+      "Binary files will return garbled output — use this only for text files.",
+      "If offset exceeds the file length, an empty result is returned.",
+      "Extremely large files (>10MB) may be slow; use limit to cap output."
+    ],
+    "related_tools": ["file_write", "file_edit", "file_search", "file_tree"]
+  },
+
+  "executor": {
+    "type": "file_read",
+    "path": "{{args.path}}",
+    "offset": "{{args.offset}}",
+    "limit": "{{args.limit}}"
+  }
+}

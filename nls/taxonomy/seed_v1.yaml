@@ -1,0 +1,358 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# NLS Domain Taxonomy Seed v1
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# This is the "parental priming" -- a structured domain hierarchy that
+# guides the thalamus routing layer when classifying new LEARN signals.
+#
+# Like the human educational system gives every child the same baseline
+# mental map (math ≠ biology ≠ history), this seed ensures the agent
+# organizes knowledge into sensible categories from the start.
+#
+# Structure:
+#   Each node has a name (the domain segment) and optional:
+#   - keywords: list of terms that hint a fact belongs here
+#   - children: sub-branches of this domain
+#
+# The taxonomy guides, it does NOT constrain. Novel domains not in this
+# seed can still be created -- the agent's cortical reorganization during
+# sleep will handle edge cases.
+#
+# Domain paths are dot-notation: Agent.Knowledge.Biology.Marine
+# ═══════════════════════════════════════════════════════════════════════════
+
+Agent:
+  Knowledge:
+    Biology:
+      keywords: [life, living, organism, species, evolution, cell, gene, dna, rna, protein]
+      children:
+        Marine:
+          keywords: [ocean, sea, fish, shark, whale, dolphin, coral, reef, squid, octopus, jellyfish, plankton, submarine, aquatic, marine]
+        Mammals:
+          keywords: [mammal, dog, cat, elephant, lion, tiger, bear, monkey, ape, primate, horse, cow, pig, bat, rodent]
+        Birds:
+          keywords: [bird, eagle, parrot, penguin, owl, hawk, sparrow, crow, raven, feather, nest, migration, avian]
+        Insects:
+          keywords: [insect, ant, bee, butterfly, beetle, spider, arachnid, mosquito, fly, moth, cricket, dragonfly]
+        Reptiles:
+          keywords: [reptile, snake, lizard, turtle, tortoise, crocodile, alligator, gecko, chameleon, iguana]
+        Botany:
+          keywords: [plant, tree, flower, leaf, root, seed, photosynthesis, forest, garden, herb, moss, fern, pollen, bloom, flora]
+        Anatomy:
+          keywords: [body, organ, bone, muscle, heart, brain, lung, liver, kidney, skin, blood, cell, tissue, nerve, femur, skull]
+        Genetics:
+          keywords: [gene, genome, chromosome, mutation, heredity, allele, phenotype, genotype, crispr, telomere, epigenetic]
+        Ecology:
+          keywords: [ecosystem, habitat, biome, biodiversity, food chain, predator, prey, endangered, conservation, extinction]
+        Microbiology:
+          keywords: [bacteria, virus, microbe, pathogen, antibiotic, infection, immune, vaccine, fungus, prion]
+
+    Mathematics:
+      keywords: [math, calculate, compute, number, equation, formula, proof, theorem]
+      children:
+        Arithmetic:
+          keywords: [addition, subtraction, multiplication, division, sum, product, remainder, modulo, plus, minus, times]
+        Algebra:
+          keywords: [equation, variable, polynomial, quadratic, linear, coefficient, solve, unknown, expression]
+        Geometry:
+          keywords: [triangle, circle, square, rectangle, area, perimeter, volume, angle, polygon, sphere, cone, cylinder, pi]
+        Statistics:
+          keywords: [average, mean, median, mode, probability, distribution, standard deviation, variance, sample, correlation]
+        NumberTheory:
+          keywords: [prime, factorial, fibonacci, googol, infinity, integer, rational, irrational, complex number]
+        Calculus:
+          keywords: [derivative, integral, limit, differential, convergence, function, continuous]
+        Logic:
+          keywords: [logic, boolean, truth table, proposition, syllogism, fallacy, deduction, induction, paradox]
+
+    Physics:
+      keywords: [physics, force, energy, motion, particle, wave, field, quantum, relativity]
+      children:
+        Mechanics:
+          keywords: [force, gravity, acceleration, velocity, momentum, friction, newton, mass, weight, inertia]
+        Thermodynamics:
+          keywords: [heat, temperature, entropy, boil, freeze, melt, celsius, fahrenheit, kelvin, energy transfer, thermal]
+        Electromagnetism:
+          keywords: [electricity, magnet, electromagnetic, current, voltage, circuit, light, photon, radiation, radio]
+        QuantumPhysics:
+          keywords: [quantum, qubit, superposition, entanglement, uncertainty, wave function, schrodinger, planck, bohr]
+        Relativity:
+          keywords: [einstein, spacetime, relativity, speed of light, time dilation, mass-energy, e=mc2]
+        Optics:
+          keywords: [light, lens, mirror, refraction, reflection, prism, spectrum, laser, wavelength, color]
+        Nuclear:
+          keywords: [atom, nucleus, fission, fusion, radioactive, isotope, neutron, proton, electron, antimatter]
+
+    Chemistry:
+      keywords: [chemistry, chemical, element, compound, reaction, molecule, bond]
+      children:
+        Elements:
+          keywords: [element, periodic table, symbol, atomic number, gold, iron, oxygen, hydrogen, carbon, sodium, helium]
+        Compounds:
+          keywords: [compound, molecule, water, acid, base, salt, organic, inorganic, formula]
+        Reactions:
+          keywords: [reaction, combustion, oxidation, reduction, catalyst, enzyme, synthesis, decomposition]
+        OrganicChemistry:
+          keywords: [organic, carbon, hydrocarbon, polymer, amino acid, lipid, carbohydrate]
+
+    Astronomy:
+      keywords: [space, universe, cosmos, celestial, astronomical]
+      children:
+        SolarSystem:
+          keywords: [sun, mercury, venus, earth, mars, jupiter, saturn, uranus, neptune, pluto, moon, asteroid, comet, orbit, planet]
+        Stars:
+          keywords: [star, constellation, supernova, neutron star, red giant, white dwarf, pulsar, binary star, stellar, magnitude, sirius, betelgeuse]
+        Galaxies:
+          keywords: [galaxy, milky way, andromeda, nebula, dark matter, dark energy, quasar, black hole]
+        Cosmology:
+          keywords: [big bang, cosmic, expansion, universe, multiverse, inflation, background radiation, hubble]
+        SpaceExploration:
+          keywords: [nasa, spacecraft, rocket, satellite, telescope, astronaut, apollo, voyager, mars rover, iss, james webb, hubble]
+
+    Geography:
+      keywords: [geography, map, region, continent, location, terrain]
+      children:
+        Countries:
+          keywords: [country, nation, capital, population, border, sovereignty, republic, kingdom, state]
+        Continents:
+          keywords: [continent, africa, asia, europe, north america, south america, australia, antarctica]
+        Oceans:
+          keywords: [ocean, sea, atlantic, pacific, indian, arctic, trench, depth, reef, tide, current, mariana]
+        Physical:
+          keywords: [mountain, river, lake, desert, volcano, island, plateau, valley, canyon, glacier, waterfall, everest, nile, sahara]
+        Cities:
+          keywords: [city, metropolis, urban, skyline, downtown, suburb, municipality]
+        Climate:
+          keywords: [climate, weather, tropical, temperate, arctic, monsoon, hurricane, tornado, drought, rainfall]
+
+    History:
+      keywords: [history, historical, ancient, century, era, period, civilization]
+      children:
+        Ancient:
+          keywords: [ancient, mesopotamia, egypt, pharaoh, pyramid, rome, roman, greece, greek, sumerian, babylon, persia, indus]
+        Medieval:
+          keywords: [medieval, middle ages, knight, castle, feudal, crusade, viking, byzantine, gothic, plague]
+        Modern:
+          keywords: [modern, industrial, revolution, world war, cold war, colonial, enlightenment, renaissance]
+        Events:
+          keywords: [war, battle, treaty, revolution, declaration, discovery, expedition, invasion, assassination]
+        Civilizations:
+          keywords: [civilization, empire, dynasty, kingdom, republic, tribe, colony, culture]
+        Periods:
+          keywords: [era, age, period, century, decade, epoch, renaissance, baroque, victorian, bronze age, iron age]
+
+    Arts:
+      keywords: [art, artistic, creative, aesthetic, expression]
+      children:
+        Music:
+          keywords: [music, song, composer, symphony, piano, guitar, orchestra, opera, jazz, rock, classical, instrument, melody, rhythm, note, tempo]
+        Literature:
+          keywords: [book, novel, author, writer, poem, poetry, story, fiction, playwright, literature, prose, verse, chapter]
+        VisualArts:
+          keywords: [painting, sculpture, drawing, gallery, museum, canvas, portrait, landscape, abstract, impressionism, cubism, surrealism]
+        Film:
+          keywords: [film, movie, director, cinema, actor, actress, screenplay, documentary, animation, oscar, hollywood]
+        Architecture:
+          keywords: [architecture, building, cathedral, temple, tower, dome, column, arch, facade, architect, gothic, baroque]
+        Theater:
+          keywords: [theater, stage, play, drama, comedy, tragedy, performance, broadway, acting]
+
+    Philosophy:
+      keywords: [philosophy, philosopher, philosophical, metaphysics, epistemology, ontology]
+      children:
+        Ethics:
+          keywords: [ethics, moral, virtue, justice, right, wrong, duty, utilitarian, deontological, consequentialism, trolley problem]
+        Logic:
+          keywords: [logic, argument, premise, conclusion, fallacy, syllogism, valid, sound, deduction, induction]
+        Metaphysics:
+          keywords: [reality, existence, being, consciousness, free will, determinism, substance, identity, mind-body]
+        Epistemology:
+          keywords: [knowledge, truth, belief, justification, skepticism, empiricism, rationalism, a priori, a posteriori]
+        Political:
+          keywords: [political philosophy, social contract, liberalism, conservatism, marxism, democracy, sovereignty, rights, freedom]
+        Schools:
+          keywords: [stoicism, existentialism, pragmatism, phenomenology, nihilism, absurdism, epicureanism, platonism, aristotelian]
+
+    Technology:
+      keywords: [technology, tech, digital, computer, software, hardware, invention]
+      children:
+        Computing:
+          keywords: [computer, programming, algorithm, software, hardware, cpu, gpu, memory, storage, operating system]
+        Internet:
+          keywords: [internet, web, website, browser, http, tcp, ip, dns, email, social media, cloud]
+        Programming:
+          keywords: [programming, code, language, python, javascript, java, rust, c++, compiler, debugging, api, framework]
+        AI:
+          keywords: [artificial intelligence, machine learning, neural network, deep learning, nlp, llm, model, training]
+        Inventions:
+          keywords: [invention, patent, inventor, innovation, device, machine, tool, breakthrough, discovery]
+        Telecommunications:
+          keywords: [phone, telephone, radio, television, satellite, cellular, 5g, broadcast, signal, communication]
+
+    Economics:
+      keywords: [economics, economy, economic, market, trade, finance]
+      children:
+        Microeconomics:
+          keywords: [supply, demand, price, consumer, producer, firm, market, competition, monopoly, elasticity]
+        Macroeconomics:
+          keywords: [gdp, inflation, unemployment, fiscal, monetary, central bank, recession, growth, debt, deficit]
+        Finance:
+          keywords: [stock, bond, investment, portfolio, bank, interest, credit, loan, mortgage, currency, exchange rate]
+        Trade:
+          keywords: [trade, export, import, tariff, commodity, globalization, free trade, nafta, wto]
+        Institutions:
+          keywords: [federal reserve, world bank, imf, european central bank, treasury, sec]
+
+    Psychology:
+      keywords: [psychology, psychological, mental, cognitive, behavior, mind]
+      children:
+        Cognitive:
+          keywords: [cognition, perception, attention, memory, learning, thinking, reasoning, decision, bias, heuristic]
+        Behavioral:
+          keywords: [behavior, conditioning, reinforcement, punishment, stimulus, response, habit, addiction]
+        Social:
+          keywords: [social, conformity, obedience, group, prejudice, stereotype, attitude, persuasion, identity]
+        Development:
+          keywords: [development, child, adolescent, aging, piaget, erikson, attachment, maturation, milestone]
+        Clinical:
+          keywords: [disorder, therapy, anxiety, depression, ptsd, schizophrenia, bipolar, ocd, phobia, treatment]
+        Neuroscience:
+          keywords: [neuron, synapse, neurotransmitter, dopamine, serotonin, cortex, hippocampus, amygdala, brain scan, neuroplasticity]
+
+    Medicine:
+      keywords: [medicine, medical, health, disease, treatment, diagnosis, clinical]
+      children:
+        Diseases:
+          keywords: [disease, illness, syndrome, condition, cancer, diabetes, infection, autoimmune, chronic, acute]
+        Anatomy:
+          keywords: [anatomy, organ, tissue, bone, muscle, nerve, blood vessel, gland]
+        Pharmacology:
+          keywords: [drug, medication, antibiotic, vaccine, dose, side effect, prescription, pharmaceutical, aspirin, penicillin, insulin]
+        Surgery:
+          keywords: [surgery, operation, transplant, procedure, incision, anesthesia, recovery]
+        PublicHealth:
+          keywords: [epidemic, pandemic, sanitation, prevention, nutrition, exercise, obesity, smoking, mortality]
+
+    Law:
+      keywords: [law, legal, court, justice, rights, constitution, legislation]
+      children:
+        Constitutional:
+          keywords: [constitution, amendment, bill of rights, supreme court, judicial review, civil rights, due process]
+        Criminal:
+          keywords: [crime, criminal, felony, misdemeanor, prosecution, defense, verdict, sentence, prison, parole]
+        International:
+          keywords: [international law, treaty, geneva convention, human rights, united nations, sovereignty, extradition]
+        Civil:
+          keywords: [civil, tort, contract, liability, negligence, damages, settlement, plaintiff, defendant]
+
+    Linguistics:
+      keywords: [language, linguistic, grammar, word, speech, writing, alphabet]
+      children:
+        Phonetics:
+          keywords: [phoneme, sound, pronunciation, vowel, consonant, accent, dialect, ipa, tone]
+        Syntax:
+          keywords: [syntax, sentence, clause, phrase, subject, predicate, grammar, parsing]
+        Semantics:
+          keywords: [meaning, definition, synonym, antonym, metaphor, connotation, denotation]
+        Languages:
+          keywords: [english, spanish, mandarin, arabic, french, german, japanese, korean, hindi, russian, latin, sanskrit]
+        WritingSystems:
+          keywords: [alphabet, script, hieroglyph, cuneiform, braille, hangul, kanji, cyrillic, morse code]
+
+    Sports:
+      keywords: [sport, athletic, game, competition, championship, player, team]
+      children:
+        TeamSports:
+          keywords: [football, soccer, basketball, baseball, hockey, volleyball, cricket, rugby]
+        IndividualSports:
+          keywords: [tennis, golf, swimming, running, cycling, boxing, wrestling, martial arts, archery, fencing]
+        Olympics:
+          keywords: [olympic, gold medal, world record, athlete, track and field, gymnastics, decathlon]
+        Records:
+          keywords: [record, fastest, longest, highest, youngest, oldest, world record, guinness]
+
+    Food:
+      keywords: [food, cuisine, dish, meal, ingredient, cooking, recipe]
+      children:
+        Cuisines:
+          keywords: [italian, japanese, chinese, mexican, indian, french, thai, mediterranean, korean, american]
+        Nutrition:
+          keywords: [nutrient, vitamin, mineral, calorie, protein, carbohydrate, fat, fiber, diet]
+        Beverages:
+          keywords: [coffee, tea, wine, beer, juice, water, soda, cocktail, milk, smoothie]
+
+  Identity:
+    keywords: [i am, my name, i feel, i think, i believe, my identity, who i am]
+    children:
+      Values:
+        keywords: [value, principle, belief, moral, ethic, integrity, honesty, loyalty, courage]
+      Personality:
+        keywords: [personality, trait, temperament, introvert, extrovert, curious, creative, analytical]
+      Preferences:
+        keywords: [favorite, prefer, like, enjoy, love, dislike, hate, best, worst]
+      Goals:
+        keywords: [goal, aspiration, dream, ambition, mission, purpose, want, wish, hope]
+
+User:
+  Personal:
+    keywords: [your, you, user]
+    children:
+      Preferences:
+        keywords: [favorite, prefer, like, enjoy, love, best, go-to]
+      Identity:
+        keywords: [name, age, birthday, location, hometown, nationality, job, occupation, profession]
+      Relationships:
+        keywords: [friend, family, wife, husband, partner, child, parent, sibling, colleague, pet, dog, cat]
+      Contact:
+        keywords: [phone, email, address, number, area code]
+  Values:
+    keywords: [believe, value, principle, important to you, care about]
+  Hobbies:
+    keywords: [hobby, pastime, weekend, free time, spare time, leisure]
+  Work:
+    keywords: [job, work, project, team, company, office, career, boss, colleague, manager]
+
+Feedback:
+  keywords: [feedback, correction, guidance, improve, tone, behavior, rule, instruction]
+  children:
+    Correction:
+      keywords: [don't, never, stop, wrong, bad, incorrect, fix, avoid, shouldn't, mistake]
+    Reinforcement:
+      keywords: [good, great, keep, nice, perfect, correct, exactly, well done, love]
+    Guidance:
+      keywords: [should, always, prefer, use, try, make sure, remember, when, rule, guideline]
+    Tone:
+      keywords: [tone, formal, casual, friendly, professional, polite, warm, cold, empathetic]
+    Email:
+      keywords: [email, mail, reply, subject, thread, inbox]
+      children:
+        Correction:
+          keywords: [email don't, email wrong, email fix, email stop]
+        Reinforcement:
+          keywords: [email good, email keep, email nice, email great]
+        Guidance:
+          keywords: [email should, email always, email format, email sign]
+    Telegram:
+      keywords: [telegram, chat, message, bot]
+      children:
+        Correction:
+          keywords: [telegram don't, telegram wrong, telegram fix]
+        Reinforcement:
+          keywords: [telegram good, telegram keep, telegram nice]
+        Guidance:
+          keywords: [telegram should, telegram always]
+    Whatsapp:
+      keywords: [whatsapp, wa, message]
+      children:
+        Correction:
+          keywords: [whatsapp don't, whatsapp wrong, whatsapp fix]
+        Reinforcement:
+          keywords: [whatsapp good, whatsapp keep, whatsapp nice]
+        Guidance:
+          keywords: [whatsapp should, whatsapp always]
+
+System:
+  Config:
+    keywords: [config, setting, parameter, configuration, setup, environment]
+  Tools:
+    keywords: [tool, api, service, integration, plugin, extension]

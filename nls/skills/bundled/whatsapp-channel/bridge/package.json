@@ -1,0 +1,16 @@
+{
+  "name": "baileys-whatsapp-bridge",
+  "version": "1.0.1",
+  "type": "module",
+  "description": "WhatsApp bridge for NLS using Baileys (QR pairing)",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.0",
+    "express": "^4.21.0",
+    "pino": "^9.0.0",
+    "qrcode": "^1.5.4"
+  }
+}

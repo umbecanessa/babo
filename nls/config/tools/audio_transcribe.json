@@ -1,0 +1,75 @@
+{
+  "name": "audio_transcribe",
+  "description": "Transcribe audio files to text using OpenAI Whisper (local or API).",
+  "version": "1.0.0",
+  "category": "sense",
+  "hormone_affinity": "norepinephrine",
+  "base_effort": 0.4,
+  "learning_yield": "high",
+  "risk_level": "read",
+  "platform": "desktop",
+  "permissions": [
+    "filesystem.read"
+  ],
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "audio_path": {
+        "type": "string",
+        "description": "Path to the audio file"
+      },
+      "language": {
+        "type": "string",
+        "description": "Language hint (e.g. 'en')",
+        "default": "en"
+      },
+      "model": {
+        "type": "string",
+        "description": "Whisper model size",
+        "default": "base"
+      }
+    },
+    "required": [
+      "audio_path"
+    ]
+  },
+  "manual": {
+    "overview": "Use when you need to convert speech in audio/video files to text—meetings, podcasts, voice memos. Works offline with local Whisper for privacy-sensitive content.",
+    "examples": [
+      {
+        "input": {
+          "audio_path": "meeting.mp3",
+          "language": "en"
+        },
+        "description": "Transcribe an English meeting recording"
+      },
+      {
+        "input": {
+          "audio_path": "podcast.wav",
+          "language": "es",
+          "model": "medium"
+        },
+        "description": "Transcribe Spanish podcast with higher accuracy model"
+      }
+    ],
+    "tips": [
+      "Provide language hint when known—speeds up processing and improves accuracy",
+      "Use 'base' for quick drafts; 'medium' or 'large' for final transcripts",
+      "Ensure audio is reasonably clear; noisy recordings may produce garbled output"
+    ],
+    "edge_cases": [
+      "Very long files can hit timeout; consider splitting or trimming first",
+      "Binary/corrupt files will fail with cryptic errors"
+    ],
+    "related_tools": [
+      "tts",
+      "pdf_tools",
+      "translate"
+    ]
+  },
+  "executor": {
+    "type": "shell",
+    "command": "python -c \"import whisper; model=whisper.load_model('{{args.model}}'); result=model.transcribe('{{args.audio_path}}', language='{{args.language}}'); print(result['text'])\"",
+    "timeout": 120
+  }
+}

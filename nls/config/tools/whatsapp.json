@@ -1,0 +1,91 @@
+{
+  "name": "whatsapp",
+  "description": "Send WhatsApp messages via the WhatsApp Business Cloud API. Requires NLS_WHATSAPP_TOKEN and NLS_WHATSAPP_PHONE_ID.",
+  "version": "1.0.0",
+  "category": "communicate",
+  "hormone_affinity": "oxytocin",
+  "base_effort": 0.3,
+  "learning_yield": "low",
+  "risk_level": "write",
+  "platform": "desktop",
+  "permissions": [
+    "network.outbound",
+    "keychain"
+  ],
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "to": {
+        "type": "string",
+        "description": "Recipient phone number (with country code, no +)"
+      },
+      "text": {
+        "type": "string",
+        "description": "Message text"
+      }
+    },
+    "required": [
+      "to",
+      "text"
+    ]
+  },
+  "manual": {
+    "overview": "Use WhatsApp when reaching users on their primary mobile messaging app. Best for time-sensitive alerts, OTPs, or customer notifications where high open rates matter. Requires WhatsApp Business API setup.",
+    "examples": [
+      {
+        "input": {
+          "to": "15551234567",
+          "text": "Your verification code is 123456"
+        },
+        "description": "Send an OTP or short alert"
+      },
+      {
+        "input": {
+          "to": "441234567890",
+          "text": "Order #1234 has shipped. Track: https://..."
+        },
+        "description": "Send a shipping notification with link"
+      },
+      {
+        "input": {
+          "to": "31612345678",
+          "text": "Reminder: Meeting at 3pm today"
+        },
+        "description": "Send a reminder to a European number"
+      }
+    ],
+    "tips": [
+      "Phone numbers must be in E.164 format without +: country code + number, no spaces or dashes",
+      "WhatsApp Business API has a 24-hour message window; after that you need template messages for first contact",
+      "Keep messages short; WhatsApp is conversational, not for long-form content",
+      "Verify NLS_WHATSAPP_PHONE_ID and NLS_WHATSAPP_TOKEN are set for your Business namespace"
+    ],
+    "edge_cases": [
+      "Recipients must have opted in to receive messages; unsolicited messages risk account bans",
+      "Number format errors (missing country code, wrong length) cause send failures",
+      "Template messages require pre-approved templates in Meta Business Manager; ad-hoc text only works within the 24h window"
+    ],
+    "related_tools": [
+      "sms",
+      "telegram",
+      "email"
+    ]
+  },
+  "executor": {
+    "type": "http",
+    "method": "POST",
+    "url": "https://graph.facebook.com/v18.0/{{env.NLS_WHATSAPP_PHONE_ID}}/messages",
+    "headers": {
+      "Authorization": "Bearer {{env.NLS_WHATSAPP_TOKEN}}",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "messaging_product": "whatsapp",
+      "to": "{{args.to}}",
+      "type": "text",
+      "text": {
+        "body": "{{args.text}}"
+      }
+    }
+  }
+}

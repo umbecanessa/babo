@@ -1,0 +1,52 @@
+{
+  "name": "terminal",
+  "description": "Execute a shell command and capture stdout/stderr. Use for running tests, build scripts, system commands.",
+  "version": "1.0.0",
+  "category": "act",
+  "hormone_affinity": "dopamine",
+  "base_effort": 0.5,
+  "learning_yield": "medium",
+  "risk_level": "execute",
+  "platform": "desktop",
+  "permissions": ["shell.execute"],
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "command": { "type": "string", "description": "Shell command to execute" },
+      "cwd": { "type": "string", "description": "Working directory (optional)" },
+      "timeout": { "type": "integer", "description": "Timeout in seconds", "default": 30 }
+    },
+    "required": ["command"]
+  },
+
+  "manual": {
+    "overview": "Use terminal to execute any shell command: run scripts, install packages, manage processes, compile code. This is the most powerful tool — use it responsibly.",
+    "examples": [
+      { "description": "Run Python tests", "input": { "command": "pytest tests/ -v", "cwd": "/project" } },
+      { "description": "Install a package", "input": { "command": "pip install requests" } },
+      { "description": "Check disk usage", "input": { "command": "df -h" } },
+      { "description": "Run with timeout", "input": { "command": "npm run build", "cwd": "/frontend", "timeout": 60 } }
+    ],
+    "tips": [
+      "Always set cwd when running project-specific commands to avoid path issues.",
+      "Use timeout for commands that might hang (network calls, build scripts).",
+      "Chain commands with && for sequential execution: 'cd /app && npm install && npm test'.",
+      "Prefer specific tools (git, file_read) over terminal equivalents when available — they are safer and more structured."
+    ],
+    "edge_cases": [
+      "Interactive commands (vim, less, python REPL) will hang — avoid them.",
+      "Commands requiring user input (password prompts, y/n confirmations) will timeout.",
+      "Stderr is captured alongside stdout — check for error messages in the output.",
+      "Long-running commands will be killed after the timeout."
+    ],
+    "related_tools": ["git", "test_runner", "docker", "process_manager"]
+  },
+
+  "executor": {
+    "type": "shell",
+    "command": "{{args.command}}",
+    "cwd": "{{args.cwd}}",
+    "timeout": "{{args.timeout}}"
+  }
+}

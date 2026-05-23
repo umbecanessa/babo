@@ -1,0 +1,49 @@
+{
+  "name": "wikipedia",
+  "description": "Search and read Wikipedia articles. Returns summaries or full article content.",
+  "version": "1.0.0",
+  "category": "sense",
+  "hormone_affinity": "norepinephrine",
+  "base_effort": 0.2,
+  "learning_yield": "high",
+  "risk_level": "read",
+  "platform": "all",
+  "permissions": ["network.outbound"],
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "action": { "type": "string", "enum": ["search", "summary", "full"], "description": "Action: search titles, get summary, or get full article" },
+      "query": { "type": "string", "description": "Search query or article title" },
+      "language": { "type": "string", "description": "Wiki language code", "default": "en" }
+    },
+    "required": ["action", "query"]
+  },
+
+  "manual": {
+    "overview": "Use wikipedia to quickly get encyclopedic knowledge. Search for topics, get concise summaries, or read full articles. Great for learning factual information about people, places, concepts, and events.",
+    "examples": [
+      { "description": "Get a summary of a topic", "input": { "action": "summary", "query": "Quantum computing" } },
+      { "description": "Search for articles", "input": { "action": "search", "query": "machine learning algorithms" } },
+      { "description": "Read in Italian", "input": { "action": "summary", "query": "Roma", "language": "it" } }
+    ],
+    "tips": [
+      "Use 'summary' for quick facts and 'full' for deep learning.",
+      "Article titles are case-sensitive — 'Python_(programming_language)' not 'python'.",
+      "Use underscores instead of spaces in article titles.",
+      "Change language code for non-English wikis."
+    ],
+    "edge_cases": [
+      "Disambiguation pages return multiple options instead of a single article.",
+      "Very niche topics may not have Wikipedia articles.",
+      "The API returns the main article — sections and references may be truncated."
+    ],
+    "related_tools": ["web_search", "arxiv_search", "translate"]
+  },
+
+  "executor": {
+    "type": "http",
+    "method": "GET",
+    "url": "https://{{args.language}}.wikipedia.org/api/rest_v1/page/summary/{{args.query}}"
+  }
+}

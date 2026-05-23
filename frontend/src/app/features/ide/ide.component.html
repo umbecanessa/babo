@@ -1,0 +1,307 @@
+<div class="ide-container">
+  <!-- ═══ File Explorer (Left Panel) ═══ -->
+  <aside class="file-tree-panel" [class.collapsed]="!showFileTree()">
+    <div class="panel-header">
+      <span class="panel-title">Explorer</span>
+      <div class="panel-actions">
+        <button class="icon-btn" (click)="refreshTree()" title="Refresh">
+          <svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14">
+            <path d="M13.451 5.609l-.579-.939-1.068.812-.076.094c-.335.415-.927 1.146-1.26 1.437l-1.12-.453c-.022-.009-.191-.085-.267-.396l-.09-.335-.339-.076C7.022 5.403 5.757 5.094 4.513 5.094c-2.123 0-3.263.994-3.263 2.844 0 .645.138 1.182.411 1.594.278.419.707.75 1.275.984.563.233 1.263.349 2.078.349.667 0 1.326-.079 1.96-.235l.152-.037.085-.13c.114-.173.244-.371.373-.566l.188-.287-.285-.193c-.488-.331-.94-.738-1.238-1.115l-.072-.091-.115.003c-.395.011-.804-.02-1.158-.088L4.5 7.875V7.5c0-.307.195-.438.612-.438.244 0 .541.068.884.203l.166.065.152-.098c.374-.24.784-.414 1.186-.504L8 6.613V6h.5c.76 0 1.79.498 2.578 1.246l.236.224.285-.148c.37-.192.626-.35.782-.483l.028-.024.016-.029c.26-.468.026-1.177.026-1.177z"/>
+          </svg>
+        </button>
+        <button class="icon-btn" (click)="showFileTree.set(false)" title="Close">
+          <svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14">
+            <path d="M8 8.707l3.646 3.647.708-.707L8.707 8l3.647-3.646-.707-.708L8 7.293 4.354 3.646l-.708.708L7.293 8l-3.647 3.646.708.708z"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Folder input -->
+    <div class="folder-input-row">
+      <input
+        class="folder-input"
+        [(ngModel)]="folderInput"
+        (keyup.enter)="openFolder()"
+        placeholder="Path to folder..."
+        spellcheck="false"
+      />
+      <button class="folder-open-btn" (click)="openFolder()">Open</button>
+    </div>
+
+    <!-- File tree -->
+    @if (projectRoot()) {
+      <div class="tree-root-label">{{ projectName() }}</div>
+      <div class="file-tree">
+        @for (node of fileTree(); track trackByPath($index, node)) {
+          <ng-container
+            *ngTemplateOutlet="treeNode; context: { node: node, depth: 0 }"
+          ></ng-container>
+        }
+      </div>
+    } @else {
+      <div class="file-tree-empty">
+        <p>No folder open</p>
+        <p class="hint">Enter a path above to browse files</p>
+      </div>
+    }
+  </aside>
+
+  <!-- ═══ Main Area (Editor + Terminal) ═══ -->
+  <main class="editor-area">
+    <!-- Tab Bar -->
+    @if (openTabs().length > 0) {
+      <div class="tab-bar">
+        @for (tab of openTabs(); track tab.path; let i = $index) {
+          <div
+            class="tab"
+            [class.active]="activeTabIndex() === i"
+            (click)="switchTab(i)"
+          >
+            <span class="tab-dot" [class.modified]="tab.modified"></span>
+            <span class="tab-name">{{ tab.name }}</span>
+            <button class="tab-close" (click)="closeTab(i, $event)">&times;</button>
+          </div>
+        }
+      </div>
+    }
+
+    <!-- Editor / Welcome -->
+    <div class="editor-content">
+      @if (activeTab()) {
+        <div class="editor-toolbar">
+          <span class="file-path">{{ activeTab()?.path }}</span>
+          <span class="file-language">{{ activeTab()?.language }}</span>
+          @if (activeTab()?.modified) {
+            <button class="save-btn" (click)="saveCurrentFile()">
+              Save
+            </button>
+          }
+        </div>
+      }
+
+      <div
+        #editorContainer
+        class="monaco-editor-container"
+        [class.hidden]="!activeTab()"
+      ></div>
+
+      @if (!activeTab()) {
+        <div class="editor-welcome">
+          <div class="welcome-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48">
+              <path d="M17.25 6.75L22.5 12l-5.25 5.25M6.75 17.25L1.5 12l5.25-5.25M14.25 3.75l-4.5 16.5"/>
+            </svg>
+          </div>
+          <h2>Babo IDE</h2>
+          <p>Open a folder to get started, or chat with your agent.</p>
+          <div class="shortcuts">
+            <div class="shortcut"><kbd>Ctrl+S</kbd> Save file</div>
+            <div class="shortcut"><kbd>Ctrl+`</kbd> Toggle terminal</div>
+            <div class="shortcut"><kbd>Ctrl+B</kbd> Toggle chat</div>
+          </div>
+        </div>
+      }
+    </div>
+
+    <!-- Terminal Panel -->
+    @if (showTerminal()) {
+      <div class="terminal-panel" [style.height.px]="terminalHeight()">
+        <div class="panel-header terminal-header" (mousedown)="onTerminalResizeStart($event)">
+          <span class="panel-title">Terminal</span>
+          <div class="panel-actions">
+            <button class="icon-btn" (click)="clearTerminal()">Clear</button>
+            <button class="icon-btn" (click)="showTerminal.set(false)">&times;</button>
+          </div>
+        </div>
+        <div #terminalContainer class="terminal-body"></div>
+      </div>
+    }
+  </main>
+
+  <!-- ═══ Chat Sidebar (Right Panel) ═══ -->
+  @if (showChat()) {
+    <aside class="chat-panel" [style.width.px]="chatWidth()">
+      <!-- Resize handle -->
+      <div class="chat-resize-handle" (mousedown)="onChatResizeStart($event)"></div>
+
+      <div class="panel-header">
+        <span class="panel-title">Agent Chat</span>
+        <div class="panel-actions">
+          @if (nlsMetadata()?.facts_in_memory) {
+            <span class="facts-badge">{{ nlsMetadata().facts_in_memory }} facts</span>
+          }
+          <button class="icon-btn" (click)="showChat.set(false)">&times;</button>
+        </div>
+      </div>
+
+      <!-- Hormone bar -->
+      @if (nlsMetadata()?.hormones) {
+        <div class="hormone-bar">
+          @for (h of ['dopamine', 'serotonin', 'cortisol', 'norepinephrine', 'oxytocin', 'acetylcholine']; track h) {
+            @if (nlsMetadata().hormones[h] != null) {
+              <div class="hormone-pip" [title]="h + ': ' + (nlsMetadata().hormones[h] * 100).toFixed(0) + '%'">
+                <div
+                  class="hormone-fill"
+                  [attr.data-hormone]="h"
+                  [style.height.%]="nlsMetadata().hormones[h] * 100"
+                ></div>
+              </div>
+            }
+          }
+        </div>
+      }
+
+      <!-- Messages -->
+      <div class="chat-messages">
+        @for (msg of chatMessages(); track $index) {
+          <div class="chat-msg" [class]="'msg-' + msg.type">
+            @if (msg.type === 'user') {
+              <div class="msg-bubble user-bubble">{{ msg.content }}</div>
+            } @else if (msg.type === 'assistant') {
+              @let parsed = parseTags(msg.content);
+              <div class="msg-bubble assistant-bubble">
+                <p class="msg-text">{{ parsed.text }}</p>
+                @if (parsed.tags.length) {
+                  <div class="signal-tags">
+                    @for (tag of parsed.tags; track tag.raw) {
+                      <span class="signal-pill" [title]="tag.raw">
+                        <span class="signal-dot" [style.background]="tagColor(tag.type)"></span>
+                        <span class="signal-type">{{ humanType(tag.type) }}</span>
+                        <span class="signal-label">{{ tag.label }}</span>
+                      </span>
+                    }
+                  </div>
+                }
+              </div>
+            } @else if (msg.type === 'tool_use') {
+              <div class="msg-tool">
+                <span class="tool-icon">&#9881;</span>
+                <span class="tool-name">{{ msg.tool?.name }}</span>
+                <span class="tool-query">{{ msg.tool?.query || msg.content }}</span>
+              </div>
+            } @else if (msg.type === 'drive_action') {
+              <div class="msg-drive-action" [class.expanded]="isDriveExpanded($index)">
+                <div class="drive-header" (click)="toggleDriveExpand($index)">
+                  <span class="drive-icon">
+                    @if (msg.drive?.actionType === 'wikipedia') {
+                      <span class="drive-icon-wiki">W</span>
+                    } @else {
+                      <span class="drive-icon-search">&#128269;</span>
+                    }
+                  </span>
+                  <div class="drive-header-text">
+                    <span class="drive-label">{{ driveActionLabel(msg.drive?.actionType || '') }} <span class="drive-motive">({{ msg.drive?.name }})</span></span>
+                    <span class="drive-query">"{{ msg.drive?.query }}"</span>
+                  </div>
+                  <span class="drive-expand-toggle">
+                    {{ isDriveExpanded($index) ? '&#9650;' : '&#9660;' }}
+                  </span>
+                </div>
+                @if (isDriveExpanded($index)) {
+                  <div class="drive-details">
+                    @if (msg.drive?.domain) {
+                      <div class="drive-domain">Domain: {{ msg.drive?.domain }}</div>
+                    }
+                    @if (msg.drive?.resultPreview) {
+                      <div class="drive-preview">{{ msg.drive?.resultPreview }}</div>
+                    }
+                    <div class="drive-status">
+                      @if (msg.drive?.success) {
+                        <span class="drive-status-dot success"></span> Success
+                      } @else {
+                        <span class="drive-status-dot fail"></span> Failed
+                      }
+                    </div>
+                  </div>
+                }
+              </div>
+            } @else if (msg.type === 'reach_out') {
+              <div class="msg-reach-out">
+                <span class="reach-out-dot"></span>
+                <div class="reach-out-content">
+                  <p class="reach-out-text">{{ msg.content }}</p>
+                  @if (msg.drive?.name) {
+                    <span class="reach-out-motive">(reach out — {{ msg.drive?.name }} drive)</span>
+                  }
+                </div>
+              </div>
+            } @else if (msg.type === 'drowsy') {
+              <div class="msg-drowsy">
+                <span class="drowsy-dot"></span>
+                <div class="drowsy-content">
+                  <p>{{ msg.content }}</p>
+                  @if (msg.drowsy?.reason) {
+                    <span class="drowsy-reason">{{ msg.drowsy.reason }}</span>
+                  }
+                  @if (!isDrowsyResponded($index)) {
+                    <div class="drowsy-actions">
+                      <button class="drowsy-btn yes" (click)="onDrowsyAction($index, 'confirm')">Yes, rest up</button>
+                      <button class="drowsy-btn no" (click)="onDrowsyAction($index, 'deny')">Stay awake</button>
+                    </div>
+                  } @else {
+                    <span class="drowsy-responded">Responded</span>
+                  }
+                </div>
+              </div>
+            } @else if (msg.type === 'status') {
+              <div class="msg-status">{{ msg.content }}</div>
+            }
+          </div>
+        }
+
+        <!-- Streaming indicator -->
+        @if (streamingText()) {
+          <div class="chat-msg msg-assistant">
+            <div class="msg-bubble assistant-bubble streaming">
+              {{ stripTags(streamingText()) }}<span class="cursor-blink">|</span>
+            </div>
+          </div>
+        }
+      </div>
+
+      <!-- Input -->
+      <div class="chat-input-row">
+        <textarea
+          #chatInput
+          class="chat-input"
+          [(ngModel)]="chatInput"
+          (keydown)="onChatKeyDown($event)"
+          placeholder="Ask your agent..."
+          rows="2"
+          spellcheck="false"
+        ></textarea>
+        <button class="chat-send-btn" (click)="sendChat()">
+          <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16">
+            <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"/>
+          </svg>
+        </button>
+      </div>
+    </aside>
+  }
+
+  <!-- ═══ Tree Node Template ═══ -->
+  <ng-template #treeNode let-node="node" let-depth="depth">
+    <div
+      class="tree-item"
+      [style.paddingLeft.px]="depth * 16 + 8"
+      [class.directory]="node.isDirectory"
+      [class.expanded]="node.expanded"
+      (click)="onTreeItemClick(node)"
+    >
+      <span class="tree-chevron" *ngIf="node.isDirectory">
+        {{ node.expanded ? '&#9662;' : '&#9656;' }}
+      </span>
+      <span class="tree-chevron placeholder" *ngIf="!node.isDirectory"></span>
+      <span class="tree-name" [class.is-dir]="node.isDirectory">{{ node.name }}</span>
+      <span class="tree-loading" *ngIf="node.loading">...</span>
+    </div>
+    @if (node.isDirectory && node.expanded && node.children) {
+      @for (child of node.children; track child.path) {
+        <ng-container
+          *ngTemplateOutlet="treeNode; context: { node: child, depth: depth + 1 }"
+        ></ng-container>
+      }
+    }
+  </ng-template>
+</div>

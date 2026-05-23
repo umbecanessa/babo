@@ -1,0 +1,94 @@
+{
+  "name": "calendar",
+  "description": "Read and create calendar events. Supports Google Calendar and Outlook. Requires API configuration in Settings > Communication.",
+  "version": "1.0.0",
+  "category": "sense",
+  "hormone_affinity": "serotonin",
+  "base_effort": 0.3,
+  "learning_yield": "medium",
+  "risk_level": "write",
+  "platform": "desktop",
+  "permissions": [
+    "network.outbound",
+    "keychain"
+  ],
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": [
+          "list",
+          "create",
+          "search"
+        ],
+        "description": "Calendar action"
+      },
+      "days_ahead": {
+        "type": "integer",
+        "description": "Days to look ahead",
+        "default": 7
+      },
+      "title": {
+        "type": "string",
+        "description": "Event title (for create)"
+      },
+      "date": {
+        "type": "string",
+        "description": "Event date YYYY-MM-DD (for create)"
+      },
+      "time": {
+        "type": "string",
+        "description": "Event time HH:MM (for create)"
+      },
+      "duration_minutes": {
+        "type": "integer",
+        "description": "Duration in minutes",
+        "default": 60
+      }
+    },
+    "required": [
+      "action"
+    ]
+  },
+  "manual": {
+    "overview": "Use when you need to read or create calendar events. Requires Google Calendar or Outlook API configuration in Settings > Communication.",
+    "examples": [
+      {
+        "input": {
+          "action": "list",
+          "days_ahead": 7
+        },
+        "description": "List events for the next week"
+      },
+      {
+        "input": {
+          "action": "create",
+          "title": "Team standup",
+          "date": "2025-02-15",
+          "time": "09:00",
+          "duration_minutes": 30
+        },
+        "description": "Schedule a 30-minute standup"
+      }
+    ],
+    "tips": [
+      "Configure API keys in Settings before first use",
+      "Use YYYY-MM-DD for date and HH:MM for time consistently",
+      "list and search help check availability before creating"
+    ],
+    "edge_cases": [
+      "Missing or invalid API config returns unclear errors",
+      "Timezone is inferred from system; cross-timezone events may be off"
+    ],
+    "related_tools": [
+      "cron_scheduler",
+      "note_memory",
+      "email"
+    ]
+  },
+  "executor": {
+    "type": "python",
+    "handler": "nls.engine.tools_extended.CalendarTool"
+  }
+}

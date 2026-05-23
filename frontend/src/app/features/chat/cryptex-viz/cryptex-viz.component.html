@@ -1,0 +1,54 @@
+<div class="cryptex-card-layout">
+  @for (group of groups; track trackByCategory($index, group)) {
+    <div class="category-section">
+      <div class="category-label">{{ group.label }}</div>
+
+      @for (card of group.cards; track trackByRingId($index, card)) {
+        <div class="ring-block">
+          <!-- Label row: name | tumbler | count -->
+          <div class="ring-label-row" (click)="onCardClick(card)">
+            <span class="ring-color-dot" [style.background]="card.color"></span>
+            <span class="ring-name">{{ card.displayName }}</span>
+
+            @if (card.isRotating && card.allPositions.length > 1) {
+              <span class="tumbler-window">
+                <span class="tumbler-reel" [style.transform]="tumblerOffset(card)">
+                  @for (pos of card.allPositions; track trackByIndex($index)) {
+                    <span class="tumbler-pos"
+                          [class.active]="pos === card.activePosition">{{ pos }}</span>
+                  }
+                </span>
+              </span>
+            } @else {
+              <span class="position-static">{{ card.activePosition }}</span>
+            }
+
+            <span class="slot-count"
+                  [class.empty]="card.slotCount === 0">{{ card.slotCount }}/{{ card.maxSlots }}</span>
+          </div>
+
+          <!-- Glassmorphic card with slot previews -->
+          @if (card.previews.length > 0) {
+            <div class="ring-card"
+                 [class.selected]="isSelected(card)"
+                 [style.--ring-color]="card.color"
+                 [style.--ring-color-rgb]="card.colorRgb"
+                 (click)="onCardClick(card)">
+              @for (preview of card.previews; track trackByIndex($index)) {
+                <div class="slot-preview-row"
+                     [style.opacity]="previewOpacity(preview.salience)">
+                  <span class="preview-access">{{ preview.accessIcon }}</span>
+                  <span class="preview-content">{{ preview.content }}</span>
+                </div>
+              }
+            </div>
+          }
+        </div>
+      }
+    </div>
+  }
+
+  @if (groups.length === 0) {
+    <div class="empty-state">No rings loaded</div>
+  }
+</div>

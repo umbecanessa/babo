@@ -1,0 +1,45 @@
+{
+  "name": "rss_reader",
+  "description": "Read and parse RSS/Atom feeds. Returns latest entries with titles, links, and summaries.",
+  "version": "1.0.0",
+  "category": "sense",
+  "hormone_affinity": "norepinephrine",
+  "base_effort": 0.2,
+  "learning_yield": "medium",
+  "risk_level": "read",
+  "platform": "all",
+  "permissions": ["network.outbound"],
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "url": { "type": "string", "description": "RSS/Atom feed URL" },
+      "limit": { "type": "integer", "description": "Max entries to return", "default": 10 }
+    },
+    "required": ["url"]
+  },
+
+  "manual": {
+    "overview": "Use rss_reader to follow news feeds, blogs, and content sources. RSS feeds provide structured updates from websites. Great for monitoring tech news, blog posts, and project updates.",
+    "examples": [
+      { "description": "Read a tech news feed", "input": { "url": "https://hnrss.org/frontpage", "limit": 5 } },
+      { "description": "Follow a blog", "input": { "url": "https://blog.example.com/feed.xml" } }
+    ],
+    "tips": [
+      "Many websites have RSS feeds at /feed, /rss, or /atom.xml.",
+      "Use limit to control how many entries to return.",
+      "Combine with web_search to read full articles from feed links."
+    ],
+    "edge_cases": [
+      "Some feeds require authentication or may be behind a paywall.",
+      "Malformed XML feeds may fail to parse.",
+      "Not all websites offer RSS feeds."
+    ],
+    "related_tools": ["web_search", "wikipedia", "note_memory"]
+  },
+
+  "executor": {
+    "type": "shell",
+    "command": "python -c \"import urllib.request, xml.etree.ElementTree as ET, json; data=urllib.request.urlopen('{{args.url}}', timeout=15).read(); root=ET.fromstring(data); ns={'a':'http://www.w3.org/2005/Atom'}; items=root.findall('.//item') or root.findall('.//a:entry',ns); results=[{'title':(i.findtext('title') or i.findtext('a:title',namespaces=ns) or ''), 'link':(i.findtext('link') or (i.find('a:link',ns).get('href','') if i.find('a:link',ns) is not None else ''))} for i in items[:{{args.limit}}]]; print(json.dumps(results, indent=2))\""
+  }
+}

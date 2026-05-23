@@ -1,0 +1,47 @@
+{
+  "name": "sql_query",
+  "description": "Run SQL queries against a database. Supports SQLite (local), PostgreSQL, and MySQL via connection strings.",
+  "version": "1.0.0",
+  "category": "sense",
+  "hormone_affinity": "norepinephrine",
+  "base_effort": 0.4,
+  "learning_yield": "high",
+  "risk_level": "read",
+  "platform": "all",
+  "permissions": ["network.outbound", "filesystem.read"],
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "connection": { "type": "string", "description": "DB connection string or SQLite file path" },
+      "query": { "type": "string", "description": "SQL query to execute" },
+      "limit": { "type": "integer", "description": "Max rows to return", "default": 100 }
+    },
+    "required": ["connection", "query"]
+  },
+
+  "manual": {
+    "overview": "Use when you need to run SQL against databases (SQLite, PostgreSQL, MySQL). Supports connection strings and file paths for SQLite.",
+    "examples": [
+      {"input": {"connection": "/data/app.db", "query": "SELECT name, email FROM users WHERE active = 1"}, "description": "Query SQLite by file path"},
+      {"input": {"connection": "postgresql://user:pass@localhost/db", "query": "SELECT COUNT(*) FROM orders"}, "description": "Query PostgreSQL via connection string"}
+    ],
+    "tips": [
+      "Use file path for SQLite; connection string for PostgreSQL/MySQL",
+      "Always use LIMIT on SELECT to avoid unbounded results",
+      "Validate query syntax before running; avoid destructive DROP/DELETE without confirmation",
+      "Use parameterized queries for user-supplied values to prevent SQL injection"
+    ],
+    "edge_cases": [
+      "Connection string format varies by backend; wrong format causes connection failures",
+      "Network timeouts for remote databases",
+      "Transaction isolation may affect concurrent reads/writes"
+    ],
+    "related_tools": ["local_db", "spreadsheet", "api_client", "json_transform"]
+  },
+
+  "executor": {
+    "type": "shell",
+    "command": "python -c \"import sqlite3, json; conn=sqlite3.connect('{{args.connection}}'); conn.row_factory=sqlite3.Row; rows=[dict(r) for r in conn.execute('{{args.query}}').fetchmany({{args.limit}})]; print(json.dumps(rows, indent=2, default=str)); conn.close()\""
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "style_alpha": 0.10,
+  "expertise_alpha": 0.08,
+  "interest_alpha": 0.12,
+  "patience_alpha": 0.05,
+  "max_users": 50,
+  "temperature_history_size": 20,
+  "empathy_factor": 0.30,
+  "max_interests": 30
+}

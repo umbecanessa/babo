@@ -1,0 +1,187 @@
+:host {
+  display: block;
+}
+
+.cryptex-card-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+// ── Category section ─────────────────────────────────────
+
+.category-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.category-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  color: rgba(255, 255, 255, 0.3);
+  text-transform: uppercase;
+  padding: 0 2px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding-bottom: 3px;
+}
+
+// ── Ring block (label + card) ────────────────────────────
+
+.ring-block {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+// ── Label row ────────────────────────────────────────────
+
+.ring-label-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.15s;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.03);
+  }
+}
+
+.ring-color-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ring-name {
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1;
+}
+
+.slot-count {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.35);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+
+  &.empty {
+    opacity: 0.4;
+  }
+}
+
+// ── Tumbler window (position roller) ─────────────────────
+
+.tumbler-window {
+  width: 64px;
+  height: 18px;
+  overflow: hidden;
+  position: relative;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  flex-shrink: 0;
+}
+
+.tumbler-reel {
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.tumbler-pos {
+  height: 18px;
+  line-height: 18px;
+  font-size: 9px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.25);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 4px;
+
+  &.active {
+    color: rgba(255, 255, 255, 0.8);
+    font-weight: 600;
+  }
+}
+
+.position-static {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.35);
+  flex-shrink: 0;
+}
+
+// ── Glassmorphic card ────────────────────────────────────
+
+.ring-card {
+  background: rgba(14, 14, 18, 0.4);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-left: 3px solid var(--ring-color, #64748b);
+  border-radius: 8px;
+  padding: 5px 10px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+
+  &:hover {
+    background: rgba(14, 14, 18, 0.55);
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+
+  &.selected {
+    background: rgba(14, 14, 18, 0.65);
+    border-color: rgba(255, 255, 255, 0.12);
+    box-shadow: 0 0 10px rgba(var(--ring-color-rgb, 100, 116, 139), 0.15);
+  }
+}
+
+// ── Slot preview rows ────────────────────────────────────
+
+.slot-preview-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.55);
+  overflow: hidden;
+}
+
+.preview-access {
+  flex-shrink: 0;
+  font-size: 8px;
+  width: 14px;
+  text-align: center;
+}
+
+.preview-content {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+// ── Empty state ──────────────────────────────────────────
+
+.empty-state {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.25);
+  text-align: center;
+  padding: 16px 0;
+}

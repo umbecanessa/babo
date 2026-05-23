@@ -1,0 +1,99 @@
+{
+  "name": "discord",
+  "description": "Send messages to Discord channels via webhook or bot. Requires NLS_DISCORD_WEBHOOK_URL or NLS_DISCORD_BOT_TOKEN.",
+  "version": "1.0.0",
+  "category": "communicate",
+  "hormone_affinity": "oxytocin",
+  "base_effort": 0.3,
+  "learning_yield": "low",
+  "risk_level": "write",
+  "platform": "desktop",
+  "permissions": [
+    "network.outbound",
+    "keychain"
+  ],
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": [
+          "send_webhook",
+          "send_bot"
+        ],
+        "description": "Discord action",
+        "default": "send_webhook"
+      },
+      "content": {
+        "type": "string",
+        "description": "Message content"
+      },
+      "webhook_url": {
+        "type": "string",
+        "description": "Discord webhook URL (overrides env)"
+      },
+      "channel_id": {
+        "type": "string",
+        "description": "Channel ID (for bot mode)"
+      }
+    },
+    "required": [
+      "content"
+    ]
+  },
+  "manual": {
+    "overview": "Use Discord when sending alerts, bot messages, or notifications to Discord servers. Webhooks are simplest for one-way posting; bot mode offers more control when configured.",
+    "examples": [
+      {
+        "input": {
+          "action": "send_webhook",
+          "content": "Build succeeded. Ready for review."
+        },
+        "description": "Post to a webhook-configured channel"
+      },
+      {
+        "input": {
+          "action": "send_webhook",
+          "content": "@here Deployment in 5 minutes",
+          "webhook_url": "https://discord.com/api/webhooks/..."
+        },
+        "description": "Override webhook URL and mention everyone"
+      },
+      {
+        "input": {
+          "action": "send_bot",
+          "content": "Status update",
+          "channel_id": "123456789"
+        },
+        "description": "Send via bot to a specific channel"
+      }
+    ],
+    "tips": [
+      "Webhooks are easiest; create one in Discord channel settings and set NLS_DISCORD_WEBHOOK_URL",
+      "Discord content is plain text; use Markdown for *bold*, _italic_, and `code`",
+      "Message length limit is 2000 characters; truncate or split long content",
+      "For send_bot, ensure the bot has Send Messages permission in the channel"
+    ],
+    "edge_cases": [
+      "Invalid or expired webhook URLs return 404; verify the URL is correct and not revoked",
+      "Discord rate limits aggressively; avoid sending many messages in quick succession",
+      "Empty or whitespace-only content may be rejected; ensure content has actual text"
+    ],
+    "related_tools": [
+      "slack",
+      "telegram",
+      "notification"
+    ]
+  },
+  "executor": {
+    "type": "http",
+    "method": "POST",
+    "url": "{{args.webhook_url}}",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "content": "{{args.content}}"
+    }
+  }
+}

@@ -1,0 +1,255 @@
+// ═══════════════════════════════════════════════════════════════
+// Projects Page — Glassmorphic Restyle
+// ═══════════════════════════════════════════════════════════════
+
+$glass-bg: rgba(14, 14, 18, 0.6);
+$glass-border: rgba(255, 255, 255, 0.05);
+$glass-blur: blur(30px);
+$indigo: #818cf8;
+
+:host {
+  display: block;
+  height: calc(100vh - 52px);
+  min-height: calc(100vh - 52px);
+  box-sizing: border-box;
+
+  @media (max-width: 768px) {
+    height: calc(100vh - 48px);
+    min-height: calc(100vh - 48px);
+  }
+}
+
+.projects-page {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.projects-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 20px 24px;
+  overflow: hidden;
+  transition: flex 0.2s ease;
+}
+
+// ── Header ─────────────────────────────────────
+
+.projects-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+  margin-bottom: 16px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.page-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #e0e0f0;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.view-tabs {
+  display: flex;
+  gap: 2px;
+  background: $glass-bg;
+  backdrop-filter: $glass-blur;
+  border: 1px solid $glass-border;
+  border-radius: 10px;
+  padding: 3px;
+}
+
+.view-tab {
+  padding: 5px 14px;
+  border-radius: 7px;
+  border: none;
+  background: transparent;
+  color: #6b7280;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover { color: #c0c0d0; }
+  &.active {
+    background: rgba(255, 255, 255, 0.08);
+    color: #e0e0f0;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  }
+}
+
+.header-command {
+  flex: 1;
+  min-width: 200px;
+}
+
+.chat-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+  color: #6b7280;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s;
+
+  &:hover { background: rgba(255, 255, 255, 0.06); color: #c0c0d0; }
+  &.active {
+    background: rgba($indigo, 0.12);
+    border-color: rgba($indigo, 0.25);
+    color: $indigo;
+  }
+}
+
+// ── Chat sidebar ───────────────────────────────
+
+.sidebar {
+  width: 360px;
+  flex-shrink: 0;
+  border-left: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.chat-open .projects-main {
+  flex: 1;
+}
+
+// ── Orchestration Ribbon ────────────────────────
+
+.orch-ribbon {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 8px 16px;
+  margin-bottom: 16px;
+  background: $glass-bg;
+  backdrop-filter: $glass-blur;
+  border: 1px solid $glass-border;
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+
+.orch-ribbon-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.orch-ribbon-val {
+  font-size: 14px;
+  font-weight: 700;
+  color: $indigo;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+.orch-ribbon-label {
+  font-size: 11px;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.orch-ribbon-divider {
+  width: 1px;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.orch-ribbon-item--warn {
+  .orch-ribbon-val {
+    color: #fbbf24;
+    animation: orch-warn-pulse 2s ease-in-out infinite;
+  }
+}
+
+@keyframes orch-warn-pulse {
+  0%, 100% { text-shadow: 0 0 0 transparent; }
+  50% { text-shadow: 0 0 8px rgba(251, 191, 36, 0.4); }
+}
+
+// ── Layouts ────────────────────────────────────
+
+.overview-layout {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 20px;
+  overflow-y: auto;
+  min-height: 0;
+
+  &::-webkit-scrollbar { width: 5px; }
+  &::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 3px;
+  }
+}
+
+.teams-section { flex-shrink: 0; }
+.activity-section { flex: 1; min-height: 200px; }
+
+.board-layout,
+.timeline-layout,
+.files-layout {
+  flex: 1;
+  overflow: hidden;
+  min-height: 0;
+}
+
+.full-board,
+.full-timeline,
+.full-files {
+  height: 100%;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+}
+
+// ── States ─────────────────────────────────────
+
+.loading-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  color: #6b7280;
+  font-size: 13px;
+}
+
+.error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  gap: 12px;
+
+  p { color: #f87171; font-size: 13px; margin: 0; }
+}
+
+.retry-btn {
+  padding: 6px 16px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #c0c0d0;
+  font-size: 12px;
+  cursor: pointer;
+
+  &:hover { background: rgba(255, 255, 255, 0.08); }
+}

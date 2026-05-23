@@ -1,0 +1,4 @@
+# Electron pack output: large archives and ASAR; indexing locks files on Windows during rebuilds.
+desktop/release/
+desktop/release-build/
+desktop/release-mac/

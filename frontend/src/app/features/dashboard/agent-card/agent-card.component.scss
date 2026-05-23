@@ -1,0 +1,242 @@
+:host {
+  display: block;
+  animation: card-enter 0.4s ease-out both;
+}
+
+@keyframes card-enter {
+  from { opacity: 0; transform: translateY(16px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.card {
+  position: relative;
+  padding: 24px;
+  background: rgba(14, 14, 18, 0.6);
+  backdrop-filter: blur(30px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 20px;
+  overflow: hidden;
+  transition: all 0.4s ease;
+
+  &:hover {
+    border-color: rgba(56, 189, 248, 0.15);
+    transform: translateY(-2px);
+    box-shadow: 0 12px 40px -10px rgba(0, 0, 0, 0.4);
+
+    .card-glow { opacity: 1; }
+    .delete-btn, .pause-btn { opacity: 1; }
+  }
+
+  &.card-alive:hover {
+    border-color: rgba(52, 211, 153, 0.15);
+  }
+
+  &.card-sleeping:hover {
+    border-color: rgba(251, 191, 36, 0.15);
+  }
+
+  &.card-paused {
+    opacity: 0.65;
+
+    .card-glow { display: none; }
+
+    &:hover {
+      opacity: 1;
+      border-color: rgba(138, 138, 154, 0.15);
+    }
+  }
+}
+
+.card-glow {
+  position: absolute;
+  top: -40px;
+  right: -40px;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: #38bdf8;
+  filter: blur(60px);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+}
+
+.card-alive .card-glow { background: #34d399; opacity: 0.04; }
+.card-sleeping .card-glow { background: #fbbf24; opacity: 0.04; }
+
+// --- Header ---
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #525252;
+  transition: box-shadow 0.3s;
+
+  &.pulse {
+    animation: status-pulse 2s ease-in-out infinite;
+  }
+}
+
+@keyframes status-pulse {
+  0%, 100% { box-shadow: 0 0 4px currentColor; }
+  50% { box-shadow: 0 0 12px currentColor; }
+}
+
+.status-text {
+  font-size: 11px;
+  color: #a8a8b8;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.pause-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: #8a8a9a;
+  background: none;
+  border: none;
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.2s;
+
+  &:hover {
+    color: #fbbf24;
+  }
+
+  &.pausing {
+    opacity: 1;
+    color: #fbbf24;
+    cursor: wait;
+    pointer-events: none;
+  }
+}
+
+.card-paused .pause-btn {
+  opacity: 1;
+  color: #34d399;
+
+  &:hover { color: #6ee7b7; }
+}
+
+.delete-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: #8a8a9a;
+  background: none;
+  border: none;
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.2s;
+
+  &:hover {
+    color: #f87171;
+  }
+
+  &.deleting {
+    opacity: 1;
+    color: #f87171;
+    cursor: wait;
+    pointer-events: none;
+  }
+}
+
+.btn-spinner {
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid rgba(248, 113, 113, 0.3);
+  border-top-color: #f87171;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+// --- Body ---
+.card-body {
+  margin-bottom: 16px;
+}
+
+.agent-name {
+  font-size: 20px;
+  font-weight: 300;
+  color: #e5e5e5;
+  margin-bottom: 4px;
+  letter-spacing: 0.02em;
+}
+
+.agent-id {
+  font-size: 11px;
+  color: #8a8a9a;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  letter-spacing: 0.02em;
+}
+
+// --- Meta ---
+.card-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.meta-item {
+  font-size: 12px;
+  color: #a8a8b8;
+}
+
+// --- Chat button ---
+.chat-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
+  color: #c0c0cc;
+  font-size: 13px;
+  text-decoration: none;
+  transition: all 0.3s ease;
+
+  &:hover {
+    background: rgba(56, 189, 248, 0.08);
+    border-color: rgba(56, 189, 248, 0.2);
+    color: #38bdf8;
+    text-decoration: none;
+  }
+}
+
+.chat-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.6;
+}

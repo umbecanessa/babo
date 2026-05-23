@@ -1,0 +1,35 @@
+{
+  "name": "gx10-8b-turbo",
+  "description": "Llama 3.1 8B on NVIDIA GB10 Blackwell with 4x accelerated timing. Control run to isolate model scale vs hardware effects.",
+
+  "runtime": {
+    "inference": {
+      "attn_implementation": "sdpa"
+    }
+  },
+
+  "drives": {
+    "drive_tick_seconds": 10,
+    "max_autonomous_actions_per_hour": 80,
+    "drives": {
+      "homeostasis":    { "cooldown_seconds": 30 },
+      "curiosity":      { "cooldown_seconds": 15 },
+      "competence":     { "cooldown_seconds": 22 },
+      "social":         { "cooldown_seconds": 75 },
+      "self_direction": { "cooldown_seconds": 150 }
+    },
+    "experience_tracker": {
+      "domain_search_cooldown_seconds": 150
+    }
+  },
+
+  "autonomic": {
+    "state_machine": {
+      "drowsy_timeout_seconds": 10.0
+    },
+    "sleep_triggers": {
+      "idle_timeout_seconds": 600,
+      "periodic_seconds": 3600
+    }
+  }
+}

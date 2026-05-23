@@ -1,0 +1,63 @@
+<div class="timeline-panel">
+  <div class="panel-header">
+    <span class="panel-title">Timeline</span>
+  </div>
+
+  @if (!timeline) {
+    <div class="empty-state">
+      No plan loaded. Select a project with a plan to view its timeline.
+    </div>
+  } @else {
+    <div class="timeline-title">{{ timeline.title }}</div>
+    <div class="waves">
+      @for (wave of waves; track wave.wave_index) {
+        <div class="wave-row">
+          <div class="wave-marker">
+            <div class="wave-dot" [style.background]="statusColor(waveStatus(wave))"></div>
+            @if (!$last) {
+              <div class="wave-line"></div>
+            }
+          </div>
+          <div class="wave-content">
+            <div class="wave-header">
+              <span class="wave-label">Wave {{ wave.wave_index + 1 }}</span>
+              @if (wave.team) {
+                <span class="wave-team-badge" [style.color]="statusColor(wave.team.status)">
+                  {{ wave.team.name }} — {{ wave.team.status }}
+                </span>
+              } @else {
+                <span class="wave-pending">Pending</span>
+              }
+            </div>
+            @if (wave.team) {
+              <div class="wave-progress">
+                <div class="progress-bar">
+                  <div class="progress-fill" [style.width.%]="waveProgressPct(wave)" [style.background]="statusColor(wave.team.status)"></div>
+                </div>
+                <span class="progress-text">{{ wave.team.progress }}</span>
+                @if (wave.team.status === 'active' || wave.team.status === 'paused') {
+                  <button class="wave-action skip-btn" (click)="onSkip(wave.team.id)" title="Skip this wave">Skip</button>
+                }
+              </div>
+            } @else {
+              <div class="wave-actions">
+                <button class="wave-action force-btn" (click)="onForceStart(wave.wave_index)" title="Force start this wave">Force Start</button>
+              </div>
+            }
+            <div class="wave-steps">
+              @for (step of wave.steps; track step.id) {
+                <div class="step-chip" [class]="'step-' + step.status">
+                  @if (step.status === 'done') { ✓ }
+                  @else if (step.status === 'in_progress') { ▶ }
+                  @else if (step.status === 'failed') { ✗ }
+                  @else { ○ }
+                  {{ step.label }}
+                </div>
+              }
+            </div>
+          </div>
+        </div>
+      }
+    </div>
+  }
+</div>

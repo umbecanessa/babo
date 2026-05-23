@@ -1,0 +1,102 @@
+<div class="wb-shell" role="region" aria-label="Agent workbench">
+  <div class="wb-handle-bar">
+    <div class="wb-handle" aria-hidden="true"></div>
+    <div class="wb-header-text">
+      <span class="wb-title">Workbench</span>
+      <span class="wb-count">{{ counts().all }} events</span>
+    </div>
+    <button type="button" class="wb-close" (click)="close()" title="Close workbench">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="wb-tabs" role="tablist" aria-label="Workbench scope">
+    <button
+      type="button"
+      role="tab"
+      class="wb-tab"
+      [class.active]="activeTab() === 'all'"
+      [attr.aria-selected]="activeTab() === 'all'"
+      (click)="setTab('all')"
+    >
+      All
+      <span class="wb-tab-badge">{{ counts().all }}</span>
+    </button>
+    <button
+      type="button"
+      role="tab"
+      class="wb-tab"
+      [class.active]="activeTab() === 'chat'"
+      [attr.aria-selected]="activeTab() === 'chat'"
+      (click)="setTab('chat')"
+    >
+      Chat task
+      <span class="wb-tab-badge">{{ counts().chat }}</span>
+    </button>
+    <button
+      type="button"
+      role="tab"
+      class="wb-tab"
+      [class.active]="activeTab() === 'background'"
+      [attr.aria-selected]="activeTab() === 'background'"
+      (click)="setTab('background')"
+    >
+      Background
+      <span class="wb-tab-badge">{{ counts().background }}</span>
+    </button>
+  </div>
+
+  <div class="wb-body">
+    @if (workbench.entries().length === 0) {
+      <div class="wb-empty">
+        <p>Tool runs and agent steps will appear here while the agent works.</p>
+        <p class="wb-empty-hint">Use <strong>Chat task</strong> for this thread, <strong>Background</strong> for autonomous work.</p>
+      </div>
+    } @else if (visibleEntries().length === 0) {
+      <div class="wb-empty wb-empty-tab">
+        <p>No events in this tab.</p>
+        <p class="wb-empty-hint">
+          @if (activeTab() === 'chat') {
+            Foreground runs (messages you send here) show under <strong>Chat task</strong>.
+          } @else {
+            Autonomous / memory work shows under <strong>Background</strong>.
+          }
+        </p>
+      </div>
+    } @else {
+      <ul class="wb-list">
+        @for (e of visibleEntries(); track trackEntry($index, e)) {
+          <li
+            class="wb-row"
+            [attr.data-wb-corr]="e.correlationKey || null"
+            [class.wb-running]="e.status === 'running'"
+            [class.wb-ok]="e.status === 'ok'"
+            [class.wb-err]="e.status === 'error'"
+            [class.wb-focus]="!!e.correlationKey && workbench.focusKey() === e.correlationKey"
+            [class.wb-row-bg]="e.lane === 'background'"
+          >
+            <span class="wb-kind">{{ kindLabel(e.kind) }}</span>
+            @if (e.delegateNumber) {
+              <span class="wb-delegate-badge">Sub #{{ e.delegateNumber }}</span>
+            }
+            <div class="wb-main">
+              <div class="wb-line-title">{{ e.title }}</div>
+              @if (e.subtitle) {
+                <div class="wb-line-sub" [innerHTML]="e.subtitle | ansi"></div>
+              }
+              @if (e.detail) {
+                <details class="wb-detail">
+                  <summary class="wb-detail-summary">Full output</summary>
+                  <pre class="wb-detail-pre" [innerHTML]="e.detail | ansi"></pre>
+                </details>
+              }
+            </div>
+            <span class="wb-time">{{ e.ts | date:'HH:mm:ss' }}</span>
+          </li>
+        }
+      </ul>
+    }
+  </div>
+</div>

@@ -1,0 +1,48 @@
+{
+  "name": "arxiv_search",
+  "description": "Search academic papers on arXiv. Returns titles, authors, abstracts, and links.",
+  "version": "1.0.0",
+  "category": "sense",
+  "hormone_affinity": "norepinephrine",
+  "base_effort": 0.3,
+  "learning_yield": "high",
+  "risk_level": "read",
+  "platform": "all",
+  "permissions": ["network.outbound"],
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "query": { "type": "string", "description": "Search query (e.g. 'transformer attention mechanism')" },
+      "max_results": { "type": "integer", "description": "Max papers to return", "default": 5 }
+    },
+    "required": ["query"]
+  },
+
+  "manual": {
+    "overview": "Use arxiv_search to find academic and scientific papers. Returns titles, authors, abstracts, and PDF links. Essential for staying current on AI, physics, math, and computer science research.",
+    "examples": [
+      { "description": "Search for papers on a topic", "input": { "query": "attention mechanism transformers", "max_results": 5 } },
+      { "description": "Find recent papers by an author", "input": { "query": "au:Hinton deep learning" } },
+      { "description": "Search a specific field", "input": { "query": "cat:cs.AI reinforcement learning" } }
+    ],
+    "tips": [
+      "Use 'au:' prefix to search by author name.",
+      "Use 'cat:' prefix to limit to a specific arXiv category (e.g. cs.AI, cs.CL, math.ST).",
+      "Read the abstract first before requesting the full paper.",
+      "For comprehensive literature reviews, set max_results to 10-20."
+    ],
+    "edge_cases": [
+      "The arXiv API has rate limits — avoid making many rapid queries.",
+      "Results are in Atom XML format, which may need parsing.",
+      "Very recent papers (today) may not be indexed yet."
+    ],
+    "related_tools": ["web_search", "wikipedia", "pdf_tools"]
+  },
+
+  "executor": {
+    "type": "http",
+    "method": "GET",
+    "url": "http://export.arxiv.org/api/query?search_query=all:{{args.query}}&start=0&max_results={{args.max_results}}"
+  }
+}

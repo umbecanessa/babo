@@ -1,0 +1,49 @@
+{
+  "name": "web_search",
+  "description": "Browse the web using a real Chromium browser. Can search, navigate to URLs, read rendered page content (including JavaScript-heavy sites), and follow links.",
+  "version": "1.0.0",
+  "category": "sense",
+  "hormone_affinity": "norepinephrine",
+  "base_effort": 0.4,
+  "learning_yield": "high",
+  "risk_level": "read",
+  "platform": "all",
+  "permissions": ["network.outbound"],
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "query": { "type": "string", "description": "Search query" },
+      "url": { "type": "string", "description": "Direct URL to read" },
+      "depth": { "type": "integer", "description": "How many results to read", "default": 1 }
+    }
+  },
+
+  "manual": {
+    "overview": "Use web_search to find information on the internet. It uses a real browser engine (Playwright/Chromium) to search and read pages, including JavaScript-rendered content. Use for current events, documentation, or any knowledge not in your memory.",
+    "examples": [
+      { "description": "Search for information", "input": { "query": "Python asyncio tutorial" } },
+      { "description": "Read a specific webpage", "input": { "url": "https://docs.python.org/3/library/asyncio.html" } },
+      { "description": "Search and read top 3 results", "input": { "query": "best practices REST API design", "depth": 3 } }
+    ],
+    "tips": [
+      "Use specific search queries for better results.",
+      "Use the url parameter to read a known page directly.",
+      "Set depth > 1 to read multiple search results for comprehensive research.",
+      "For academic papers, prefer arxiv_search. For encyclopedic knowledge, prefer wikipedia."
+    ],
+    "edge_cases": [
+      "Some sites block automated access — results may be incomplete.",
+      "Very large pages are truncated to avoid overwhelming context.",
+      "Login-protected content is not accessible."
+    ],
+    "related_tools": ["wikipedia", "arxiv_search", "browser"]
+  },
+
+  "_note": "This tool uses the existing WebBrowseTool Python handler (Playwright-backed). The JSON definition provides the biological metadata.",
+
+  "executor": {
+    "type": "python",
+    "handler": "nls.engine.tools.WebBrowseTool"
+  }
+}

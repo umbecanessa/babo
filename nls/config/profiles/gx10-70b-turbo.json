@@ -1,0 +1,44 @@
+{
+  "name": "gx10-70b-turbo",
+  "description": "Llama 3.1 70B on NVIDIA GB10 Blackwell (128GB unified) with 4x accelerated brain timing. For rapid validation and stress testing.",
+
+  "runtime": {
+    "inference": {
+      "hf_model": "unsloth/Meta-Llama-3.1-70B-Instruct-bnb-4bit",
+      "attn_implementation": "sdpa",
+      "generation": {
+        "max_new_tokens": 4096
+      }
+    },
+    "training": {
+      "lora_rank": 32,
+      "lora_alpha": 64,
+      "batch_size": 4
+    }
+  },
+
+  "drives": {
+    "drive_tick_seconds": 10,
+    "max_autonomous_actions_per_hour": 80,
+    "drives": {
+      "homeostasis":    { "cooldown_seconds": 30 },
+      "curiosity":      { "cooldown_seconds": 15 },
+      "competence":     { "cooldown_seconds": 22 },
+      "social":         { "cooldown_seconds": 75 },
+      "self_direction": { "cooldown_seconds": 150 }
+    },
+    "experience_tracker": {
+      "domain_search_cooldown_seconds": 150
+    }
+  },
+
+  "autonomic": {
+    "state_machine": {
+      "drowsy_timeout_seconds": 10.0
+    },
+    "sleep_triggers": {
+      "idle_timeout_seconds": 600,
+      "periodic_seconds": 3600
+    }
+  }
+}

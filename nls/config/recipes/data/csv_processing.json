@@ -1,0 +1,68 @@
+{
+  "name": "csv_processing",
+  "description": "Process and analyze CSV data using Python",
+  "category": "data",
+  "difficulty": "basic",
+  "prerequisites": [
+    "Python 3 available"
+  ],
+  "steps": [
+    {
+      "description": "Inspect the CSV file structure",
+      "tool": "bash",
+      "example_params": {
+        "command": "head -5 data.csv"
+      },
+      "expected_outcome": "First 5 lines of the CSV showing headers and sample data",
+      "error_patterns": [
+        "No such file or directory"
+      ],
+      "recovery_hints": [
+        "Check the file path and name"
+      ]
+    },
+    {
+      "description": "Write a processing script",
+      "tool": "write",
+      "example_params": {
+        "path": "process_csv.py",
+        "content": "import csv\nimport json\nimport sys\nfrom collections import Counter\n\nfilename = sys.argv[1] if len(sys.argv) > 1 else 'data.csv'\n\nwith open(filename, newline='', encoding='utf-8') as f:\n    reader = csv.DictReader(f)\n    rows = list(reader)\n\nprint(f'Total rows: {len(rows)}')\nprint(f'Columns: {\", \".join(rows[0].keys()) if rows else \"none\"}')\n\nfor col in rows[0].keys() if rows else []:\n    values = [r[col] for r in rows if r[col]]\n    print(f'\\n{col}: {len(values)} non-empty, sample: {values[:3]}')\n"
+      },
+      "expected_outcome": "Processing script created",
+      "error_patterns": [],
+      "recovery_hints": []
+    },
+    {
+      "description": "Run the analysis",
+      "tool": "bash",
+      "example_params": {
+        "command": "python process_csv.py data.csv"
+      },
+      "expected_outcome": "Summary statistics printed for each column",
+      "error_patterns": [
+        "UnicodeDecodeError",
+        "KeyError"
+      ],
+      "recovery_hints": [
+        "Try encoding='latin-1' for non-UTF8 files",
+        "Check delimiter: use csv.Sniffer().sniff() to auto-detect"
+      ]
+    },
+    {
+      "description": "Export results to JSON",
+      "tool": "bash",
+      "example_params": {
+        "command": "python -c \"import csv, json; rows = list(csv.DictReader(open('data.csv'))); json.dump(rows, open('data.json','w'), indent=2); print(f'Exported {len(rows)} rows')\""
+      },
+      "expected_outcome": "CSV data exported as JSON",
+      "error_patterns": [],
+      "recovery_hints": []
+    }
+  ],
+  "learning_signals": [
+    "Python csv module is in the standard library (no install needed)",
+    "csv.DictReader returns rows as dicts with column headers as keys",
+    "csv.Sniffer().sniff() auto-detects delimiter and quoting",
+    "For large datasets, use pandas: pip install pandas"
+  ]
+}

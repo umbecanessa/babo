@@ -1,0 +1,177 @@
+"""File System endpoints for the NLS IDE.
+
+Provides REST access to the server filesystem so the Angular
+frontend can browse, read, write, and search files without
+requiring the Electron shell.
+
+Reuses the existing tool executors from ``nls.engine.tools_builtin``.
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import Any
+
+from fastapi import APIRouter, HTTPException, Query, Request
+from pydantic import BaseModel
+
+from nls.engine.tools_builtin import (
+    FileEditTool,
+    FileReadTool,
+    FileSearchTool,
+    FileTreeTool,
+    FileWriteTool,
+)
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/fs", tags=["filesystem"])
+
+# Singleton tool instances (stateless, safe to share)
+_file_read = FileReadTool()
+_file_write = FileWriteTool()
+_file_edit = FileEditTool()
+_file_tree = FileTreeTool()
+_file_search = FileSearchTool()
+
+
+# ── Request models ────────────────────────────────────────────────
+
+
+class FileWriteRequest(BaseModel):
+    path: str
+    content: str
+    append: bool = False
+
+
+class FileEditRequest(BaseModel):
+    path: str
+    old_string: str
+    new_string: str
+    replace_all: bool = False
+
+
+# ── Endpoints ─────────────────────────────────────────────────────
+
+
+@router.get("/tree")
+async def get_tree(
+    path: str = Query(..., description="Directory path"),
+    depth: int = Query(default=3, ge=1, le=10, description="Max recursion depth"),
+    glob: str = Query(default="", description="Glob filter"),
+):
+    """List directory structure."""
+    result = _file_tree.execute({"path": path, "depth": depth, "glob": glob})
+    if not result.success:
+        raise HTTPException(status_code=400, detail=result.error)
+    return {
+        "text": result.text,
+        "metadata": result.metadata,
+    }
+
+
+@router.get("/read")
+async def read_file(
+    path: str = Query(..., description="Absolute file path"),
+    offset: int = Query(default=0, ge=0, description="Start line (1-based)"),
+    limit: int = Query(default=0, ge=0, description="Max lines to read"),
+):
+    """Read a file with optional line range."""
+    result = _file_read.execute({"path": path, "offset": offset, "limit": limit})
+    if not result.success:
+        raise HTTPException(status_code=400, detail=result.error)
+    return {
+        "content": result.text,
+        "metadata": result.metadata,
+    }
+
+
+@router.post("/write")
+async def write_file(body: FileWriteRequest):
+    """Write or create a file."""
+    result = _file_write.execute({
+        "path": body.path,
+        "content": body.content,
+        "append": body.append,
+    })
+    if not result.success:
+        raise HTTPException(status_code=400, detail=result.error)
+    return {
+        "message": result.text,
+        "metadata": result.metadata,
+    }
+
+
+@router.post("/edit")
+async def edit_file(body: FileEditRequest):
+    """Perform surgical text replacement in a file."""
+    result = _file_edit.execute({
+        "path": body.path,
+        "old_string": body.old_string,
+        "new_string": body.new_string,
+        "replace_all": body.replace_all,
+    })
+    if not result.success:
+        raise HTTPException(status_code=400, detail=result.error)
+    return {
+        "message": result.text,
+        "metadata": result.metadata,
+    }
+
+
+@router.get("/search")
+async def search_files(
+    pattern: str = Query(..., description="Search pattern (regex)"),
+    path: str = Query(..., description="Directory to search in"),
+    glob: str = Query(default="", description="File glob filter"),
+    max_results: int = Query(default=50, ge=1, le=500),
+):
+    """Search file contents using ripgrep or Python fallback."""
+    result = _file_search.execute({
+        "pattern": pattern,
+        "path": path,
+        "glob": glob,
+        "max_results": max_results,
+    })
+    if not result.success:
+        raise HTTPException(status_code=400, detail=result.error)
+    return {
+        "text": result.text,
+        "metadata": result.metadata,
+    }
+
+
+@router.get("/readdir")
+async def read_directory(
+    path: str = Query(..., description="Directory path"),
+):
+    """Read immediate directory contents (for file explorer).
+
+    Returns a flat list of entries with name, isDirectory, and size.
+    Skips hidden entries, node_modules, __pycache__, .git.
+    """
+    from pathlib import Path as P
+
+    dir_path = P(path)
+    if not dir_path.exists() or not dir_path.is_dir():
+        raise HTTPException(status_code=400, detail=f"Not a directory: {path}")
+
+    entries = []
+    try:
+        for entry in sorted(dir_path.iterdir(), key=lambda e: (not e.is_dir(), e.name.lower())):
+            if entry.name.startswith(".") or entry.name in ("node_modules", "__pycache__", ".git"):
+                continue
+            try:
+                size = entry.stat().st_size if entry.is_file() else 0
+            except OSError:
+                size = 0
+            entries.append({
+                "name": entry.name,
+                "path": str(entry).replace("\\", "/"),
+                "isDirectory": entry.is_dir(),
+                "size": size,
+            })
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Permission denied")
+
+    return {"entries": entries, "path": path}

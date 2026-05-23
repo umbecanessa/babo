@@ -1,0 +1,65 @@
+{
+  "name": "ci_cd_pipeline",
+  "description": "Set up a CI/CD pipeline with GitHub Actions",
+  "category": "devops",
+  "difficulty": "intermediate",
+  "prerequisites": [
+    "gh CLI installed",
+    "Git repository initialized"
+  ],
+  "steps": [
+    {
+      "description": "Create the workflows directory",
+      "tool": "bash",
+      "example_params": {
+        "command": "mkdir -p .github/workflows"
+      },
+      "expected_outcome": "Directory created",
+      "error_patterns": [],
+      "recovery_hints": []
+    },
+    {
+      "description": "Write the CI workflow file",
+      "tool": "write",
+      "example_params": {
+        "path": ".github/workflows/ci.yml",
+        "content": "name: CI\non:\n  push:\n    branches: [main]\n  pull_request:\n    branches: [main]\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: actions/checkout@v4\n      - uses: actions/setup-python@v5\n        with:\n          python-version: '3.11'\n      - run: pip install -r requirements.txt\n      - run: pytest\n"
+      },
+      "expected_outcome": "CI workflow file created",
+      "error_patterns": [],
+      "recovery_hints": []
+    },
+    {
+      "description": "Commit and push the workflow",
+      "tool": "bash",
+      "example_params": {
+        "command": "git add .github/workflows/ci.yml && git commit -m \"Add CI pipeline\" && git push"
+      },
+      "expected_outcome": "Workflow pushed, GitHub Actions will trigger",
+      "error_patterns": [
+        "Permission denied - missing push access",
+        "nothing to commit"
+      ],
+      "recovery_hints": [
+        "Check repository permissions",
+        "Ensure changes are staged with git add"
+      ]
+    },
+    {
+      "description": "Check workflow status",
+      "tool": "bash",
+      "example_params": {
+        "command": "gh run list --limit 5"
+      },
+      "expected_outcome": "List of recent workflow runs with status",
+      "error_patterns": [],
+      "recovery_hints": []
+    }
+  ],
+  "learning_signals": [
+    "GitHub Actions workflows live in .github/workflows/*.yml",
+    "Triggered by: push, pull_request, schedule, workflow_dispatch",
+    "Common actions: actions/checkout@v4, actions/setup-python@v5, actions/setup-node@v4",
+    "Check runs: gh run list, gh run view <id>, gh run watch <id>"
+  ]
+}

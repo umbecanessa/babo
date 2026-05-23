@@ -1,0 +1,49 @@
+{
+  "name": "chart_generate",
+  "description": "Generate charts and data visualizations. Creates PNG/SVG from data using matplotlib.",
+  "version": "1.0.0",
+  "category": "create",
+  "hormone_affinity": "dopamine",
+  "base_effort": 0.4,
+  "learning_yield": "medium",
+  "risk_level": "write",
+  "platform": "all",
+  "permissions": ["filesystem.write"],
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "chart_type": { "type": "string", "enum": ["bar", "line", "pie", "scatter", "histogram"], "description": "Chart type" },
+      "title": { "type": "string", "description": "Chart title" },
+      "labels": { "type": "array", "items": { "type": "string" }, "description": "X-axis labels or categories" },
+      "values": { "type": "array", "items": { "type": "number" }, "description": "Data values" },
+      "output_path": { "type": "string", "description": "Path to save chart", "default": "chart.png" }
+    },
+    "required": ["chart_type", "labels", "values"]
+  },
+
+  "manual": {
+    "overview": "Use when you need to create charts (bar, line, pie, scatter, histogram) from data. Outputs PNG or SVG for reports or dashboards.",
+    "examples": [
+      {"input": {"chart_type": "bar", "title": "Sales by Region", "labels": ["North", "South", "East", "West"], "values": [120, 90, 150, 80], "output_path": "sales.png"}, "description": "Create a bar chart of regional sales"},
+      {"input": {"chart_type": "line", "title": "Trend", "labels": ["Q1", "Q2", "Q3", "Q4"], "values": [10, 15, 12, 18]}, "description": "Line chart with default output path"}
+    ],
+    "tips": [
+      "Match labels and values array lengths; mismatches cause errors",
+      "Use bar for categories, line for time series, pie for proportions, scatter for correlations",
+      "Set output_path to a writable location; default is chart.png",
+      "Ensure values are numeric; strings will fail"
+    ],
+    "edge_cases": [
+      "Empty labels or values will produce empty or broken charts",
+      "Very large datasets may slow rendering; consider aggregating first",
+      "Pie charts with many slices become unreadable; limit to 5-7 slices"
+    ],
+    "related_tools": ["spreadsheet", "json_transform", "sql_query"]
+  },
+
+  "executor": {
+    "type": "python",
+    "handler": "nls.engine.tools_extended.ChartGenerateTool"
+  }
+}

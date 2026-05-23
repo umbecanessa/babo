@@ -1,0 +1,72 @@
+/* Babo docs — calmer header and brand polish */
+
+:root {
+  --babo-header-bg: #12141c;
+  --babo-header-border: rgba(99, 102, 241, 0.35);
+  --babo-accent: #818cf8;
+}
+
+/* Softer header than default Material primary fill */
+.md-header {
+  background-color: var(--babo-header-bg);
+  border-bottom: 1px solid var(--babo-header-border);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.2);
+}
+
+.md-header__inner {
+  max-width: none;
+}
+
+/* Logo: bubble icon with readable title */
+.md-header__button.md-logo {
+  margin: 0.2rem 0.4rem 0.2rem 0;
+  padding: 0;
+}
+
+.md-header__button.md-logo img,
+.md-header__button.md-logo svg {
+  height: 2rem;
+  width: auto;
+}
+
+.md-header__title {
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+/* Tab bar: subtle, not full cyan band */
+.md-tabs {
+  background-color: #0d0f14;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+[data-md-color-scheme="default"] .md-tabs {
+  background-color: #f6f7fb;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.md-tabs__link {
+  opacity: 0.85;
+  font-weight: 500;
+}
+
+.md-tabs__link--active {
+  opacity: 1;
+  color: var(--babo-accent);
+}
+
+/* Sidebar active link */
+.md-nav__link--active {
+  font-weight: 600;
+}
+
+/* Code blocks slightly softer in dark mode */
+[data-md-color-scheme="slate"] .highlight pre {
+  border-radius: 6px;
+}
+
+/* Hero on home — optional spacing */
+.md-typeset h1:first-of-type {
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}

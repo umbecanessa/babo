@@ -1,0 +1,49 @@
+{
+  "name": "spreadsheet",
+  "description": "Read CSV/JSON files, query rows, compute basic statistics.",
+  "version": "1.0.0",
+  "category": "sense",
+  "hormone_affinity": "norepinephrine",
+  "base_effort": 0.3,
+  "learning_yield": "high",
+  "risk_level": "read",
+  "platform": "all",
+  "permissions": ["filesystem.read"],
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "path": { "type": "string", "description": "Path to CSV or JSON file" },
+      "action": { "type": "string", "enum": ["read", "stats", "query"], "default": "read" },
+      "limit": { "type": "integer", "description": "Max rows to return", "default": 50 },
+      "filter_column": { "type": "string", "description": "Column to filter on" },
+      "filter_value": { "type": "string", "description": "Value to filter for" }
+    },
+    "required": ["path"]
+  },
+
+  "manual": {
+    "overview": "Use when you need to read CSV/JSON files, filter rows, or compute basic stats. Ideal for tabular data stored locally.",
+    "examples": [
+      {"input": {"path": "/data/sales.csv", "action": "read", "limit": 10}, "description": "Read first 10 rows from a CSV file"},
+      {"input": {"path": "/data/sales.csv", "action": "query", "filter_column": "region", "filter_value": "West"}, "description": "Filter rows where region equals West"}
+    ],
+    "tips": [
+      "Use action=read for quick inspection, action=query for filtered data, action=stats for summaries",
+      "Set limit to avoid loading huge datasets into memory",
+      "Column names are case-sensitive; ensure filter_column matches file headers",
+      "Prefer CSV for tabular data; JSON for nested structures"
+    ],
+    "edge_cases": [
+      "Large files may be slow; use limit and filter to reduce scope",
+      "Malformed CSV (unescaped commas, missing headers) can cause parse errors",
+      "Encoding issues with non-ASCII characters; check file encoding"
+    ],
+    "related_tools": ["json_transform", "local_db", "sql_query", "chart_generate"]
+  },
+
+  "executor": {
+    "type": "python",
+    "handler": "nls.engine.tools_extended.SpreadsheetTool"
+  }
+}

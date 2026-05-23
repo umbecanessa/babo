@@ -1,0 +1,83 @@
+{
+  "name": "translate",
+  "description": "Translate text between languages. Uses LibreTranslate (local) or cloud API.",
+  "version": "1.0.0",
+  "category": "think",
+  "hormone_affinity": "norepinephrine",
+  "base_effort": 0.2,
+  "learning_yield": "medium",
+  "risk_level": "read",
+  "platform": "all",
+  "permissions": [
+    "network.outbound"
+  ],
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "text": {
+        "type": "string",
+        "description": "Text to translate"
+      },
+      "source": {
+        "type": "string",
+        "description": "Source language code (auto-detect if omitted)",
+        "default": "auto"
+      },
+      "target": {
+        "type": "string",
+        "description": "Target language code (e.g. 'en', 'it', 'es', 'fr')"
+      }
+    },
+    "required": [
+      "text",
+      "target"
+    ]
+  },
+  "manual": {
+    "overview": "Use when you need to translate text between languages. Uses LibreTranslate (local or cloud) for general translation.",
+    "examples": [
+      {
+        "input": {
+          "text": "Hello, how are you?",
+          "target": "es"
+        },
+        "description": "Translate to Spanish"
+      },
+      {
+        "input": {
+          "text": "Bonjour le monde",
+          "source": "fr",
+          "target": "en"
+        },
+        "description": "Translate French to English with explicit source"
+      }
+    ],
+    "tips": [
+      "Omit source for auto-detect when language is uncertain",
+      "Use ISO codes: en, es, fr, de, it, ja, zh, etc.",
+      "For long text, split into chunks to avoid timeout"
+    ],
+    "edge_cases": [
+      "Cloud API may rate-limit or require API key for large volumes",
+      "Idioms and technical terms may translate poorly"
+    ],
+    "related_tools": [
+      "audio_transcribe",
+      "tts",
+      "pdf_tools"
+    ]
+  },
+  "executor": {
+    "type": "http",
+    "method": "POST",
+    "url": "https://libretranslate.com/translate",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "q": "{{args.text}}",
+      "source": "{{args.source}}",
+      "target": "{{args.target}}"
+    }
+  }
+}

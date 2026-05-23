@@ -1,0 +1,66 @@
+<div class="login-container">
+  <!-- Ambient background -->
+  <div class="ambient-bg">
+    <div class="glow glow-1"></div>
+    <div class="glow glow-2"></div>
+    <div class="glow glow-3"></div>
+    <div class="particles">
+      @for (i of particleCount; track i) {
+        <div class="particle" [style.--delay]="i * 0.7 + 's'" [style.--x]="particleX(i)" [style.--size]="particleSize(i)"></div>
+      }
+    </div>
+  </div>
+
+  <!-- Login card -->
+  <div class="login-card animate-fade-in">
+    <div class="logo-wrapper">
+      <div class="logo-glow"></div>
+      <img src="assets/images/babo.png" alt="Babo" class="login-logo" />
+    </div>
+    <h1 class="title">Babo</h1>
+    <p class="subtitle">Your AI, your mind</p>
+
+    <div class="status-tag" [class]="serverStatus()">
+      <span class="status-dot"></span>
+      @if (serverStatus() === 'checking') {
+        <span>Connecting...</span>
+      } @else if (serverStatus() === 'offline') {
+        <span>Waiting for server</span>
+      } @else {
+        <span>Connected</span>
+      }
+    </div>
+
+    <form (ngSubmit)="onSubmit()" class="form">
+      @if (error()) {
+        <div class="error-msg">{{ error() }}</div>
+      }
+
+      <div class="field">
+        <label>Email</label>
+        <input type="email" [(ngModel)]="email" name="email" required
+               placeholder="you@example.com" autocomplete="email" />
+      </div>
+
+      <div class="field">
+        <label>Password</label>
+        <input type="password" [(ngModel)]="password" name="password" required
+               placeholder="Enter password" autocomplete="current-password" />
+      </div>
+
+      <button type="submit" [disabled]="loading() || serverStatus() !== 'online'" class="submit-btn">
+        <span class="btn-glow"></span>
+        @if (serverStatus() !== 'online') {
+          Waiting for server...
+        } @else {
+          {{ loading() ? 'Authenticating...' : 'Sign in' }}
+        }
+      </button>
+
+      <p class="switch-link">
+        No account yet?
+        <a routerLink="/auth/register">Create one</a>
+      </p>
+    </form>
+  </div>
+</div>

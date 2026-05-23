@@ -1,0 +1,101 @@
+import { Injectable, Injector, signal, computed } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Router } from '@angular/router';
+import { Observable, tap, catchError, throwError, map } from 'rxjs';
+import { environment } from '../../../environments/environment';
+import { AuthTokens } from '../models/user.model';
+import { WebSocketService } from './websocket.service';
+import { ChatUiSnapshotService } from './chat-ui-snapshot.service';
+
+@Injectable({ providedIn: 'root' })
+export class AuthService {
+  private readonly API = environment.apiUrl;
+  private tokenSignal = signal<string | null>(this.getStoredToken());
+
+  isAuthenticated = computed(() => !!this.tokenSignal());
+  token = computed(() => this.tokenSignal());
+
+  constructor(
+    private http: HttpClient,
+    private router: Router,
+    private injector: Injector,
+  ) {}
+
+  register(email: string, password: string, displayName?: string) {
+    return this.http.post<AuthTokens>(`${this.API}/auth/register`, {
+      email, password, displayName,
+    });
+  }
+
+  login(email: string, password: string) {
+    return this.http.post<AuthTokens>(`${this.API}/auth/login`, {
+      email, password,
+    });
+  }
+
+  handleAuthSuccess(tokens: AuthTokens): void {
+    localStorage.setItem('access_token', tokens.accessToken);
+    localStorage.setItem('refresh_token', tokens.refreshToken);
+    localStorage.setItem('user_id', tokens.userId);
+    this.tokenSignal.set(tokens.accessToken);
+    this.router.navigate(['/dashboard']);
+  }
+
+  logout(): void {
+    try {
+      this.injector.get(WebSocketService).disconnect();
+      this.injector.get(ChatUiSnapshotService).clearAll();
+    } catch {
+      /* optional during bootstrap */
+    }
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('refresh_token');
+    localStorage.removeItem('user_id');
+    this.tokenSignal.set(null);
+    this.router.navigate(['/auth/login']);
+  }
+
+  getAccessToken(): string | null {
+    return this.tokenSignal();
+  }
+
+  getRefreshToken(): string | null {
+    return localStorage.getItem('refresh_token');
+  }
+
+  getUserId(): string | null {
+    return localStorage.getItem('user_id');
+  }
+
+  /**
+   * Refresh the access token using the stored refresh token.
+   * On success: stores new tokens and emits the new access token.
+   * On failure: logs the user out and propagates the error.
+   */
+  refreshAccessToken(): Observable<string> {
+    const refreshToken = this.getRefreshToken();
+    if (!refreshToken) {
+      this.logout();
+      return throwError(() => new Error('No refresh token'));
+    }
+
+    return this.http
+      .post<AuthTokens>(`${this.API}/auth/refresh`, { refreshToken })
+      .pipe(
+        tap((tokens) => {
+          localStorage.setItem('access_token', tokens.accessToken);
+          localStorage.setItem('refresh_token', tokens.refreshToken);
+          this.tokenSignal.set(tokens.accessToken);
+        }),
+        map((tokens) => tokens.accessToken),
+        catchError((err) => {
+          this.logout();
+          return throwError(() => err);
+        }),
+      );
+  }
+
+  private getStoredToken(): string | null {
+    return localStorage.getItem('access_token');
+  }
+}
