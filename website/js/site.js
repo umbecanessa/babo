@@ -56,7 +56,7 @@
     const subtabs = panel.querySelectorAll(".showcase-subtab");
     if (!subtabs.length) return;
 
-    const images = panel.querySelectorAll("img[data-subpanel]");
+    const images = panel.querySelectorAll(".screen-viewport img[data-subpanel], img[data-subpanel]");
 
     subtabs.forEach((btn) => {
       btn.addEventListener("click", () => {

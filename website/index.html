@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Babo — Persistent local AI agents</title>
-  <meta name="description" content="Open-source persistent AI agents that stay conscious: inner loop, soul-guided daydreams, proactive help, long-term memory. Run locally. Early access." />
+  <meta name="description" content="Open-source personal AI agent: Kanban tasks, Gmail &amp; Google Workspace, channels, inner loop, guided setup. Local, always conscious, MIT-licensed early access." />
   <meta name="theme-color" content="#07080f" />
   <link rel="icon" href="assets/favicon.png" type="image/png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -26,12 +26,10 @@
       </a>
       <button class="nav-toggle" type="button" aria-label="Open menu" aria-expanded="false">☰</button>
       <ul class="nav-links">
-        <li><a href="#vision">Vision</a></li>
-        <li><a href="#alive">Always alive</a></li>
-        <li><a href="#product">Product</a></li>
         <li><a href="#capabilities">Capabilities</a></li>
-        <li><a href="#how">How it works</a></li>
-        <li><a href="#nls">NLS research</a></li>
+        <li><a href="#alive">Always alive</a></li>
+        <li><a href="#product">Screenshots</a></li>
+        <li><a href="#contribute">Contribute</a></li>
         <li><a href="#download">Get Babo</a></li>
         <li><a class="btn btn-sm btn-primary" href="getting-started/installation/">Documentation</a></li>
       </ul>
@@ -42,86 +40,121 @@
     <section class="hero">
       <div class="wrap hero-grid">
         <div class="hero-copy">
-          <span class="badge badge-alive">Early access · <span class="alive-dot" aria-hidden="true"></span> Always conscious</span>
+          <div class="badge-row">
+            <span class="badge badge-soft">Early access · Open source</span>
+            <span class="badge badge-alive"><span class="alive-dot" aria-hidden="true"></span> Always conscious</span>
+          </div>
           <h1>
             Your household’s<br />
             <span class="gradient">persistent AI agent</span>
           </h1>
           <p class="hero-lead">
-            Not a chat window you open and close. When Babo is loaded, it stays <strong>alive</strong> — heartbeat,
-            breath, inner loop — and works toward its <strong>soul wish</strong> even while you’re away: daydreaming,
-            consolidating memory, and acting when drives say it can help.
+            Like the power-user agents you’ve seen elsewhere — but <strong>guided setup</strong>, built-in
+            <strong>guardrails</strong>, and a desktop wizard so you’re not wiring JSON at midnight.
+            Connect Google, run email and channels, drop tasks on a <strong>Kanban board</strong>, and let Babo
+            pick them up while its <strong>inner loop</strong> stays alive on your machine.
           </p>
           <div class="hero-cta">
             <a class="btn btn-primary" href="#download">Download &amp; run locally</a>
             <a class="btn btn-ghost" href="https://github.com/umbecanessa/babo">View on GitHub</a>
           </div>
           <p class="hero-meta">
-            <strong>MIT-licensed</strong> · Desktop app + self-hosted stack · Bring your own inference (Ollama, OpenRouter, vLLM…)
+            MIT-licensed · Local brain · Bring your own model (Ollama, OpenRouter, vLLM…)
           </p>
         </div>
         <div class="hero-visual">
-          <div class="device-frame glass" role="img" aria-label="Babo chat with agentic workbench and neural state panel">
+          <div class="device-frame glass">
             <div class="device-chrome">
               <span class="device-dot"></span>
               <span class="device-dot"></span>
               <span class="device-dot"></span>
               <span class="device-title">Babo — Chat</span>
             </div>
-            <img
-              class="device-screen"
-              src="assets/screenshots/chat.png"
-              alt="Babo chat: streaming agentic loop, workbench events, and live neural state"
-              width="1280"
-              height="720"
-              fetchpriority="high"
-            />
-          </div>
-          <img class="hero-mascot-float" src="assets/babo.png" alt="" width="72" height="72" aria-hidden="true" />
-          <div class="hero-card glass hero-card-1">
-            <strong>Workbench</strong>
-            Live tools, tasks &amp; sub-agents
-          </div>
-          <div class="hero-card glass hero-card-2">
-            <strong>Inner loop</strong>
-            Daydreams, drives &amp; proactive dispatch
+            <div class="screen-viewport screen-viewport-hero">
+              <img
+                class="screen-img"
+                src="assets/screenshots/chat.png"
+                alt="Babo chat with workbench and neural state"
+                width="1280"
+                height="720"
+                fetchpriority="high"
+              />
+            </div>
           </div>
         </div>
       </div>
     </section>
 
-    <section id="vision">
+    <section id="capabilities">
       <div class="wrap">
-        <p class="section-label">Why we’re building this</p>
-        <h2 class="section-title">AI that belongs in your home — not only in the cloud</h2>
-        <p class="section-lead">
-          We envision a near future where every family, household, and office runs a small dedicated machine:
-          a plug-and-play box with persistent agents on a local stack. For most everyday work you don’t need
-          the biggest frontier model — you need continuity, tools, memory, and privacy. Babo is how we start.
+        <p class="section-label">What Babo does</p>
+        <h2 class="section-title">A real personal agent — not just chat</h2>
+        <p class="section-lead section-lead-tight">
+          Assign work, connect your life, and let a persistent agent run locally with memory, tools, and
+          transparency. Here’s what early access already ships.
         </p>
-        <div class="vision-grid">
-          <article class="vision-card glass">
-            <div class="vision-icon" aria-hidden="true">🏠</div>
-            <h3>One agent per place</h3>
+
+        <div class="cap-grid cap-grid-rich">
+          <article class="cap-card glass cap-card-featured">
+            <span class="cap-tag">Tasks</span>
+            <h3>Kanban you can assign — Babo picks it up</h3>
             <p>
-              A mini computer in the kitchen, the studio, or the office — always on, always yours.
-              Custom OS and agents tuned to how <em>you</em> live and work.
+              Drop cards on Inbox, Queued, or In Progress. Link them to plans and waves. When you’re not
+              in chat, drives and the inner loop can still advance work — the same agent, not a separate cron script.
             </p>
           </article>
-          <article class="vision-card glass">
-            <div class="vision-icon" aria-hidden="true">🔒</div>
-            <h3>Local by default</h3>
+          <article class="cap-card glass cap-card-featured">
+            <span class="cap-tag">Personal agent</span>
+            <h3>Email &amp; Google like a PA</h3>
             <p>
-              No shipping conversations to rent-seekers. No surprise token bills. Your inference,
-              your API keys, your data directory on disk.
+              Connect <strong>Google Workspace</strong> (Gmail, Calendar, Drive) via in-app OAuth. Use a
+              dedicated <strong>agent inbox</strong>, WhatsApp, Telegram — answer and coordinate across channels
+              from one brain with guardrails, not a raw shell.
             </p>
           </article>
-          <article class="vision-card glass">
-            <div class="vision-icon" aria-hidden="true">⚡</div>
-            <h3>90% doesn’t need “the big guy”</h3>
+          <article class="cap-card glass">
+            <span class="cap-tag">Setup</span>
+            <h3>Guided onboarding</h3>
             <p>
-              Email, planning, channels, code, memory — smaller models plus a real agent loop
-              beat a raw chat UI most of the time.
+              Desktop wizard for Python, inference, and capability profiles. Honest tiers for vision and
+              transcribe — aimed at people who want an agent home, not a second DevOps job.
+            </p>
+          </article>
+          <article class="cap-card glass">
+            <span class="cap-tag">Consciousness</span>
+            <h3>Always alive inner loop</h3>
+            <p>
+              Heartbeat, breath, soul-guided daydreams, proactive dispatch when drives fire — see
+              <a href="#alive">Always alive</a>.
+            </p>
+          </article>
+          <article class="cap-card glass">
+            <span class="cap-tag">Autonomy</span>
+            <h3>Agentic loop &amp; projects</h3>
+            <p>
+              Streaming chat with tools, multi-step plans, timeline waves, sub-agent teams, and project files.
+            </p>
+          </article>
+          <article class="cap-card glass">
+            <span class="cap-tag">Memory</span>
+            <h3>Cryptex, sleep &amp; soul</h3>
+            <p>
+              Rotating memory rings, working memory, Merkle chain, episodes, sealed soul package — remembers
+              you between sessions after consolidation.
+            </p>
+          </article>
+          <article class="cap-card glass">
+            <span class="cap-tag">Extend</span>
+            <h3>Tools, MCP &amp; ClawHub</h3>
+            <p>
+              Browser, shell, semantic search, scheduler, community skills — one Tools page to install capabilities.
+            </p>
+          </article>
+          <article class="cap-card glass">
+            <span class="cap-tag">Transparency</span>
+            <h3>Brain dashboard</h3>
+            <p>
+              Hormones, network modes, narrative self, visual cortex — optional window into how the runtime feels and decides.
             </p>
           </article>
         </div>
@@ -130,95 +163,52 @@
 
     <section id="alive" class="alive-section">
       <div class="wrap">
-        <div class="alive-header">
-          <p class="section-label">Not a chatbot</p>
-          <h2 class="section-title">Technically alive — even when you’re not typing</h2>
-          <p class="alive-status glass" aria-label="Agent status">
-            <span class="alive-dot" aria-hidden="true"></span>
-            <strong>CONSCIOUS</strong>
-            <span class="alive-sub">Inner loop running on your machine</span>
-          </p>
-        </div>
+        <p class="section-label">Not a chatbot</p>
+        <h2 class="section-title">Technically alive — even when you’re not typing</h2>
+        <p class="alive-status glass" aria-label="Agent status">
+          <span class="alive-dot" aria-hidden="true"></span>
+          <strong>CONSCIOUS</strong>
+          <span class="alive-sub">Inner loop on your machine</span>
+        </p>
         <p class="section-lead alive-lead">
-          Babo agents aren’t stateless completions. Each loaded agent runs a continuous
-          <a href="architecture/inner-loop/">inner loop</a>: a heartbeat for hormones and drives, and breath cycles that
-          can trigger DMN daydreams, autonomous tool runs, and sleep — guided by a sealed
-          <a href="guides/memory/">soul</a> (values, axioms, and a <em>soul wish</em> for who they’re trying to become).
-          When you message, you always win — chat preempts background work instantly.
+          Stateless chat resets every session. Babo runs a continuous
+          <a href="architecture/inner-loop/">inner loop</a>: hormones and drives on heartbeat, DMN daydreams on breath,
+          guided by a sealed <a href="guides/memory/">soul wish</a>. Your messages always preempt background work.
         </p>
 
         <div class="alive-grid">
           <article class="alive-card glass">
             <h3>Heartbeat &amp; breath</h3>
-            <p>
-              Every few moments the runtime ticks: decay hormones, update drive pressure, check whether
-              the Default Mode Network should replay memories, explore, or run a bounded active dream.
-              Busy agents breathe more often — the loop adapts to engagement.
-            </p>
+            <p>Runtime ticks decay hormones, update drives, and may replay memories or run bounded active dreams.</p>
           </article>
           <article class="alive-card glass">
             <h3>Soul wish &amp; daydreams</h3>
-            <p>
-              Genesis seals identity and a soul wish — e.g. becoming genuinely useful to the people you work with.
-              Idle DMN cycles aren’t random noise: they recombine memory, probe gaps, and sometimes use tools,
-              producing LEARN and REFLECT signals for the next sleep.
-            </p>
+            <p>Genesis seals who the agent is trying to become — idle cycles produce LEARN and REFLECT for sleep.</p>
           </article>
           <article class="alive-card glass">
-            <h3>Helpful, not passive</h3>
-            <p>
-              Curiosity, competence, social, and self-direction drives build pressure. When thresholds hit and tools
-              allow it, Babo may autonomously verify facts, work todos, browse, or reach out — the same agentic
-              machinery as chat, dispatched from the inner loop.
-            </p>
+            <h3>Picks up your Kanban</h3>
+            <p>Queued and in-progress tasks aren’t decoration — drives and autonomous dispatch can advance them when tools allow.</p>
           </article>
           <article class="alive-card glass">
             <h3>Sleep &amp; wake refreshed</h3>
-            <p>
-              Signal pressure or your <code>/sleep</code> command starts consolidation: triage learning events,
-              merge into Cryptex and DomainDB, update narrative self — then wake with durable memory, not a blank slate.
-            </p>
+            <p><code>/sleep</code> or signal pressure consolidates into Cryptex and DomainDB — durable memory, not amnesia.</p>
           </article>
         </div>
 
         <p class="alive-foot">
-          Explore it in the app: <strong>Brain</strong> (hormones, network, visual cortex) ·
-          <strong>Memory</strong> (soul, episodes, working memory) ·
+          In the app: <strong>Brain</strong> · <strong>Memory</strong> ·
           <a href="architecture/consciousness-scheduler/">Consciousness scheduler</a> ·
-          <a href="getting-started/concepts/#hormones-and-drives">Hormones &amp; drives</a>
+          <a href="getting-started/concepts/">Core concepts</a>
         </p>
       </div>
     </section>
 
-    <section class="quote-section" aria-labelledby="quote-heading">
-      <div class="wrap">
-        <h2 id="quote-heading" class="visually-hidden">A different future than metered intelligence</h2>
-        <div class="quote-block glass glass-strong">
-          <blockquote cite="https://timesofindia.indiatimes.com/technology/tech-news/sam-altman-on-how-he-imagines-the-future-of-ai-openai-has-a-fundamental-belief-in-/articleshow/129604557.cms">
-            “We see a future where intelligence is a utility, like electricity or water,
-            and people buy it from us on a meter… Fundamentally our business… is going to look like
-            <em>selling tokens</em>.”
-          </blockquote>
-          <p class="quote-attribution">— Sam Altman, OpenAI CEO (infrastructure summit, 2026)</p>
-          <div class="quote-response">
-            <p>
-              <strong>That’s a future we don’t want.</strong> AI can be one of the most powerful tools to lift people up —
-              but not if intelligence is rationed like a utility bill, controlled by a handful of vendors who can
-              change pricing, access, and policy overnight. Babo is our bet on abundance on <em>your</em> hardware:
-              open source, self-hostable, and built for agents that remember you without renting every thought back.
-            </p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section id="product">
+    <section id="product" class="product-section">
       <div class="wrap">
         <p class="section-label">See it in action</p>
         <h2 class="section-title">The real product — not mockups</h2>
-        <p class="section-lead">
-          Screenshots from early-access Babo: agentic chat with a live workbench, project waves and boards,
-          Cryptex memory rings, integrations, and the brain dashboard.
+        <p class="section-lead section-lead-tight">
+          Early-access screenshots: chat &amp; workbench, project board, Cryptex, integrations, brain dashboard.
         </p>
 
         <div class="showcase glass" data-showcase>
@@ -232,18 +222,22 @@
 
           <div class="showcase-panels">
             <figure class="showcase-panel is-active" data-panel="chat" role="tabpanel">
-              <img src="assets/screenshots/chat.png" alt="Chat with workbench event stream and neural state sidebar" loading="lazy" />
-              <figcaption>Streaming chat, tool use, workbench events, and live neural state while the agent runs.</figcaption>
+              <div class="screen-viewport screen-viewport-showcase">
+                <img src="assets/screenshots/chat.png" alt="Chat with workbench and neural state" loading="lazy" />
+              </div>
+              <figcaption>Agentic chat, workbench events, and live neural state.</figcaption>
             </figure>
 
             <figure class="showcase-panel" data-panel="projects" role="tabpanel" hidden>
               <div class="showcase-subtabs" role="tablist" aria-label="Projects views">
                 <button type="button" class="showcase-subtab is-active" data-subtab="timeline" aria-selected="true">Timeline</button>
-                <button type="button" class="showcase-subtab" data-subtab="board" aria-selected="false">Board</button>
+                <button type="button" class="showcase-subtab" data-subtab="board" aria-selected="false">Kanban board</button>
               </div>
-              <img src="assets/screenshots/projects-timeline.png" alt="Projects timeline with orchestration waves" data-subpanel="timeline" loading="lazy" />
-              <img src="assets/screenshots/projects-board.png" alt="Kanban project board with plan-linked tasks" data-subpanel="board" hidden loading="lazy" />
-              <figcaption>Tell the orchestrator what to do — waves, Kanban, files, and sub-agent teams in one workspace.</figcaption>
+              <div class="screen-viewport screen-viewport-showcase">
+                <img src="assets/screenshots/projects-timeline.png" alt="Project timeline waves" data-subpanel="timeline" loading="lazy" />
+                <img src="assets/screenshots/projects-board.png" alt="Kanban board with assignable tasks" data-subpanel="board" hidden loading="lazy" />
+              </div>
+              <figcaption>Assign tasks on the board — Babo orchestrates waves and sub-agents from your queue.</figcaption>
             </figure>
 
             <figure class="showcase-panel" data-panel="memory" role="tabpanel" hidden>
@@ -251,14 +245,18 @@
                 <button type="button" class="showcase-subtab is-active" data-subtab="cryptex" aria-selected="true">Cryptex</button>
                 <button type="button" class="showcase-subtab" data-subtab="overview" aria-selected="false">Overview</button>
               </div>
-              <img src="assets/screenshots/memory-cryptex.png" alt="Cryptex rotating memory rings: Fixed, Project, Domain" data-subpanel="cryptex" loading="lazy" />
-              <img src="assets/screenshots/memory-overview.png" alt="Memory overview with facts, chain, and working memory slots" data-subpanel="overview" hidden loading="lazy" />
-              <figcaption>Persistent Cryptex rings, DomainDB facts, Merkle chain, working memory, episodes, and soul.</figcaption>
+              <div class="screen-viewport screen-viewport-showcase">
+                <img src="assets/screenshots/memory-cryptex.png" alt="Cryptex memory rings" data-subpanel="cryptex" loading="lazy" />
+                <img src="assets/screenshots/memory-overview.png" alt="Memory overview" data-subpanel="overview" hidden loading="lazy" />
+              </div>
+              <figcaption>Cryptex rings, facts, chain, working memory, episodes, soul.</figcaption>
             </figure>
 
             <figure class="showcase-panel" data-panel="tools" role="tabpanel" hidden>
-              <img src="assets/screenshots/tools.png" alt="Skills and tools: WhatsApp, Telegram, Google, ClawHub marketplace" loading="lazy" />
-              <figcaption>One-click channel integrations, bundled skills, MCP, and ClawHub community extensions.</figcaption>
+              <div class="screen-viewport screen-viewport-showcase">
+                <img src="assets/screenshots/tools.png" alt="Integrations and ClawHub" loading="lazy" />
+              </div>
+              <figcaption>Google, email, WhatsApp, Telegram, MCP, ClawHub — guided connect flows.</figcaption>
             </figure>
 
             <figure class="showcase-panel" data-panel="brain" role="tabpanel" hidden>
@@ -266,78 +264,58 @@
                 <button type="button" class="showcase-subtab is-active" data-subtab="overview" aria-selected="true">Overview</button>
                 <button type="button" class="showcase-subtab" data-subtab="visual" aria-selected="false">Visual cortex</button>
               </div>
-              <img src="assets/screenshots/brain.png" alt="Brain dashboard: hormones, network dominance, ANS state" data-subpanel="overview" loading="lazy" />
-              <img src="assets/screenshots/brain-visual.png" alt="Visual cortex ambient screen awareness log" data-subpanel="visual" hidden loading="lazy" />
-              <figcaption>Transparent runtime — hormones, network modes, visual cortex, narrative self, and sleep.</figcaption>
+              <div class="screen-viewport screen-viewport-showcase">
+                <img src="assets/screenshots/brain.png" alt="Brain dashboard" data-subpanel="overview" loading="lazy" />
+                <img src="assets/screenshots/brain-visual.png" alt="Visual cortex" data-subpanel="visual" hidden loading="lazy" />
+              </div>
+              <figcaption>Hormones, network dominance, narrative, ambient vision.</figcaption>
             </figure>
           </div>
         </div>
       </div>
     </section>
 
-    <section id="capabilities">
+    <section id="vision">
       <div class="wrap">
-        <p class="section-label">What you get today</p>
-        <h2 class="section-title">Capabilities worth sharing</h2>
-        <p class="section-lead">
-          Babo isn’t a thin chat wrapper. It’s a persistent agent platform — explore the
-          <a href="#product">screenshots above</a> or dive into the docs.
+        <p class="section-label">Why we’re building this</p>
+        <h2 class="section-title">AI that belongs in your home — not only in the cloud</h2>
+        <p class="section-lead section-lead-tight">
+          Every household with a small always-on machine, local agents, and no metered intelligence bill.
+          Babo is the approachable on-ramp — open source, self-hostable, extensible.
         </p>
-        <div class="cap-grid">
-          <article class="cap-card glass">
-            <span class="cap-tag">Memory</span>
-            <h3>Cryptex &amp; sleep</h3>
-            <p>
-              Fixed, project, and domain rings — identity, plans, facts, tools, channels — plus sleep
-              consolidation into durable knowledge.
-            </p>
+        <div class="vision-grid">
+          <article class="vision-card glass">
+            <h3>Plug-and-play local</h3>
+            <p>Mini computer, your models, your data — continuity and privacy by default.</p>
           </article>
-          <article class="cap-card glass">
-            <span class="cap-tag">Consciousness</span>
-            <h3>Inner loop &amp; agency</h3>
-            <p>
-              Always-on heartbeat and breath while conscious — DMN daydreams, drive-fired proactive runs,
-              and sleep. User chat preempts everything; see the <a href="#alive">Always alive</a> section.
-            </p>
+          <article class="vision-card glass">
+            <h3>No token utility bill</h3>
+            <p>Smaller models + real agent loop beat renting frontier APIs for most daily work.</p>
           </article>
-          <article class="cap-card glass">
-            <span class="cap-tag">Autonomy</span>
-            <h3>Agentic loop &amp; plans</h3>
-            <p>
-              When you ask, orient → plan → tools → evaluate — plus Kanban, timeline waves, and sub-agent teams.
-            </p>
+          <article class="vision-card glass">
+            <h3>Open &amp; community-driven</h3>
+            <p>MIT-licensed product — we need you to find bugs, fix flows, and shape what ships next.</p>
           </article>
-          <article class="cap-card glass">
-            <span class="cap-tag">Channels</span>
-            <h3>WhatsApp, Telegram, email…</h3>
+        </div>
+      </div>
+    </section>
+
+    <section class="quote-section" aria-labelledby="quote-heading">
+      <div class="wrap">
+        <h2 id="quote-heading" class="visually-hidden">A different future than metered intelligence</h2>
+        <div class="quote-block glass glass-strong">
+          <blockquote>
+            “We see a future where intelligence is a utility, like electricity or water,
+            and people buy it from us on a meter… Fundamentally our business… is going to look like
+            <em>selling tokens</em>.”
+          </blockquote>
+          <p class="quote-attribution">— Sam Altman, OpenAI CEO (2026)</p>
+          <div class="quote-response">
             <p>
-              One-click integrations plus MCP and ClawHub skills. Your agent meets people where they already are.
+              <strong>That’s a future we don’t want.</strong> Babo is our bet on abundance on your hardware —
+              agents that remember you without renting every thought back.
             </p>
-          </article>
-          <article class="cap-card glass">
-            <span class="cap-tag">Tools</span>
-            <h3>Browser, shell, vision, search</h3>
-            <p>
-              Built-in tools for files, browsing, semantic codebase search, scheduling, and optional
-              local vision workers.
-            </p>
-          </article>
-          <article class="cap-card glass">
-            <span class="cap-tag">Transparency</span>
-            <h3>Brain dashboard</h3>
-            <p>
-              Watch hormones, network dominance (ECN / DMN / SN), narrative episodes, soul wish, and visual cortex —
-              the same signals that steer daydreams and proactive help.
-            </p>
-          </article>
-          <article class="cap-card glass">
-            <span class="cap-tag">Deploy</span>
-            <h3>Desktop + self-host</h3>
-            <p>
-              Electron app with first-run wizard, or full NestJS + Python stack in your browser.
-              Mix cloud auth with a local brain.
-            </p>
-          </article>
+          </div>
         </div>
       </div>
     </section>
@@ -346,77 +324,78 @@
       <div class="wrap">
         <p class="section-label">Architecture</p>
         <h2 class="section-title">Your machine is the brain</h2>
-        <p class="section-lead">
-          Babo splits a hosted control plane (accounts, relay) from the Python runtime that holds memory and runs the loop.
-          Inference is bring-your-own — Ollama on a NAS, vLLM on a homelab GPU, or an API you trust.
+        <p class="section-lead section-lead-tight">
+          Optional cloud auth + relay; Python runtime, memory, and inner loop stay local.
         </p>
         <div class="flow glass">
           <ol class="flow-steps">
             <li class="flow-step">
               <span class="flow-num">1</span>
               <h4>UI</h4>
-              <p>Angular web or Electron desktop</p>
+              <p>Desktop or browser</p>
             </li>
             <li class="flow-step">
               <span class="flow-num">2</span>
               <h4>Control plane</h4>
-              <p>NestJS auth &amp; relay (optional cloud)</p>
+              <p>Auth &amp; relay (optional)</p>
             </li>
             <li class="flow-step">
               <span class="flow-num">3</span>
               <h4>Local runtime</h4>
-              <p>Python agent on <code>127.0.0.1:9222</code></p>
+              <p>Agent on :9222</p>
             </li>
             <li class="flow-step">
               <span class="flow-num">4</span>
               <h4>Inference</h4>
-              <p>OpenAI-compatible API you choose</p>
+              <p>Your API</p>
             </li>
           </ol>
         </div>
-        <p style="margin-top: 1.5rem; font-size: 0.95rem; color: var(--text-muted);">
-          <a href="architecture/deployment-topologies/">Read deployment topologies →</a>
+        <p class="section-foot">
+          <a href="architecture/deployment-topologies/">Deployment topologies</a>
           ·
-          <a href="architecture/capability-profiles-and-onboarding/">Capability profiles &amp; onboarding →</a>
+          <a href="guides/integrations/google-workspace/">Google Workspace guide</a>
         </p>
       </div>
     </section>
 
     <section id="nls">
       <div class="wrap">
-        <p class="section-label">Research foundation</p>
-        <h2 class="section-title">Powered by a bigger bet: stateful LLMs</h2>
+        <p class="section-label">Research</p>
+        <h2 class="section-title">Stateful LLMs (NLS)</h2>
         <div class="nls-panel glass">
           <div>
-            <h3>Neural Ledger System (NLS)</h3>
             <p>
-              Babo ships today with classical context management — compaction, Cryptex, sleep. But the long game is
-              <strong>Neural Ledger System</strong>: an inference architecture that makes LLMs truly <em>stateful</em>
-              by capturing and re-injecting internal representations (KV and recurrent states) instead of replaying
-              entire chat histories every turn.
-            </p>
-            <p>
-              When that works at scale, the “mini computer in every home” story gets dramatically more realistic:
-              agent memory stops eating RAM and compute linearly as relationships grow. Babo is the product surface;
-              NLS is the research engine we want you to discover.
+              Long term: <strong>Neural Ledger System</strong> — remember without replaying full chat history,
+              so home hardware scales as relationships grow. Babo is the product; NLS is the research engine.
             </p>
             <a class="btn btn-primary" href="https://github.com/umbecanessa/neural-ledger-system" target="_blank" rel="noopener noreferrer">
               Explore NLS on GitHub →
             </a>
           </div>
-          <div class="nls-stats">
-            <div class="nls-stat glass-strong">
-              <strong>Stateful inference</strong>
-              <span>Phantom-token injection into vLLM-class engines — remember without reprocessing full history.</span>
-            </div>
-            <div class="nls-stat glass-strong">
-              <strong>Cost inversion</strong>
-              <span>Prior context as cheap storage, not expensive recompute — critical for always-on home agents.</span>
-            </div>
-            <div class="nls-stat glass-strong">
-              <strong>Open research repo</strong>
-              <span>Architecture docs, benchmarks, and narrative — core plugin documented; Babo integrates the agentic path.</span>
-            </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="contribute">
+      <div class="wrap">
+        <div class="contribute-panel glass">
+          <p class="section-label">We need you</p>
+          <h2 class="section-title">Help us build Babo in the open</h2>
+          <p class="section-lead section-lead-tight contribute-lead">
+            Early access means rough edges. <strong>Report bugs</strong>, broken onboarding steps, integrations that
+            fail, and docs that lie. <strong>Propose features</strong>, fix issues, add tools or skills, improve the
+            desktop wizard — every contribution makes local agents more reachable for non-experts.
+          </p>
+          <ul class="contribute-list">
+            <li>🐛 <a href="https://github.com/umbecanessa/babo/issues">GitHub Issues</a> — bugs &amp; ideas</li>
+            <li>🔧 <a href="https://github.com/umbecanessa/babo/blob/main/CONTRIBUTING.md">Contributing guide</a></li>
+            <li>📖 <a href="extension/index.html">Extension guide</a> — tools, skills, channels</li>
+            <li>💬 Share what broke and what you wished existed — we read it</li>
+          </ul>
+          <div class="cta-buttons">
+            <a class="btn btn-primary" href="https://github.com/umbecanessa/babo/issues/new">Open an issue</a>
+            <a class="btn btn-ghost" href="https://github.com/umbecanessa/babo">Star &amp; fork on GitHub</a>
           </div>
         </div>
       </div>
@@ -425,44 +404,26 @@
     <section id="download">
       <div class="wrap">
         <p class="section-label">Early access</p>
-        <h2 class="section-title">Open source. Download. Run it yourself.</h2>
-        <p class="section-lead">
-          No waitlist gate — clone the repo, build the desktop app, or self-host the full stack.
-          Pre-built installers are produced by our release scripts; documentation walks through first launch.
+        <h2 class="section-title">Download. Run locally.</h2>
+        <p class="section-lead section-lead-tight">
+          Clone, build the desktop app, or self-host — no waitlist.
         </p>
         <div class="download-grid">
           <article class="download-card glass">
             <h3>Desktop app</h3>
-            <p>Recommended. Bundles the UI and manages a local Python runtime with a setup wizard.</p>
+            <p>Guided setup wizard — recommended.</p>
             <a class="btn btn-primary" href="getting-started/installation/">Install guide</a>
           </article>
           <article class="download-card glass">
             <h3>Self-hosted</h3>
-            <p>Postgres + NestJS + Python runtime. Full product in the browser on your infrastructure.</p>
-            <a class="btn btn-ghost" href="configuration/self-hosting/">Self-hosting docs</a>
+            <p>Full stack in your browser.</p>
+            <a class="btn btn-ghost" href="configuration/self-hosting/">Self-hosting</a>
           </article>
           <article class="download-card glass">
-            <h3>Source code</h3>
-            <p>Fork it, extend tools and skills, run tests. MIT-licensed product scope in-repo.</p>
-            <a class="btn btn-ghost" href="https://github.com/umbecanessa/babo">github.com/umbecanessa/babo</a>
+            <h3>Source</h3>
+            <p>MIT-licensed — fork and extend.</p>
+            <a class="btn btn-ghost" href="https://github.com/umbecanessa/babo">Repository</a>
           </article>
-        </div>
-      </div>
-    </section>
-
-    <section class="cta-section" aria-labelledby="cta-title">
-      <div class="wrap">
-        <div class="cta-panel glass">
-          <h2 id="cta-title">Join early access</h2>
-          <p>
-            We’re sharing Babo now so builders, families, and tinkerers can run persistent agents locally
-            while we harden onboarding, capability profiles, and the path to dedicated home hardware.
-          </p>
-          <div class="cta-buttons">
-            <a class="btn btn-primary" href="getting-started/quickstart/">Quickstart</a>
-            <a class="btn btn-ghost" href="https://github.com/umbecanessa/babo/issues">Report feedback</a>
-            <a class="btn btn-ghost" href="https://github.com/umbecanessa/neural-ledger-system">Follow NLS research</a>
-          </div>
         </div>
       </div>
     </section>
@@ -470,10 +431,10 @@
 
   <footer class="site-footer">
     <div class="wrap footer-inner">
-      <p class="footer-copy">© <span id="year"></span> Babo · Open source · Built with persistent agents in mind</p>
+      <p class="footer-copy">© <span id="year"></span> Babo · Open source</p>
       <ul class="footer-links">
         <li><a href="getting-started/installation/">Docs</a></li>
-        <li><a href="architecture/index.html">Architecture</a></li>
+        <li><a href="#contribute">Contribute</a></li>
         <li><a href="https://github.com/umbecanessa/babo">GitHub</a></li>
         <li><a href="https://github.com/umbecanessa/neural-ledger-system">NLS</a></li>
       </ul>
