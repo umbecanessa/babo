@@ -161,7 +161,7 @@ See the [documentation](https://umbecanessa.github.io/babo/) for full guides.
 ## Documentation
 
 - **[Documentation home](docs/index.md)** — full map (architecture, reference, extension)
-- **[Docs website](https://umbecanessa.github.io/babo/)** — searchable site (GitHub Pages)
+- **[Website & docs](https://umbecanessa.github.io/babo/)** — marketing homepage + searchable documentation (GitHub Pages)
 - [Deployment topologies](docs/architecture/deployment-topologies.md) — desktop hub + web relay
 - [Quickstart](docs/getting-started/quickstart.md)
 - [Extension guide](docs/extension/index.md)

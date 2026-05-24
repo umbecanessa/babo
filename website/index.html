@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Babo — Persistent local AI agents</title>
+  <meta name="description" content="Open-source persistent AI agents with long-term memory, projects, and channel integrations. Run locally on your machine. Early access." />
+  <meta name="theme-color" content="#07080f" />
+  <link rel="icon" href="assets/favicon.png" type="image/png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="css/site.css" />
+</head>
+<body>
+  <div class="bg-canvas" aria-hidden="true"></div>
+  <div class="orb orb-1" aria-hidden="true"></div>
+  <div class="orb orb-2" aria-hidden="true"></div>
+  <div class="orb orb-3" aria-hidden="true"></div>
+
+  <header class="site-nav" role="banner">
+    <div class="wrap">
+      <a class="brand" href="#top">
+        <img src="assets/babo.png" alt="" width="40" height="40" />
+        Babo
+      </a>
+      <button class="nav-toggle" type="button" aria-label="Open menu" aria-expanded="false">☰</button>
+      <ul class="nav-links">
+        <li><a href="#vision">Vision</a></li>
+        <li><a href="#capabilities">Capabilities</a></li>
+        <li><a href="#how">How it works</a></li>
+        <li><a href="#nls">NLS research</a></li>
+        <li><a href="#download">Get Babo</a></li>
+        <li><a class="btn btn-sm btn-primary" href="getting-started/installation/">Documentation</a></li>
+      </ul>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="wrap hero-grid">
+        <div class="hero-copy">
+          <span class="badge">Early access · Open source</span>
+          <h1>
+            Your household’s<br />
+            <span class="gradient">persistent AI agent</span>
+          </h1>
+          <p class="hero-lead">
+            Babo is a full-stack agent platform: long-term memory, autonomous work, projects with sub-agents,
+            and one-click integrations — designed to run on <strong>your</strong> machine with <strong>your</strong> models.
+          </p>
+          <div class="hero-cta">
+            <a class="btn btn-primary" href="#download">Download &amp; run locally</a>
+            <a class="btn btn-ghost" href="https://github.com/umbecanessa/babo">View on GitHub</a>
+          </div>
+          <p class="hero-meta">
+            <strong>MIT-licensed</strong> · Desktop app + self-hosted stack · Bring your own inference (Ollama, OpenRouter, vLLM…)
+          </p>
+        </div>
+        <div class="hero-visual">
+          <div class="hero-mascot-wrap">
+            <img class="hero-mascot" src="assets/babo.png" alt="Babo mascot — a walrus with a blue beanie" width="280" height="280" />
+            <div class="hero-card glass hero-card-1">
+              <strong>Local brain</strong>
+              Memory, tools &amp; sleep on your hardware
+            </div>
+            <div class="hero-card glass hero-card-2">
+              <strong>Your data</strong>
+              Stays on your machine by default
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="vision">
+      <div class="wrap">
+        <p class="section-label">Why we’re building this</p>
+        <h2 class="section-title">AI that belongs in your home — not only in the cloud</h2>
+        <p class="section-lead">
+          We envision a near future where every family, household, and office runs a small dedicated machine:
+          a plug-and-play box with persistent agents on a local stack. For most everyday work you don’t need
+          the biggest frontier model — you need continuity, tools, memory, and privacy. Babo is how we start.
+        </p>
+        <div class="vision-grid">
+          <article class="vision-card glass">
+            <div class="vision-icon" aria-hidden="true">🏠</div>
+            <h3>One agent per place</h3>
+            <p>
+              A mini computer in the kitchen, the studio, or the office — always on, always yours.
+              Custom OS and agents tuned to how <em>you</em> live and work.
+            </p>
+          </article>
+          <article class="vision-card glass">
+            <div class="vision-icon" aria-hidden="true">🔒</div>
+            <h3>Local by default</h3>
+            <p>
+              No shipping conversations to rent-seekers. No surprise token bills. Your inference,
+              your API keys, your data directory on disk.
+            </p>
+          </article>
+          <article class="vision-card glass">
+            <div class="vision-icon" aria-hidden="true">⚡</div>
+            <h3>90% doesn’t need “the big guy”</h3>
+            <p>
+              Email, planning, channels, code, memory — smaller models plus a real agent loop
+              beat a raw chat UI most of the time.
+            </p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="quote-section" aria-labelledby="quote-heading">
+      <div class="wrap">
+        <h2 id="quote-heading" class="visually-hidden">A different future than metered intelligence</h2>
+        <div class="quote-block glass glass-strong">
+          <blockquote cite="https://timesofindia.indiatimes.com/technology/tech-news/sam-altman-on-how-he-imagines-the-future-of-ai-openai-has-a-fundamental-belief-in-/articleshow/129604557.cms">
+            “We see a future where intelligence is a utility, like electricity or water,
+            and people buy it from us on a meter… Fundamentally our business… is going to look like
+            <em>selling tokens</em>.”
+          </blockquote>
+          <p class="quote-attribution">— Sam Altman, OpenAI CEO (infrastructure summit, 2026)</p>
+          <div class="quote-response">
+            <p>
+              <strong>That’s a future we don’t want.</strong> AI can be one of the most powerful tools to lift people up —
+              but not if intelligence is rationed like a utility bill, controlled by a handful of vendors who can
+              change pricing, access, and policy overnight. Babo is our bet on abundance on <em>your</em> hardware:
+              open source, self-hostable, and built for agents that remember you without renting every thought back.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="capabilities">
+      <div class="wrap">
+        <p class="section-label">What you get today</p>
+        <h2 class="section-title">Capabilities worth sharing</h2>
+        <p class="section-lead">
+          Babo isn’t a thin chat wrapper. It’s a persistent agent platform — the same stack we document for
+          contributors and early adopters.
+        </p>
+        <div class="cap-grid">
+          <article class="cap-card glass">
+            <span class="cap-tag">Memory</span>
+            <h3>🧠 Cryptex &amp; sleep</h3>
+            <p>
+              Layered long-term memory, working memory, Merkle chain history, and sleep cycles that
+              consolidate experience into durable knowledge.
+            </p>
+          </article>
+          <article class="cap-card glass">
+            <span class="cap-tag">Autonomy</span>
+            <h3>🔄 Agentic loop &amp; plans</h3>
+            <p>
+              Orient, plan, use tools, evaluate progress, delegate to sub-agents — with Kanban boards,
+              timelines, and live orchestration.
+            </p>
+          </article>
+          <article class="cap-card glass">
+            <span class="cap-tag">Channels</span>
+            <h3>💬 WhatsApp, Telegram, email…</h3>
+            <p>
+              One-click integrations plus MCP and ClawHub skills. Your agent meets people where they already are.
+            </p>
+          </article>
+          <article class="cap-card glass">
+            <span class="cap-tag">Tools</span>
+            <h3>🛠 Browser, shell, vision, search</h3>
+            <p>
+              Built-in tools for files, browsing, semantic codebase search, scheduling, and optional
+              local vision workers.
+            </p>
+          </article>
+          <article class="cap-card glass">
+            <span class="cap-tag">Transparency</span>
+            <h3>🧬 Brain dashboard</h3>
+            <p>
+              Hormones, drives, signals, theory of mind — optional visibility into the biologically-inspired runtime.
+            </p>
+          </article>
+          <article class="cap-card glass">
+            <span class="cap-tag">Deploy</span>
+            <h3>🖥 Desktop + self-host</h3>
+            <p>
+              Electron app with first-run wizard, or full NestJS + Python stack in your browser.
+              Mix cloud auth with a local brain.
+            </p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="how">
+      <div class="wrap">
+        <p class="section-label">Architecture</p>
+        <h2 class="section-title">Your machine is the brain</h2>
+        <p class="section-lead">
+          Babo splits a hosted control plane (accounts, relay) from the Python runtime that holds memory and runs the loop.
+          Inference is bring-your-own — Ollama on a NAS, vLLM on a homelab GPU, or an API you trust.
+        </p>
+        <div class="flow glass">
+          <ol class="flow-steps">
+            <li class="flow-step">
+              <span class="flow-num">1</span>
+              <h4>UI</h4>
+              <p>Angular web or Electron desktop</p>
+            </li>
+            <li class="flow-step">
+              <span class="flow-num">2</span>
+              <h4>Control plane</h4>
+              <p>NestJS auth &amp; relay (optional cloud)</p>
+            </li>
+            <li class="flow-step">
+              <span class="flow-num">3</span>
+              <h4>Local runtime</h4>
+              <p>Python agent on <code>127.0.0.1:9222</code></p>
+            </li>
+            <li class="flow-step">
+              <span class="flow-num">4</span>
+              <h4>Inference</h4>
+              <p>OpenAI-compatible API you choose</p>
+            </li>
+          </ol>
+        </div>
+        <p style="margin-top: 1.5rem; font-size: 0.95rem; color: var(--text-muted);">
+          <a href="architecture/deployment-topologies/">Read deployment topologies →</a>
+          ·
+          <a href="architecture/capability-profiles-and-onboarding/">Capability profiles &amp; onboarding →</a>
+        </p>
+      </div>
+    </section>
+
+    <section id="nls">
+      <div class="wrap">
+        <p class="section-label">Research foundation</p>
+        <h2 class="section-title">Powered by a bigger bet: stateful LLMs</h2>
+        <div class="nls-panel glass">
+          <div>
+            <h3>Neural Ledger System (NLS)</h3>
+            <p>
+              Babo ships today with classical context management — compaction, Cryptex, sleep. But the long game is
+              <strong>Neural Ledger System</strong>: an inference architecture that makes LLMs truly <em>stateful</em>
+              by capturing and re-injecting internal representations (KV and recurrent states) instead of replaying
+              entire chat histories every turn.
+            </p>
+            <p>
+              When that works at scale, the “mini computer in every home” story gets dramatically more realistic:
+              agent memory stops eating RAM and compute linearly as relationships grow. Babo is the product surface;
+              NLS is the research engine we want you to discover.
+            </p>
+            <a class="btn btn-primary" href="https://github.com/umbecanessa/neural-ledger-system" target="_blank" rel="noopener noreferrer">
+              Explore NLS on GitHub →
+            </a>
+          </div>
+          <div class="nls-stats">
+            <div class="nls-stat glass-strong">
+              <strong>Stateful inference</strong>
+              <span>Phantom-token injection into vLLM-class engines — remember without reprocessing full history.</span>
+            </div>
+            <div class="nls-stat glass-strong">
+              <strong>Cost inversion</strong>
+              <span>Prior context as cheap storage, not expensive recompute — critical for always-on home agents.</span>
+            </div>
+            <div class="nls-stat glass-strong">
+              <strong>Open research repo</strong>
+              <span>Architecture docs, benchmarks, and narrative — core plugin documented; Babo integrates the agentic path.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="download">
+      <div class="wrap">
+        <p class="section-label">Early access</p>
+        <h2 class="section-title">Open source. Download. Run it yourself.</h2>
+        <p class="section-lead">
+          No waitlist gate — clone the repo, build the desktop app, or self-host the full stack.
+          Pre-built installers are produced by our release scripts; documentation walks through first launch.
+        </p>
+        <div class="download-grid">
+          <article class="download-card glass">
+            <h3>Desktop app</h3>
+            <p>Recommended. Bundles the UI and manages a local Python runtime with a setup wizard.</p>
+            <a class="btn btn-primary" href="getting-started/installation/">Install guide</a>
+          </article>
+          <article class="download-card glass">
+            <h3>Self-hosted</h3>
+            <p>Postgres + NestJS + Python runtime. Full product in the browser on your infrastructure.</p>
+            <a class="btn btn-ghost" href="configuration/self-hosting/">Self-hosting docs</a>
+          </article>
+          <article class="download-card glass">
+            <h3>Source code</h3>
+            <p>Fork it, extend tools and skills, run tests. MIT-licensed product scope in-repo.</p>
+            <a class="btn btn-ghost" href="https://github.com/umbecanessa/babo">github.com/umbecanessa/babo</a>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="cta-section" aria-labelledby="cta-title">
+      <div class="wrap">
+        <div class="cta-panel glass">
+          <h2 id="cta-title">Join early access</h2>
+          <p>
+            We’re sharing Babo now so builders, families, and tinkerers can run persistent agents locally
+            while we harden onboarding, capability profiles, and the path to dedicated home hardware.
+          </p>
+          <div class="cta-buttons">
+            <a class="btn btn-primary" href="getting-started/quickstart/">Quickstart</a>
+            <a class="btn btn-ghost" href="https://github.com/umbecanessa/babo/issues">Report feedback</a>
+            <a class="btn btn-ghost" href="https://github.com/umbecanessa/neural-ledger-system">Follow NLS research</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap footer-inner">
+      <p class="footer-copy">© <span id="year"></span> Babo · Open source · Built with persistent agents in mind</p>
+      <ul class="footer-links">
+        <li><a href="getting-started/installation/">Docs</a></li>
+        <li><a href="architecture/index.html">Architecture</a></li>
+        <li><a href="https://github.com/umbecanessa/babo">GitHub</a></li>
+        <li><a href="https://github.com/umbecanessa/neural-ledger-system">NLS</a></li>
+      </ul>
+    </div>
+  </footer>
+
+  <style>
+    .visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
+    code {
+      font-family: "JetBrains Mono", ui-monospace, monospace;
+      font-size: 0.88em;
+      background: rgba(0, 0, 0, 0.25);
+      padding: 0.12em 0.4em;
+      border-radius: 6px;
+    }
+  </style>
+  <script src="js/site.js" defer></script>
+</body>
+</html>

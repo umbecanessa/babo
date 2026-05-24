@@ -2,7 +2,9 @@
 
 Welcome to the Babo docs. Babo is a persistent AI agent platform with long-term memory, autonomous task execution, project orchestration, and one-click channel integrations.
 
-**Browse online:** [umbecanessa.github.io/babo](https://umbecanessa.github.io/babo/)
+**Product site:** [umbecanessa.github.io/babo](https://umbecanessa.github.io/babo/) — early-access homepage with vision, capabilities, and download links.
+
+**Documentation map:** you are on the docs home (also linked from the site nav as *Documentation*). If you landed on the marketing homepage, open [Getting started → Installation](getting-started/installation.md) to install Babo.
 
 ---
 
