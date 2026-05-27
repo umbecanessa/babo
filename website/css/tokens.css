@@ -1,0 +1,106 @@
+/* Babo design tokens — synced with frontend/src/styles.scss */
+
+:root {
+  --glass-bg: rgba(255, 255, 255, 0.55);
+  --glass-bg-hover: rgba(255, 255, 255, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.60);
+  --glass-border-strong: rgba(255, 255, 255, 0.80);
+  --glass-blur: 20px;
+
+  --bg-primary: #eef0f7;
+  --bg-secondary: #e4e7f2;
+  --bg-surface: rgba(255, 255, 255, 0.60);
+
+  --text-primary: #1a1d2e;
+  --text-secondary: #4a4f6a;
+  --text-muted: #8b90a8;
+
+  --overlay-1: rgba(0, 0, 0, 0.02);
+  --overlay-2: rgba(0, 0, 0, 0.04);
+  --overlay-3: rgba(0, 0, 0, 0.06);
+  --overlay-4: rgba(0, 0, 0, 0.08);
+  --overlay-5: rgba(0, 0, 0, 0.18);
+
+  --accent-primary: #7c5bf5;
+  --accent-primary-glow: rgba(124, 91, 245, 0.20);
+  --accent-tint-bg: color-mix(in srgb, var(--accent-primary) 12%, var(--glass-bg));
+  --accent-tint-border: color-mix(in srgb, var(--accent-primary) 28%, var(--glass-border));
+  --accent-secondary: #14b8a6;
+  --accent-secondary-glow: rgba(20, 184, 166, 0.20);
+  --accent-success: #14b8a6;
+  --accent-success-glow: rgba(20, 184, 166, 0.20);
+  --accent-warn: #e5a520;
+
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 24px;
+
+  --shadow-glass: 0 2px 12px rgba(0, 0, 0, 0.04), 0 0 1px rgba(0, 0, 0, 0.08);
+  --shadow-glow: 0 0 24px var(--accent-primary-glow);
+
+  --surface-inset: var(--overlay-2);
+  --backdrop-scrim: rgba(0, 0, 0, 0.32);
+
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", monospace;
+
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --glass-bg: rgba(30, 33, 48, 0.55);
+  --glass-bg-hover: rgba(40, 44, 62, 0.70);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-border-strong: rgba(255, 255, 255, 0.18);
+
+  --bg-primary: #0c0d14;
+  --bg-secondary: #15171f;
+  --bg-surface: rgba(20, 22, 32, 0.65);
+
+  --text-primary: #e8eaf2;
+  --text-secondary: #b3b8cb;
+  --text-muted: #6f7591;
+
+  --overlay-1: rgba(255, 255, 255, 0.025);
+  --overlay-2: rgba(255, 255, 255, 0.05);
+  --overlay-3: rgba(255, 255, 255, 0.08);
+  --overlay-4: rgba(255, 255, 255, 0.12);
+  --overlay-5: rgba(255, 255, 255, 0.22);
+
+  --shadow-glass: 0 2px 12px rgba(0, 0, 0, 0.45), 0 0 1px rgba(255, 255, 255, 0.06);
+
+  --accent-tint-bg: color-mix(in srgb, var(--accent-primary) 20%, var(--glass-bg));
+  --accent-tint-border: color-mix(in srgb, var(--accent-primary) 35%, var(--glass-border));
+
+  --surface-inset: rgba(0, 0, 0, 0.22);
+  --backdrop-scrim: rgba(0, 0, 0, 0.62);
+
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] {
+    --glass-bg: rgba(30, 33, 48, 0.55);
+    --glass-bg-hover: rgba(40, 44, 62, 0.70);
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-border-strong: rgba(255, 255, 255, 0.18);
+    --bg-primary: #0c0d14;
+    --bg-secondary: #15171f;
+    --bg-surface: rgba(20, 22, 32, 0.65);
+    --text-primary: #e8eaf2;
+    --text-secondary: #b3b8cb;
+    --text-muted: #6f7591;
+    --overlay-1: rgba(255, 255, 255, 0.025);
+    --overlay-2: rgba(255, 255, 255, 0.05);
+    --overlay-3: rgba(255, 255, 255, 0.08);
+    --overlay-4: rgba(255, 255, 255, 0.12);
+    --overlay-5: rgba(255, 255, 255, 0.22);
+    --shadow-glass: 0 2px 12px rgba(0, 0, 0, 0.45), 0 0 1px rgba(255, 255, 255, 0.06);
+    --accent-tint-bg: color-mix(in srgb, var(--accent-primary) 20%, var(--glass-bg));
+    --accent-tint-border: color-mix(in srgb, var(--accent-primary) 35%, var(--glass-border));
+    --surface-inset: rgba(0, 0, 0, 0.22);
+    --backdrop-scrim: rgba(0, 0, 0, 0.62);
+    color-scheme: dark;
+  }
+}

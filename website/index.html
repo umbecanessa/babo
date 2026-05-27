@@ -5,34 +5,55 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Babo — Persistent local AI agents</title>
   <meta name="description" content="Open-source personal AI agent: Kanban tasks, Gmail &amp; Google Workspace, channels, inner loop, guided setup. Local, always conscious, MIT-licensed early access." />
-  <meta name="theme-color" content="#07080f" />
+  <meta name="theme-color" content="#0c0d14" />
   <link rel="icon" href="assets/favicon.png" type="image/png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script>
+    (function () {
+      var t = "dark";
+      try {
+        var s = localStorage.getItem("babo_theme");
+        if (s === "light" || s === "dark" || s === "system") t = s;
+      } catch (_) {}
+      document.documentElement.setAttribute("data-theme", t);
+    })();
+  </script>
+  <link rel="stylesheet" href="css/tokens.css" />
   <link rel="stylesheet" href="css/site.css" />
 </head>
 <body>
-  <div class="bg-canvas" aria-hidden="true"></div>
-  <div class="orb orb-1" aria-hidden="true"></div>
-  <div class="orb orb-2" aria-hidden="true"></div>
-  <div class="orb orb-3" aria-hidden="true"></div>
+  <div class="mesh mesh-a" aria-hidden="true"></div>
+  <div class="mesh mesh-b" aria-hidden="true"></div>
 
   <header class="site-nav" role="banner">
     <div class="wrap">
       <a class="brand" href="#top">
-        <img src="assets/babo.png" alt="" width="40" height="40" />
-        Babo
+        <span class="brand-orb" aria-hidden="true"><span class="brand-orb-core"></span><span class="brand-orb-ring"></span></span>
+        <img src="assets/babo.png" alt="" width="28" height="28" />
+        <span>Babo</span>
       </a>
-      <button class="nav-toggle" type="button" aria-label="Open menu" aria-expanded="false">☰</button>
-      <ul class="nav-links">
-        <li><a href="#capabilities">Capabilities</a></li>
-        <li><a href="#alive">Always alive</a></li>
-        <li><a href="#product">Screenshots</a></li>
-        <li><a href="#contribute">Contribute</a></li>
-        <li><a href="#download">Get Babo</a></li>
-        <li><a class="btn btn-sm btn-primary" href="getting-started/installation/">Documentation</a></li>
-      </ul>
+      <div class="nav-end">
+        <button class="nav-toggle" type="button" aria-label="Open menu" aria-expanded="false">☰</button>
+        <ul class="nav-links">
+          <li><a href="#capabilities">Capabilities</a></li>
+          <li><a href="#alive">Always alive</a></li>
+          <li><a href="#product">Screenshots</a></li>
+          <li><a href="#contribute">Contribute</a></li>
+          <li><a href="#download">Get Babo</a></li>
+          <li><a class="btn btn-sm btn-primary" href="getting-started/installation/">Docs</a></li>
+        </ul>
+        <button type="button" class="theme-toggle-btn" id="theme-toggle" aria-label="Cycle theme" title="Cycle theme">
+          <svg class="icon-sun" viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
+            <path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clip-rule="evenodd"/>
+          </svg>
+          <svg class="icon-moon" viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
+            <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
+          </svg>
+          <span class="theme-toggle-badge" aria-hidden="true">auto</span>
+        </button>
+      </div>
     </div>
   </header>
 
@@ -441,26 +462,6 @@
     </div>
   </footer>
 
-  <style>
-    .visually-hidden {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      padding: 0;
-      margin: -1px;
-      overflow: hidden;
-      clip: rect(0, 0, 0, 0);
-      white-space: nowrap;
-      border: 0;
-    }
-    code {
-      font-family: "JetBrains Mono", ui-monospace, monospace;
-      font-size: 0.88em;
-      background: rgba(0, 0, 0, 0.25);
-      padding: 0.12em 0.4em;
-      border-radius: 6px;
-    }
-  </style>
   <script src="js/site.js" defer></script>
 </body>
 </html>

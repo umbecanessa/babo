@@ -1,6 +1,8 @@
 # Babo marketing site
 
-Glassmorphic early-access homepage for [umbecanessa.github.io/babo](https://umbecanessa.github.io/babo/).
+Early-access homepage for [umbecanessa.github.io/babo](https://umbecanessa.github.io/babo/).
+
+Uses the same **light / dark / system** theme tokens as `frontend/src/styles.scss` (`babo_theme` in localStorage). The site toggle cycles Light → Dark → System like the app settings.
 
 ## Local preview
 
