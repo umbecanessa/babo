@@ -15,6 +15,7 @@ import { SettingsModule } from './settings/settings.module';
 import { ChannelsModule } from './channels/channels.module';
 import { RuntimeProxyModule } from './runtime-proxy/runtime-proxy.module';
 import { ClawhubModule } from './clawhub/clawhub.module';
+import { BaboCloudModule } from './babo-cloud/babo-cloud.module';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { ClawhubModule } from './clawhub/clawhub.module';
     ChannelsModule,
     RuntimeProxyModule,
     ClawhubModule,
+    BaboCloudModule,
   ],
 })
 export class AppModule {}

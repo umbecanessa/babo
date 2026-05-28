@@ -759,3 +759,13 @@ class AgentManager:
         }
 
         return overview
+
+    def validate_api_key(self, token: str) -> str | None:
+        """Validate a user API key (``nlsk_...``).
+
+        Keys are issued and verified by the NestJS control plane when using
+        Babo Cloud inference proxy. The local runtime does not store key hashes;
+        non-loopback callers should use Nest, not direct runtime HTTP.
+        """
+        _ = token
+        return None

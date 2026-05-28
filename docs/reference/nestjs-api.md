@@ -46,6 +46,23 @@ See [Device lease](../architecture/device-lease.md), [Soul packages](../architec
 
 ---
 
+## Babo Cloud (`/api/inference/v1`, `/api/gpu`, `/api/cloud`)
+
+OpenAI-compatible inference relay + GPU workers. Auth: JWT or `nlsk_` API key. Requires trial/subscription when `BABO_CLOUD_MODE=true`.
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/inference/v1/models` | List models |
+| POST | `/inference/v1/chat/completions` | Chat completions (SSE) |
+| POST | `/gpu/transcribe` | Audio → text |
+| POST | `/gpu/vision/describe` | Image describe |
+| POST | `/gpu/embed` | Embeddings |
+| GET | `/cloud/subscription` | Usage / plan status |
+
+See [Babo Cloud module](../architecture/nestjs-modules/babo-cloud.md).
+
+---
+
 ## Runtime proxy (`/api/rt`)
 
 Catch-all **`/api/rt/*`** → Python path via relay (`runtime-proxy.controller.ts`).

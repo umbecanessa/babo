@@ -10,7 +10,13 @@ export class ApiKeysController {
 
   @Post()
   create(@Request() req: any, @Body() dto: CreateApiKeyDto) {
-    return this.apiKeys.create(req.user.userId, dto.name, dto.rateLimitRpm);
+    return this.apiKeys.create(
+      req.user.userId,
+      dto.name,
+      dto.rateLimitRpm,
+      dto.agentId,
+      dto.scopes,
+    );
   }
 
   @Get()

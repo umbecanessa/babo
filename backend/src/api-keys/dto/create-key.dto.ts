@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsInt, Min, Max } from 'class-validator';
+import { IsString, IsOptional, IsInt, Min, Max, IsUUID, IsArray } from 'class-validator';
 
 export class CreateApiKeyDto {
   @IsString()
@@ -9,4 +9,13 @@ export class CreateApiKeyDto {
   @Min(1)
   @Max(1000)
   rateLimitRpm?: number;
+
+  @IsUUID()
+  @IsOptional()
+  agentId?: string;
+
+  @IsArray()
+  @IsString({ each: true })
+  @IsOptional()
+  scopes?: string[];
 }

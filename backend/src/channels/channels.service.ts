@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { Resend } from 'resend';
 import { PrismaService } from '../prisma/prisma.service';
 import { RuntimeService } from '../runtime/runtime.service';
+import { ProviderKeysService } from '../babo-cloud/provider-keys.service';
 import WebSocket from 'ws';
 
 @Injectable()
@@ -17,6 +18,7 @@ export class ChannelsService {
   constructor(
     private config: ConfigService,
     private prisma: PrismaService,
+    private providerKeys: ProviderKeysService,
     @Inject(forwardRef(() => RuntimeService))
     private runtime: RuntimeService,
   ) {
@@ -313,6 +315,19 @@ export class ChannelsService {
     return !!this.resend && !!this.inboundDomain;
   }
 
+  private async resendForUser(
+    userId: string,
+  ): Promise<{ client: Resend; inboundDomain: string } | null> {
+    const byo = await this.providerKeys.getResendConfig(userId);
+    if (byo?.apiKey && byo.inboundDomain) {
+      return { client: new Resend(byo.apiKey), inboundDomain: byo.inboundDomain };
+    }
+    if (this.resend && this.inboundDomain) {
+      return { client: this.resend, inboundDomain: this.inboundDomain };
+    }
+    return null;
+  }
+
   // ── Alias management ──────────────────────────────────────────
 
   async activateEmail(
@@ -320,9 +335,17 @@ export class ChannelsService {
     runtimeAgentId: string,
     agentName?: string,
   ): Promise<{ alias: string; from_address: string }> {
-    if (!this.resend || !this.inboundDomain) {
-      throw new Error('Resend is not configured (missing RESEND_API_KEY or RESEND_INBOUND_DOMAIN)');
+    const agent = await this.prisma.agent.findUnique({ where: { id: agentId } });
+    if (!agent) {
+      throw new Error('Agent not found');
     }
+    const resendCfg = await this.resendForUser(agent.userId);
+    if (!resendCfg) {
+      throw new Error(
+        'Email is not configured — set Babo Resend on the server or add your Resend API key in settings',
+      );
+    }
+    const inboundDomain = resendCfg.inboundDomain;
 
     // Check if this agent already has an email alias
     const existing = await this.prisma.channelAlias.findFirst({
@@ -334,7 +357,7 @@ export class ChannelsService {
 
     const slug = this.slugify(agentName || 'agent');
     const hex = this.randomHex(4);
-    const alias = `${slug}.${hex}@${this.inboundDomain}`;
+    const alias = `${slug}.${hex}@${inboundDomain}`;
     const from_address = `${agentName || 'Agent'} <${alias}>`;
 
     // Store in DB for webhook routing
@@ -379,17 +402,25 @@ export class ChannelsService {
 
   // ── Send email ────────────────────────────────────────────────
 
-  async sendEmail(params: {
-    from: string;
-    to: string | string[];
-    subject: string;
-    html?: string;
-    text?: string;
-    reply_to?: string;
-    in_reply_to?: string;
-    references?: string;
-  }): Promise<{ id: string }> {
-    if (!this.resend) {
+  async sendEmail(
+    params: {
+      from: string;
+      to: string | string[];
+      subject: string;
+      html?: string;
+      text?: string;
+      reply_to?: string;
+      in_reply_to?: string;
+      references?: string;
+    },
+    userId?: string,
+  ): Promise<{ id: string }> {
+    let resendClient = this.resend;
+    if (userId) {
+      const cfg = await this.resendForUser(userId);
+      if (cfg) resendClient = cfg.client;
+    }
+    if (!resendClient) {
       throw new Error('Resend is not configured');
     }
 
@@ -408,7 +439,7 @@ export class ChannelsService {
       };
     }
 
-    const result = await this.resend.emails.send(payload);
+    const result = await resendClient.emails.send(payload);
     if (result.error) {
       throw new Error(result.error.message || 'Resend send failed');
     }

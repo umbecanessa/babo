@@ -24,6 +24,7 @@ Per-module reference for `backend/src/`. Global HTTP prefix: **`/api`**.
 | [Transcribe](transcribe.md) | Audio upload → Python |
 | [Admin](admin.md) | Platform admin + runtime introspection |
 | [API keys](api-keys.md) | User automation keys |
+| [Babo Cloud](babo-cloud.md) | Inference + GPU relay, BYOK keys, subscriptions |
 | [Settings](settings.md) | Per-user JSON preferences |
 
 ---

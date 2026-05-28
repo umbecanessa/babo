@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
+import { EntitlementsService } from '../babo-cloud/entitlements.service';
 
 @Injectable()
 export class AuthService {
@@ -10,6 +11,7 @@ export class AuthService {
     private prisma: PrismaService,
     private jwt: JwtService,
     private config: ConfigService,
+    private entitlements: EntitlementsService,
   ) {}
 
   async register(email: string, password: string, displayName?: string) {
@@ -24,6 +26,8 @@ export class AuthService {
       data: { email, passwordHash, displayName },
     });
 
+    await this.entitlements.ensureSubscriptionForUser(user.id);
+
     return this.generateTokens(user.id, user.email, user.role, displayName);
   }
 
@@ -37,6 +41,8 @@ export class AuthService {
     if (!valid) {
       throw new UnauthorizedException('Invalid credentials');
     }
+
+    await this.entitlements.ensureSubscriptionForUser(user.id);
 
     return this.generateTokens(user.id, user.email, user.role, user.displayName ?? undefined);
   }

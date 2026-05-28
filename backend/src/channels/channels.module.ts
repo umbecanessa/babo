@@ -4,10 +4,11 @@ import { ChannelsService } from './channels.service';
 import { RuntimeModule } from '../runtime/runtime.module';
 import { AgentsModule } from '../agents/agents.module';
 import { PrismaModule } from '../prisma/prisma.module';
+import { BaboCloudModule } from '../babo-cloud/babo-cloud.module';
 
 @Global()
 @Module({
-  imports: [PrismaModule, RuntimeModule, AgentsModule],
+  imports: [PrismaModule, RuntimeModule, AgentsModule, BaboCloudModule],
   controllers: [ChannelsController],
   providers: [ChannelsService],
   exports: [ChannelsService],

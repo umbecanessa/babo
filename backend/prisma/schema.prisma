@@ -18,6 +18,8 @@ model User {
   agents       Agent[]
   apiKeys      ApiKey[]
   settings     UserSettings?
+  inferenceUsage InferenceUsage[]
+  cloudSubscription CloudSubscription?
 
   @@map("users")
 }
@@ -47,6 +49,7 @@ model Agent {
   soulPackages    SoulPackage[]
   deviceLeases    DeviceLease[]
   clawhubSkills   ClawhubSkill[]
+  apiKeys         ApiKey[]
 
   @@map("agents")
 }
@@ -134,15 +137,61 @@ model ClawhubSkill {
 model ApiKey {
   id            String    @id @default(uuid())
   userId        String    @map("user_id")
+  agentId       String?   @map("agent_id")
   keyHash       String    @map("key_hash")
   keyPrefix     String    @map("key_prefix")
   name          String
+  scopes        String[]  @default(["inference"])
   rateLimitRpm  Int       @default(60) @map("rate_limit_rpm")
   isActive      Boolean   @default(true) @map("is_active")
   totalRequests Int       @default(0) @map("total_requests")
   lastUsedAt    DateTime? @map("last_used_at")
   createdAt     DateTime  @default(now()) @map("created_at")
   user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  agent         Agent?    @relation(fields: [agentId], references: [id], onDelete: SetNull)
 
+  @@index([keyPrefix])
+  @@index([userId, isActive])
   @@map("api_keys")
+}
+
+model InferenceUsage {
+  id                String   @id @default(uuid())
+  userId            String   @map("user_id")
+  apiKeyId          String?  @map("api_key_id")
+  agentId           String?  @map("agent_id")
+  workload          String   @default("inference")
+  placement         String
+  provider          String?
+  model             String
+  route             String
+  promptTokens      Int      @default(0) @map("prompt_tokens")
+  completionTokens  Int      @default(0) @map("completion_tokens")
+  totalTokens       Int      @default(0) @map("total_tokens")
+  upstreamCostCents Int?     @map("upstream_cost_cents")
+  requestId         String?  @map("request_id")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([requestId])
+  @@map("inference_usage")
+}
+
+model CloudSubscription {
+  id               String    @id @default(uuid())
+  userId           String    @unique @map("user_id")
+  status           String    @default("trialing")
+  planId           String    @default("cloud_basic") @map("plan_id")
+  trialEndsAt      DateTime? @map("trial_ends_at")
+  currentPeriodEnd DateTime? @map("current_period_end")
+  includedTokens   Int       @default(500000) @map("included_tokens")
+  usedTokens       Int       @default(0) @map("used_tokens")
+  allowOverage     Boolean   @default(true) @map("allow_overage")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("cloud_subscriptions")
 }
