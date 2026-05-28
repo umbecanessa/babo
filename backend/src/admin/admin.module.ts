@@ -4,9 +4,10 @@ import { AdminSetupController } from './admin-setup.controller';
 import { AdminService } from './admin.service';
 import { RuntimeModule } from '../runtime/runtime.module';
 import { AuthModule } from '../auth/auth.module';
+import { EntitlementsModule } from '../babo-cloud/entitlements.module';
 
 @Module({
-  imports: [RuntimeModule, AuthModule],
+  imports: [RuntimeModule, AuthModule, EntitlementsModule],
   controllers: [AdminController, AdminSetupController],
   providers: [AdminService],
 })
