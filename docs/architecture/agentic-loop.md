@@ -39,6 +39,12 @@ flowchart TD
 | Plan store | `plan_store.py` | Plan persistence |
 | Bridge | `bridge.py` | `LoopConfig`, `LoopHooks` builders |
 | Types | `types.py` | Modes, allowlists, configs |
+| Orchestration policy | `orchestration_policy.py` | Tool allowlists, wakes, coordinator phases |
+| Tool mode policy | `tool_mode_policy.py` | Mode transitions after tool success |
+| Coordinator guard | `coordinator_guard.py` | Blocks orchestrator IC work during waves |
+| Skill discovery boost | `skill_discovery_boost.py` | Promotes skills ring on stall/hint |
+| Recipe hints | `recipe_hints.py` | GitHub/recipe preflight injection |
+| Wave coordination | `wave_coordination.py` | Tech stack + file ownership for delegates |
 
 ---
 
@@ -55,7 +61,9 @@ Modes (`nls/agentic/types.py`) gate which tools and prompts apply:
 | Monitoring | Watch delegate progress |
 | Evaluating | Completion / acceptance checks |
 
-Mode transitions are driven by evaluator + orchestrator state.
+Mode transitions are driven by evaluator + orchestrator state + **tool_mode_policy** (e.g. `team(launch)` → MONITORING).
+
+See [Orchestration & delegation](orchestration-and-delegation.md) for the full coordinator/worker model.
 
 ---
 
@@ -63,14 +71,28 @@ Mode transitions are driven by evaluator + orchestrator state.
 
 **Plan tool** (`nls/tools/agent_tools/plan.py`):
 
-- Creates structured steps, sub-plans, acceptance criteria
+- Creates structured steps, sub-plans, acceptance criteria, `project_dir`, `tech_stack`
 - Linked to Kanban via todo-list skill
 
-**Team tool** (`team.py`) + **delegate_ring**:
+**Team tool** (`team.py`) + **TeamManager** + **wave_coordination**:
 
-- Orchestrator spawns delegates with isolated context
-- Each delegate runs nested `run_loop()` with scoped tools
-- Progress streamed to Projects UI
+- Orchestrator creates **waves** of delegates bound to plan steps
+- Each delegate runs nested `run_loop()` with **SubCryptex** memory
+- Progress streamed to Projects UI and **run panel**
+- Orchestrator uses `team(hint/intervene/advance)` — not raw IC tools while wave runs
+
+---
+
+## Stall & skill recovery
+
+When the agent repeats failing tools or ignores skills:
+
+1. **Soft errors** — bash/gh exit-0 auth failures count as errors (`tool_result_semantics.py`)
+2. **Stall nudges** — `detect_stall()` injects pivot messages (ClawHub, discover_tools)
+3. **ERROR_RECOVERY** — system directive after consecutive failures
+4. **Ring boost** — Cryptex skills/tools rings move to top of WM (`skill_discovery_boost.py`)
+
+See [Skill discovery & recovery](skill-discovery-and-recovery.md).
 
 ---
 
@@ -79,8 +101,9 @@ Mode transitions are driven by evaluator + orchestrator state.
 When token pressure is high, `compactor.py`:
 
 - Preserves anchors (goals, constraints, plan id)
-- Summarizes older tool results
-- Keeps recent turns verbatim
+- **Anchors** large `read` / `web_fetch` / `semantic_search` via cognitive digest (≥4K chars)
+- Summarizes older turns; `on_compaction` hook feeds Cryptex
+- Default `relay_compact_message_chars`: 32K (no lossy bash truncation)
 
 ---
 
@@ -117,5 +140,7 @@ See [Add an agent tool](../extension/add-agent-tool.md) to expose new capabiliti
 ## Related
 
 - [User guide: Agentic loop & plans](../guides/agentic-loop-and-plans.md)
+- [Orchestration & delegation](orchestration-and-delegation.md)
+- [Skill discovery & recovery](skill-discovery-and-recovery.md)
+- [2026 release architecture](2026-cloud-orchestration-release.md)
 - [Agent runtime](agent-runtime.md)
-- [Projects & teams](../guides/projects-and-teams.md)

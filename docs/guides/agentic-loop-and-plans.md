@@ -67,11 +67,36 @@ Plans sync with the **Kanban board**:
 
 The **delegate manager** runs child loops with:
 
-- Scoped **SubCryptex** memory
-- Token budgets
-- Types: `explore`, `bash`, `general`
+- Scoped **SubCryptex** memory (task, progress, knowledge, borrowed skills)
+- Token budgets; `escalate()` for auth/budget help
+- Types: explore, bash, general (via delegate spec)
 
-Parent agents use **delegate_ring** to read or inject delegate memory (task, progress, knowledge, credentials, etc.).
+Parent agents use **team(hint/intervene)** and **delegate_ring** to steer workers.
+
+### Team waves (orchestrator)
+
+For multi-step projects the orchestrator should use **team**, not solo IC tools:
+
+1. `plan(create)` — master plan with `project_dir` and dependencies  
+2. `team(create, wave=N)` — batch members for ready steps  
+3. `team(launch)` — start delegates  
+4. `await_delegates` / wake on completion — review, then `team(advance)`  
+
+See [Orchestration architecture](../architecture/orchestration-and-delegation.md).
+
+---
+
+## When stuck
+
+Babo promotes **skills** and **ClawHub** in working memory when:
+
+- The same tool call repeats with errors  
+- The evaluator fires ERROR_RECOVERY  
+- The orchestrator sends a hint to a delegate  
+
+Agents should call `clawhub(action='search')` or `discover_tools(query='...')` before retrying the same bash command.
+
+See [Skill discovery & recovery](../architecture/skill-discovery-and-recovery.md).
 
 ---
 

@@ -95,11 +95,17 @@ nav:
       - Inference providers: configuration/inference-providers.md
       - Desktop app: configuration/desktop.md
       - Cloud deployment: configuration/cloud-deployment.md
+      - Babo Cloud Railway & GX10: configuration/babo-cloud-railway-gx10.md
       - Product mode: configuration/product-mode.md
       - Transcribe & GPU worker: configuration/transcribe-and-gpu-worker.md
       - Self-hosting: configuration/self-hosting.md
   - Architecture:
       - Overview: architecture/index.md
+      - "2026 release (vs main)": architecture/2026-cloud-orchestration-release.md
+      - Production architecture & onboarding: architecture/production-architecture-and-onboarding.md
+      - Capability profiles & onboarding: architecture/capability-profiles-and-onboarding.md
+      - Babo Cloud personas & commercial: architecture/babo-cloud-personas-and-commercial-design.md
+      - Vision worker: architecture/vision-worker.md
       - Deployment topologies: architecture/deployment-topologies.md
       - Auth & access: architecture/auth-and-access.md
       - System overview: architecture/overview.md
@@ -107,6 +113,8 @@ nav:
       - Inference & plugins: architecture/inference-and-plugins.md
       - Agent runtime: architecture/agent-runtime.md
       - Agentic loop: architecture/agentic-loop.md
+      - Orchestration & delegation: architecture/orchestration-and-delegation.md
+      - Skill discovery & recovery: architecture/skill-discovery-and-recovery.md
       - Inner loop: architecture/inner-loop.md
       - Brain & memory: architecture/brain-and-memory.md
       - Bridge & AKU: architecture/bridge-and-aku.md
@@ -149,6 +157,7 @@ nav:
           - Admin: architecture/nestjs-modules/admin.md
           - API keys: architecture/nestjs-modules/api-keys.md
           - Settings: architecture/nestjs-modules/settings.md
+          - Babo Cloud: architecture/nestjs-modules/babo-cloud.md
       - Frontend application: architecture/frontend-application.md
       - Channels & webhooks: architecture/channels-and-webhooks.md
       - Connection & broadcasts: architecture/connection-and-broadcasts.md

@@ -6,6 +6,7 @@ Technical documentation for how Babo is built and how data flows.
 
 ## Start here
 
+0. **[2026 release: Babo Cloud + orchestration](2026-cloud-orchestration-release.md)** — **branch delta vs `main`** (read first if upgrading).
 1. **[Production architecture & onboarding](production-architecture-and-onboarding.md)** — ship-ready map + wizard UX (read first for release).
 2. **[Babo Cloud personas & commercial design](babo-cloud-personas-and-commercial-design.md)** — who runs what, BYO vs hosted, email/Google, pricing direction.
 3. **[Deployment topologies](deployment-topologies.md)** — desktop hub, hosted web, NestJS relay.
@@ -20,6 +21,8 @@ Technical documentation for how Babo is built and how data flows.
 |----------|-------|
 | [Agent runtime](agent-runtime.md) | `AgentRuntime` lifecycle and APIs |
 | [Agentic loop](agentic-loop.md) | Multi-step LLM + tools |
+| [Orchestration & delegation](orchestration-and-delegation.md) | Teams, waves, coordinator policy |
+| [Skill discovery & recovery](skill-discovery-and-recovery.md) | Stall, ClawHub, recipes, ring boost |
 | [Brain & memory](brain-and-memory.md) | Cryptex, hormones, DomainDB, identity |
 | [Bridge & AKU](bridge-and-aku.md) | Knowledge units, agentic bridge |
 | [Ledger & DomainDB](ledger-and-domain-db.md) | SQLite facts, Merkle chain |

@@ -2,7 +2,7 @@ name: Deploy documentation
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/babo-cloud-inference-proxy]
     paths:
       - 'docs/**'
       - 'website/**'

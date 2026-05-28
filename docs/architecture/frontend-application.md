@@ -37,7 +37,7 @@ Electron may override via IPC `urls:get` after config wizard.
 | `/auth/*` | Login/register |
 | `/dashboard` | Agent list + relay status |
 | `/create` | Genesis wizard |
-| `/chat/:agentId` | Main chat |
+| `/chat/:agentId` | Main chat + **run panel** + **model picker** |
 | `/tools/:agentId` | Integrations & skills |
 | `/projects/:agentId` | Board, timeline, teams |
 | `/memory/:agentId` | Memory browser |
@@ -53,7 +53,11 @@ Electron may override via IPC `urls:get` after config wizard.
 | Service | Role |
 |---------|------|
 | `ApiService` | HTTP — splits NestJS vs runtime URLs |
-| `WebSocketService` | Chat — Socket.IO or raw WS |
+| `WebSocketService` | Chat — **one Socket.IO/WS connection per agent** (parallel runs) |
+| `AgentModelService` | Per-agent session + delegate model binding |
+| `RunViewService` | Run panel timeline state |
+| `ThemeService` | Light/dark theme tokens |
+| `WorkspaceNavService` | Project workspace routing |
 | `AuthService` | JWT storage |
 | `TerminalService` | User shell via `/terminal` |
 | `FilesystemService` | IDE — IPC in Electron, API in web |
@@ -97,9 +101,33 @@ Agent cards show **Desktop Offline** when relay down.
 
 ## Projects workspace
 
-`features/projects/` — board, timeline, files, teams.
+`features/projects/` — board, **overview strip**, **workspace IDE** (CodeMirror), teams.
 
-Uses `ProjectService` + runtime APIs for plan/team state.
+Uses `ProjectService` + runtime APIs for plan/team state. Legacy IDE/files/timeline panels replaced by unified **workspace** component.
+
+---
+
+## Chat workbench (2026)
+
+| Component | Path | Role |
+|-----------|------|------|
+| Run panel | `run-panel/` | Live tool calls, orchestration events |
+| Model picker | `chat-model-picker/` | Session model + delegate override |
+| Workbench utils | `workbench-display.util.ts` | Density, labels, activity formatting |
+
+**Multi-agent:** opening several agents keeps separate WebSocket sessions so parallel benchmark runs do not cross-stream events.
+
+---
+
+## Capability onboarding UI
+
+| Component | Role |
+|-----------|------|
+| `capability-settings-panel/` | Four workloads × placement cards |
+| `day1-coach` | Post-setup guided tour |
+| Setup wizard | LAN scan, inference test, Babo Cloud sign-in |
+
+See [Capability profiles](capability-profiles-and-onboarding.md).
 
 ---
 

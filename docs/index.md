@@ -6,6 +6,8 @@ Welcome to the Babo docs. Babo is a persistent AI agent platform with long-term 
 
 **Documentation map:** you are on the docs home (also linked from the site nav as *Documentation*). If you landed on the marketing homepage, open [Getting started → Installation](getting-started/installation.md) to install Babo.
 
+**Latest architecture (feature branch):** [2026 Cloud + orchestration release](architecture/2026-cloud-orchestration-release.md) documents everything new vs `main` — Babo Cloud, team waves, capability onboarding, multi-agent UI.
+
 ---
 
 ## How Babo works (30 seconds)
@@ -29,6 +31,7 @@ Details: **[Deployment topologies](architecture/deployment-topologies.md)**
 | Deploy backend to Railway | [Cloud deployment](configuration/cloud-deployment.md) |
 | See how chat/memory/tools work | [User guides](guides/index.md) |
 | Understand the full architecture | [Architecture index](architecture/index.md) |
+| See what changed vs main (2026) | [2026 release architecture](architecture/2026-cloud-orchestration-release.md) |
 | Look up APIs & relay protocol | [Reference](reference/index.md) |
 | Add a tool or skill | [Extension guide](extension/index.md) |
 | Fix relay / build errors | [Troubleshooting](development/troubleshooting.md) |
@@ -71,6 +74,7 @@ Details: **[Deployment topologies](architecture/deployment-topologies.md)**
 | [Frontend](architecture/frontend-application.md) | Angular modes |
 | [Skills](architecture/skills-system.md) · [Tools](architecture/tools-system.md) | Extension points |
 | [Full architecture index](architecture/index.md) | All architecture pages |
+| [2026 Cloud + orchestration](architecture/2026-cloud-orchestration-release.md) | Branch delta vs main |
 
 ### Reference
 

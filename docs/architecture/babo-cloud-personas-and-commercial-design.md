@@ -94,7 +94,7 @@ These are **not** the four workloads but follow the same **Babo-provided vs brin
 
 ### Email (Resend)
 
-- **Today:** Email channel availability is tied to server env (`RESEND_API_KEY`, `RESEND_INBOUND_DOMAIN`) — see [channels service](../../backend/src/channels/channels.service.ts).
+- **Today:** Email channel availability is tied to server env (`RESEND_API_KEY`, `RESEND_INBOUND_DOMAIN`) — see [Channels & webhooks](channels-and-webhooks.md).
 - **Target:** Per-user Resend BYO — user configures their API key/domain; agent aliases live on **their** infrastructure, not `@inbox.babo.agency`.
 
 ### Google Workspace

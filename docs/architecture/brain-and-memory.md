@@ -38,10 +38,27 @@ Babo's cognitive stack lives under `nls/brain/` and `nls/identity/`, orchestrate
 | Concept | Description |
 |---------|-------------|
 | **WM slots** | Short-term goals, constraints, active facts |
-| **Cryptex rings** | 13 rotating context layers (identity, user, project, skills, …) |
+| **Cryptex rings** | 15 rotating context layers (identity, orchestration, skills, …) |
 | **Salience** | Decay and promotion rules |
+| **Ring priorities** | `update_ring_priorities()` — cognitive phase / agent mode reorders prompt |
+| **SubCryptex** | Per-delegate lightweight rings (task, progress, skills borrow) |
 
 UI: Memory page tabs — see [Memory guide](../guides/memory.md).
+
+### Dynamic ring ordering
+
+`CryptexMemory.compose_context()` renders rings **highest priority first** so the LLM sees the most relevant instructions at the top.
+
+| Phase / signal | Rings promoted |
+|----------------|----------------|
+| `planning` | Behavioral, instructions |
+| `monitoring` | Orchestration, wake attention |
+| `executing` | Instructions, behavioral, skills |
+| `stuck` (stall/hint) | **Skills**, tools_mcp, credentials |
+
+**Skill discovery boost:** on stall or orchestrator hint, a high-salience slot is upserted on the skills ring and priorities switch to the `stuck` profile for several iterations. Delegates get the same via `SubCryptex.activate_skill_discovery_boost()`.
+
+See [Skill discovery & recovery](skill-discovery-and-recovery.md).
 
 ---
 
