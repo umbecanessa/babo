@@ -25,6 +25,7 @@ Keep secrets only in Railway — never commit them.
 | Variable | Purpose |
 |----------|---------|
 | `BABO_CLOUD_MODE` | `true` — enables entitlements + relay |
+| `PLATFORM_OPENROUTER_API_KEY` | Babo’s OpenRouter key for trial/resold chat (Claude/GPT/Gemini model ids via OpenRouter) |
 | `SECRETS_ENCRYPTION_KEY` | 32+ char random string for BYOK provider keys |
 | `INFERENCE_UPSTREAM_URL` | Public vLLM base, e.g. `https://brain.babo.agency` |
 | `INFERENCE_UPSTREAM_API_KEY` | Only if vLLM/nginx requires a bearer key |

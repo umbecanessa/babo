@@ -1,786 +1,305 @@
-import { Component, OnInit, OnDestroy, signal, ViewChild, ElementRef, effect } from '@angular/core';
+import {
+  Component,
+  OnInit,
+  OnDestroy,
+  signal,
+  ViewChild,
+  ElementRef,
+  effect,
+  computed,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
+import { firstValueFrom } from 'rxjs';
 import { PlatformService } from '../../core/services/platform.service';
+import { AuthService } from '../../core/services/auth.service';
+import { ApiService } from '../../core/services/api.service';
+import type {
+  CapabilityProfile,
+  CapabilityScan,
+  CapabilityTier,
+} from './capability-profile.model';
+import {
+  formatBackendReachabilityMessage,
+  isBackendReachableStatus,
+} from '../../core/backend-reachability.util';
+import {
+  BABO_CLOUD_MODELS,
+  CLOUD_PROVIDERS,
+  resolveBaboCloudModelId,
+  matchCloudProvider,
+  stripInferenceV1Suffix,
+} from './setup-inference.util';
+import {
+  BACKEND_CHOICES,
+  type BackendChoiceId,
+  backendDisplayLabel,
+  matchBackendChoice,
+  normalizeNestjsUrl,
+} from './setup-backend.util';
+import {
+  applyBaboCloudPlacements,
+  usesBaboCloudRelay,
+} from './setup-cloud.util';
+import { ApiKeyService } from '../../core/services/api-key.service';
+import { ToastService } from '../../shared/toast/toast.service';
+import { Day1CoachService } from '../../shared/onboarding/day1-coach.service';
 
 interface SetupConfig {
   inferenceUrl: string;
   inferenceModel: string;
   inferenceApiKey: string;
   nestjsUrl: string;
-  /** @deprecated migrated from legacy config */
-  vllmUrl?: string;
-  hfModel?: string;
   gpuWorkerUrl?: string;
   gpuWorkerSecret?: string;
-  runtimeHost?: string;
+}
+
+interface ExpRow {
+  label: string;
+  value: string;
+  ok: boolean;
 }
 
 @Component({
   selector: 'app-setup',
   standalone: true,
-  imports: [CommonModule, FormsModule],
-  template: `
-    <div class="setup-page">
-      <!-- Ambient -->
-      <div class="ambient">
-        <div class="glow glow-1"></div>
-        <div class="glow glow-2"></div>
-      </div>
-
-      <div class="setup-card animate-fade-in">
-        <div class="setup-header">
-          <img src="assets/images/babo.png" alt="Babo" class="setup-logo" />
-          <h1 class="setup-title">Babo</h1>
-          <p class="setup-subtitle">Desktop Setup</p>
-        </div>
-
-        <!-- Step indicator -->
-        <div class="steps">
-          @for (s of steps; track s.id; let i = $index) {
-            <div class="step" [class.active]="step() === i" [class.done]="step() > i">
-              <span class="step-num">{{ step() > i ? '✓' : i + 1 }}</span>
-              <span class="step-label">{{ s.label }}</span>
-            </div>
-          }
-        </div>
-
-        <!-- Step 0: Python Environment -->
-        @if (step() === 0) {
-          <div class="step-content animate-fade-in">
-            <h2>Python Environment</h2>
-            <p>Babo needs Python 3.11+ to run the agent runtime locally.</p>
-
-            @if (setupStage() === 'idle') {
-              <button class="action-btn" (click)="startSetup()">Set Up Python Environment</button>
-            }
-
-            @if (setupStage() === 'checking' || setupStage() === 'creating-venv' || setupStage() === 'installing') {
-              <div class="progress-area">
-                <div class="progress-bar">
-                  <div class="progress-fill" [style.width.%]="setupProgress()"></div>
-                </div>
-                <div class="progress-meta">
-                  <p class="progress-text">{{ setupMessage() }}</p>
-                  <span class="elapsed-time">{{ elapsedTime() }}</span>
-                </div>
-
-                <button class="details-toggle" (click)="showDetails.set(!showDetails())">
-                  <span class="chevron" [class.open]="showDetails()">&#9662;</span>
-                  {{ showDetails() ? 'Hide Details' : 'Show Details' }}
-                </button>
-
-                @if (showDetails()) {
-                  <div class="log-area animate-fade-in" #logArea>
-                    @for (line of logLines(); track $index) {
-                      <div class="log-line" [class.stderr]="line.level === 'stderr'">{{ line.message }}</div>
-                    }
-                  </div>
-                }
-              </div>
-            }
-
-            @if (setupStage() === 'ready') {
-              <div class="success-badge animate-fade-in">Python environment ready</div>
-              <button class="action-btn" (click)="nextStep()">Continue</button>
-            }
-
-            @if (setupStage() === 'error') {
-              <div class="error-badge animate-fade-in">{{ setupError() }}</div>
-              <button class="action-btn secondary" (click)="retrySetup()">Retry</button>
-            }
-          </div>
-        }
-
-        <!-- Step 1: Inference -->
-        @if (step() === 1) {
-          <div class="step-content animate-fade-in">
-            <h2>Inference Provider</h2>
-            <p>Connect to any OpenAI-compatible API (OpenRouter, local Ollama, vLLM, etc.).</p>
-
-            <div class="form-group">
-              <label>Inference API URL</label>
-              <input type="text" [(ngModel)]="config.inferenceUrl" placeholder="https://openrouter.ai/api/v1" />
-            </div>
-
-            <div class="form-group">
-              <label>Model</label>
-              <input type="text" [(ngModel)]="config.inferenceModel" placeholder="openai/gpt-4o-mini" />
-            </div>
-
-            <div class="form-group">
-              <label>API Key (optional)</label>
-              <input type="password" [(ngModel)]="config.inferenceApiKey" placeholder="sk-..." />
-            </div>
-
-            <div class="form-group">
-              <label>Backend URL (NestJS)</label>
-              <input type="text" [(ngModel)]="config.nestjsUrl" placeholder="http://localhost:3000" />
-            </div>
-
-            <div class="connection-test centered">
-              <button class="action-btn secondary small" (click)="testInference()" [disabled]="testing()">
-                {{ testing() ? 'Testing...' : 'Test Connection' }}
-              </button>
-              @if (testResult()) {
-                <span class="test-result" [class.ok]="testResult()!.ok" [class.fail]="!testResult()!.ok">
-                  {{ testResult()!.message }}
-                  @if (testResult()!.ok) {
-                    <span class="latency">{{ testResult()!.latency }}ms</span>
-                  }
-                </span>
-              }
-            </div>
-
-            <div class="step-actions">
-              <button class="action-btn secondary" (click)="prevStep()">Back</button>
-              <button class="action-btn" (click)="saveConfigAndNext()">Continue</button>
-            </div>
-          </div>
-        }
-
-        <!-- Step 2: Ready -->
-        @if (step() === 2) {
-          <div class="step-content animate-fade-in">
-            <div class="ready-orb">
-              <div class="orb"></div>
-              <div class="ring ring-1"></div>
-              <div class="ring ring-2"></div>
-            </div>
-            <h2>Ready</h2>
-            <p>Your Babo desktop agent is configured. The runtime will start automatically.</p>
-
-            <div class="config-summary">
-              <div class="summary-row">
-                <span class="label">Inference</span>
-                <span class="value">{{ config.inferenceUrl }}</span>
-              </div>
-              <div class="summary-row">
-                <span class="label">Backend</span>
-                <span class="value">{{ config.nestjsUrl }}</span>
-              </div>
-              <div class="summary-row">
-                <span class="label">Model</span>
-                <span class="value">{{ config.inferenceModel }}</span>
-              </div>
-            </div>
-
-            @if (launching()) {
-              <div class="progress-area animate-fade-in">
-                <div class="progress-bar">
-                  <div class="progress-fill indeterminate"></div>
-                </div>
-                <p class="progress-text">{{ launchMessage() }}</p>
-              </div>
-            } @else if (launchError()) {
-              <div class="error-badge animate-fade-in">{{ launchError() }}</div>
-              <button class="action-btn" (click)="finish()">Retry</button>
-            } @else {
-              <button class="action-btn launch" (click)="finish()">Launch Babo</button>
-            }
-          </div>
-        }
-      </div>
-    </div>
-  `,
-  styles: [`
-    :host {
-      display: block;
-      height: 100vh;
-      overflow: hidden;
-    }
-
-    .setup-page {
-      position: relative;
-      height: 100%;
-      background: #050508;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
-    }
-
-    /* ─── Ambient ─────────────────────────────────────────── */
-
-    .ambient {
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-    }
-
-    .glow {
-      position: absolute;
-      border-radius: 50%;
-      filter: blur(150px);
-      opacity: 0.12;
-    }
-
-    .glow-1 {
-      width: 700px;
-      height: 700px;
-      background: #38bdf8;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      animation: glow-breathe 6s ease-in-out infinite;
-    }
-
-    .glow-2 {
-      width: 400px;
-      height: 400px;
-      background: #a78bfa;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      opacity: 0.06;
-      animation: glow-breathe 8s ease-in-out infinite 2s;
-    }
-
-    @keyframes glow-breathe {
-      0%, 100% { opacity: 0.08; transform: translate(-50%, -50%) scale(1); }
-      50% { opacity: 0.15; transform: translate(-50%, -50%) scale(1.1); }
-    }
-
-    /* ─── Card ────────────────────────────────────────────── */
-
-    .setup-card {
-      position: relative;
-      z-index: 1;
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      border-radius: 20px;
-      padding: 48px 40px;
-      max-width: 520px;
-      width: 100%;
-      backdrop-filter: blur(20px);
-    }
-
-    /* ─── Header ──────────────────────────────────────────── */
-
-    .setup-header {
-      text-align: center;
-      margin-bottom: 32px;
-    }
-
-    .setup-logo {
-      display: block;
-      margin: 0 auto 12px;
-      width: 72px;
-      height: auto;
-    }
-
-    .setup-title {
-      font-size: 28px;
-      font-weight: 200;
-      color: #e0e0f0;
-      letter-spacing: 0.15em;
-      margin: 0;
-    }
-
-    .setup-subtitle {
-      color: #8a8a9a;
-      margin-top: 8px;
-      font-size: 13px;
-      letter-spacing: 0.04em;
-    }
-
-    /* ─── Steps ───────────────────────────────────────────── */
-
-    .steps {
-      display: flex;
-      gap: 20px;
-      justify-content: center;
-      margin-bottom: 36px;
-    }
-
-    .step {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      color: #5a5a6a;
-      font-size: 12px;
-      letter-spacing: 0.04em;
-
-      &.active {
-        color: #e0e0f0;
-        .step-num {
-          background: rgba(56, 189, 248, 0.15);
-          border-color: rgba(56, 189, 248, 0.4);
-          color: #38bdf8;
-        }
-      }
-
-      &.done {
-        color: #34d399;
-        .step-num {
-          background: rgba(52, 211, 153, 0.1);
-          border-color: rgba(52, 211, 153, 0.3);
-          color: #34d399;
-        }
-      }
-    }
-
-    .step-num {
-      width: 26px;
-      height: 26px;
-      border-radius: 50%;
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 11px;
-      font-weight: 500;
-      transition: all 0.3s ease;
-    }
-
-    /* ─── Step Content ────────────────────────────────────── */
-
-    .step-content {
-      text-align: center;
-
-      h2 {
-        font-size: 20px;
-        font-weight: 300;
-        color: #e0e0f0;
-        letter-spacing: 0.06em;
-        margin: 0 0 8px;
-      }
-
-      > p {
-        color: #8a8a9a;
-        margin-bottom: 28px;
-        font-size: 13px;
-        line-height: 1.6;
-        letter-spacing: 0.02em;
-      }
-    }
-
-    /* ─── Buttons ─────────────────────────────────────────── */
-
-    .action-btn {
-      padding: 10px 32px;
-      border: 1px solid rgba(56, 189, 248, 0.3);
-      border-radius: 12px;
-      background: rgba(56, 189, 248, 0.08);
-      color: #b0d4f0;
-      font-size: 14px;
-      font-weight: 400;
-      letter-spacing: 0.05em;
-      cursor: pointer;
-      transition: all 0.3s ease;
-
-      &:hover:not(:disabled) {
-        background: rgba(56, 189, 248, 0.15);
-        border-color: rgba(56, 189, 248, 0.5);
-        color: #e0f0ff;
-        box-shadow: 0 0 20px rgba(56, 189, 248, 0.1);
-      }
-
-      &:disabled {
-        opacity: 0.3;
-        cursor: not-allowed;
-      }
-
-      &.secondary {
-        border-color: rgba(255, 255, 255, 0.08);
-        background: rgba(255, 255, 255, 0.03);
-        color: #8a8a9a;
-
-        &:hover:not(:disabled) {
-          border-color: rgba(255, 255, 255, 0.15);
-          background: rgba(255, 255, 255, 0.06);
-          color: #b0b0c0;
-          box-shadow: none;
-        }
-      }
-
-      &.small {
-        padding: 7px 20px;
-        font-size: 12px;
-      }
-
-      &.launch {
-        padding: 12px 48px;
-        font-size: 15px;
-      }
-    }
-
-    /* ─── Form ────────────────────────────────────────────── */
-
-    .form-group {
-      text-align: left;
-      margin-bottom: 18px;
-
-      label {
-        display: block;
-        color: #8a8a9a;
-        font-size: 11px;
-        margin-bottom: 6px;
-        font-weight: 500;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-      }
-
-      input {
-        width: 100%;
-        padding: 10px 14px;
-        background: rgba(255, 255, 255, 0.03);
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 10px;
-        color: #d0d0e0;
-        font-size: 13px;
-        letter-spacing: 0.02em;
-        outline: none;
-        transition: all 0.3s ease;
-        box-sizing: border-box;
-
-        &:focus {
-          border-color: rgba(56, 189, 248, 0.3);
-          background: rgba(56, 189, 248, 0.03);
-        }
-
-        &::placeholder { color: #4a4a5a; }
-      }
-
-      .hint {
-        display: block;
-        color: #5a5a6a;
-        font-size: 11px;
-        margin-top: 4px;
-        letter-spacing: 0.02em;
-      }
-    }
-
-    /* ─── Progress ────────────────────────────────────────── */
-
-    .progress-area {
-      margin: 24px 0;
-    }
-
-    .progress-bar {
-      height: 4px;
-      background: rgba(255, 255, 255, 0.06);
-      border-radius: 2px;
-      overflow: hidden;
-    }
-
-    .progress-fill {
-      height: 100%;
-      background: linear-gradient(90deg, #38bdf8, #a78bfa);
-      border-radius: 2px;
-      transition: width 0.3s ease;
-
-      &.indeterminate {
-        width: 30% !important;
-        animation: indeterminate 1.5s ease-in-out infinite;
-      }
-    }
-
-    @keyframes indeterminate {
-      0% { margin-left: 0; }
-      50% { margin-left: 70%; }
-      100% { margin-left: 0; }
-    }
-
-    .progress-meta {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      margin-top: 8px;
-    }
-
-    .progress-text {
-      color: #8a8a9a;
-      font-size: 12px;
-      letter-spacing: 0.02em;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      margin: 0;
-      min-width: 0;
-    }
-
-    .elapsed-time {
-      color: #5a5a6a;
-      font-size: 11px;
-      font-family: monospace;
-      letter-spacing: 0.04em;
-      flex-shrink: 0;
-    }
-
-    .details-toggle {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      background: none;
-      border: none;
-      color: #5a5a6a;
-      font-size: 11px;
-      letter-spacing: 0.04em;
-      cursor: pointer;
-      padding: 4px 0;
-      margin-top: 12px;
-      transition: color 0.2s ease;
-
-      &:hover { color: #8a8a9a; }
-
-      .chevron {
-        font-size: 9px;
-        transition: transform 0.2s ease;
-        &.open { transform: rotate(180deg); }
-      }
-    }
-
-    .log-area {
-      margin-top: 10px;
-      max-height: 180px;
-      overflow-y: auto;
-      background: rgba(0, 0, 0, 0.4);
-      border: 1px solid rgba(255, 255, 255, 0.04);
-      border-radius: 8px;
-      padding: 10px 12px;
-      text-align: left;
-
-      &::-webkit-scrollbar { width: 4px; }
-      &::-webkit-scrollbar-track { background: transparent; }
-      &::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.08);
-        border-radius: 2px;
-      }
-    }
-
-    .log-line {
-      font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace;
-      font-size: 10px;
-      line-height: 1.6;
-      color: #6a6a7a;
-      word-break: break-all;
-
-      &.stderr { color: #f87171; opacity: 0.8; }
-    }
-
-    /* ─── Badges ──────────────────────────────────────────── */
-
-    .success-badge {
-      color: #34d399;
-      background: rgba(52, 211, 153, 0.08);
-      border: 1px solid rgba(52, 211, 153, 0.15);
-      padding: 10px 20px;
-      border-radius: 12px;
-      margin-bottom: 20px;
-      font-size: 13px;
-      letter-spacing: 0.04em;
-    }
-
-    .error-badge {
-      color: #f87171;
-      background: rgba(248, 113, 113, 0.08);
-      border: 1px solid rgba(248, 113, 113, 0.15);
-      padding: 10px 20px;
-      border-radius: 12px;
-      margin-bottom: 20px;
-      font-size: 12px;
-      letter-spacing: 0.02em;
-    }
-
-    /* ─── Connection Test ─────────────────────────────────── */
-
-    .connection-test {
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      margin-bottom: 24px;
-
-      &.centered {
-        justify-content: center;
-      }
-    }
-
-    .test-result {
-      font-size: 12px;
-      letter-spacing: 0.02em;
-
-      &.ok { color: #34d399; }
-      &.fail { color: #f87171; }
-
-      .latency {
-        color: #6a6a7a;
-        margin-left: 4px;
-      }
-    }
-
-    /* ─── Advanced Toggle ─────────────────────────────────── */
-
-    .advanced-toggle {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      background: none;
-      border: none;
-      color: #5a5a6a;
-      font-size: 12px;
-      letter-spacing: 0.04em;
-      cursor: pointer;
-      padding: 4px 0;
-      margin-bottom: 16px;
-      transition: color 0.2s ease;
-
-      &:hover { color: #8a8a9a; }
-
-      .chevron {
-        font-size: 9px;
-        transition: transform 0.2s ease;
-        &.open { transform: rotate(180deg); }
-      }
-    }
-
-    .advanced-fields {
-      border-top: 1px solid rgba(255, 255, 255, 0.04);
-      padding-top: 16px;
-      margin-bottom: 8px;
-    }
-
-    /* ─── Step Actions ────────────────────────────────────── */
-
-    .step-actions {
-      display: flex;
-      justify-content: space-between;
-      margin-top: 24px;
-    }
-
-    /* ─── Ready Orb ───────────────────────────────────────── */
-
-    .ready-orb {
-      position: relative;
-      width: 80px;
-      height: 80px;
-      margin: 0 auto 20px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .orb {
-      width: 16px;
-      height: 16px;
-      border-radius: 50%;
-      background: linear-gradient(135deg, #34d399, #38bdf8);
-      box-shadow:
-        0 0 30px rgba(52, 211, 153, 0.5),
-        0 0 80px rgba(52, 211, 153, 0.2);
-      animation: orb-pulse 3s ease-in-out infinite;
-      z-index: 2;
-    }
-
-    .ring {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      border-radius: 50%;
-      border: 1px solid rgba(52, 211, 153, 0.12);
-      transform: translate(-50%, -50%);
-      animation: ring-expand 3s ease-in-out infinite;
-    }
-
-    .ring-1 { width: 40px; height: 40px; }
-    .ring-2 { width: 70px; height: 70px; animation-delay: 0.5s; }
-
-    @keyframes orb-pulse {
-      0%, 100% { transform: scale(1); }
-      50% { transform: scale(1.15); }
-    }
-
-    @keyframes ring-expand {
-      0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.3; }
-      50% { transform: translate(-50%, -50%) scale(1.1); opacity: 0.6; }
-    }
-
-    /* ─── Config Summary ──────────────────────────────────── */
-
-    .config-summary {
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      border-radius: 12px;
-      padding: 16px 20px;
-      margin: 24px 0;
-      text-align: left;
-
-      .summary-row {
-        display: flex;
-        justify-content: space-between;
-        padding: 6px 0;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.03);
-
-        &:last-child { border-bottom: none; }
-
-        .label {
-          color: #6a6a7a;
-          font-size: 11px;
-          letter-spacing: 0.06em;
-          text-transform: uppercase;
-        }
-        .value {
-          color: #b0b0c0;
-          font-size: 12px;
-          font-family: monospace;
-          letter-spacing: 0.02em;
-        }
-      }
-    }
-
-    /* ─── Animation ───────────────────────────────────────── */
-
-    .animate-fade-in {
-      animation: fade-in 0.4s ease-out;
-    }
-
-    @keyframes fade-in {
-      from { opacity: 0; transform: translateY(8px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-  `],
+  imports: [CommonModule, FormsModule, RouterLink],
+  templateUrl: './setup.component.html',
+  styleUrl: './setup.component.scss',
 })
+/** Screen: 0 welcome → 1 prepare → 2 device → 3 thinking → 4 extras → 5 placement → 6 sign-in → 7 ready → 8 name */
 export class SetupComponent implements OnInit, OnDestroy {
-  steps = [
-    { id: 'python', label: 'Python' },
-    { id: 'connection', label: 'Connection' },
-    { id: 'ready', label: 'Ready' },
+  readonly decisionSteps = [
+    { id: 'thinking', label: 'Thinking' },
+    { id: 'features', label: 'Features' },
+    { id: 'placement', label: 'Account server' },
+    { id: 'signin', label: 'Sign in' },
   ];
 
+  readonly brainCards: {
+    tier: CapabilityTier;
+    title: string;
+    subtitle: string;
+    glyph: string;
+  }[] = [
+    {
+      tier: 'hosted_babo',
+      title: 'Babo Cloud',
+      subtitle: 'Claude, GPT, Gemini via your Babo account',
+      glyph: '☁',
+    },
+    {
+      tier: 'self_local',
+      title: 'This computer',
+      subtitle: 'Ollama on this PC',
+      glyph: '◻',
+    },
+    {
+      tier: 'self_lan',
+      title: 'My server',
+      subtitle: 'vLLM or OpenAI-compatible server on your LAN',
+      glyph: '⎔',
+    },
+  ];
+
+  readonly baboCloudModels = BABO_CLOUD_MODELS;
+
   step = signal(0);
+  returningUser = signal(false);
+  showByokPanel = signal(false);
+  showLanSheet = signal(false);
+  showVoiceSheet = signal(false);
+  authEmail = '';
+  authPassword = '';
+  authError = signal<string | null>(null);
+  signingIn = signal(false);
+  prepareAutoAdvanced = false;
+  brainUndoTier = signal<CapabilityTier | null>(null);
+  agentName = '';
+  provisioningCloud = signal(false);
   setupStage = signal<string>('idle');
   setupProgress = signal(0);
   setupMessage = signal('');
   setupError = signal<string | null>(null);
+  venvReady = signal(false);
   elapsedTime = signal('0:00');
   showDetails = signal(false);
   logLines = signal<{ level: string; message: string }[]>([]);
   testing = signal(false);
   testResult = signal<{ ok: boolean; message: string; latency: number } | null>(null);
-  showAdvanced = signal(false);
+  /** Tier that `testResult` belongs to (avoid showing errors on the wrong card). */
+  brainTestedTier = signal<CapabilityTier | null>(null);
+  /** After "I already have an account", skip placement and land on sign-in once extras are done. */
+  private preferSignInAfterConfig = false;
+  /** Furthest step reached this run — blocks jumping past gaps in the wizard. */
+  private highestStepReached = 0;
   launching = signal(false);
   launchMessage = signal('Starting agent runtime...');
   launchError = signal<string | null>(null);
 
-  @ViewChild('logArea') private logArea?: ElementRef<HTMLDivElement>;
+  scanLoading = signal(false);
+  scan = signal<CapabilityScan | null>(null);
+  profile = signal<CapabilityProfile | null>(null);
+  lanHost = '';
+  lanGpuSecret = '';
+  lanProbing = signal(false);
+  showLanAdvanced = signal(false);
+
+  ambientVisionOn = signal(false);
+  codeSearchOn = signal(true);
+  brainTier = signal<CapabilityTier>('byok_cloud');
+  voiceTier = signal<CapabilityTier>('self_local');
+  visualTier = signal<CapabilityTier>('off');
+  cloudProviderId = signal('openrouter');
+  recommendedBrainTier: CapabilityTier = 'hosted_babo';
+  savingCapabilities = signal(false);
+  visionPrefetchActive = signal(false);
+  visionPrefetchMessage = signal('');
+  private visionPrefetchListener: ((data: unknown) => void) | null = null;
+
+  showDecisionDots = computed(() => {
+    const s = this.step();
+    return s >= 3 && s <= 6;
+  });
+
+  decisionStepIndex = computed(() => {
+    const s = this.step();
+    if (s === 3) return 0;
+    if (s === 4) return 1;
+    if (s === 5) return 2;
+    if (s === 6) return 3;
+    return -1;
+  });
+
+  deviceTagline = computed(() => {
+    const vram = this.scan()?.device.vramGb ?? 0;
+    if (vram >= 6) {
+      return 'Good for running helpers on this computer.';
+    }
+    return 'Best with Babo Cloud or a network server for heavy models.';
+  });
+
+  localVisionReady = computed(() => (this.scan()?.device.vramGb ?? 0) >= 6);
+
+  lanInferenceFound = computed(() =>
+    !!this.scan()?.lan.some((s) => s.kind === 'inference' && s.healthy && s.port === 8000),
+  );
+
+  /** Screen-awareness placement options depend on where chat runs. */
+  visualPlacementOptions = computed(() => {
+    const brain = this.brainTier();
+    const opts: { tier: CapabilityTier; label: string; disabled: boolean }[] = [];
+
+    const add = (tier: CapabilityTier, label: string, disabled: boolean) => {
+      if (!opts.some((o) => o.tier === tier)) {
+        opts.push({ tier, label, disabled });
+      }
+    };
+
+    if (brain === 'hosted_babo') {
+      add('hosted_babo', 'Babo Cloud', false);
+      if (this.hasLanVision()) add('self_lan', 'Your LAN server', false);
+      if (this.canLocalVision()) add('self_local', 'This PC (Moondream)', false);
+    } else if (brain === 'self_lan') {
+      if (this.hasLanVision()) add('self_lan', 'Same LAN server', false);
+      add('hosted_babo', 'Babo Cloud', false);
+      if (this.canLocalVision()) add('self_local', 'This PC', false);
+    } else {
+      if (this.canLocalVision()) add('self_local', 'This PC', false);
+      if (this.hasLanVision()) add('self_lan', 'LAN server', false);
+      add('hosted_babo', 'Babo Cloud', false);
+    }
+
+    return opts;
+  });
+
+  readySummary = computed(() => {
+    const p = this.profile();
+    if (!p) return [];
+    const thinking =
+      p.inference.tier === 'hosted_babo'
+        ? 'Babo Cloud'
+        : p.inference.tier === 'byok_cloud'
+          ? 'Your API key'
+          : p.inference.model || tierLabel(p.inference.tier);
+    const extras = `Code search ${this.codeSearchOn() ? 'on' : 'off'} · Screen ${this.ambientVisionOn() ? 'on' : 'off'}`;
+    const account = this.auth.isAuthenticated()
+      ? `${this.backendSummaryLabel()} (signed in)`
+      : this.backendSummaryLabel();
+    return [
+      { icon: '🧠', label: 'Thinking', value: thinking },
+      { icon: '✦', label: 'Extras', value: extras },
+      { icon: '☁', label: 'Account', value: account },
+    ];
+  });
+
+  /** Where models run (step 3) — separate from NestJS account (steps 5–6). */
+  inferenceRunLocation = computed(() => {
+    switch (this.brainTier()) {
+      case 'hosted_babo':
+        return 'Babo Cloud';
+      case 'byok_cloud':
+        return 'your API provider';
+      case 'self_local':
+        return 'this computer';
+      case 'self_lan':
+        return 'your LAN server';
+      default:
+        return 'your chosen provider';
+    }
+  });
+
+  placementStepLead = computed(
+    () =>
+      `Pick the NestJS server for your account and agents. Chat runs on ` +
+      `${this.inferenceRunLocation()} — you already chose that.`,
+  );
+
+  signInStepLead = computed(
+    () =>
+      `Create an account or sign in on ${this.backendSummaryLabel()}. ` +
+      `Required for agents and sync, even when chat runs locally.`,
+  );
+
+  backendChoice = signal<BackendChoiceId>('babo_cloud');
+  backendTesting = signal(false);
+  backendTestResult = signal<{ ok: boolean; message: string; latency: number } | null>(null);
+  backendSaveError = signal<string | null>(null);
+  savingBackend = signal(false);
+
+  readonly cloudProviders = CLOUD_PROVIDERS;
+  readonly backendChoices = BACKEND_CHOICES;
+
+  voiceOptions = [
+    { tier: 'self_local' as CapabilityTier, label: 'This computer', shortLabel: 'This PC' },
+    { tier: 'self_lan' as CapabilityTier, label: 'My server', shortLabel: 'My server' },
+    { tier: 'off' as CapabilityTier, label: 'Off', shortLabel: 'Off' },
+  ];
+
+  lanServices = computed(() => this.scan()?.lan ?? []);
 
   config: SetupConfig = {
-    inferenceUrl: 'https://openrouter.ai/api/v1',
+    inferenceUrl: 'https://openrouter.ai/api',
     inferenceModel: 'openai/gpt-4o-mini',
     inferenceApiKey: '',
-    nestjsUrl: 'http://localhost:3000',
+    nestjsUrl: 'https://api.babo.agency',
   };
 
-  private progressListener: any = null;
-  private logListener: any = null;
-  private elapsedTimer: any = null;
+  @ViewChild('logArea') private logArea?: ElementRef<HTMLDivElement>;
+
+  private progressListener: ((data: unknown) => void) | null = null;
+  private logListener: ((data: unknown) => void) | null = null;
+  private elapsedTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     private router: Router,
-    private platform: PlatformService,
+    public platform: PlatformService,
+    public auth: AuthService,
+    private api: ApiService,
+    private apiKeys: ApiKeyService,
+    private toast: ToastService,
+    private day1Coach: Day1CoachService,
   ) {
     effect(() => {
       this.logLines();
@@ -798,42 +317,82 @@ export class SetupComponent implements OnInit, OnDestroy {
     }
 
     const nls = (window as any).nls;
-
     try {
       const cfg = await nls.config.get();
       this.config = {
         ...this.config,
         ...cfg,
-        inferenceUrl: cfg.inferenceUrl || cfg.vllmUrl || this.config.inferenceUrl,
+        inferenceUrl: stripInferenceV1Suffix(
+          cfg.inferenceUrl || cfg.vllmUrl || this.config.inferenceUrl,
+        ),
         inferenceModel: cfg.inferenceModel || cfg.hfModel || this.config.inferenceModel,
         inferenceApiKey: cfg.inferenceApiKey || '',
+        nestjsUrl: normalizeNestjsUrl(cfg.nestjsUrl || this.config.nestjsUrl),
+        gpuWorkerSecret: cfg.gpuWorkerSecret || '',
       };
-    } catch {}
+      this.lanGpuSecret = this.config.gpuWorkerSecret || '';
+      this.backendChoice.set(matchBackendChoice(this.config.nestjsUrl));
+      if (cfg.capabilityProfile && cfg.setupComplete) {
+        this.profile.set(cfg.capabilityProfile);
+        this.applyProfileToUi(cfg.capabilityProfile);
+      }
+    } catch { /* ignore */ }
 
     try {
       const check = await nls.setup.check();
+      this.venvReady.set(!!check.venvReady);
       if (check.venvReady) {
         this.setupStage.set('ready');
       }
-    } catch {}
+      if (check.setupComplete) {
+        this.returningUser.set(true);
+      }
+    } catch { /* ignore */ }
+
+    if (this.auth.isAuthenticated()) {
+      this.returningUser.set(true);
+    }
 
     this.progressListener = (data: any) => {
       this.setupStage.set(data.stage);
       this.setupProgress.set(data.progress);
       this.setupMessage.set(data.message);
       if (data.error) this.setupError.set(data.error);
+      if (data.stage === 'ready') {
+        this.venvReady.set(true);
+        this.stopElapsedTimer();
+      } else if (data.stage === 'error') {
+        this.stopElapsedTimer();
+      } else if (
+        data.stage === 'checking' ||
+        data.stage === 'creating-venv' ||
+        data.stage === 'installing'
+      ) {
+        this.ensureElapsedTimerForInstall();
+      }
     };
     nls.on('setup:progress', this.progressListener);
 
     this.logListener = (data: any) => {
       const msg = (data.message || '').trim();
       if (!msg) return;
-      this.logLines.update(lines => {
+      this.logLines.update((lines) => {
         const updated = [...lines, { level: data.level, message: msg }];
         return updated.length > 200 ? updated.slice(-200) : updated;
       });
     };
     nls.on('setup:log', this.logListener);
+
+    this.visionPrefetchListener = (data: any) => {
+      const msg = (data?.message || '').trim();
+      if (msg) this.visionPrefetchMessage.set(msg);
+      if (typeof data?.progress === 'number' && data.progress >= 100) {
+        this.visionPrefetchActive.set(false);
+      } else if (msg) {
+        this.visionPrefetchActive.set(true);
+      }
+    };
+    nls.on('vision:prefetch-progress', this.visionPrefetchListener);
   }
 
   ngOnDestroy(): void {
@@ -845,17 +404,134 @@ export class SetupComponent implements OnInit, OnDestroy {
     if (this.logListener) {
       nls?.removeListener?.('setup:log', this.logListener);
     }
+    if (this.visionPrefetchListener) {
+      nls?.removeListener?.('vision:prefetch-progress', this.visionPrefetchListener);
+    }
+  }
+
+  private shouldPrefetchLocalVision(profile: CapabilityProfile): boolean {
+    return (
+      this.ambientVisionOn() &&
+      profile.visualCortex.strategy === 'dedicated_vlm_local'
+    );
+  }
+
+  private startVisionPrefetchInBackground(): void {
+    if (!this.venvReady()) return;
+    this.visionPrefetchActive.set(true);
+    this.visionPrefetchMessage.set('Downloading screen awareness model…');
+    void this.nls()
+      .capabilities.prefetchVision()
+      .catch(() => {
+        this.visionPrefetchMessage.set('Will download on first use');
+        setTimeout(() => this.visionPrefetchActive.set(false), 4000);
+      });
+  }
+
+  private nls(): any {
+    return (window as any).nls;
+  }
+
+  lanKindLabel(kind: string, port?: number): string {
+    switch (kind) {
+      case 'inference':
+        return port === 11434 ? 'Ollama' : 'Chat model';
+      case 'vision':
+        return 'Vision';
+      case 'transcribe':
+        return 'Voice';
+      default:
+        return kind;
+    }
+  }
+
+  brainServerUrl(): string {
+    return stripInferenceV1Suffix(this.profile()?.inference.url ?? '');
+  }
+
+  setBrainServerUrl(url: string): void {
+    const p = this.profile();
+    if (!p) return;
+    p.inference.url = stripInferenceV1Suffix(url);
+    this.syncInferenceLegacy();
+    this.profile.set({ ...p });
+  }
+
+  onBrainServerUrlEdit(url: string): void {
+    this.setBrainServerUrl(url);
+    this.testResult.set(null);
+    this.brainTestedTier.set(null);
+  }
+
+  brainModelLabel(): string {
+    const tier = this.profile()?.inference.tier;
+    const raw = this.profile()?.inference.model ?? this.config.inferenceModel ?? '';
+    if (tier === 'hosted_babo') {
+      return resolveBaboCloudModelId(raw);
+    }
+    return raw;
+  }
+
+  baboCloudModelActive(modelId: string): boolean {
+    return this.brainModelLabel() === modelId;
+  }
+
+  brainCardTestLine(tier: CapabilityTier): string {
+    const tr = this.testResult();
+    if (!tr) return '';
+    if (!tr.ok) return tr.message;
+    if (tier === 'hosted_babo') {
+      const m = this.profile()?.inference.model;
+      const id = resolveBaboCloudModelId(m);
+      const label = this.baboCloudModels.find((x) => x.id === id)?.label ?? m;
+      return label ? `✓ ${label} (via Babo Cloud)` : '✓ Babo Cloud';
+    }
+    if (tier === 'self_local' && tr.message) {
+      return `✓ ${tr.message}`;
+    }
+    const model = this.brainModelLabel();
+    return model ? `✓ ${model}` : '✓ Connected';
+  }
+
+  selectBaboCloudModel(modelId: string): void {
+    const p = this.profile();
+    if (!p) return;
+    p.inference.model = modelId;
+    this.config.inferenceModel = modelId;
+    this.profile.set({ ...p });
+    this.testResult.set(null);
+    this.brainTestedTier.set(null);
+  }
+
+  setVisualPlacement(tier: CapabilityTier): void {
+    if (tier === 'hosted_babo') this.setVisualHostedBabo();
+    else if (tier === 'self_lan') this.setVisualLan();
+    else if (tier === 'self_local') this.setVisualLocal();
+  }
+
+  setVisualHostedBabo(): void {
+    const p = this.profile();
+    if (!p) return;
+    p.visualCortex = {
+      tier: 'hosted_babo',
+      strategy: 'dedicated_vlm_lan',
+      url: '',
+      reason: 'Screen awareness via Babo Cloud GPU relay',
+    };
+    this.visualTier.set('hosted_babo');
+    this.profile.set({ ...p });
   }
 
   async startSetup(): Promise<void> {
     this.setupStage.set('checking');
     this.setupError.set(null);
     this.logLines.set([]);
-    this.startElapsedTimer();
+    this.ensureElapsedTimerForInstall();
     try {
-      const nls = (window as any).nls;
-      await nls.setup.start();
+      await this.nls().setup.start();
       this.setupStage.set('ready');
+      this.venvReady.set(true);
+      this.maybeAutoAdvanceFromPrepare();
     } catch (err: any) {
       this.setupStage.set('error');
       this.setupError.set(err?.message || 'Setup failed');
@@ -869,39 +545,758 @@ export class SetupComponent implements OnInit, OnDestroy {
     this.setupError.set(null);
   }
 
+  goToStep(target: number): void {
+    if (!this.canEnterStep(target)) return;
+    this.step.set(target);
+    this.highestStepReached = Math.max(this.highestStepReached, target);
+  }
+
+  canEnterStep(target: number): boolean {
+    if (target <= 1) return true;
+    if (target >= 2 && !this.venvReady()) return false;
+    if (target >= 3 && !this.profile()) return false;
+    return true;
+  }
+
   nextStep(): void {
-    this.step.update(s => Math.min(s + 1, this.steps.length - 1));
+    const n = Math.min(this.step() + 1, 8);
+    if (!this.canEnterStep(n)) return;
+    this.goToStep(n);
   }
 
-  prevStep(): void {
-    this.step.update(s => Math.max(s - 1, 0));
+  async prevStep(): Promise<void> {
+    const n = Math.max(this.step() - 1, 0);
+    this.goToStep(n);
+    if (n === 2 && !this.scan() && !this.scanLoading()) {
+      await this.runDeviceScan();
+    }
   }
 
-  onHostChange(host: string): void {
-    this.config.inferenceUrl = `http://${host}:8000`;
-    this.config.gpuWorkerUrl = `http://${host}:8443`;
+  /** Full first-run path: prepare → device → thinking → extras → placement → sign-in → name */
+  continueFromWelcome(): void {
+    this.goToStep(1);
+    if (this.setupStage() === 'idle') {
+      void this.startSetup();
+    } else if (this.setupStage() === 'ready') {
+      void this.goToScan();
+    }
+  }
+
+  /** Same setup as Continue; after features, jump to sign-in (placement still suggested). */
+  beginSetupWithExistingAccount(): void {
+    this.preferSignInAfterConfig = true;
+    this.continueFromWelcome();
+  }
+
+  isBackendSuggested(id: BackendChoiceId): boolean {
+    const tier = this.brainTier();
+    if (tier === 'hosted_babo') return id === 'babo_cloud';
+    if (tier === 'self_local') return id === 'local';
+    if (tier === 'byok_cloud') return id === 'babo_cloud';
+    return id === 'babo_cloud';
+  }
+
+  suggestBackendFromThinking(): void {
+    const tier = this.brainTier();
+    if (tier === 'hosted_babo' || tier === 'byok_cloud') {
+      this.selectBackendChoice('babo_cloud');
+    } else if (tier === 'self_local') {
+      this.selectBackendChoice('local');
+    }
+  }
+
+  private maybeAutoAdvanceFromPrepare(): void {
+    if (this.prepareAutoAdvanced || this.step() !== 1) return;
+    this.prepareAutoAdvanced = true;
+    setTimeout(() => {
+      if (this.setupStage() === 'ready' && this.step() === 1) {
+        void this.goToScan();
+      }
+    }, 1200);
+  }
+
+  isBrainSuggested(tier: CapabilityTier): boolean {
+    return tier === this.recommendedBrainTier;
+  }
+
+  async selectBrainCard(tier: CapabilityTier): Promise<void> {
+    const previous = this.brainTier();
+    this.showByokPanel.set(false);
+    this.brainUndoTier.set(null);
+    this.testResult.set(null);
+    this.brainTestedTier.set(null);
+    this.onBrainTierChange(tier);
+
+    if (tier === 'hosted_babo') {
+      if (this.auth.isAuthenticated()) {
+        await this.testBrain();
+      } else {
+        this.testResult.set({
+          ok: true,
+          message: 'Sign in on the next step to connect',
+          latency: 0,
+        });
+        this.brainTestedTier.set('hosted_babo');
+      }
+    } else if (tier === 'byok_cloud' && this.config.inferenceApiKey.trim()) {
+      await this.testBrain();
+    }
+
+    if (
+      this.isBrainSuggested(tier) &&
+      (this.testResult()?.ok || tier === 'hosted_babo')
+    ) {
+      this.brainUndoTier.set(previous);
+      this.toast.show(
+        tier === 'hosted_babo' ? 'Using Babo Cloud' : `Using ${this.brainCardTitle(tier)}`,
+        'info',
+        8000,
+      );
+    }
+  }
+
+  undoBrainSelection(): void {
+    const prev = this.brainUndoTier();
+    if (!prev) return;
+    this.brainUndoTier.set(null);
+    void this.selectBrainCard(prev);
+  }
+
+  brainCardTitle(tier: CapabilityTier): string {
+    return this.brainCards.find((c) => c.tier === tier)?.title ?? tier;
+  }
+
+  useOwnApiKey(): void {
+    this.showByokPanel.set(true);
+    this.onBrainTierChange('byok_cloud');
+  }
+
+  canContinueThinking(): boolean {
+    const tier = this.brainTier();
+    if (tier === 'hosted_babo') return true;
+    if (tier === 'byok_cloud') {
+      return !!this.config.inferenceApiKey.trim() && this.testResult()?.ok === true;
+    }
+    const url = stripInferenceV1Suffix(this.profile()?.inference.url ?? '');
+    if (!url) return false;
+    if (tier === 'self_lan' && url.includes('11434')) return false;
+    return this.testResult()?.ok === true;
+  }
+
+  brainTestShowsOnCard(tier: CapabilityTier): boolean {
+    return this.brainTier() === tier && this.brainTestedTier() === tier && !!this.testResult();
+  }
+
+  continueFromThinking(): void {
+    if (!this.canContinueThinking()) return;
+    this.nextStep();
+  }
+
+  openVoiceSheet(): void {
+    this.showVoiceSheet.set(true);
+  }
+
+  closeVoiceSheet(): void {
+    this.showVoiceSheet.set(false);
+  }
+
+  voiceSummary(): string {
+    const opt = this.voiceOptions.find((o) => o.tier === this.voiceTier());
+    return opt?.label ?? 'Off';
+  }
+
+  async goToScan(): Promise<void> {
+    if (!this.venvReady()) {
+      this.setupError.set('Wait for Python setup to finish before continuing.');
+      return;
+    }
+    this.goToStep(2);
+    await this.runDeviceScan();
+  }
+
+  async runDeviceScan(): Promise<void> {
+    this.scanLoading.set(true);
+    try {
+      const scan = await this.nls().capabilities.scanDevice();
+      this.scan.set({ ...scan, lan: [] });
+    } catch (err: any) {
+      this.setupError.set(err?.message || 'Scan failed');
+    } finally {
+      this.scanLoading.set(false);
+    }
+  }
+
+  async runLanProbe(): Promise<void> {
+    if (!this.lanHost.trim()) return;
+    this.lanProbing.set(true);
+    const secret = this.lanGpuSecret.trim();
+    try {
+      const full = (await this.nls().capabilities.probeLan(
+        this.lanHost.trim(),
+        secret,
+      )) as CapabilityScan;
+      const device = this.scan()?.device ?? full.device;
+      this.scan.set({ ...full, device });
+      if (
+        full.lan.some((s) => s.kind === 'inference' && s.healthy && s.port === 8000)
+      ) {
+        this.recommendedBrainTier = 'self_lan';
+      }
+      if (secret) {
+        this.config.gpuWorkerSecret = secret;
+        await this.nls().config.set({ gpuWorkerSecret: secret });
+      }
+    } finally {
+      this.lanProbing.set(false);
+    }
+  }
+
+  async applyRecommendationsAndContinue(): Promise<void> {
+    const s = this.scan();
+    if (!s) return;
+    const gpuSecret = this.lanGpuSecret.trim() || this.config.gpuWorkerSecret || '';
+    const recommended = await this.nls().capabilities.recommend(s, gpuSecret);
+    this.profile.set(recommended);
+    this.applyProfileToUi(recommended);
+    if (recommended.inference.tier === 'self_lan') {
+      this.showLanAdvanced.set(true);
+    }
+    this.nextStep();
+  }
+
+  applyProfileToUi(p: CapabilityProfile): void {
+    if (p.inference.tier === 'hosted_babo') {
+      p.inference.model = resolveBaboCloudModelId(p.inference.model);
+      this.config.inferenceModel = p.inference.model;
+    }
+    this.brainTier.set(p.inference.tier);
+    this.recommendedBrainTier = p.inference.tier;
+    this.voiceTier.set(p.transcribe.tier);
+    if (p.inference.url) {
+      p.inference.url = stripInferenceV1Suffix(p.inference.url);
+    }
+    this.cloudProviderId.set(matchCloudProvider(p.inference.url ?? ''));
+    const vcOn =
+      p.visualCortex.tier !== 'off' &&
+      (p.visualCortex.strategy ?? 'off') !== 'off';
+    this.ambientVisionOn.set(vcOn);
+    this.visualTier.set(vcOn ? p.visualCortex.tier : 'off');
+    this.codeSearchOn.set(p.embeddings.tier !== 'off');
+    this.syncInferenceLegacy();
+  }
+
+  selectCloudProvider(id: string): void {
+    const p = this.profile();
+    const prov = CLOUD_PROVIDERS.find((x) => x.id === id);
+    if (!p || !prov) return;
+    this.cloudProviderId.set(id);
+    p.inference.url = prov.baseUrl;
+    p.inference.model = prov.defaultModel;
+    this.syncInferenceLegacy();
+    this.profile.set({ ...p });
     this.testResult.set(null);
   }
 
-  async testInference(): Promise<void> {
+  onBrainTierChange(tier: CapabilityTier): void {
+    this.brainTier.set(tier);
+    const p = this.profile();
+    if (!p) return;
+    p.inference.tier = tier;
+    this.testResult.set(null);
+
+    if (tier === 'self_lan') {
+      const inf = this.scan()?.lan.find((x) => x.kind === 'inference' && x.healthy);
+      if (inf) {
+        p.inference.url = stripInferenceV1Suffix(inf.url);
+        p.inference.model = inf.modelIds?.[0] ?? p.inference.model;
+      } else {
+        const cur = stripInferenceV1Suffix(p.inference.url || '');
+        const looksLocalOllama = !cur || cur.includes('11434');
+        p.inference.url = looksLocalOllama
+          ? `http://${this.lanHost || '192.168.1.50'}:8000`
+          : cur;
+      }
+    } else if (tier === 'self_local') {
+      p.inference.url = 'http://127.0.0.1:11434';
+      p.inference.model = p.inference.model || 'llama3.2';
+    } else if (tier === 'byok_cloud') {
+      this.selectCloudProvider(this.cloudProviderId());
+    } else if (tier === 'hosted_babo') {
+      p.inference.url = '';
+      p.inference.model = resolveBaboCloudModelId(p.inference.model);
+      this.config.inferenceModel = p.inference.model;
+    }
+    this.syncInferenceLegacy();
+    this.profile.set({ ...p });
+  }
+
+  onVoiceTierChange(tier: CapabilityTier): void {
+    this.voiceTier.set(tier);
+    const p = this.profile();
+    if (!p) return;
+    p.transcribe.tier = tier;
+    if (tier === 'self_lan') {
+      const t = this.scan()?.lan.find((x) => x.kind === 'transcribe' && x.healthy);
+      if (t) p.transcribe.url = t.url;
+    }
+    this.profile.set({ ...p });
+  }
+
+  toggleAmbient(on: boolean): void {
+    this.ambientVisionOn.set(on);
+    const p = this.profile();
+    if (!p) return;
+    if (!on) {
+      p.visualCortex = { tier: 'off', strategy: 'off' };
+      this.visualTier.set('off');
+    } else {
+      const first = this.visualPlacementOptions().find((o) => !o.disabled);
+      if (first) {
+        this.setVisualPlacement(first.tier);
+      } else if (p.inference.tier === 'hosted_babo') {
+        this.setVisualHostedBabo();
+      } else if (this.hasLanVision()) {
+        this.setVisualLan();
+      } else if (this.canLocalVision()) {
+        this.setVisualLocal();
+      }
+    }
+    this.profile.set({ ...p });
+  }
+
+  toggleCodeSearch(on: boolean): void {
+    this.codeSearchOn.set(on);
+    const p = this.profile();
+    if (!p) return;
+    p.embeddings = on
+      ? { tier: 'self_local', reason: 'Semantic code search on this computer' }
+      : { tier: 'off', reason: 'Disabled' };
+    this.profile.set({ ...p });
+  }
+
+  setVisualLocal(): void {
+    const p = this.profile();
+    if (!p) return;
+    p.visualCortex = {
+      tier: 'self_local',
+      strategy: 'dedicated_vlm_local',
+      modelPreference: 'auto',
+    };
+    this.visualTier.set('self_local');
+    this.profile.set({ ...p });
+  }
+
+  setVisualLan(): void {
+    const p = this.profile();
+    if (!p) return;
+    const v = this.scan()?.lan.find((x) => x.kind === 'vision' && x.healthy);
+    p.visualCortex = {
+      tier: 'self_lan',
+      strategy: 'dedicated_vlm_lan',
+      url: v?.url ?? `http://${this.lanHost || '192.168.1.50'}:8443`,
+      secret: p.visualCortex.secret ?? this.config.gpuWorkerSecret,
+    };
+    this.visualTier.set('self_lan');
+    this.profile.set({ ...p });
+  }
+
+  canLocalVision(): boolean {
+    return (this.scan()?.device.vramGb ?? 0) >= 6;
+  }
+
+  hasLanVision(): boolean {
+    return !!this.scan()?.lan.some((x) => x.kind === 'vision' && x.healthy);
+  }
+
+  syncInferenceLegacy(): void {
+    const p = this.profile();
+    if (!p?.inference.url) return;
+    this.config.inferenceUrl = stripInferenceV1Suffix(p.inference.url);
+    if (p.inference.model) this.config.inferenceModel = p.inference.model;
+  }
+
+  async testBrain(): Promise<void> {
+    const p = this.profile();
+    if (!p) return;
+    let url = stripInferenceV1Suffix(p.inference.url || this.config.inferenceUrl);
+    if (p.inference.tier === 'hosted_babo' || p.inference.tier === 'byok_cloud') {
+      const base = this.config.nestjsUrl.replace(/\/+$/, '');
+      const apiBase = base.endsWith('/api') ? base : `${base}/api`;
+      url = `${apiBase}/inference`;
+    }
+    let authToken: string | undefined =
+      this.config.inferenceApiKey?.trim() || undefined;
+    if (p.inference.tier === 'hosted_babo' || p.inference.tier === 'byok_cloud') {
+      if (!authToken && this.auth.getAccessToken()) {
+        authToken = this.auth.getAccessToken() ?? undefined;
+      }
+      if (p.inference.tier === 'hosted_babo' && !authToken) {
+        this.testResult.set({
+          ok: false,
+          message: 'Sign in after setup to verify Babo Cloud',
+          latency: 0,
+        });
+        return;
+      }
+    }
+    if (!url) {
+      this.testResult.set({ ok: false, message: 'Enter a server address first', latency: 0 });
+      return;
+    }
     this.testing.set(true);
     this.testResult.set(null);
+    this.brainTestedTier.set(null);
     try {
-      const nls = (window as any).nls;
-      const result = await nls.config.testConnection(this.config.inferenceUrl);
+      const result = await this.nls().capabilities.testInference(url, authToken);
       this.testResult.set(result);
+      this.brainTestedTier.set(p.inference.tier);
+      if (result.ok && p) {
+        if (result.models?.length) {
+          p.inference.model = result.models[0];
+        }
+        p.inference.url = url;
+        this.syncInferenceLegacy();
+        this.profile.set({ ...p });
+      }
     } catch (err: any) {
       this.testResult.set({ ok: false, message: err?.message || 'Test failed', latency: 0 });
+      this.brainTestedTier.set(p.inference.tier);
     }
     this.testing.set(false);
   }
 
-  async saveConfigAndNext(): Promise<void> {
+  selectBackendChoice(id: BackendChoiceId): void {
+    this.backendChoice.set(id);
+    this.backendTestResult.set(null);
+    this.backendSaveError.set(null);
+    const choice = BACKEND_CHOICES.find((c) => c.id === id);
+    if (id !== 'custom' && choice?.url) {
+      this.config.nestjsUrl = normalizeNestjsUrl(choice.url);
+    }
+  }
+
+  setCustomBackendUrl(url: string): void {
+    this.config.nestjsUrl = normalizeNestjsUrl(url);
+    this.backendTestResult.set(null);
+    this.backendSaveError.set(null);
+  }
+
+  backendSummaryLabel(): string {
+    return backendDisplayLabel(this.config.nestjsUrl, this.backendChoice());
+  }
+
+  canContinueBackend(): boolean {
+    const url = normalizeNestjsUrl(this.config.nestjsUrl);
+    if (!url) return false;
+    if (this.backendChoice() === 'custom') {
+      try {
+        new URL(url);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  async testBackend(): Promise<void> {
+    const url = normalizeNestjsUrl(this.config.nestjsUrl);
+    if (!url) {
+      this.backendTestResult.set({
+        ok: false,
+        message: 'Enter a server address first',
+        latency: 0,
+      });
+      return;
+    }
+    this.backendTesting.set(true);
+    this.backendTestResult.set(null);
     try {
-      const nls = (window as any).nls;
-      await nls.config.set(this.config);
-    } catch {}
+      const result = await this.nls().backend.ping(url);
+      const ok = !!result.ok && isBackendReachableStatus(result.statusCode);
+      this.backendTestResult.set({
+        ok,
+        message: formatBackendReachabilityMessage(
+          ok,
+          result.latency,
+          result.statusCode,
+          result.message,
+        ),
+        latency: result.latency,
+      });
+    } catch (err: any) {
+      this.backendTestResult.set({
+        ok: false,
+        message: err?.message || 'Test failed',
+        latency: 0,
+      });
+    }
+    this.backendTesting.set(false);
+  }
+
+  async saveBackendPlacementAndContinue(): Promise<void> {
+    if (!this.venvReady()) {
+      this.backendSaveError.set(
+        'Python is still installing. Finish the prepare step first (or wait if you skipped ahead).',
+      );
+      return;
+    }
+    if (!this.canContinueBackend()) {
+      this.backendSaveError.set('Choose where your account lives, or enter a valid server URL.');
+      return;
+    }
+    this.config.nestjsUrl = normalizeNestjsUrl(this.config.nestjsUrl);
+    this.savingBackend.set(true);
+    this.backendSaveError.set(null);
+    try {
+      await this.nls().config.set({ nestjsUrl: this.config.nestjsUrl });
+      await this.api.whenReady();
+      this.nextStep();
+    } catch (err: any) {
+      this.backendSaveError.set(err?.error?.message || err?.message || 'Could not save server');
+    } finally {
+      this.savingBackend.set(false);
+    }
+  }
+
+  canContinueSignIn(): boolean {
+    if (this.auth.isAuthenticated()) return true;
+    return !!this.authEmail.trim() && !!this.authPassword;
+  }
+
+  async saveSignInAndContinue(): Promise<void> {
+    if (!this.venvReady()) {
+      this.authError.set('Finish installing Babo on this computer before signing in.');
+      return;
+    }
+    const url = normalizeNestjsUrl(this.config.nestjsUrl);
+    if (!url) {
+      this.authError.set('Choose an account server first (previous step).');
+      return;
+    }
+    this.savingBackend.set(true);
+    this.authError.set(null);
+    try {
+      await this.nls().config.set({ nestjsUrl: url });
+      await this.api.whenReady();
+      if (!this.auth.isAuthenticated()) {
+        if (!this.authEmail.trim() || !this.authPassword) {
+          this.authError.set('Enter your email and password, or create an account.');
+          return;
+        }
+        this.signingIn.set(true);
+        const tokens = await firstValueFrom(
+          this.auth.login(this.authEmail.trim(), this.authPassword),
+        );
+        this.auth.applyTokens(tokens, false);
+        this.signingIn.set(false);
+      }
+      await this.ensureBaboCloudAccess();
+      this.nextStep();
+    } catch (err: any) {
+      this.authError.set(err?.error?.message || err?.message || 'Could not sign in');
+    } finally {
+      this.savingBackend.set(false);
+      this.signingIn.set(false);
+    }
+  }
+
+  experienceRows(): ExpRow[] {
+    const p = this.profile();
+    if (!p) return [];
+    const brain =
+      p.inference.tier === 'off'
+        ? 'Not configured'
+        : p.inference.tier === 'hosted_babo'
+          ? 'Babo Cloud'
+          : p.inference.model || tierLabel(p.inference.tier);
+    const voice =
+      p.transcribe.tier === 'off' ? 'Off' : tierLabel(p.transcribe.tier);
+    const ambient = this.ambientVisionOn()
+      ? tierLabel(this.visualTier())
+      : 'Off';
+    const code = this.codeSearchOn() ? 'On' : 'Off';
+    const backend = this.backendSummaryLabel();
+    return [
+      { label: 'Thinking', value: brain, ok: p.inference.tier !== 'off' },
+      { label: 'Voice', value: voice, ok: p.transcribe.tier !== 'off' },
+      { label: 'Screen awareness', value: ambient, ok: this.ambientVisionOn() },
+      { label: 'Code search', value: code, ok: this.codeSearchOn() },
+      { label: 'Account & sync', value: backend, ok: !!normalizeNestjsUrl(this.config.nestjsUrl) },
+    ];
+  }
+
+  private profileForSave(): CapabilityProfile | null {
+    const p = this.profile();
+    if (!p) return null;
+    let next = { ...p };
+    if (p.inference.url) {
+      next.inference = {
+        ...p.inference,
+        url: stripInferenceV1Suffix(p.inference.url),
+      };
+    }
+    if (usesBaboCloudRelay(next)) {
+      next = applyBaboCloudPlacements(next, this.config.nestjsUrl);
+    }
+    return next;
+  }
+
+  async ensureBaboCloudAccess(): Promise<void> {
+    const p = this.profile();
+    if (!p || !usesBaboCloudRelay(p)) return;
+
+    this.provisioningCloud.set(true);
+    try {
+      if (p.inference.tier === 'hosted_babo') {
+        if (!this.config.inferenceApiKey?.startsWith('nlsk_')) {
+          const created = await firstValueFrom(
+            this.apiKeys.createKey('Babo Desktop', {
+              rateLimitRpm: 120,
+              scopes: ['inference', 'gpu'],
+            }),
+          );
+          if (created.key) {
+            this.config.inferenceApiKey = created.key;
+          }
+        }
+      }
+
+      const synced = applyBaboCloudPlacements(p, this.config.nestjsUrl);
+      this.profile.set(synced);
+      this.syncInferenceLegacy();
+      await this.nls().config.set({
+        nestjsUrl: this.config.nestjsUrl,
+        inferenceApiKey: this.config.inferenceApiKey,
+        inferenceUrl: this.config.inferenceUrl,
+        inferenceModel: this.config.inferenceModel,
+      });
+      await this.nls().capabilities.applyProfile(synced);
+
+      if (p.inference.tier === 'hosted_babo' && this.config.inferenceApiKey) {
+        await this.testBrain();
+      }
+    } finally {
+      this.provisioningCloud.set(false);
+    }
+  }
+
+  async saveCapabilitiesAndContinue(): Promise<void> {
+    const p = this.profileForSave();
+    if (!p) return;
+    this.savingCapabilities.set(true);
+    try {
+      this.profile.set(p);
+      this.syncInferenceLegacy();
+      await this.nls().config.set({
+        inferenceApiKey: this.config.inferenceApiKey,
+        inferenceUrl: this.config.inferenceUrl,
+        inferenceModel: this.config.inferenceModel,
+      });
+      await this.nls().capabilities.applyProfile(p);
+      if (this.shouldPrefetchLocalVision(p)) {
+        this.startVisionPrefetchInBackground();
+      }
+      this.suggestBackendFromThinking();
+      if (this.preferSignInAfterConfig) {
+        this.preferSignInAfterConfig = false;
+        this.goToStep(6);
+      } else {
+        this.nextStep();
+      }
+    } finally {
+      this.savingCapabilities.set(false);
+    }
+  }
+
+  canContinueName(): boolean {
+    return this.agentName.trim().length >= 2;
+  }
+
+  continueToNameStep(): void {
     this.nextStep();
+  }
+
+  async finish(): Promise<void> {
+    const name = this.agentName.trim();
+    if (name.length < 2) {
+      this.launchError.set('Choose a name with at least 2 characters.');
+      return;
+    }
+
+    try {
+      const check = await this.nls().setup.check();
+      this.venvReady.set(!!check.venvReady);
+      if (!check.venvReady) {
+        this.launchError.set(
+          'Python environment is not ready yet. Go back to the prepare step and wait for setup to complete.',
+        );
+        return;
+      }
+    } catch {
+      this.launchError.set('Could not verify Python setup. Try again from the prepare step.');
+      return;
+    }
+
+    this.launching.set(true);
+    this.launchError.set(null);
+    this.launchMessage.set('Saving configuration...');
+
+    try {
+      let p = this.profileForSave();
+      if (p && usesBaboCloudRelay(p)) {
+        p = applyBaboCloudPlacements(p, this.config.nestjsUrl);
+      }
+      await this.nls().config.set({
+        ...this.config,
+        capabilityProfile: p,
+        setupComplete: true,
+      });
+
+      if (p) {
+        await this.nls().capabilities.applyProfile(p);
+      }
+
+      this.launchMessage.set('Creating your agent...');
+      await this.api.whenReady();
+      const agent = await firstValueFrom(
+        this.api.createAgent({
+          name,
+          sovereignty: 'local',
+          genesisVersion: 'standard-v1',
+        }),
+      );
+
+      if (p?.inference.tier === 'hosted_babo') {
+        const scoped = await firstValueFrom(
+          this.apiKeys.createKey(name, {
+            agentId: agent.id,
+            rateLimitRpm: 120,
+            scopes: ['inference', 'gpu'],
+          }),
+        );
+        if (scoped.key) {
+          this.config.inferenceApiKey = scoped.key;
+          await this.nls().config.set({ inferenceApiKey: scoped.key });
+        }
+      }
+
+      this.launchMessage.set('Starting agent runtime...');
+      await this.nls().runtime.start();
+
+      this.day1Coach.schedule();
+      this.launchMessage.set('Opening Babo...');
+      await new Promise((r) => setTimeout(r, 400));
+      this.router.navigate(['/chat', agent.id]);
+    } catch (err: any) {
+      this.launching.set(false);
+      this.launchError.set(err?.message || 'Failed to finish setup.');
+    }
+  }
+
+  private ensureElapsedTimerForInstall(): void {
+    if (this.elapsedTimer) return;
+    this.startElapsedTimer();
   }
 
   private startElapsedTimer(): void {
@@ -921,27 +1316,19 @@ export class SetupComponent implements OnInit, OnDestroy {
       this.elapsedTimer = null;
     }
   }
+}
 
-  async finish(): Promise<void> {
-    this.launching.set(true);
-    this.launchError.set(null);
-    this.launchMessage.set('Saving configuration...');
-
-    try {
-      const nls = (window as any).nls;
-      await nls.config.set({ ...this.config, setupComplete: true });
-
-      this.launchMessage.set('Starting agent runtime...');
-      await nls.runtime.start();
-
-      this.launchMessage.set('Runtime is healthy — launching dashboard...');
-      await new Promise(r => setTimeout(r, 600));
-      this.router.navigate(['/dashboard']);
-    } catch (err: any) {
-      this.launching.set(false);
-      this.launchError.set(
-        err?.message || 'Failed to start agent runtime. Check Python environment and inference connection.',
-      );
-    }
+function tierLabel(tier: CapabilityTier): string {
+  switch (tier) {
+    case 'self_local':
+      return 'This computer';
+    case 'self_lan':
+      return 'My server';
+    case 'byok_cloud':
+      return 'Cloud';
+    case 'hosted_babo':
+      return 'Babo hosted';
+    default:
+      return 'Off';
   }
 }

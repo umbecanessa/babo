@@ -22,6 +22,8 @@ export class CloudUpstreamService {
   readonly visionBase: string;
   readonly embedBase: string;
   readonly cloudMode: boolean;
+  /** Babo-operated OpenRouter key for trial / resold inference (Railway secret). */
+  readonly platformOpenRouterKey: string;
 
   constructor(private config: ConfigService) {
     const inf =
@@ -56,6 +58,14 @@ export class CloudUpstreamService {
     ).replace(/\/+$/, '');
 
     this.cloudMode = config.get<string>('BABO_CLOUD_MODE') !== 'false';
+    this.platformOpenRouterKey =
+      config.get<string>('PLATFORM_OPENROUTER_API_KEY') ||
+      config.get<string>('BABO_OPENROUTER_API_KEY') ||
+      '';
+  }
+
+  isResoldInferenceConfigured(): boolean {
+    return this.platformOpenRouterKey.length > 0;
   }
 
   inferenceApiBase(): string {

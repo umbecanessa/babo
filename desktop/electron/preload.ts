@@ -11,6 +11,23 @@
 
 import { contextBridge, ipcRenderer } from 'electron';
 
+export interface BaboBootConfig {
+  nestjsUrl: string;
+  apiUrl: string;
+  runtimeUrl: string;
+  runtimePort: number;
+}
+
+function readBootConfig(): BaboBootConfig | null {
+  try {
+    return ipcRenderer.sendSync('config:boot') as BaboBootConfig;
+  } catch {
+    return null;
+  }
+}
+
+const bootConfig = readBootConfig();
+
 // ---------------------------------------------------------------------------
 // Valid event channels (main -> renderer)
 // ---------------------------------------------------------------------------
@@ -20,6 +37,7 @@ const VALID_CHANNELS = [
   'runtime:log',
   'setup:progress',
   'setup:log',
+  'vision:prefetch-progress',
   'permission:requested',
   'mcp:tool-discovered',
   'notification:clicked',
@@ -29,6 +47,7 @@ const VALID_CHANNELS = [
   'update:downloaded',
   'update:installing',
   'update:error',
+  'config:changed',
 ];
 
 // ---------------------------------------------------------------------------
@@ -38,6 +57,10 @@ const VALID_CHANNELS = [
 const nlsDesktopApi = {
   platform: process.platform,
   isDesktop: true,
+  /** Filled synchronously from %APPDATA%/babo-desktop/nls-config.json */
+  boot: bootConfig,
+  /** Re-read after setup saves nestjsUrl (boot snapshot can be stale until reload). */
+  getBoot: (): BaboBootConfig | null => readBootConfig(),
 
   getVersion: (): Promise<string> => ipcRenderer.invoke('app:version'),
 
@@ -68,6 +91,29 @@ const nlsDesktopApi = {
 
     reset: (): Promise<any> =>
       ipcRenderer.invoke('setup:reset'),
+  },
+
+  capabilities: {
+    scanDevice: (): Promise<any> =>
+      ipcRenderer.invoke('capabilities:scan-device'),
+
+    probeLan: (host: string, gpuWorkerSecret?: string): Promise<any> =>
+      ipcRenderer.invoke('capabilities:probe-lan', host, gpuWorkerSecret),
+
+    recommend: (scan: any, gpuWorkerSecret?: string): Promise<any> =>
+      ipcRenderer.invoke('capabilities:recommend', scan, gpuWorkerSecret),
+
+    testInference: (
+      url: string,
+      apiKey?: string,
+    ): Promise<{ ok: boolean; message: string; latency: number; models: string[] }> =>
+      ipcRenderer.invoke('capabilities:test-inference', url, apiKey),
+
+    prefetchVision: (): Promise<any> =>
+      ipcRenderer.invoke('capabilities:prefetch-vision'),
+
+    applyProfile: (profile: any): Promise<any> =>
+      ipcRenderer.invoke('capabilities:apply-profile', profile),
   },
 
   // ─── Runtime (Agent runtime process) ──────────────────────────
@@ -101,8 +147,22 @@ const nlsDesktopApi = {
   getUrls: (): Promise<{
     runtimeUrl: string;
     nestjsUrl: string;
+    apiUrl: string;
     wsUrl: string;
   }> => ipcRenderer.invoke('urls:get'),
+
+  backend: {
+    ping: (
+      nestjsUrl?: string,
+    ): Promise<{
+      ok: boolean;
+      statusCode: number;
+      latency: number;
+      message: string;
+      apiBase: string;
+      nestjsUrl: string;
+    }> => ipcRenderer.invoke('backend:ping', nestjsUrl),
+  },
 
   // ─── File System (permission-gated) ───────────────────────────
 
@@ -116,6 +176,9 @@ const nlsDesktopApi = {
     dirPath: string,
   ): Promise<Array<{ name: string; isDirectory: boolean; size: number }>> =>
     ipcRenderer.invoke('fs:readDir', dirPath),
+
+  stat: (filePath: string): Promise<{ isFile: boolean; isDirectory: boolean }> =>
+    ipcRenderer.invoke('fs:stat', filePath),
 
   showOpenDialog: (
     options: Record<string, unknown>,
@@ -157,9 +220,29 @@ const nlsDesktopApi = {
 
   // ─── Permissions ──────────────────────────────────────────────
 
+  permissions: {
+    getAll: (): Promise<Record<string, boolean>> =>
+      ipcRenderer.invoke('permissions:get'),
+
+    getProfiles: (): Promise<
+      Array<{ name: string; description: string; grants: Record<string, boolean> }>
+    > => ipcRenderer.invoke('permissions:get-profiles'),
+
+    applyProfile: (profileName: string): Promise<Record<string, boolean>> =>
+      ipcRenderer.invoke('permissions:apply-profile', profileName),
+
+    reset: (): Promise<Record<string, boolean>> =>
+      ipcRenderer.invoke('permissions:reset'),
+
+    request: (permission: string, reason: string): Promise<boolean> =>
+      ipcRenderer.invoke('permissions:request', permission, reason),
+  },
+
+  /** @deprecated use permissions.getAll */
   getPermissions: (): Promise<Record<string, boolean>> =>
     ipcRenderer.invoke('permissions:get'),
 
+  /** @deprecated use permissions.request */
   requestPermission: (permission: string, reason: string): Promise<boolean> =>
     ipcRenderer.invoke('permissions:request', permission, reason),
 

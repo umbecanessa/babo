@@ -4,7 +4,9 @@ import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { AuthService } from '../../../core/services/auth.service';
-import { environment } from '../../../../environments/environment';
+import { ApiService } from '../../../core/services/api.service';
+import { checkAuthServer } from '../auth-server.util';
+import { ThemeService } from '../../../core/services/theme.service';
 
 @Component({
   selector: 'app-register',
@@ -20,17 +22,20 @@ export class RegisterComponent implements OnInit, OnDestroy {
   error = signal('');
   loading = signal(false);
   serverStatus = signal<'checking' | 'online' | 'offline'>('checking');
+  serverMessage = signal('');
 
-  particleCount = Array.from({ length: 20 }, (_, i) => i);
   private pollTimer: ReturnType<typeof setTimeout> | null = null;
   private pollInterval = 3000;
 
   constructor(
     private auth: AuthService,
     private http: HttpClient,
+    private api: ApiService,
+    public theme: ThemeService,
   ) {}
 
-  ngOnInit(): void {
+  async ngOnInit(): Promise<void> {
+    await this.api.whenReady();
     this.checkServer();
   }
 
@@ -38,27 +43,23 @@ export class RegisterComponent implements OnInit, OnDestroy {
     this.stopPolling();
   }
 
-  particleX(i: number): string {
-    return ((i * 37 + 13) % 100) + '%';
-  }
-
-  particleSize(i: number): string {
-    return (2 + (i % 3)) + 'px';
-  }
-
   checkServer(): void {
     this.serverStatus.set('checking');
-    this.http.get(`${environment.apiUrl}/auth/login`, { observe: 'response' }).subscribe({
-      next: () => this.onServerOnline(),
-      error: (err) => {
-        if (err.status > 0) {
+    void checkAuthServer(this.api, this.http)
+      .then((result) => {
+        this.serverMessage.set(result.message);
+        if (result.ok) {
           this.onServerOnline();
         } else {
           this.serverStatus.set('offline');
           this.startPolling();
         }
-      },
-    });
+      })
+      .catch(() => {
+        this.serverMessage.set('Could not reach server');
+        this.serverStatus.set('offline');
+        this.startPolling();
+      });
   }
 
   private onServerOnline(): void {
@@ -78,7 +79,7 @@ export class RegisterComponent implements OnInit, OnDestroy {
     }
   }
 
-  onSubmit() {
+  async onSubmit() {
     if (this.serverStatus() !== 'online') {
       this.error.set('Waiting for server to start...');
       return;
@@ -86,6 +87,8 @@ export class RegisterComponent implements OnInit, OnDestroy {
 
     this.loading.set(true);
     this.error.set('');
+
+    await this.api.whenReady();
 
     this.auth.register(this.email, this.password, this.displayName || undefined).subscribe({
       next: (tokens) => {

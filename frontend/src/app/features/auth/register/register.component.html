@@ -1,65 +1,94 @@
-<div class="login-container">
-  <!-- Ambient background -->
-  <div class="ambient-bg">
+<div class="auth-page">
+  <button
+    type="button"
+    class="auth-theme-toggle theme-toggle-btn"
+    [title]="theme.themeCycleTooltip()"
+    (click)="theme.cycle()"
+    aria-label="Cycle theme"
+  >
+    @if (theme.effective() === 'dark') {
+      <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
+        <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
+      </svg>
+    } @else {
+      <svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
+        <path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clip-rule="evenodd"/>
+      </svg>
+    }
+    @if (theme.mode() === 'system') {
+      <span class="theme-toggle-badge" aria-hidden="true">auto</span>
+    }
+  </button>
+
+  <div class="ambient">
     <div class="glow glow-1"></div>
     <div class="glow glow-2"></div>
-    <div class="glow glow-3"></div>
-    <div class="particles">
-      @for (i of particleCount; track i) {
-        <div class="particle" [style.--delay]="i * 0.7 + 's'" [style.--x]="particleX(i)" [style.--size]="particleSize(i)"></div>
-      }
-    </div>
   </div>
 
-  <!-- Register card -->
-  <div class="login-card animate-fade-in">
-    <div class="logo-wrapper">
-      <div class="logo-glow"></div>
-      <img src="assets/images/babo.png" alt="Babo" class="login-logo" />
+  <div class="auth-card animate-fade-in">
+    <div class="auth-header">
+      <img src="assets/images/babo.png" alt="Babo" class="auth-logo" />
     </div>
-    <h1 class="title">Join Babo</h1>
-    <p class="subtitle">Create your neural identity</p>
+    <h1>Create account</h1>
+    <p class="lead">Register on your Babo server — same place you sign in from the app.</p>
 
-    <div class="status-tag" [class]="serverStatus()">
-      <span class="status-dot"></span>
+    <div class="server-pill" [class]="serverStatus()">
+      <span class="dot"></span>
       @if (serverStatus() === 'checking') {
-        <span>Connecting...</span>
+        <span>Checking server…</span>
       } @else if (serverStatus() === 'offline') {
-        <span>Waiting for server</span>
+        <span>{{ serverMessage() || 'Server unreachable' }}</span>
       } @else {
-        <span>Connected</span>
+        <span>{{ serverMessage() || 'Server reachable' }}</span>
       }
     </div>
 
-    <form (ngSubmit)="onSubmit()" class="form">
+    <form (ngSubmit)="onSubmit()">
       @if (error()) {
-        <div class="error-msg">{{ error() }}</div>
+        <div class="error-badge">{{ error() }}</div>
       }
 
-      <div class="field">
-        <label>Display Name</label>
-        <input type="text" [(ngModel)]="displayName" name="displayName"
-               placeholder="Your name (optional)" autocomplete="name" />
+      <div class="form-group">
+        <label>Display name</label>
+        <input
+          type="text"
+          [(ngModel)]="displayName"
+          name="displayName"
+          placeholder="Optional"
+          autocomplete="name"
+        />
       </div>
 
-      <div class="field">
+      <div class="form-group">
         <label>Email</label>
-        <input type="email" [(ngModel)]="email" name="email" required
-               placeholder="you@example.com" autocomplete="email" />
+        <input
+          type="email"
+          [(ngModel)]="email"
+          name="email"
+          required
+          placeholder="you@example.com"
+          autocomplete="email"
+        />
       </div>
 
-      <div class="field">
+      <div class="form-group">
         <label>Password</label>
-        <input type="password" [(ngModel)]="password" name="password" required minlength="8"
-               placeholder="Minimum 8 characters" autocomplete="new-password" />
+        <input
+          type="password"
+          [(ngModel)]="password"
+          name="password"
+          required
+          minlength="8"
+          placeholder="At least 8 characters"
+          autocomplete="new-password"
+        />
       </div>
 
-      <button type="submit" [disabled]="loading() || serverStatus() !== 'online'" class="submit-btn">
-        <span class="btn-glow"></span>
+      <button type="submit" class="action-btn" [disabled]="loading() || serverStatus() !== 'online'">
         @if (serverStatus() !== 'online') {
-          Waiting for server...
+          Waiting for server…
         } @else {
-          {{ loading() ? 'Creating...' : 'Create account' }}
+          {{ loading() ? 'Creating…' : 'Create account' }}
         }
       </button>
 

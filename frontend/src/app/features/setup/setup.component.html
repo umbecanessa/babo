@@ -1,0 +1,624 @@
+<div class="setup-page">
+  <div class="ambient">
+    <div class="glow glow-1"></div>
+    <div class="glow glow-2"></div>
+  </div>
+
+  <div
+    class="setup-card animate-fade-in"
+    [class.wide]="step() >= 2"
+    [class.welcome]="step() === 0"
+  >
+    @if (step() > 0) {
+      <div class="setup-header compact">
+        <img src="assets/images/babo.png" alt="Babo" class="setup-logo" />
+      </div>
+    }
+
+    @if (visionPrefetchActive()) {
+      <div class="vision-prefetch-banner" role="status">
+        <span class="vision-prefetch-spinner" aria-hidden="true"></span>
+        <span>{{ visionPrefetchMessage() || 'Preparing screen awareness…' }}</span>
+        <span class="vision-prefetch-hint">You can keep going — setup continues in the background.</span>
+      </div>
+    }
+
+    @if (showDecisionDots()) {
+      <div class="steps compact decision-dots">
+        @for (s of decisionSteps; track s.id; let i = $index) {
+          <div
+            class="step"
+            [class.active]="decisionStepIndex() === i"
+            [class.done]="decisionStepIndex() > i"
+          >
+            <span class="step-num">{{ decisionStepIndex() > i ? '✓' : i + 1 }}</span>
+            <span class="step-label">{{ s.label }}</span>
+          </div>
+        }
+      </div>
+    }
+
+    <!-- 0 · Welcome -->
+    @if (step() === 0) {
+      <div class="step-shell welcome-shell">
+        <div class="step-body center welcome-body">
+          <img src="assets/images/babo.png" alt="Babo" class="welcome-logo" />
+          <h1 class="welcome-title">{{ returningUser() ? 'Welcome back' : 'Welcome to Babo' }}</h1>
+          <p class="welcome-lead">Your agent runs on this {{ platform.isElectron ? 'computer' : 'device' }}.</p>
+          <button type="button" class="action-btn full" (click)="continueFromWelcome()">Continue</button>
+          <button type="button" class="link-btn center" (click)="beginSetupWithExistingAccount()">
+            I already have an account
+          </button>
+          <p class="small-muted welcome-account-hint">
+            Install Babo on this computer first. You’ll configure thinking and features, then sign in.
+          </p>
+        </div>
+      </div>
+    }
+
+    <!-- 1 · Prepare -->
+    @if (step() === 1) {
+      <div class="step-shell">
+        <div class="step-body center">
+          <h2>Setting up</h2>
+          <p class="lead">Installing what Babo needs on this computer.</p>
+
+          @if (setupStage() === 'idle') {
+            <button class="action-btn" type="button" (click)="startSetup()">Try again</button>
+          }
+
+          @if (setupStage() === 'checking' || setupStage() === 'creating-venv' || setupStage() === 'installing') {
+            <div class="progress-ring-wrap">
+              <div class="progress-ring" [style.--p]="setupProgress() + '%'">
+                <span class="ring-label">{{ setupProgress() }}%</span>
+              </div>
+              <p class="progress-text prepare-status">{{ setupMessage() }}</p>
+              <span class="elapsed-time">{{ elapsedTime() }}</span>
+            </div>
+            <button class="details-toggle" type="button" (click)="showDetails.set(!showDetails())">
+              <span class="chevron" [class.open]="showDetails()">&#9662;</span>
+              {{ showDetails() ? 'Hide log' : 'Show log' }}
+            </button>
+            @if (showDetails()) {
+              <div class="log-area" #logArea>
+                @for (line of logLines(); track $index) {
+                  <div class="log-line" [class.stderr]="line.level === 'stderr'">{{ line.message }}</div>
+                }
+              </div>
+            }
+          }
+
+          @if (setupStage() === 'ready') {
+            <div class="success-check">✓</div>
+            <p class="hint-ok">Ready</p>
+          }
+          @if (setupStage() === 'error') {
+            <div class="error-badge">{{ setupError() }}</div>
+            <button class="action-btn secondary" type="button" (click)="retrySetup()">Try again</button>
+          }
+        </div>
+        @if (setupStage() === 'ready') {
+          <div class="step-footer">
+            <button class="action-btn full" type="button" (click)="goToScan()">Continue</button>
+          </div>
+        }
+      </div>
+    }
+
+    <!-- 2 · This device -->
+    @if (step() === 2) {
+      <div class="step-shell">
+        <div class="step-body">
+          <h2>This device</h2>
+          <p class="lead">{{ deviceTagline() }}</p>
+
+          @if (scanLoading()) {
+            <div class="progress-area">
+              <div class="progress-bar"><div class="progress-fill indeterminate"></div></div>
+              <p class="progress-text">Checking hardware…</p>
+            </div>
+          } @else if (scan()) {
+            <div class="device-panel">
+              <div class="device-stat">
+                <span class="stat-label">GPU</span>
+                <span class="stat-value">{{ scan()!.device.gpuName }}</span>
+              </div>
+              <div class="device-stat">
+                <span class="stat-label">Memory</span>
+                <span class="stat-value">{{ scan()!.device.ramGb }} GB</span>
+              </div>
+              <div class="device-stat">
+                <span class="stat-label">Local vision</span>
+                <span class="stat-value">
+                  <span class="pill" [class.ok]="localVisionReady()">
+                    {{ localVisionReady() ? 'Ready' : 'Limited' }}
+                  </span>
+                </span>
+              </div>
+            </div>
+            <button type="button" class="link-btn" (click)="showLanSheet.set(true)">
+              I have a server on my network
+            </button>
+          }
+        </div>
+        @if (scan() && !scanLoading()) {
+          @if (!venvReady()) {
+            <p class="small-muted center">Still installing Python dependencies — wait for the prepare step to finish.</p>
+          }
+          <div class="step-footer split">
+            <button type="button" class="icon-back" (click)="prevStep()" aria-label="Back">‹</button>
+            <button
+              class="action-btn"
+              type="button"
+              (click)="applyRecommendationsAndContinue()"
+              [disabled]="!venvReady()"
+            >Continue</button>
+          </div>
+        }
+      </div>
+    }
+
+    <!-- 3 · How Babo thinks -->
+    @if (step() === 3 && !profile()) {
+      <div class="step-shell">
+        <div class="step-body center">
+          <p class="lead">Finish the device step first so we can recommend a setup.</p>
+          <button type="button" class="action-btn" (click)="goToScan()">Go to device scan</button>
+        </div>
+      </div>
+    }
+    @if (step() === 3 && profile()) {
+      <div class="step-shell">
+        <div class="step-body">
+          <h2>How should Babo think?</h2>
+          <p class="lead">
+            Where chat runs. Your account and agents come later — after optional features.
+            @if (lanInferenceFound()) {
+              We found a chat server on your network — <strong>My server</strong> is suggested.
+            }
+          </p>
+
+          <div class="choice-cards">
+            @for (card of brainCards; track card.tier) {
+              <button
+                type="button"
+                class="choice-card"
+                [class.active]="brainTier() === card.tier || (card.tier === 'hosted_babo' && brainTier() === 'byok_cloud')"
+                [class.suggested]="isBrainSuggested(card.tier)"
+                (click)="selectBrainCard(card.tier)"
+              >
+                <span class="card-glyph">{{ card.glyph }}</span>
+                <span class="card-body">
+                  <span class="card-title">
+                    {{ card.title }}
+                    @if (isBrainSuggested(card.tier)) {
+                      <span class="suggested-pill">Suggested</span>
+                    }
+                  </span>
+                  <span class="card-sub">{{ card.subtitle }}</span>
+                  @if (brainTestShowsOnCard(card.tier)) {
+                    <span class="card-test" [class.ok]="testResult()!.ok" [class.fail]="!testResult()!.ok">
+                      {{ brainCardTestLine(card.tier) }}
+                    </span>
+                  }
+                </span>
+              </button>
+            }
+          </div>
+
+          @if (brainUndoTier()) {
+            <button type="button" class="link-btn undo-link" (click)="undoBrainSelection()">
+              Undo — use {{ brainCardTitle(brainUndoTier()!) }} instead
+            </button>
+          }
+
+          @if (brainTier() === 'hosted_babo') {
+            <div class="sheet-panel inline connect-panel">
+              <p class="panel-label">Chat model (Babo Cloud)</p>
+              <p class="panel-hint">
+                Routed through api.babo.agency after sign-in. Add provider API keys in Settings if prompted.
+              </p>
+              <div class="chip-row providers">
+                @for (m of baboCloudModels; track m.id) {
+                  <button
+                    type="button"
+                    class="chip"
+                    [class.active]="baboCloudModelActive(m.id)"
+                    (click)="selectBaboCloudModel(m.id)"
+                  >{{ m.label }}</button>
+                }
+              </div>
+            </div>
+            <button type="button" class="link-btn" (click)="useOwnApiKey()">Use API key on this computer only</button>
+          }
+
+          @if (brainTier() === 'hosted_babo' || brainTier() === 'byok_cloud') {
+            @if (brainTier() === 'byok_cloud') {
+              <button type="button" class="link-btn" (click)="selectBrainCard('hosted_babo')">Use Babo Cloud instead</button>
+            }
+          }
+
+          @if (showByokPanel() || brainTier() === 'byok_cloud') {
+            <div class="sheet-panel inline connect-panel">
+              <p class="panel-label">Provider</p>
+              <div class="chip-row providers">
+                @for (p of cloudProviders; track p.id) {
+                  <button
+                    type="button"
+                    class="chip"
+                    [class.active]="cloudProviderId() === p.id"
+                    (click)="selectCloudProvider(p.id)"
+                  >{{ p.name }}</button>
+                }
+              </div>
+              <div class="form-group panel-field">
+                <label>API key</label>
+                <input type="password" [(ngModel)]="config.inferenceApiKey" placeholder="Paste your key" />
+              </div>
+              <button class="action-btn secondary full" type="button" (click)="testBrain()" [disabled]="testing()">
+                {{ testing() ? 'Testing…' : 'Test connection' }}
+              </button>
+            </div>
+          }
+
+          @if (brainTier() === 'self_local' || brainTier() === 'self_lan') {
+            <div class="sheet-panel inline connect-panel">
+              <div class="form-group panel-field">
+                <label>{{ brainTier() === 'self_local' ? 'Ollama URL' : 'Server address' }}</label>
+                <input
+                  type="text"
+                  [ngModel]="brainServerUrl()"
+                  (ngModelChange)="onBrainServerUrlEdit($event)"
+                  [placeholder]="brainTier() === 'self_local' ? 'http://127.0.0.1:11434' : 'http://192.168.1.50:8000'"
+                />
+              </div>
+              <p class="panel-hint">
+                @if (brainTier() === 'self_local') {
+                  Start Ollama on this PC, then test the connection.
+                } @else {
+                  Use your vLLM or OpenAI-compatible server (port 8000), not Ollama’s 11434.
+                }
+              </p>
+              <button class="action-btn secondary full" type="button" (click)="testBrain()" [disabled]="testing()">
+                {{ testing() ? 'Testing…' : 'Test connection' }}
+              </button>
+            </div>
+          }
+        </div>
+        <div class="step-footer split">
+          <button type="button" class="icon-back" (click)="prevStep()" aria-label="Back">‹</button>
+          <button
+            class="action-btn"
+            type="button"
+            (click)="continueFromThinking()"
+            [disabled]="!canContinueThinking()"
+          >Continue</button>
+        </div>
+      </div>
+    }
+
+    <!-- 4 · Extras -->
+    @if (step() === 4 && profile()) {
+      <div class="step-shell">
+        <div class="step-body">
+          <h2>Optional features</h2>
+          <p class="lead">You can change these anytime in Settings.</p>
+
+          <div class="ios-row">
+            <div class="ios-row-text">
+              <strong>Screen awareness</strong>
+              <span>Background view of your desktop</span>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" [checked]="ambientVisionOn()" (change)="toggleAmbient($any($event.target).checked)" />
+              <span></span>
+            </label>
+          </div>
+          @if (ambientVisionOn()) {
+            <div class="segmented visual-segmented">
+              @for (opt of visualPlacementOptions(); track opt.tier) {
+                <button
+                  type="button"
+                  [class.active]="visualTier() === opt.tier"
+                  [disabled]="opt.disabled"
+                  (click)="setVisualPlacement(opt.tier)"
+                >{{ opt.label }}</button>
+              }
+            </div>
+          }
+
+          <div class="ios-row">
+            <div class="ios-row-text">
+              <strong>Code search</strong>
+              <span>Find code by meaning</span>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" [checked]="codeSearchOn()" (change)="toggleCodeSearch($any($event.target).checked)" />
+              <span></span>
+            </label>
+          </div>
+
+          <button type="button" class="ios-row tap-row" (click)="openVoiceSheet()">
+            <div class="ios-row-text">
+              <strong>Voice input</strong>
+              <span>{{ voiceSummary() }}</span>
+            </div>
+            <span class="chevron-right">›</span>
+          </button>
+        </div>
+        <div class="step-footer split">
+          <button type="button" class="icon-back" (click)="prevStep()" aria-label="Back">‹</button>
+          <button class="action-btn" type="button" (click)="saveCapabilitiesAndContinue()" [disabled]="savingCapabilities()">
+            {{ savingCapabilities() ? 'Saving preferences…' : 'Continue' }}
+          </button>
+        </div>
+      </div>
+    }
+
+    <!-- 5 · Account server (NestJS — not where chat runs) -->
+    @if (step() === 5) {
+      <div class="step-shell">
+        <div class="step-body">
+          <h2>Where your account lives</h2>
+          <p class="lead">{{ placementStepLead() }}</p>
+          <p class="small-muted account-split">
+            Chat runs on <strong>{{ inferenceRunLocation() }}</strong>
+          </p>
+
+          <div class="choice-cards backend-cards">
+            @for (opt of backendChoices; track opt.id) {
+              <button
+                type="button"
+                class="choice-card compact"
+                [class.active]="backendChoice() === opt.id"
+                [class.suggested]="isBackendSuggested(opt.id)"
+                (click)="selectBackendChoice(opt.id)"
+              >
+                <span class="card-body">
+                  <span class="card-title">
+                    {{ opt.shortLabel }}
+                    @if (isBackendSuggested(opt.id)) {
+                      <span class="suggested-pill">Suggested</span>
+                    }
+                  </span>
+                  <span class="card-sub">{{ opt.description }}</span>
+                </span>
+              </button>
+            }
+          </div>
+
+          @if (backendChoice() === 'custom') {
+            <div class="form-group">
+              <label>NestJS server URL</label>
+              <input
+                type="text"
+                [ngModel]="config.nestjsUrl"
+                (ngModelChange)="setCustomBackendUrl($event)"
+                placeholder="https://your-server.example"
+              />
+            </div>
+          }
+
+          <div class="connection-test backend-connection-test">
+            <button
+              type="button"
+              class="action-btn secondary small"
+              (click)="testBackend()"
+              [disabled]="backendTesting() || !canContinueBackend()"
+            >
+              {{ backendTesting() ? 'Testing…' : 'Test connection' }}
+            </button>
+            @if (backendTestResult()) {
+              <span
+                class="test-result"
+                [class.ok]="backendTestResult()!.ok"
+                [class.fail]="!backendTestResult()!.ok"
+              >
+                {{ backendTestResult()!.message }}
+              </span>
+            } @else {
+              <span class="test-result muted">Optional — verifies api.babo.agency is reachable</span>
+            }
+          </div>
+
+          @if (backendSaveError()) {
+            <div class="error-badge inline">{{ backendSaveError() }}</div>
+          }
+
+          @if (!venvReady()) {
+            <p class="small-muted center">Finish installing Babo on this computer (prepare step) before continuing.</p>
+          }
+        </div>
+        <div class="step-footer split">
+          <button type="button" class="icon-back" (click)="prevStep()" aria-label="Back">‹</button>
+          <button
+            class="action-btn"
+            type="button"
+            (click)="saveBackendPlacementAndContinue()"
+            [disabled]="savingBackend() || !canContinueBackend() || !venvReady()"
+          >
+            {{ savingBackend() ? 'Saving…' : 'Continue' }}
+          </button>
+        </div>
+      </div>
+    }
+
+    <!-- 6 · Sign in -->
+    @if (step() === 6) {
+      <div class="step-shell">
+        <div class="step-body">
+          <h2>Sign in</h2>
+          <p class="lead">{{ signInStepLead() }}</p>
+          <p class="small-muted account-split">
+            Server: <strong>{{ backendSummaryLabel() }}</strong>
+            <button type="button" class="link-btn inline-link" (click)="goToStep(5)">Change</button>
+          </p>
+
+          @if (!auth.isAuthenticated()) {
+            <div class="form-group">
+              <label>Email</label>
+              <input type="email" [(ngModel)]="authEmail" autocomplete="email" />
+            </div>
+            <div class="form-group">
+              <label>Password</label>
+              <input type="password" [(ngModel)]="authPassword" autocomplete="current-password" />
+            </div>
+            <p class="small-muted">
+              New here?
+              <a routerLink="/auth/register" class="text-link">Create account</a>
+              — use the same server you chose above.
+            </p>
+          } @else {
+            <p class="hint-ok">Signed in — you're good to go.</p>
+          }
+
+          @if (authError()) {
+            <div class="error-badge inline">{{ authError() }}</div>
+          }
+
+          @if (provisioningCloud()) {
+            <p class="progress-text">Connecting to Babo Cloud…</p>
+          }
+        </div>
+        <div class="step-footer split">
+          <button type="button" class="icon-back" (click)="prevStep()" aria-label="Back">‹</button>
+          <button
+            class="action-btn"
+            type="button"
+            (click)="saveSignInAndContinue()"
+            [disabled]="savingBackend() || signingIn() || provisioningCloud() || !canContinueSignIn() || !venvReady()"
+          >
+            {{ signingIn() || savingBackend() ? 'Signing in…' : (auth.isAuthenticated() ? 'Continue' : 'Sign in') }}
+          </button>
+        </div>
+      </div>
+    }
+
+    <!-- 7 · Ready summary -->
+    @if (step() === 7) {
+      <div class="step-shell">
+        <div class="step-body center">
+          <div class="success-check large">✓</div>
+          <h2>You're ready</h2>
+          <ul class="ready-summary">
+            @for (row of readySummary(); track row.label) {
+              <li>
+                <span class="ready-icon">{{ row.icon }}</span>
+                <span class="ready-label">{{ row.label }}</span>
+                <span class="ready-value">{{ row.value }}</span>
+              </li>
+            }
+          </ul>
+          <p class="small-muted">Change anytime in Settings.</p>
+        </div>
+        <div class="step-footer">
+          <button class="action-btn launch full" type="button" (click)="continueToNameStep()">Continue</button>
+        </div>
+      </div>
+    }
+
+    <!-- 8 · Name your agent -->
+    @if (step() === 8) {
+      <div class="step-shell">
+        <div class="step-body center">
+          <h2>Name your agent</h2>
+          <p class="lead">This is how Babo will appear in your workspace.</p>
+          <div class="form-group name-field">
+            <input
+              type="text"
+              [(ngModel)]="agentName"
+              placeholder="e.g. Nova"
+              maxlength="64"
+              autocomplete="off"
+            />
+          </div>
+          @if (launching()) {
+            <div class="progress-area">
+              <div class="progress-bar"><div class="progress-fill indeterminate"></div></div>
+              <p class="progress-text">{{ launchMessage() }}</p>
+            </div>
+          } @else if (launchError()) {
+            <div class="error-badge">{{ launchError() }}</div>
+          }
+        </div>
+        <div class="step-footer split">
+          <button type="button" class="icon-back" (click)="prevStep()" aria-label="Back" [disabled]="launching()">‹</button>
+          <button
+            class="action-btn launch"
+            type="button"
+            (click)="finish()"
+            [disabled]="!canContinueName() || launching()"
+          >Open Babo</button>
+        </div>
+      </div>
+    }
+  </div>
+
+  <!-- LAN sheet -->
+  @if (showLanSheet()) {
+    <div class="sheet-backdrop" (click)="showLanSheet.set(false)">
+      <div class="sheet sheet-lan" (click)="$event.stopPropagation()">
+        <h3>Network server</h3>
+        <p class="small-muted sheet-lead">vLLM, Whisper, or vision on your LAN.</p>
+        <div class="form-group sheet-field">
+          <label>Host</label>
+          <input type="text" [(ngModel)]="lanHost" placeholder="192.168.68.96" />
+        </div>
+        <div class="form-group sheet-field">
+          <label>GPU worker secret</label>
+          <input
+            type="password"
+            [(ngModel)]="lanGpuSecret"
+            placeholder="Same as GX10 / Babo Cloud GPU_UPSTREAM_SECRET"
+            autocomplete="off"
+          />
+          <span class="hint">Required for vision on port 8443 when the server uses BABO_VISION_SECRET.</span>
+        </div>
+        <div class="sheet-actions">
+          <button
+            class="action-btn secondary full"
+            type="button"
+            (click)="runLanProbe()"
+            [disabled]="lanProbing() || !lanHost.trim()"
+          >
+            {{ lanProbing() ? 'Looking…' : 'Find services' }}
+          </button>
+          @if (lanServices().length) {
+            <ul class="lan-list">
+              @for (s of lanServices(); track s.port + s.kind) {
+                <li [class.ok]="s.healthy" [class.fail]="!s.healthy">
+                  {{ s.healthy ? '✓' : '—' }}
+                  {{ lanKindLabel(s.kind, s.port) }} · {{ s.port }}
+                  @if (!s.healthy && s.detail) {
+                    <span class="lan-detail"> — {{ s.detail }}</span>
+                  }
+                </li>
+              }
+            </ul>
+          }
+          <button class="action-btn full" type="button" (click)="showLanSheet.set(false)">Done</button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- Voice sheet -->
+  @if (showVoiceSheet()) {
+    <div class="sheet-backdrop" (click)="closeVoiceSheet()">
+      <div class="sheet sheet-voice" (click)="$event.stopPropagation()">
+        <h3>Voice input</h3>
+        <div class="chip-row voice-chips">
+          @for (opt of voiceOptions; track opt.tier) {
+            <button
+              type="button"
+              class="chip"
+              [class.active]="voiceTier() === opt.tier"
+              (click)="onVoiceTierChange(opt.tier)"
+            >{{ opt.shortLabel }}</button>
+          }
+        </div>
+        <button class="action-btn full" type="button" (click)="closeVoiceSheet()">Done</button>
+      </div>
+    </div>
+  }
+</div>
