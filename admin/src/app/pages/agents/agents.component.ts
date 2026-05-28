@@ -1,18 +1,20 @@
 import { Component, OnInit, computed, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { RouterLink } from '@angular/router';
 import { AdminApiService } from '../../core/admin-api.service';
 import { PageToolbarComponent } from '../../shared/page-toolbar.component';
 import { ApiErrorBannerComponent } from '../../shared/api-error-banner.component';
 import { matchesSearch, paginate, sortBy, type ListQuery } from '../../shared/list.util';
+import { formatNumber, runtimeStatusLabel, statusClass } from '../../shared/format.util';
 
 @Component({
   selector: 'app-agents',
   standalone: true,
-  imports: [CommonModule, PageToolbarComponent, ApiErrorBannerComponent],
+  imports: [CommonModule, RouterLink, PageToolbarComponent, ApiErrorBannerComponent],
   template: `
     <header class="page-header">
       <h1 class="page-title">Agents</h1>
-      <p class="page-desc">All agents across customers — filter by owner, status, or runtime id.</p>
+      <p class="page-desc">Fleet registry — open operations for live stats, cleanup, sleep, and eviction.</p>
     </header>
 
     <app-api-error-banner [message]="error()" [forbidden]="forbidden()" />
@@ -43,23 +45,32 @@ import { matchesSearch, paginate, sortBy, type ListQuery } from '../../shared/li
             <tr>
               <th>Name</th>
               <th>Owner</th>
-              <th>Runtime ID</th>
-              <th>DB status</th>
-              <th>Runtime</th>
+              <th>Live status</th>
+              <th>Turns</th>
+              <th>DB</th>
               <th>Created</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
             @for (a of pageAgents(); track a.id) {
               <tr>
-                <td>{{ a.name || '—' }}</td>
-                <td>{{ a.user?.email || '—' }}</td>
-                <td><code>{{ a.runtimeAgentId }}</code></td>
                 <td>
-                  <span class="badge" [class.badge-warn]="a.status !== 'active'">{{ a.status }}</span>
+                  <a [routerLink]="['/agents', a.id]">{{ a.name || '—' }}</a>
                 </td>
-                <td>{{ runtimeLabel(a) }}</td>
+                <td>{{ a.user?.email || '—' }}</td>
+                <td>
+                  <span class="status-pill sm" [class]="statusClass(runtimeStatusLabel({ live: a.runtime, runtime: a.runtime }))">
+                    {{ runtimeStatusLabel({ live: a.runtime, runtime: a.runtime }) }}
+                  </span>
+                </td>
+                <td>{{ formatNumber(a.runtime?.turn_count) }}</td>
+                <td><span class="badge" [class.badge-warn]="a.status !== 'active'">{{ a.status }}</span></td>
                 <td>{{ a.createdAt | date:'mediumDate' }}</td>
+                <td class="actions">
+                  <a [routerLink]="['/agents', a.id]">Ops</a>
+                  <button type="button" class="link-btn danger" (click)="remove(a)">Delete</button>
+                </td>
               </tr>
             }
           </tbody>
@@ -74,8 +85,31 @@ import { matchesSearch, paginate, sortBy, type ListQuery } from '../../shared/li
     .muted { color: var(--text-muted); }
     .empty { padding: 2rem; text-align: center; color: var(--text-muted); }
     .table-wrap { overflow-x: auto; padding: 0; }
-    code { font-size: 0.72rem; }
+    .actions { white-space: nowrap; }
+    .actions a, .link-btn { margin-right: 0.65rem; font-size: 0.85rem; }
+    .link-btn {
+      background: none;
+      border: none;
+      color: var(--accent-primary);
+      cursor: pointer;
+      padding: 0;
+      font-weight: 600;
+    }
+    .link-btn.danger { color: var(--accent-danger); }
     .badge-warn { background: rgba(229, 165, 32, 0.15); color: var(--accent-warn); }
+    .status-pill {
+      display: inline-block;
+      padding: 0.15rem 0.5rem;
+      border-radius: 999px;
+      font-size: 0.68rem;
+      font-weight: 600;
+      text-transform: capitalize;
+    }
+    .status-pill.ok { background: rgba(20, 184, 166, 0.15); color: var(--accent-success); }
+    .status-pill.busy { background: rgba(124, 91, 245, 0.15); color: var(--accent-primary); }
+    .status-pill.sleep { background: rgba(229, 165, 32, 0.15); color: var(--accent-warn); }
+    .status-pill.bad { background: rgba(192, 57, 43, 0.12); color: var(--accent-danger); }
+    .status-pill.neutral { background: rgba(0,0,0,0.06); color: var(--text-secondary); }
   `],
 })
 export class AgentsComponent implements OnInit {
@@ -92,8 +126,12 @@ export class AgentsComponent implements OnInit {
     pageSize: 25,
   });
 
+  formatNumber = formatNumber;
+  runtimeStatusLabel = runtimeStatusLabel;
+  statusClass = statusClass;
+
   filterOptions = [
-    { value: 'all', label: 'All statuses' },
+    { value: 'all', label: 'All DB statuses' },
     { value: 'active', label: 'Active' },
     { value: 'inactive', label: 'Inactive' },
   ];
@@ -140,8 +178,14 @@ export class AgentsComponent implements OnInit {
     }
   }
 
-  runtimeLabel(a: any): string {
-    return a.runtime?.status || a.runtime?.agent_status || '—';
+  async remove(a: { id: string; name?: string }): Promise<void> {
+    if (!confirm(`Delete agent "${a.name || a.id}" from database and runtime?`)) return;
+    try {
+      await this.api.deleteAgentDb(a.id);
+      this.allAgents.update((list) => list.filter((x) => x.id !== a.id));
+    } catch (e: unknown) {
+      alert(AdminApiService.errorMessage(e));
+    }
   }
 
   onQuery(ev: {

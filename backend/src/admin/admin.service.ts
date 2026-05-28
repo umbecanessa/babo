@@ -241,24 +241,237 @@ export class AdminService {
   }
 
   async getStats() {
-    const [userCount, agentCount, apiKeyCount] = await Promise.all([
+    const dash = await this.getDashboard();
+    return {
+      users: dash.database.users,
+      agents: dash.database.agents,
+      apiKeys: dash.database.apiKeys,
+      system: {
+        status: dash.runtime.status,
+        reachable: dash.runtime.reachable,
+        model: dash.runtime.model,
+        agents: dash.runtime.agents,
+        analytics: dash.runtime.analytics,
+      },
+    };
+  }
+
+  /** Rich fleet overview for the operator dashboard. */
+  async getDashboard() {
+    const [
+      userCount,
+      adminCount,
+      agentCount,
+      apiKeyCount,
+      usageAgg,
+      recentDbAgents,
+    ] = await Promise.all([
       this.prisma.user.count(),
+      this.prisma.user.count({ where: { role: 'admin' } }),
       this.prisma.agent.count(),
       this.prisma.apiKey.count(),
+      this.prisma.inferenceUsage.aggregate({
+        _sum: {
+          promptTokens: true,
+          completionTokens: true,
+          totalTokens: true,
+          upstreamCostCents: true,
+        },
+        _count: true,
+      }),
+      this.prisma.agent.findMany({
+        take: 10,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          name: true,
+          runtimeAgentId: true,
+          status: true,
+          createdAt: true,
+          user: { select: { email: true } },
+        },
+      }),
     ]);
 
-    let systemHealth: any = null;
+    const byUserRaw = await this.prisma.inferenceUsage.groupBy({
+      by: ['userId'],
+      _sum: { totalTokens: true },
+      _count: { _all: true },
+      orderBy: { _sum: { totalTokens: 'desc' } },
+      take: 8,
+    });
+    const userIds = byUserRaw.map((r) => r.userId);
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: userIds } },
+      select: { id: true, email: true },
+    });
+    const userMap = new Map(users.map((u) => [u.id, u.email]));
+
+    let runtime = {
+      reachable: false,
+      status: 'unreachable' as string,
+      raw: null as any,
+      analytics: null as any,
+      model: null as any,
+      agents: null as any,
+      sleepQueue: null as any,
+      consciousness: null as any,
+    };
+
     try {
-      systemHealth = await this.runtime.getHealth();
+      const [health, analytics] = await Promise.all([
+        this.runtime.getHealth(),
+        this.fetchRuntimeAdmin('/admin/analytics/overview').catch(() => null),
+      ]);
+      runtime = {
+        reachable: true,
+        status: health?.status ?? 'unknown',
+        raw: health,
+        analytics,
+        model: health?.model ?? null,
+        agents: health?.agents ?? null,
+        sleepQueue: health?.sleep_queue ?? null,
+        consciousness: health?.consciousness ?? null,
+      };
     } catch {
-      systemHealth = { status: 'unreachable' };
+      // leave defaults
     }
 
+    const recentAgents = await Promise.all(
+      recentDbAgents.map(async (a) => {
+        let live: any = { reachable: false };
+        try {
+          live = { reachable: true, ...(await this.runtime.getAgent(a.runtimeAgentId)) };
+        } catch {
+          live = { reachable: false, status: 'unreachable' };
+        }
+        return { ...a, live };
+      }),
+    );
+
+    const usage24h = await this.prisma.inferenceUsage.aggregate({
+      where: {
+        createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+      },
+      _sum: { totalTokens: true },
+      _count: true,
+    });
+
     return {
-      users: userCount,
-      agents: agentCount,
-      apiKeys: apiKeyCount,
-      system: systemHealth,
+      database: {
+        users: userCount,
+        admins: adminCount,
+        agents: agentCount,
+        apiKeys: apiKeyCount,
+      },
+      inference: {
+        allTime: {
+          requestCount: usageAgg._count,
+          promptTokens: usageAgg._sum.promptTokens ?? 0,
+          completionTokens: usageAgg._sum.completionTokens ?? 0,
+          totalTokens: usageAgg._sum.totalTokens ?? 0,
+          upstreamCostCents: usageAgg._sum.upstreamCostCents ?? 0,
+        },
+        last24h: {
+          requestCount: usage24h._count,
+          totalTokens: usage24h._sum.totalTokens ?? 0,
+        },
+      },
+      runtime: {
+        reachable: runtime.reachable,
+        status: runtime.status,
+        model: runtime.model,
+        agents: runtime.agents,
+        analytics: runtime.analytics,
+        sleepQueue: runtime.sleepQueue,
+        consciousness: runtime.consciousness,
+      },
+      topUsersByTokens: byUserRaw.map((row) => ({
+        userId: row.userId,
+        email: userMap.get(row.userId) ?? null,
+        requestCount: row._count._all,
+        totalTokens: row._sum.totalTokens ?? 0,
+      })),
+      recentAgents,
+    };
+  }
+
+  /** Operator view: live runtime + privacy-safe summaries for one DB agent. */
+  async getAgentInspect(dbId: string) {
+    const agent = await this.prisma.agent.findUnique({
+      where: { id: dbId },
+      include: { user: { select: { id: true, email: true, displayName: true } } },
+    });
+    if (!agent) throw new NotFoundException('Agent not found');
+
+    const rid = agent.runtimeAgentId;
+    const settled = await Promise.allSettled([
+      this.runtime.getAgent(rid),
+      this.fetchRuntimeAdmin(`/admin/agents/${rid}/chain`),
+      this.fetchRuntimeAdmin(`/admin/agents/${rid}/memory-tiers`),
+      this.fetchRuntimeAdmin(`/admin/agents/${rid}/hormones/history`),
+      this.fetchRuntimeAdmin(`/admin/agents/${rid}/events?limit=25`),
+      this.fetchRuntimeAdmin(`/admin/agents/${rid}/facts?limit=8`),
+      this.fetchRuntimeAdmin(`/admin/agents/${rid}/conversation`),
+      this.fetchRuntimeAdmin(`/admin/agents/${rid}/wm`),
+    ]);
+
+    const val = (i: number) =>
+      settled[i].status === 'fulfilled' ? (settled[i] as PromiseFulfilledResult<any>).value : null;
+
+    const liveStatus = val(0);
+    const chain = val(1);
+    const memory = val(2);
+    const hormones = val(3);
+    const events = val(4);
+    const facts = val(5);
+    const conversation = val(6);
+    const workingMemory = val(7);
+
+    return {
+      agent,
+      live: liveStatus ?? { status: 'unreachable', reachable: false },
+      chain: chain
+        ? {
+            currentHeight: chain.current_height,
+            blockCount: chain.block_count,
+            baseModel: chain.base_model_label || chain.base_model,
+            soulHash: chain.soul_hash,
+          }
+        : null,
+      memory,
+      hormones: hormones?.hormones ?? hormones,
+      recentEvents: events?.events?.slice(0, 25) ?? [],
+      facts: facts
+        ? { total: facts.total ?? facts.facts?.length ?? 0, sample: facts.facts ?? [] }
+        : null,
+      conversation: this.summarizeConversation(conversation),
+      workingMemory,
+      errors: settled
+        .map((s, i) =>
+          s.status === 'rejected' ? { index: i, message: String((s as PromiseRejectedResult).reason) } : null,
+        )
+        .filter(Boolean),
+    };
+  }
+
+  private summarizeConversation(data: any) {
+    const msgs: any[] = data?.messages ?? [];
+    const last = msgs[msgs.length - 1];
+    let preview: string | null = null;
+    if (last?.content) {
+      const text =
+        typeof last.content === 'string'
+          ? last.content
+          : JSON.stringify(last.content);
+      preview = text.length > 280 ? `${text.slice(0, 280)}…` : text;
+    }
+    return {
+      messageCount: msgs.length,
+      userMessages: msgs.filter((m) => m.role === 'user').length,
+      assistantMessages: msgs.filter((m) => m.role === 'assistant').length,
+      lastRole: last?.role ?? null,
+      lastPreview: preview,
     };
   }
 

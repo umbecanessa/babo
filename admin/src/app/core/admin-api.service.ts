@@ -23,6 +23,10 @@ export class AdminApiService {
     );
   }
 
+  dashboard() {
+    return firstValueFrom(this.http.get<any>(`${this.base}/dashboard`));
+  }
+
   stats() {
     return firstValueFrom(this.http.get<any>(`${this.base}/stats`));
   }
@@ -47,6 +51,30 @@ export class AdminApiService {
 
   agents() {
     return firstValueFrom(this.http.get<any[]>(`${this.base}/agents`));
+  }
+
+  agentDb(id: string) {
+    return firstValueFrom(this.http.get<any>(`${this.base}/agents/db/${id}`));
+  }
+
+  agentInspect(id: string) {
+    return firstValueFrom(this.http.get<any>(`${this.base}/agents/db/${id}/inspect`));
+  }
+
+  deleteAgentDb(id: string) {
+    return firstValueFrom(this.http.delete(`${this.base}/agents/db/${id}`));
+  }
+
+  evictAgent(runtimeId: string) {
+    return firstValueFrom(
+      this.http.post(`${this.base}/agents/${runtimeId}/evict`, {}),
+    );
+  }
+
+  sleepAgent(runtimeId: string) {
+    return firstValueFrom(
+      this.http.post(`${this.base}/agents/${runtimeId}/sleep`, {}),
+    );
   }
 
   usage(limit = 50) {

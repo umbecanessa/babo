@@ -27,6 +27,11 @@ export class AdminController {
     return this.admin.getStats();
   }
 
+  @Get('dashboard')
+  getDashboard() {
+    return this.admin.getDashboard();
+  }
+
   // ===================================================================
   // Users
   // ===================================================================
@@ -64,6 +69,11 @@ export class AdminController {
   @Get('agents')
   listAllAgents() {
     return this.admin.listAllAgents();
+  }
+
+  @Get('agents/db/:id/inspect')
+  inspectAgent(@Param('id') id: string) {
+    return this.admin.getAgentInspect(id);
   }
 
   @Get('agents/db/:id')
