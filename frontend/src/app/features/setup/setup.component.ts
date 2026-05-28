@@ -112,8 +112,11 @@ export class SetupComponent implements OnInit, OnDestroy {
   showVoiceSheet = signal(false);
   authEmail = '';
   authPassword = '';
+  authDisplayName = '';
+  authAccountMode = signal<'signin' | 'signup'>('signin');
   authError = signal<string | null>(null);
   signingIn = signal(false);
+  private static readonly WIZARD_DRAFT_KEY = 'babo-setup-wizard-draft';
   prepareAutoAdvanced = false;
   brainUndoTier = signal<CapabilityTier | null>(null);
   agentName = '';
@@ -256,11 +259,13 @@ export class SetupComponent implements OnInit, OnDestroy {
       `${this.inferenceRunLocation()} — you already chose that.`,
   );
 
-  signInStepLead = computed(
-    () =>
-      `Create an account or sign in on ${this.backendSummaryLabel()}. ` +
-      `Required for agents and sync, even when chat runs locally.`,
-  );
+  signInStepLead = computed(() => {
+    const server = this.backendSummaryLabel();
+    if (this.authAccountMode() === 'signup') {
+      return `Create your account on ${server}. You’ll finish setup right after.`;
+    }
+    return `Sign in on ${server} — required for agents and sync.`;
+  });
 
   backendChoice = signal<BackendChoiceId>('babo_cloud');
   backendTesting = signal(false);
@@ -338,8 +343,10 @@ export class SetupComponent implements OnInit, OnDestroy {
       }
     } catch { /* ignore */ }
 
+    let setupComplete = false;
     try {
       const check = await nls.setup.check();
+      setupComplete = !!check.setupComplete;
       this.venvReady.set(!!check.venvReady);
       if (check.venvReady) {
         this.setupStage.set('ready');
@@ -351,6 +358,10 @@ export class SetupComponent implements OnInit, OnDestroy {
 
     if (this.auth.isAuthenticated()) {
       this.returningUser.set(true);
+    }
+
+    if (!setupComplete) {
+      this.restoreWizardDraft();
     }
 
     this.progressListener = (data: any) => {
@@ -549,6 +560,81 @@ export class SetupComponent implements OnInit, OnDestroy {
     if (!this.canEnterStep(target)) return;
     this.step.set(target);
     this.highestStepReached = Math.max(this.highestStepReached, target);
+    this.persistWizardDraft();
+  }
+
+  persistWizardDraft(): void {
+    try {
+      const p = this.profile();
+      sessionStorage.setItem(
+        SetupComponent.WIZARD_DRAFT_KEY,
+        JSON.stringify({
+          step: this.step(),
+          highestStepReached: this.highestStepReached,
+          nestjsUrl: this.config.nestjsUrl,
+          backendChoice: this.backendChoice(),
+          authEmail: this.authEmail,
+          authAccountMode: this.authAccountMode(),
+          capabilityProfile: p,
+          brainTier: this.brainTier(),
+          ambientVisionOn: this.ambientVisionOn(),
+          codeSearchOn: this.codeSearchOn(),
+        }),
+      );
+    } catch { /* ignore */ }
+  }
+
+  private restoreWizardDraft(): void {
+    try {
+      const raw = sessionStorage.getItem(SetupComponent.WIZARD_DRAFT_KEY);
+      if (!raw) return;
+      const d = JSON.parse(raw) as {
+        step?: number;
+        highestStepReached?: number;
+        nestjsUrl?: string;
+        backendChoice?: BackendChoiceId;
+        authEmail?: string;
+        authAccountMode?: 'signin' | 'signup';
+        capabilityProfile?: CapabilityProfile;
+        brainTier?: CapabilityTier;
+        ambientVisionOn?: boolean;
+        codeSearchOn?: boolean;
+      };
+      if (d.nestjsUrl) {
+        this.config.nestjsUrl = normalizeNestjsUrl(d.nestjsUrl);
+        this.backendChoice.set(matchBackendChoice(this.config.nestjsUrl));
+      }
+      if (d.authEmail) this.authEmail = d.authEmail;
+      if (d.authAccountMode) this.authAccountMode.set(d.authAccountMode);
+      if (d.capabilityProfile) {
+        this.profile.set(d.capabilityProfile);
+        this.applyProfileToUi(d.capabilityProfile);
+      }
+      if (d.brainTier) this.brainTier.set(d.brainTier);
+      if (typeof d.ambientVisionOn === 'boolean') {
+        this.ambientVisionOn.set(d.ambientVisionOn);
+      }
+      if (typeof d.codeSearchOn === 'boolean') {
+        this.codeSearchOn.set(d.codeSearchOn);
+      }
+      const target = Math.min(Math.max(d.step ?? 0, 1), 8);
+      this.highestStepReached = d.highestStepReached ?? target;
+      if (this.canEnterStep(target)) {
+        this.step.set(target);
+      }
+    } catch { /* ignore */ }
+  }
+
+  private clearWizardDraft(): void {
+    try {
+      sessionStorage.removeItem(SetupComponent.WIZARD_DRAFT_KEY);
+    } catch { /* ignore */ }
+  }
+
+  setAuthAccountMode(mode: 'signin' | 'signup'): void {
+    this.authAccountMode.set(mode);
+    this.authError.set(null);
+    this.persistWizardDraft();
   }
 
   canEnterStep(target: number): boolean {
@@ -951,8 +1037,15 @@ export class SetupComponent implements OnInit, OnDestroy {
       this.testResult.set(result);
       this.brainTestedTier.set(p.inference.tier);
       if (result.ok && p) {
-        if (result.models?.length) {
+        // Babo Cloud test hits OpenRouter /models (huge catalog) — never adopt models[0].
+        if (
+          result.models?.length &&
+          p.inference.tier !== 'hosted_babo'
+        ) {
           p.inference.model = result.models[0];
+        } else if (p.inference.tier === 'hosted_babo') {
+          p.inference.model = resolveBaboCloudModelId(p.inference.model);
+          this.config.inferenceModel = p.inference.model;
         }
         p.inference.url = url;
         this.syncInferenceLegacy();
@@ -1061,7 +1154,19 @@ export class SetupComponent implements OnInit, OnDestroy {
 
   canContinueSignIn(): boolean {
     if (this.auth.isAuthenticated()) return true;
-    return !!this.authEmail.trim() && !!this.authPassword;
+    if (!this.authEmail.trim() || !this.authPassword) return false;
+    if (this.authAccountMode() === 'signup') {
+      return this.authPassword.length >= 8;
+    }
+    return true;
+  }
+
+  authSubmitLabel(): string {
+    if (this.auth.isAuthenticated()) return 'Continue';
+    if (this.signingIn() || this.savingBackend()) {
+      return this.authAccountMode() === 'signup' ? 'Creating account…' : 'Signing in…';
+    }
+    return this.authAccountMode() === 'signup' ? 'Create account' : 'Sign in';
   }
 
   async saveSignInAndContinue(): Promise<void> {
@@ -1085,13 +1190,21 @@ export class SetupComponent implements OnInit, OnDestroy {
           return;
         }
         this.signingIn.set(true);
+        const email = this.authEmail.trim();
         const tokens = await firstValueFrom(
-          this.auth.login(this.authEmail.trim(), this.authPassword),
+          this.authAccountMode() === 'signup'
+            ? this.auth.register(
+                email,
+                this.authPassword,
+                this.authDisplayName.trim() || undefined,
+              )
+            : this.auth.login(email, this.authPassword),
         );
         this.auth.applyTokens(tokens, false);
         this.signingIn.set(false);
       }
       await this.ensureBaboCloudAccess();
+      this.clearWizardDraft();
       this.nextStep();
     } catch (err: any) {
       this.authError.set(err?.error?.message || err?.message || 'Could not sign in');
@@ -1197,6 +1310,7 @@ export class SetupComponent implements OnInit, OnDestroy {
       if (this.shouldPrefetchLocalVision(p)) {
         this.startVisionPrefetchInBackground();
       }
+      this.persistWizardDraft();
       this.suggestBackendFromThinking();
       if (this.preferSignInAfterConfig) {
         this.preferSignInAfterConfig = false;
@@ -1257,8 +1371,12 @@ export class SetupComponent implements OnInit, OnDestroy {
         await this.nls().capabilities.applyProfile(p);
       }
 
-      this.launchMessage.set('Creating your agent...');
       await this.api.whenReady();
+
+      this.launchMessage.set('Starting agent runtime...');
+      await this.nls().runtime.start();
+
+      this.launchMessage.set('Creating your agent...');
       const agent = await firstValueFrom(
         this.api.createAgent({
           name,
@@ -1270,7 +1388,7 @@ export class SetupComponent implements OnInit, OnDestroy {
       if (p?.inference.tier === 'hosted_babo') {
         const scoped = await firstValueFrom(
           this.apiKeys.createKey(name, {
-            agentId: agent.id,
+            agentId: agent.cloudId ?? agent.id,
             rateLimitRpm: 120,
             scopes: ['inference', 'gpu'],
           }),
@@ -1281,13 +1399,12 @@ export class SetupComponent implements OnInit, OnDestroy {
         }
       }
 
-      this.launchMessage.set('Starting agent runtime...');
-      await this.nls().runtime.start();
-
+      this.clearWizardDraft();
       this.day1Coach.schedule();
       this.launchMessage.set('Opening Babo...');
       await new Promise((r) => setTimeout(r, 400));
-      this.router.navigate(['/chat', agent.id]);
+      const chatAgentId = agent.runtimeAgentId || agent.id;
+      this.router.navigate(['/chat', chatAgentId]);
     } catch (err: any) {
       this.launching.set(false);
       this.launchError.set(err?.message || 'Failed to finish setup.');

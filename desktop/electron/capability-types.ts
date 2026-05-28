@@ -122,6 +122,50 @@ function normalizeBaseUrl(url: string): string {
   return url.replace(/\/v1\/?$/, '').replace(/\/$/, '');
 }
 
+const BABO_CLOUD_MODEL_IDS = new Set([
+  'anthropic/claude-sonnet-4',
+  'openai/gpt-4o-mini',
+  'openai/gpt-4o',
+  'google/gemini-2.0-flash',
+]);
+
+const DEFAULT_BABO_CLOUD_MODEL = 'anthropic/claude-sonnet-4';
+
+/** Keep runtime/chat model ids valid for Babo Cloud (OpenRouter-style). */
+export function resolveBaboCloudModelId(model?: string | null): string {
+  const m = (model ?? '').trim();
+  if (
+    !m ||
+    m === 'llama3.2' ||
+    m === 'gpt-4o-mini' ||
+    m === 'babo-hosted' ||
+    /qwen3\.7/i.test(m)
+  ) {
+    return DEFAULT_BABO_CLOUD_MODEL;
+  }
+  if (BABO_CLOUD_MODEL_IDS.has(m)) {
+    return m;
+  }
+  return DEFAULT_BABO_CLOUD_MODEL;
+}
+
+/** Normalize hosted_babo model + legacy inferenceModel fields. */
+export function sanitizeCapabilityProfile(
+  profile: CapabilityProfile,
+): CapabilityProfile {
+  if (profile.inference.tier !== 'hosted_babo') {
+    return profile;
+  }
+  const model = resolveBaboCloudModelId(profile.inference.model);
+  if (model === profile.inference.model) {
+    return profile;
+  }
+  return {
+    ...profile,
+    inference: { ...profile.inference, model },
+  };
+}
+
 /** Map profile → runtime env keys for the Python sidecar. */
 export function capabilityProfileToRuntimeEnv(
   profile: CapabilityProfile,
@@ -138,8 +182,7 @@ export function capabilityProfileToRuntimeEnv(
   if (inf.tier === 'hosted_babo' && legacy.nestjsApiBase) {
     const apiBase = legacy.nestjsApiBase.replace(/\/+$/, '');
     env.NLS_VLLM_BASE_URL = `${apiBase}/inference/v1`;
-    if (!inf.model) env.NLS_HF_MODEL = 'babo-hosted';
-    else env.NLS_HF_MODEL = inf.model;
+    env.NLS_HF_MODEL = resolveBaboCloudModelId(inf.model);
   } else if (inf.tier === 'byok_cloud' && legacy.nestjsApiBase) {
     const apiBase = legacy.nestjsApiBase.replace(/\/+$/, '');
     env.NLS_VLLM_BASE_URL = `${apiBase}/inference/v1`;

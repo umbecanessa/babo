@@ -443,52 +443,88 @@
       </div>
     }
 
-    <!-- 6 · Sign in -->
+    <!-- 6 · Sign in / Create account -->
     @if (step() === 6) {
-      <div class="step-shell">
+      <div class="step-shell auth-step-shell">
         <div class="step-body">
-          <h2>Sign in</h2>
-          <p class="lead">{{ signInStepLead() }}</p>
-          <p class="small-muted account-split">
-            Server: <strong>{{ backendSummaryLabel() }}</strong>
-            <button type="button" class="link-btn inline-link" (click)="goToStep(5)">Change</button>
-          </p>
+          <div class="account-auth-panel">
+            <h2 class="account-auth-title">
+              {{ authAccountMode() === 'signup' ? 'Create account' : 'Sign in' }}
+            </h2>
+            <p class="account-auth-lead">{{ signInStepLead() }}</p>
 
-          @if (!auth.isAuthenticated()) {
-            <div class="form-group">
-              <label>Email</label>
-              <input type="email" [(ngModel)]="authEmail" autocomplete="email" />
+            <div class="server-pill static">
+              <span class="dot online"></span>
+              <span>{{ backendSummaryLabel() }}</span>
+              <button type="button" class="link-btn inline-link" (click)="goToStep(5)">Change</button>
             </div>
-            <div class="form-group">
-              <label>Password</label>
-              <input type="password" [(ngModel)]="authPassword" autocomplete="current-password" />
-            </div>
-            <p class="small-muted">
-              New here?
-              <a routerLink="/auth/register" class="text-link">Create account</a>
-              — use the same server you chose above.
-            </p>
-          } @else {
-            <p class="hint-ok">Signed in — you're good to go.</p>
-          }
 
-          @if (authError()) {
-            <div class="error-badge inline">{{ authError() }}</div>
-          }
+            @if (!auth.isAuthenticated()) {
+              <div class="auth-mode-tabs">
+                <button
+                  type="button"
+                  [class.active]="authAccountMode() === 'signin'"
+                  (click)="setAuthAccountMode('signin')"
+                >Sign in</button>
+                <button
+                  type="button"
+                  [class.active]="authAccountMode() === 'signup'"
+                  (click)="setAuthAccountMode('signup')"
+                >Create account</button>
+              </div>
 
-          @if (provisioningCloud()) {
-            <p class="progress-text">Connecting to Babo Cloud…</p>
-          }
+              @if (authAccountMode() === 'signup') {
+                <div class="form-group">
+                  <label>Display name</label>
+                  <input
+                    type="text"
+                    [(ngModel)]="authDisplayName"
+                    placeholder="Optional"
+                    autocomplete="name"
+                  />
+                </div>
+              }
+
+              <div class="form-group">
+                <label>Email</label>
+                <input
+                  type="email"
+                  [(ngModel)]="authEmail"
+                  placeholder="you@example.com"
+                  autocomplete="email"
+                />
+              </div>
+              <div class="form-group">
+                <label>Password</label>
+                <input
+                  type="password"
+                  [(ngModel)]="authPassword"
+                  [placeholder]="authAccountMode() === 'signup' ? 'At least 8 characters' : 'Your password'"
+                  [attr.autocomplete]="authAccountMode() === 'signup' ? 'new-password' : 'current-password'"
+                />
+              </div>
+            } @else {
+              <p class="hint-ok">Signed in — continue to finish setup.</p>
+            }
+
+            @if (authError()) {
+              <div class="error-badge">{{ authError() }}</div>
+            }
+
+            @if (provisioningCloud()) {
+              <p class="progress-text center">Connecting to Babo Cloud…</p>
+            }
+          </div>
         </div>
         <div class="step-footer split">
           <button type="button" class="icon-back" (click)="prevStep()" aria-label="Back">‹</button>
           <button
-            class="action-btn"
+            class="action-btn launch"
             type="button"
             (click)="saveSignInAndContinue()"
             [disabled]="savingBackend() || signingIn() || provisioningCloud() || !canContinueSignIn() || !venvReady()"
           >
-            {{ signingIn() || savingBackend() ? 'Signing in…' : (auth.isAuthenticated() ? 'Continue' : 'Sign in') }}
+            {{ authSubmitLabel() }}
           </button>
         </div>
       </div>

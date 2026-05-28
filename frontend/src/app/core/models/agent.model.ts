@@ -1,6 +1,8 @@
 // ─── Core Agent ──────────────────────────────────────────────────
 export interface Agent {
   id: string;
+  /** Nest DB id after desktop sync (for API keys / cloud features). */
+  cloudId?: string;
   userId: string;
   runtimeAgentId: string;
   name: string | null;
@@ -323,6 +325,8 @@ export interface NetworkDynamicsStatus {
 export interface ChainState {
   agent_id: string;
   base_model: string;
+  base_model_label?: string;
+  block_count?: number;
   sovereignty_mode: string;
   current_height: number;
   genesis_hash: string;
@@ -339,7 +343,7 @@ export interface Block {
   height: number;
   block_hash: string;
   parent_hash: string;
-  block_type: 'delta' | 'epoch';
+  block_type: 'delta' | 'epoch' | 'genesis';
   delta_path: string;
   timestamp: string;
   aku_count: number;

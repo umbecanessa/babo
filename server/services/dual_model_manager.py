@@ -38,6 +38,17 @@ class DualModelManager:
         self.tokenizer = None
         self.model_a = None
         self._loaded = False
+        self._remote_inference = self._is_remote_vllm(vllm_base_url)
+
+    @staticmethod
+    def _is_remote_vllm(base_url: str) -> bool:
+        from urllib.parse import urlparse
+
+        try:
+            host = (urlparse(base_url).hostname or "").lower()
+        except Exception:
+            return True
+        return host not in ("localhost", "127.0.0.1", "::1")
 
     def load_models(self) -> None:
         import transformers
@@ -71,30 +82,118 @@ class DualModelManager:
         "Qwen3-32B": "Qwen/Qwen3-32B",
     }
 
+    _GENERIC_TOKENIZER_REPOS: tuple[str, ...] = (
+        "Qwen/Qwen2.5-0.5B-Instruct",
+        "Qwen/Qwen3-32B",
+        "gpt2",
+    )
+
     def _load_tokenizer(self, auto_tokenizer_cls: Any) -> Any:
         import os
 
         model_id = self.hf_model
-        if os.path.isdir(model_id) or "/" in model_id and not model_id.startswith("/"):
+        if self._remote_inference or self._is_api_model_id(model_id):
+            return self._load_generic_tokenizer(
+                auto_tokenizer_cls,
+                f"remote inference model {model_id!r}",
+            )
+
+        if os.path.isdir(model_id):
+            return self._finalize_tokenizer(
+                auto_tokenizer_cls.from_pretrained(model_id),
+            )
+
+        if "/" in model_id and not model_id.startswith("/"):
             try:
-                tok = auto_tokenizer_cls.from_pretrained(model_id)
-                if tok.pad_token is None:
-                    tok.pad_token = tok.eos_token
-                return tok
-            except Exception:
-                pass
+                return self._finalize_tokenizer(
+                    auto_tokenizer_cls.from_pretrained(model_id),
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Tokenizer for %s unavailable (%s); using generic fallback",
+                    model_id,
+                    exc,
+                )
+                return self._load_generic_tokenizer(
+                    auto_tokenizer_cls,
+                    f"HuggingFace repo {model_id!r}",
+                )
 
         for key, repo in self._TOKENIZER_FALLBACKS.items():
             if key in model_id:
                 try:
-                    tok = auto_tokenizer_cls.from_pretrained(repo)
-                    if tok.pad_token is None:
-                        tok.pad_token = tok.eos_token
-                    return tok
+                    return self._finalize_tokenizer(
+                        auto_tokenizer_cls.from_pretrained(repo),
+                    )
                 except Exception as exc:
                     logger.warning("Fallback tokenizer %s failed: %s", repo, exc)
 
-        tok = auto_tokenizer_cls.from_pretrained(model_id)
+        try:
+            return self._finalize_tokenizer(
+                auto_tokenizer_cls.from_pretrained(model_id),
+            )
+        except Exception as exc:
+            logger.warning(
+                "Tokenizer for %s failed (%s); using generic fallback",
+                model_id,
+                exc,
+            )
+            return self._load_generic_tokenizer(
+                auto_tokenizer_cls,
+                f"model id {model_id!r}",
+            )
+
+    @staticmethod
+    def _is_api_model_id(model_id: str) -> bool:
+        if model_id in ("babo-hosted",):
+            return True
+        if "/" not in model_id:
+            return model_id.startswith(("gpt-", "claude-", "o1", "o3", "gemini-"))
+        provider = model_id.split("/", 1)[0].lower()
+        return provider in {
+            "openai",
+            "anthropic",
+            "google",
+            "meta-llama",
+            "mistralai",
+            "deepseek",
+            "cohere",
+            "x-ai",
+            "perplexity",
+            "openrouter",
+            "qwen",
+            "microsoft",
+            "nvidia",
+            "amazon",
+        }
+
+    def _load_generic_tokenizer(
+        self,
+        auto_tokenizer_cls: Any,
+        reason: str,
+    ) -> Any:
+        last_exc: Exception | None = None
+        for repo in self._GENERIC_TOKENIZER_REPOS:
+            try:
+                tok = self._finalize_tokenizer(
+                    auto_tokenizer_cls.from_pretrained(repo),
+                )
+                logger.info(
+                    "Loaded generic tokenizer %s for %s (%s)",
+                    repo,
+                    self.hf_model,
+                    reason,
+                )
+                return tok
+            except Exception as exc:
+                last_exc = exc
+                logger.warning("Generic tokenizer %s failed: %s", repo, exc)
+        raise RuntimeError(
+            f"Could not load any tokenizer for inference model {self.hf_model!r}",
+        ) from last_exc
+
+    @staticmethod
+    def _finalize_tokenizer(tok: Any) -> Any:
         if tok.pad_token is None:
             tok.pad_token = tok.eos_token
         return tok

@@ -1,7 +1,8 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { Observable, map, tap } from 'rxjs';
+import { Observable, map, of, catchError, switchMap } from 'rxjs';
 import { environment } from '../../../environments/environment';
+import { isDesktopShell, nestjsRootFromApiBase, readBaboBoot } from '../desktop-boot';
 import { PlatformService } from './platform.service';
 import {
   Agent,
@@ -50,6 +51,9 @@ export class ApiService {
   /** Agent runtime — proxy in browser, direct Python in Electron */
   private RUNTIME = (environment as any).runtimeUrl || environment.apiUrl;
 
+  /** Resolves after Electron loads nestjsUrl / runtimePort from nls-config.json */
+  private readonly urlsReady: Promise<void>;
+
   /**
    * Base URL for agent CRUD.
    * Electron: local Python runtime (direct).
@@ -71,26 +75,89 @@ export class ApiService {
     private http: HttpClient,
     private platform: PlatformService,
   ) {
-    if (this.platform.isElectron) {
-      this.initElectronUrls();
+    this.applyBootConfig();
+    this.urlsReady = isDesktopShell()
+      ? this.initElectronUrls()
+      : Promise.resolve();
+    this.listenForConfigChanges();
+  }
+
+  /** Preload injects nls.boot before Angular bootstraps (no localhost race). */
+  private applyBootConfig(): void {
+    const boot = readBaboBoot();
+    if (!boot) {
+      return;
+    }
+    if (boot.apiUrl) {
+      this.API = boot.apiUrl;
+    }
+    if (boot.runtimeUrl) {
+      this.RUNTIME = boot.runtimeUrl;
     }
   }
 
+  private listenForConfigChanges(): void {
+    const nls = (window as unknown as { nls?: { on?: Function } }).nls;
+    nls?.on?.('config:changed', () => {
+      this.applyBootConfig();
+      void this.initElectronUrls();
+    });
+  }
+
+  whenReady(): Promise<void> {
+    return this.urlsReady;
+  }
+
+  /** NestJS global prefix is `/api` (see backend main.ts). */
+  static nestjsApiBase(nestjsUrl: string): string {
+    const base = nestjsUrl.trim().replace(/\/+$/, '');
+    return base.endsWith('/api') ? base : `${base}/api`;
+  }
+
   /**
-   * In Electron mode, fetch the runtime URL from the main process.
-   * The ConfigManager may have a different port or the URL can be
-   * updated if the user changes settings.
+   * In Electron mode, fetch NestJS + runtime URLs from the main process
+   * (setup wizard writes nestjsUrl, e.g. https://api.babo.agency).
    */
   private async initElectronUrls(): Promise<void> {
+    const nls = (window as unknown as {
+      nls?: {
+        config?: { get: () => Promise<{ nestjsUrl?: string; runtimePort?: number }> };
+        getUrls?: () => Promise<{ apiUrl?: string; runtimeUrl?: string; nestjsUrl?: string }>;
+      };
+    }).nls;
+    if (!nls) {
+      return;
+    }
+
+    this.applyBootConfig();
+
     try {
-      const nls = (window as any).nls;
-      if (nls?.getUrls) {
-        const urls = await nls.getUrls();
-        this.RUNTIME = urls.runtimeUrl;
+      const cfg = await nls.config?.get?.();
+      if (cfg?.nestjsUrl) {
+        this.API = ApiService.nestjsApiBase(cfg.nestjsUrl);
       }
     } catch {
-      // Fall back to environment defaults
+      /* keep boot / defaults */
     }
+
+    try {
+      const urls = await nls.getUrls?.();
+      if (urls?.runtimeUrl) {
+        this.RUNTIME = urls.runtimeUrl;
+      }
+      if (urls?.apiUrl) {
+        this.API = urls.apiUrl;
+      } else if (urls?.nestjsUrl) {
+        this.API = ApiService.nestjsApiBase(urls.nestjsUrl);
+      }
+    } catch {
+      /* keep config / boot */
+    }
+  }
+
+  /** NestJS root URL (no /api) — for main-process ping. */
+  nestjsRoot(): string {
+    return nestjsRootFromApiBase(this.API);
   }
 
   // ─── Genesis Templates ────────────────────────────────────────
@@ -130,18 +197,30 @@ export class ApiService {
   createAgent(data: CreateAgentRequest): Observable<Agent> {
     return this.http.post<any>(`${this.AGENTS}/agents`, data).pipe(
       map(a => this.normalizeAgent(a)),
-      tap(agent => {
-        if (agent.runtimeAgentId) {
-          this.syncAgentToCloud(agent).subscribe();
-        }
-      }),
+      switchMap(agent => this.attachCloudAgentRecord(agent)),
+    );
+  }
+
+  /**
+   * After local runtime creation, register in Nest so cloud keys / relay use DB ids.
+   */
+  private attachCloudAgentRecord(agent: Agent): Observable<Agent> {
+    if (!this.platform.isElectron || !agent.runtimeAgentId) {
+      return of(agent);
+    }
+    return this.syncAgentToCloud(agent).pipe(
+      map((row: any) => ({
+        ...agent,
+        cloudId: row?.id,
+        userId: row?.userId || agent.userId,
+      })),
+      catchError(() => of(agent)),
     );
   }
 
   /** Register a locally-created agent in the NestJS DB for web/relay access. */
   private syncAgentToCloud(agent: Agent): Observable<any> {
     return this.http.post(`${this.API}/agents/sync`, {
-      runtimeAgentId: agent.runtimeAgentId,
       runtimeAgentId: agent.runtimeAgentId,
       name: agent.name,
       genesisVersion: agent.genesisVersion || 'default',

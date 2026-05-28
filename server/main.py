@@ -68,7 +68,6 @@ async def lifespan(app: FastAPI):
     model_manager = DualModelManager(
         hf_model=settings.hf_model,
         vllm_base_url=settings.vllm_base_url,
-        attn_implementation=settings.attn_implementation,
         genesis_dir=settings.genesis_dir,
         agents_dir=settings.agents_dir,
         default_genesis=settings.default_genesis,
@@ -80,12 +79,18 @@ async def lifespan(app: FastAPI):
 
     vllm_client = model_manager.vllm_client
     if vllm_client is not None:
-        vllm_ready = await vllm_client.wait_until_ready(timeout=300.0)
-        if not vllm_ready:
-            logger.warning(
-                "Inference backend not ready at %s — requests will fail until it starts.",
+        if getattr(model_manager, "_remote_inference", False):
+            logger.info(
+                "Remote inference at %s — not blocking local startup on upstream /health",
                 settings.vllm_base_url,
             )
+        else:
+            vllm_ready = await vllm_client.wait_until_ready(timeout=300.0)
+            if not vllm_ready:
+                logger.warning(
+                    "Inference backend not ready at %s — requests will fail until it starts.",
+                    settings.vllm_base_url,
+                )
 
     sleep_scheduler = SleepScheduler(
         model_manager=model_manager,

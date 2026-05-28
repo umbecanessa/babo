@@ -9,6 +9,13 @@ import { app } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 
+import type { CapabilityProfile } from './capability-types';
+import {
+  DEFAULT_CAPABILITY_PROFILE,
+  capabilityProfileToRuntimeEnv,
+  sanitizeCapabilityProfile,
+} from './capability-types';
+
 export interface NlsConfig {
   /** OpenAI-compatible inference API base URL */
   inferenceUrl: string;
@@ -28,6 +35,9 @@ export interface NlsConfig {
   /** Whether first-run setup has been completed */
   setupComplete: boolean;
 
+  /** Composable capability placements (onboarding wizard) */
+  capabilityProfile?: CapabilityProfile;
+
   /** @deprecated legacy field — migrated on load */
   vllmUrl?: string;
   hfModel?: string;
@@ -40,9 +50,10 @@ const DEFAULT_CONFIG: NlsConfig = {
   inferenceUrl: 'https://openrouter.ai/api/v1',
   inferenceModel: 'openai/gpt-4o-mini',
   inferenceApiKey: '',
-  nestjsUrl: 'http://localhost:3000',
+  nestjsUrl: 'https://api.babo.agency',
   runtimePort: 9222,
   setupComplete: false,
+  capabilityProfile: { ...DEFAULT_CAPABILITY_PROFILE },
 };
 
 export class ConfigManager {
@@ -56,13 +67,60 @@ export class ConfigManager {
   }
 
   get(): NlsConfig {
-    return { ...this.config };
+    return {
+      ...this.config,
+      capabilityProfile: this.config.capabilityProfile
+        ? JSON.parse(JSON.stringify(this.config.capabilityProfile))
+        : undefined,
+    };
   }
 
   set(partial: Partial<NlsConfig>): NlsConfig {
-    this.config = { ...this.config, ...partial };
+    const next = { ...partial };
+    if (typeof next.inferenceUrl === 'string') {
+      next.inferenceUrl = ConfigManager.normalizeInferenceUrl(next.inferenceUrl);
+    }
+    if (next.capabilityProfile) {
+      next.capabilityProfile = sanitizeCapabilityProfile(next.capabilityProfile);
+      const p = next.capabilityProfile;
+      if (p.inference?.url) {
+        next.inferenceUrl = ConfigManager.normalizeInferenceUrl(p.inference.url);
+      }
+      if (p.inference?.model) {
+        next.inferenceModel = p.inference.model;
+      }
+    }
+    this.config = { ...this.config, ...next };
     this.save();
     return { ...this.config };
+  }
+
+  /** NestJS global prefix (`backend/src/main.ts` → `setGlobalPrefix('api')`). */
+  static nestjsApiBase(nestjsUrl: string): string {
+    const base = nestjsUrl.trim().replace(/\/+$/, '');
+    return base.endsWith('/api') ? base : `${base}/api`;
+  }
+
+  /** Local vLLM/Ollama: host root only. Cloud providers keep a `/v1` suffix in config. */
+  static normalizeInferenceUrl(url: string): string {
+    const trimmed = url.trim().replace(/\/+$/, '');
+    if (!trimmed.endsWith('/v1')) {
+      return trimmed;
+    }
+    try {
+      const host = new URL(trimmed).hostname.toLowerCase();
+      const cloud =
+        host.includes('openrouter.ai') ||
+        host.endsWith('.openai.com') ||
+        host.includes('openai.azure.com') ||
+        host.includes('api.babo.agency');
+      if (cloud) {
+        return trimmed;
+      }
+    } catch {
+      return trimmed;
+    }
+    return trimmed.slice(0, -3);
   }
 
   reset(): NlsConfig {
@@ -75,12 +133,25 @@ export class ConfigManager {
     return this.config.setupComplete;
   }
 
+  shouldPrefetchVision(): boolean {
+    const p = this.config.capabilityProfile;
+    if (!p) return false;
+    const strat = p.visualCortex.strategy ?? 'off';
+    return (
+      strat === 'dedicated_vlm_local' &&
+      p.visualCortex.tier !== 'off'
+    );
+  }
+
   getRuntimeEnv(): Record<string, string> {
     const dataDir = app.isPackaged
       ? path.join(app.getPath('userData'), 'data')
       : path.join(path.resolve(__dirname, '..', '..'), 'data');
 
-    return {
+    const profile =
+      this.config.capabilityProfile ?? DEFAULT_CAPABILITY_PROFILE;
+
+    const env: Record<string, string> = {
       NLS_PRODUCT_MODE: '1',
       NLS_VLLM_BASE_URL: this.config.inferenceUrl,
       NLS_HF_MODEL: this.config.inferenceModel,
@@ -97,14 +168,48 @@ export class ConfigManager {
       NESTJS_URL: this.config.nestjsUrl,
       NLS_BROWSER_CDP_URL: 'http://127.0.0.1:9245',
       PYTHONUNBUFFERED: '1',
+      ...capabilityProfileToRuntimeEnv(profile, {
+        inferenceApiKey: this.config.inferenceApiKey,
+        runtimePort: this.config.runtimePort,
+        nestjsApiBase: ConfigManager.nestjsApiBase(this.config.nestjsUrl),
+      }),
     };
+
+    if (this.config.gpuWorkerUrl) {
+      env.NLS_GPU_WORKER_URL = env.NLS_GPU_WORKER_URL || this.config.gpuWorkerUrl;
+    }
+    if (this.config.gpuWorkerSecret) {
+      env.NLS_GPU_WORKER_SECRET =
+        env.NLS_GPU_WORKER_SECRET || this.config.gpuWorkerSecret;
+    }
+
+    return env;
   }
 
   private load(): void {
     try {
       if (fs.existsSync(this.configPath)) {
         const data = JSON.parse(fs.readFileSync(this.configPath, 'utf-8'));
-        this.config = { ...DEFAULT_CONFIG, ...this.migrateLegacy(data) };
+        const merged = { ...DEFAULT_CONFIG, ...this.migrateLegacy(data) };
+        if (merged.inferenceUrl) {
+          merged.inferenceUrl = ConfigManager.normalizeInferenceUrl(merged.inferenceUrl);
+        }
+        if (!merged.capabilityProfile) {
+          merged.capabilityProfile = { ...DEFAULT_CAPABILITY_PROFILE };
+        } else {
+          merged.capabilityProfile = sanitizeCapabilityProfile(
+            merged.capabilityProfile,
+          );
+          if (merged.capabilityProfile.inference.model) {
+            merged.inferenceModel = merged.capabilityProfile.inference.model;
+          }
+        }
+        this.config = merged;
+        const prevModel = (data as { capabilityProfile?: CapabilityProfile })
+          .capabilityProfile?.inference?.model;
+        if (merged.capabilityProfile.inference.model !== prevModel) {
+          this.save();
+        }
       }
     } catch {
       this.config = { ...DEFAULT_CONFIG };
@@ -141,4 +246,3 @@ export class ConfigManager {
     }
   }
 }
-

@@ -118,6 +118,22 @@ class VLLMInferenceClient:
         # Track loaded adapters
         self._loaded_adapters: dict[str, AdapterInfo] = {}
 
+    def _openai_path(self, resource: str) -> str:
+        """OpenAI-compat path when base_url may already end with ``/v1`` (Babo Cloud relay)."""
+        resource = resource.lstrip("/")
+        if self.base_url.rstrip("/").endswith("/v1"):
+            return f"/{resource}"
+        return f"/v1/{resource}"
+
+    @staticmethod
+    def _preserve_configured_model(model_id: str) -> bool:
+        """Do not replace user/provider model ids from a catalog listing."""
+        if model_id in ("babo-hosted",):
+            return True
+        if "/" in model_id and not model_id.startswith("/"):
+            return True
+        return model_id.startswith(("gpt-", "claude-", "o1", "o3", "gemini-"))
+
     # ===================================================================
     # Client Self-Healing
     # ===================================================================
@@ -153,15 +169,24 @@ class VLLMInferenceClient:
     # ===================================================================
 
     async def health_check(self) -> bool:
-        """Check if the vLLM server is healthy.
-
-        Returns True if the server is responding.
-        """
+        """Check if the inference server is reachable (local vLLM or cloud relay)."""
+        client = self._ensure_client()
         try:
-            client = self._ensure_client()
-            resp = await client.get("/health", timeout=5.0)
-            return resp.status_code == 200
+            resp = await client.get(self._openai_path("health"), timeout=5.0)
+            if resp.status_code == 200:
+                return True
         except (httpx.ConnectError, httpx.TimeoutException):
+            return False
+        except Exception:
+            pass
+
+        # Babo Cloud / OpenRouter omit /health — probe /models instead.
+        try:
+            resp = await client.get(self._openai_path("models"), timeout=10.0)
+            return resp.status_code in (200, 401, 403)
+        except (httpx.ConnectError, httpx.TimeoutException):
+            return False
+        except Exception:
             return False
 
     async def wait_until_ready(
@@ -177,10 +202,11 @@ class VLLMInferenceClient:
         while time.time() - t0 < timeout:
             if await self.health_check():
                 logger.info(
-                    "vLLM server ready at %s (%.1fs)",
+                    "Inference backend ready at %s (%.1fs)",
                     self.base_url, time.time() - t0,
                 )
-                await self._auto_detect_model()
+                if not self._preserve_configured_model(self.default_model):
+                    await self._auto_detect_model()
                 return True
             await _async_sleep(poll_interval)
         logger.error(
@@ -194,7 +220,9 @@ class VLLMInferenceClient:
         if self._model_auto_detected:
             return
         try:
-            resp = await self._ensure_client().get("/v1/models", timeout=5.0)
+            resp = await self._ensure_client().get(
+                self._openai_path("models"), timeout=5.0,
+            )
             if resp.status_code == 200:
                 data = resp.json()
                 models = data.get("data", [])
@@ -393,7 +421,11 @@ class VLLMInferenceClient:
 
         t0 = time.perf_counter()
 
-        endpoint = "/v1/chat/completions" if use_chat else "/v1/completions"
+        endpoint = (
+            self._openai_path("chat/completions")
+            if use_chat
+            else self._openai_path("completions")
+        )
         resp = await self._request_with_retry(
             "POST", endpoint, json=body,
         )
@@ -549,7 +581,11 @@ class VLLMInferenceClient:
 
         self._inject_router_bias(body)
 
-        endpoint = "/v1/chat/completions" if use_chat else "/v1/completions"
+        endpoint = (
+            self._openai_path("chat/completions")
+            if use_chat
+            else self._openai_path("completions")
+        )
 
         # Reset accumulated tool calls from any previous stream
         self.last_stream_tool_calls: list[dict[str, Any]] | None = None
@@ -786,7 +822,7 @@ class VLLMInferenceClient:
 
     async def list_models(self) -> list[str]:
         """List available models (base + loaded adapters) from vLLM."""
-        resp = await self._ensure_client().get("/v1/models")
+        resp = await self._ensure_client().get(self._openai_path("models"))
         resp.raise_for_status()
         data = resp.json()
         return [m["id"] for m in data.get("data", [])]

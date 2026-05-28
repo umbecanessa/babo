@@ -25,6 +25,11 @@ export class InferenceController {
     private upstream: CloudUpstreamService,
   ) {}
 
+  @Get('health')
+  health() {
+    return { ok: true, service: 'babo-inference' };
+  }
+
   @Get('models')
   async listModels(@Req() req: any) {
     if (!this.upstream.isInferenceConfigured()) {

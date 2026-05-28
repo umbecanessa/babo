@@ -41,7 +41,8 @@ export function resolveBaboCloudModelId(model?: string | null): string {
     !m ||
     m === 'llama3.2' ||
     m === 'gpt-4o-mini' ||
-    m === BABO_HOSTED_MODEL_ID
+    m === BABO_HOSTED_MODEL_ID ||
+    /qwen3\.7/i.test(m)
   ) {
     return DEFAULT_BABO_CLOUD_MODEL;
   }

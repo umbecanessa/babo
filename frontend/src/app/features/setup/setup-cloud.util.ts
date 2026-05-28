@@ -1,6 +1,6 @@
 import type { CapabilityProfile } from './capability-profile.model';
 import { normalizeNestjsUrl } from './setup-backend.util';
-import { DEFAULT_BABO_CLOUD_MODEL } from './setup-inference.util';
+import { resolveBaboCloudModelId } from './setup-inference.util';
 
 /** Nest API root with `/api` suffix. */
 export function nestjsApiBase(nestjsUrl: string): string {
@@ -29,8 +29,8 @@ export function applyBaboCloudPlacements(
 
   if (inf.tier === 'hosted_babo' || inf.tier === 'byok_cloud') {
     inf.url = relayInf;
-    if (inf.tier === 'hosted_babo' && !inf.model) {
-      inf.model = DEFAULT_BABO_CLOUD_MODEL;
+    if (inf.tier === 'hosted_babo') {
+      inf.model = resolveBaboCloudModelId(inf.model);
     }
   }
 
