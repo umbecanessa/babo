@@ -34,7 +34,21 @@ Or edit `src/environments/environment.ts`.
 
 If an admin already exists, use **Login** with an admin account (or promote via SQL: `UPDATE users SET role = 'admin' WHERE email = '...'`).
 
-## Production build
+## Production / Railway
+
+Deploy from the `admin/` root (uses `Dockerfile` + `railway.json`).
+
+Set on the Railway service (optional — defaults to Babo Cloud API):
+
+```env
+BABO_ADMIN_API=https://api.babo.agency/api
+```
+
+The container injects this into `index.html` at startup so API calls go to NestJS, not the admin static host.
+
+Ensure NestJS CORS allows your admin origin (e.g. `https://admin-production-d73d.up.railway.app`).
+
+## Production build (manual)
 
 ```bash
 npm run build
