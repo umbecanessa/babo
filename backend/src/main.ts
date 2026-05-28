@@ -8,6 +8,11 @@ import { WebSocketServer } from 'ws';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  // Default Express JSON limit is ~100KB — agentic inference payloads with
+  // tool schemas + message history exceed that. File uploads use Multer (25MB).
+  app.useBodyParser('json', { limit: '8mb' });
+  app.useBodyParser('urlencoded', { limit: '8mb', extended: true });
+
   app.enableCors({
     origin: true,
     credentials: true,
