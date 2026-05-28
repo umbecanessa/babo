@@ -8,6 +8,8 @@ export interface TeamMember {
   iterations: number;
   tool_calls: number;
   elapsed_seconds: number;
+  last_actions?: string[];
+  hint_ack?: string;
 }
 
 export interface Team {
@@ -15,7 +17,9 @@ export interface Team {
   name: string;
   plan_id: string;
   wave_index: number;
-  status: 'created' | 'active' | 'paused' | 'completed' | 'partial' | 'failed' | 'blocked';
+  wave_attempt?: number;
+  supersedes_team_id?: string;
+  status: 'created' | 'active' | 'paused' | 'completed' | 'partial' | 'failed' | 'blocked' | 'cancelled';
   mission: string;
   briefing: string;
   members: TeamMember[];

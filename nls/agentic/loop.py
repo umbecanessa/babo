@@ -26,6 +26,36 @@ from nls.tools.agent_tools.base import AgentTool, tool_to_openai_schema
 from .bridge import LoopHooks
 from .breadcrumbs import BreadcrumbContext, BreadcrumbEngine
 from .compactor import CompactionAnchor, compact, should_compact
+from .orchestration_policy import (
+    build_orchestration_wake_message,
+    invalidate_tool_policy_cache,
+    is_conversational_user_turn,
+    on_evaluating_wave,
+    refresh_tool_schemas,
+    should_force_coordinator_yield,
+    should_suppress_checkback_wake,
+    trim_context_for_orchestration_wake,
+    update_coordinator_counters,
+    iter_tool_names,
+    delegates_running,
+)
+from .tool_mode_policy import (
+    apply_dispatch_mode,
+    apply_tool_mode_transition,
+    compute_tool_mode_transition,
+)
+from nls.runtime.dispatch_sources import is_orchestration_dispatch_source
+from .coordinator_guard import (
+    coordinator_nudge_pre_delegate,
+    record_team_inspect,
+    filter_stale_tactical_goals,
+    must_delegate_before_impl,
+    pre_delegate_block_message,
+    pre_delegate_reason,
+    delegation_hallucination_nudge,
+    recovery_mode_system_note,
+    sync_goals_from_wm,
+)
 from .evaluator import check_guards, should_complete_v4
 from .events import AgentEvent, EventType, emit
 from .executor import execute_tools, make_tool_message
@@ -36,6 +66,10 @@ from .generator import (
     sanitize_generation_error_for_user,
 )
 from .goals import extract_goals
+from .resume_guidance import (
+    build_session_resume_guidance,
+    user_requests_session_resume,
+)
 from .types import (
     AgentMode,
     COORDINATOR_TOOLS,
@@ -53,6 +87,7 @@ from .types import (
     _DELEGATE_TOOL_SCHEMA,
     _get_plan_position,
     _select_thinking_mode,
+    virtual_tool_schemas_for_loop,
 )
 from nls.brain.thinking import assess_coherence, extract_trajectory
 
@@ -286,7 +321,9 @@ def apply_final_response_backfill(
     # automatically when they complete.
     _silent_exits = (
         "total_timeout", "max_iterations", "tool_call_budget",
-        "idle_monitor_yield",
+        "idle_monitor_yield", "awaiting_delegates",
+        "post_launch_yield", "coordinator_burn", "monitor_iter_cap",
+        "checkback_suppressed", "wake_token_budget",
     )
     if (
         state.delegate_count > 0
@@ -667,6 +704,7 @@ async def run_loop(
     wrap_up_signal: asyncio.Event | None = None,
     delegate_manager: Any | None = None,
     active_tool_names: set[str] | None = None,
+    dispatch_source: str = "",
 ) -> LoopResult:
     """Core v5 agentic loop. Thin orchestrator — all logic in modules.
 
@@ -678,6 +716,7 @@ async def run_loop(
     """
 
     state = LoopState(user_input=user_input, start_time=time.time())
+    state.dispatch_source = dispatch_source or ""
     if state_holder is not None:
         state_holder.append(state)
     _session_log_path = _open_session_log(config, state)
@@ -712,6 +751,51 @@ async def run_loop(
     _team_tool = tools.get("team")
     if _team_tool is not None:
         _cached_team_manager = getattr(_team_tool, "_tm", None)
+    if _cached_team_manager is not None:
+        hooks._cached_team_manager = _cached_team_manager  # type: ignore[attr-defined]
+
+    # Recovery / auto-reconcile: launch prepared next waves without a full
+    # EM review loop when policy allows (saves tokens vs stall → idle).
+    if (
+        _cached_team_manager is not None
+        and config.enable_delegation
+        and delegate_manager is not None
+    ):
+        _cached_team_manager.enqueue_unlaunched_for_auto_launch()
+        if not dispatch_source.startswith("team_wave_complete:"):
+            try:
+                from nls.agentic.executor import try_auto_launch_pending_wave
+
+                await try_auto_launch_pending_wave(
+                    _cached_team_manager,
+                    delegate_manager,
+                    tools,
+                    config,
+                    state,
+                    hooks,
+                    vllm_client,
+                    on_event,
+                    abort_signal,
+                    user_input,
+                )
+            except Exception:
+                logger.debug(
+                    "pending wave auto-launch at loop start failed",
+                    exc_info=True,
+                )
+
+    # Follow-up user messages start a fresh LoopState.  Sync running
+    # delegates from the manager so monitoring wrap-up / idle yield logic
+    # sees background work launched in a prior loop.
+    if delegate_manager is not None:
+        _running_delegates = delegate_manager.running_count()
+        if _running_delegates:
+            state.delegate_count = max(state.delegate_count, _running_delegates)
+            logger.info(
+                "[LOOP:%s] synced delegate_count=%d from %d running "
+                "delegate(s) in prior loop",
+                state.loop_id, state.delegate_count, _running_delegates,
+            )
 
     if copilot_queue is not None and hooks.copilot_queue is None:
         hooks.copilot_queue = copilot_queue
@@ -722,16 +806,11 @@ async def run_loop(
     # Lazy loading (get_tool_schema) caused mismatches: the system prompt
     # listed 20+ tools but only 10 had schemas, making the model
     # hallucinate non-existent tools and fall back to XML format.
-    _base_schemas: list[dict] = [
-        _ASK_USER_TOOL_SCHEMA,
-        _DELEGATE_TOOL_SCHEMA,
-    ]
-    if config.enable_delegation:
-        _base_schemas.append(_COMMUNICATE_TOOL_SCHEMA)
-        _base_schemas.append(_SWITCH_MODE_TOOL_SCHEMA)
-    if config.enable_detached_delegates and delegate_manager is not None:
-        _base_schemas.append(_DELEGATE_STATUS_TOOL_SCHEMA)
-        _base_schemas.append(_WAIT_TOOL_SCHEMA)
+    _base_schemas: list[dict] = virtual_tool_schemas_for_loop(
+        enable_delegation=config.enable_delegation,
+        enable_detached_delegates=config.enable_detached_delegates,
+        delegate_manager=delegate_manager,
+    )
     for _tool_name, _tool_obj in tools.items():
         if isinstance(_tool_obj, AgentTool):
             if active_tool_names is not None and _tool_name not in active_tool_names:
@@ -763,6 +842,98 @@ async def run_loop(
     from nls.tools.agent_tools.plan import PlanReadOnlyTool as _PlanRO
     _is_delegate_loop = isinstance(_plan_tool, _PlanRO)
 
+    # Orchestration wake: trim history and inject compact WM packet
+    _dual_wm = getattr(hooks, "_accumulator_wm_target", None)
+    if (
+        config.enable_delegation
+        and is_orchestration_dispatch_source(dispatch_source)
+    ):
+        context = trim_context_for_orchestration_wake(
+            context, dispatch_source,
+        )
+        if delegates_running(delegate_manager):
+            if should_suppress_checkback_wake(
+                _dual_wm, dispatch_source, delegates_active=True,
+            ):
+                logger.info(
+                    "[LOOP:%s] check-back suppressed — WM unchanged",
+                    state.loop_id,
+                )
+                state.exit_reason = "checkback_suppressed"
+                return LoopResult(
+                    final_response="",
+                    exit_reason="checkback_suppressed",
+                    iterations=0,
+                    total_tool_calls=0,
+                )
+        if not state.orch_wake_injected:
+            _delegate_summary = ""
+            if delegate_manager is not None:
+                try:
+                    _running = delegate_manager.running_count()
+                    if _running:
+                        _delegate_summary = f"{_running} delegate(s) running"
+                except Exception:
+                    pass
+            _plan_progress = ""
+            if _plan_tool is not None and hasattr(_plan_tool, "_store"):
+                try:
+                    _ap = _plan_tool._store.find_active()
+                    if _ap is not None:
+                        _plan_progress = _ap.progress_summary()
+                except Exception:
+                    pass
+            context.append({
+                "role": "system",
+                "content": build_orchestration_wake_message(
+                    dispatch_source=dispatch_source,
+                    dual_wm=_dual_wm,
+                    plan_progress=_plan_progress,
+                    delegate_summary=_delegate_summary,
+                    coordinator_phase=getattr(state, "coordinator_phase", ""),
+                ),
+            })
+            state.orch_wake_injected = True
+
+    if (
+        dispatch_source.startswith("team_wave_complete:")
+        or dispatch_source.startswith("team_completion_review:")
+    ):
+        state.active_mode = AgentMode.EVALUATING
+        invalidate_tool_policy_cache(state)
+        _record_phase = None
+        if hooks and hooks.wm_orch_set_coordinator_phase:
+            _record_phase = hooks.wm_orch_set_coordinator_phase
+        on_evaluating_wave(state, record_phase=_record_phase)
+        if _cached_team_manager is not None:
+            try:
+                from nls.agentic.wake_coordination import sync_wake_attention_board
+                sync_wake_attention_board(_cached_team_manager)
+            except Exception:
+                pass
+        logger.info(
+            "[LOOP:%s] %s dispatch — entering EVALUATING mode",
+            state.loop_id,
+            dispatch_source.split(":", 1)[0],
+        )
+    elif config.enable_delegation:
+        _dispatch_mt = apply_dispatch_mode(
+            state, dispatch_source, enable_delegation=True,
+        )
+        if _dispatch_mt is not None:
+            apply_tool_mode_transition(state, _dispatch_mt)
+            if _dispatch_mt.hint:
+                context.append({"role": "system", "content": _dispatch_mt.hint})
+            _rmode_ref = getattr(hooks, "_render_mode_ref", None)
+            if _rmode_ref:
+                _rmode_ref[0] = state.active_mode.value
+            logger.info(
+                "[LOOP:%s] dispatch %s — mode %s",
+                state.loop_id,
+                _dispatch_mt.reason,
+                state.active_mode.value,
+            )
+
     # --- Hook: on_loop_start ---
     if hooks.on_loop_start:
         try:
@@ -780,11 +951,22 @@ async def run_loop(
     # --- Pre-loop: goal extraction ---
     if pre_extracted_hints:
         state.hints = list(pre_extracted_hints)
+    _active_plan_for_goals = None
+    _plan_tool_goals = tools.get("plan")
+    if _plan_tool_goals is not None and hasattr(_plan_tool_goals, "_store"):
+        try:
+            _active_plan_for_goals = _plan_tool_goals._store.find_active()
+        except Exception:
+            pass
     if pre_extracted_goals:
-        state.goals = list(pre_extracted_goals)
+        state.goals = filter_stale_tactical_goals(
+            list(pre_extracted_goals), _active_plan_for_goals,
+        )
     elif not (hooks.has_active_plan and hooks.has_active_plan()):
         try:
-            goals, hints, deferred = await extract_goals(vllm_client, user_input)
+            goals, hints, deferred = await extract_goals(
+                vllm_client, user_input, adapter_name=adapter_name,
+            )
             if goals:
                 state.goals = goals
                 if hooks.on_goals_extracted:
@@ -821,6 +1003,13 @@ async def run_loop(
         except Exception:
             logger.debug("Pre-loop goal extraction failed", exc_info=True)
 
+    _wm_goals_fn = getattr(hooks, "wm_get_tactical_goals", None)
+    sync_goals_from_wm(state, _wm_goals_fn)
+    if state.goals:
+        state.goals = filter_stale_tactical_goals(
+            state.goals, _active_plan_for_goals,
+        )
+
     # Inject [CHANNEL ROUTING] system message when deferred external channels
     if _deferred_actions:
         _ext_chs = {
@@ -832,16 +1021,14 @@ async def run_loop(
             _ch_list = ", ".join(sorted(_ext_chs))
             _routing_msg = (
                 f"[CHANNEL ROUTING] The user is AFK. "
-                f"Primary communication channel(s): {_ch_list}.\n"
-                f"- Send ALL updates, progress notifications, and final "
-                f"results via {_ch_list} — the user is NOT watching the "
-                f"chat.\n"
-                f"- Do NOT rely on the chat for delivering important "
-                f"information.\n"
-                f"- When delegating work to sub-agents, immediately "
-                f"acknowledge on {_ch_list} that work is underway.\n"
-                f"- When results are ready, send the FULL report on "
-                f"{_ch_list}, not a placeholder message."
+                f"Requested channel(s): {_ch_list}.\n"
+                f"- Send updates ONLY on channels that show CONNECTED in "
+                f"your Channels ring (whatsapp_send / telegram_send / "
+                f"email_send must succeed).\n"
+                f"- If a channel is NOT CONNECTED, use communicate() in chat "
+                f"and do NOT label messages 'Status Update ({_ch_list})'.\n"
+                f"- When a channel IS connected, send the FULL report there, "
+                f"not a placeholder."
             )
             context.append({"role": "system", "content": _routing_msg})
             logger.info(
@@ -890,12 +1077,9 @@ async def run_loop(
                 _t1_tm = getattr(_t1_tool_obj, "_tm", None)
                 if _t1_tm is not None:
                     try:
-                        _t1_all = _t1_tm.list_teams(include_terminal=True)
-                        _t1_non_terminal = [
-                            t for t in _t1_all if not t.is_terminal
-                        ]
-                        if _t1_non_terminal:
-                            _trigger1_has_active_teams = True
+                        _trigger1_has_active_teams = (
+                            _t1_tm.has_orchestrator_blocking_team()
+                        )
                     except Exception:
                         pass
                 break
@@ -908,8 +1092,15 @@ async def run_loop(
         and hasattr(_plan_tool, "get_store")
     ):
         try:
-            _active_plan = _plan_tool.get_store().find_active()
-            if _active_plan and _active_plan.status != "done":
+            _ps = _plan_tool.get_store()
+            _tm = _cached_team_manager
+            _active_plan = _ps.resolve_work_plan(
+                "", _tm, reopen=False,
+            )
+            if (
+                _active_plan
+                and _active_plan.status not in ("done", "archived")
+            ):
                 # Ensure orchestrator CWD is inside the project folder.
                 _cwd_fn = getattr(_plan_tool, "_cwd_switch_fn", None)
                 if _cwd_fn and _active_plan.project_dir:
@@ -926,7 +1117,7 @@ async def run_loop(
                     s for s in _active_plan.steps
                     if s.delegatable and s.status not in ("done", "skipped")
                 ]
-                if len(_delegatable) >= 2:
+                if _delegatable:
                     state.active_mode = AgentMode.DELEGATING
                     logger.info(
                         "[LOOP:%s] AUTO-MODE (plan): active plan "
@@ -943,16 +1134,24 @@ async def run_loop(
                     )
                     if len(_delegatable) > 3:
                         _step_labels += f", +{len(_delegatable)-3} more"
+                    _wave_hint = (
+                        "team(action='create', plan_id="
+                        f"'{_active_plan.id}', wave=0, "
+                        f"name='Wave 0 - {_delegatable[0].label}')"
+                        if len(_delegatable) >= 2
+                        else (
+                            f"team(action='create', plan_id='{_active_plan.id}', "
+                            f"wave=N, name='Final wave - {_delegatable[0].label}')"
+                        )
+                    )
                     _plan_coord_msg = (
                         "DELEGATING MODE RESTORED — you have an active "
                         f"plan '{_active_plan.id}' with "
-                        f"{len(_delegatable)} pending delegatable steps "
+                        f"{len(_delegatable)} pending delegatable step(s) "
                         f"({_done_count}/{len(_active_plan.steps)} done): "
                         f"{_step_labels}.\n"
                         "Your NEXT action should be:\n"
-                        "  team(action='create', plan_id="
-                        f"'{_active_plan.id}', wave=0, "
-                        f"name='Wave 0 - {_delegatable[0].label}')\n"
+                        f"  {_wave_hint}\n"
                         "Then: team(action='launch', team_id=...)\n\n"
                         "CRITICAL: Do NOT create project files, "
                         "directories, scaffolding, or git repos yourself. "
@@ -1041,7 +1240,7 @@ async def run_loop(
                 ]
                 if _non_terminal:
                     state.active_mode = AgentMode.MONITORING
-                    state._mode_schemas_applied = False  # re-filter schemas for MONITORING
+                    invalidate_tool_policy_cache(state)  # re-filter schemas for MONITORING
                     _team_ids = ", ".join(t.id[:8] for t in _non_terminal[:3])
                     logger.info(
                         "[LOOP:%s] AUTO-MODE (teams): %d active teams "
@@ -1049,19 +1248,15 @@ async def run_loop(
                         state.loop_id, len(_non_terminal), _team_ids,
                     )
                     context.append({"role": "system", "content": (
-                        "MONITORING MODE RESTORED — you have "
-                        f"{len(_non_terminal)} active team(s). "
-                        "You are the orchestrator. Use team(action='inspect') "
-                        "to check progress, wait() for running delegates, "
-                        "and team(action='advance') when waves complete. "
-                        "Do NOT implement code yourself — delegate ALL work.\n"
-                        "IMPORTANT: Sub-agents run in the background. You do "
-                        "NOT need to stay in this loop to monitor them. After "
-                        "sending a status update to the user, you can call "
-                        "task_complete(summary='Monitoring N active teams — "
-                        "will notify when complete.') to close the loop "
-                        "cleanly. You will be re-activated automatically "
-                        "when delegates finish."
+                        "MONITORING MODE — engineering manager on the board.\n"
+                        f"You have {len(_non_terminal)} active wave(s). "
+                        "Your team executes; you steer when stuck and review "
+                        "when waves land.\n"
+                        "After launch: communicate(optional) → "
+                        "await_delegates(summary='...') to end this turn.\n"
+                        "On wake: inspect → hint if blocked → evaluating "
+                        "to review deliverables → advance plan/Kanban.\n"
+                        "Do NOT do IC work (write/bash) or idle-poll wait(60+)."
                     )})
                 elif _recently_completed:
                     state.active_mode = AgentMode.EVALUATING
@@ -1071,16 +1266,59 @@ async def run_loop(
                         state.loop_id, len(_recently_completed),
                     )
                     context.append({"role": "system", "content": (
-                        "EVALUATING MODE RESTORED — previous team waves "
-                        "completed. Review their output with "
-                        "team(action='inspect'), then advance the plan "
-                        "with team(action='advance') or create the next "
-                        "wave. Do NOT implement code yourself.\n"
-                        "When ALL plan steps are complete and verified, "
-                        "call task_complete(summary='...') to finish."
+                        "EVALUATING MODE — engineering manager code review.\n"
+                        "A wave finished. Inspect outputs, verify acceptance "
+                        "criteria, patch small gaps, update plan/Kanban.\n"
+                        "Use plan(accept_partial) if delegates failed but "
+                        "artifacts exist. Then team(advance) or launch next wave.\n"
+                        "When ALL plan steps are verified, task_complete."
                     )})
             except Exception:
                 pass
+
+    # Session resume: user returned after downtime — avoid status re-scan loops.
+    if (
+        config.enable_delegation
+        and user_requests_session_resume(user_input)
+        and _plan_tool
+        and hasattr(_plan_tool, "get_store")
+    ):
+        try:
+            _resume_plan = _plan_tool.get_store().find_active()
+            if _resume_plan and _resume_plan.status != "done":
+                _resume_blocking = False
+                for _rtool_name, _rtool_obj in tools.items():
+                    if _rtool_name == "team":
+                        _rtm = getattr(_rtool_obj, "_tm", None)
+                        if _rtm is not None:
+                            try:
+                                _resume_blocking = (
+                                    _rtm.has_orchestrator_blocking_team()
+                                )
+                            except Exception:
+                                pass
+                        break
+                _resume_msg = build_session_resume_guidance(
+                    _resume_plan,
+                    blocking_team=_resume_blocking,
+                )
+                context.append({"role": "system", "content": _resume_msg})
+                _open_steps = [
+                    s for s in _resume_plan.steps
+                    if s.status not in ("done", "skipped")
+                ]
+                if (
+                    state.active_mode == AgentMode.EXECUTING
+                    and any(s.delegatable for s in _open_steps)
+                ):
+                    state.active_mode = AgentMode.DELEGATING
+                    invalidate_tool_policy_cache(state)
+                logger.info(
+                    "[LOOP:%s] injected session-resume guidance for plan %s",
+                    state.loop_id, _resume_plan.id,
+                )
+        except Exception:
+            logger.debug("Session resume guidance failed", exc_info=True)
 
     # Set render mode for Cryptex compositor
     _rmode_ref = getattr(hooks, "_render_mode_ref", None)
@@ -1090,9 +1328,20 @@ async def run_loop(
     # Populate loop state ref for Cryptex ring priority computation
     _lstate_ref = getattr(hooks, "_loop_state_ref", None)
     if _lstate_ref is not None:
+        _pending_cr = 0
+        _tm_lc = getattr(hooks, "_cached_team_manager", None)
+        if _tm_lc is not None:
+            try:
+                _pending_cr = len(
+                    getattr(_tm_lc, "_pending_completion_reviews", {}) or {},
+                )
+            except Exception:
+                pass
         _lstate_ref.update({
             "coordinator_mode": state.coordinator_mode,
             "active_mode": state.active_mode.value,
+            "coordinator_phase": state.coordinator_phase,
+            "pending_completion_reviews": _pending_cr,
             "iteration": state.iteration,
             "last_tool": "",
             "last_tool_action": "",
@@ -1122,6 +1371,7 @@ async def run_loop(
     _slog(_session_log_path, {
         "event": "loop_start",
         "loop_id": state.loop_id,
+        "dispatch_source": dispatch_source or "",
         "goals": state.goals,
         "hints": state.hints[:5],
         "context_msgs": len(context),
@@ -1156,6 +1406,15 @@ async def run_loop(
         else:
             _base_schemas = list(_all_schemas)
             state.unlocked_tools = set(_all_unlocked)
+        _base_schemas, state.unlocked_tools, _ = refresh_tool_schemas(
+            state,
+            _all_schemas,
+            _all_unlocked,
+            state.active_mode,
+            delegate_manager,
+            hooks,
+            force=True,
+        )
         logger.info(
             "[LOOP:%s] MODE %s schemas applied — %d tools: %s",
             state.loop_id, state.active_mode.value, len(_base_schemas),
@@ -1165,15 +1424,11 @@ async def run_loop(
         # Loop started directly in EXECUTING: expand to the full tool set
         # in case the snapshot was taken with a predict_tools filter.
         state._mode_schemas_applied = True
-        _exec_schemas2: list[dict] = [
-            _ASK_USER_TOOL_SCHEMA, _DELEGATE_TOOL_SCHEMA,
-        ]
-        if config.enable_delegation:
-            _exec_schemas2.append(_COMMUNICATE_TOOL_SCHEMA)
-            _exec_schemas2.append(_SWITCH_MODE_TOOL_SCHEMA)
-        if config.enable_detached_delegates and delegate_manager is not None:
-            _exec_schemas2.append(_DELEGATE_STATUS_TOOL_SCHEMA)
-            _exec_schemas2.append(_WAIT_TOOL_SCHEMA)
+        _exec_schemas2: list[dict] = virtual_tool_schemas_for_loop(
+            enable_delegation=config.enable_delegation,
+            enable_detached_delegates=config.enable_detached_delegates,
+            delegate_manager=delegate_manager,
+        )
         _exec_unlocked2: set[str] = set()
         for _en2, _eo2 in tools.items():
             if isinstance(_eo2, AgentTool):
@@ -1186,6 +1441,16 @@ async def run_loop(
         state.unlocked_tools = _exec_unlocked2
         _all_schemas = list(_exec_schemas2)
         _all_unlocked = set(_exec_unlocked2)
+        if config.enable_delegation and not _is_delegate_loop:
+            _base_schemas, state.unlocked_tools, _ = refresh_tool_schemas(
+                state,
+                _all_schemas,
+                _all_unlocked,
+                state.active_mode,
+                delegate_manager,
+                hooks,
+                force=True,
+            )
         logger.info(
             "[LOOP:%s] MODE %s schemas applied (full set) — %d tools",
             state.loop_id, state.active_mode.value, len(_base_schemas),
@@ -1254,6 +1519,7 @@ async def run_loop(
                                 "plan_id": _refreshed.id,
                                 "title": _refreshed.title,
                                 "todo_id": _refreshed.todo_id or "",
+                                "project_dir": _refreshed.project_dir or "",
                                 "iteration": 0,
                             },
                         ))
@@ -1263,6 +1529,33 @@ async def run_loop(
     # --- Main loop ---
     while True:
         state.iteration += 1
+
+        if _lstate_ref is not None:
+            _lstate_ref["iteration"] = state.iteration
+            from nls.agentic.skill_discovery_boost import (
+                sync_skill_discovery_boost_flag,
+            )
+            sync_skill_discovery_boost_flag(_lstate_ref, state.iteration)
+
+        if (
+            state.iteration == 1
+            and dispatch_source.startswith("team_wave_complete:")
+            and _cached_team_manager is not None
+        ):
+            _review_team_id = dispatch_source.split(":", 1)[1]
+            _stale_wake = _cached_team_manager.stale_wave_review_wake_reason(
+                _review_team_id,
+            )
+            if _stale_wake:
+                _cached_team_manager._drain_wave_complete_dispatch(
+                    _review_team_id,
+                )
+                state.exit_reason = "stale_wave_review_wake"
+                logger.info(
+                    "[LOOP:%s] skipping redundant wave-complete wake for %s (%s)",
+                    state.loop_id, _review_team_id, _stale_wake,
+                )
+                break
 
         # Tombstone cleanup: remove partial messages from failed streams
         _pre_tomb = len(context)
@@ -1320,14 +1613,22 @@ async def run_loop(
             state.exit_reason = "user_abort"
             break
 
-        _has_pending = bool(
-            hooks.has_active_plan and hooks.has_active_plan()
-        )
+        if hooks.plan_has_pending_steps:
+            try:
+                _has_pending = hooks.plan_has_pending_steps()
+            except Exception:
+                _has_pending = bool(
+                    hooks.has_active_plan and hooks.has_active_plan()
+                )
+        else:
+            _has_pending = bool(
+                hooks.has_active_plan and hooks.has_active_plan()
+            )
         _has_team = False
         _guard_tm = _cached_team_manager
         if _guard_tm is not None:
             try:
-                _has_team = bool(_guard_tm.list_teams(include_terminal=False))
+                _has_team = _guard_tm.has_orchestrator_blocking_team()
             except Exception:
                 pass
 
@@ -1347,7 +1648,7 @@ async def run_loop(
             and not _il_user_switched_recently
         ):
             state.active_mode = AgentMode.MONITORING
-            state._mode_schemas_applied = False  # re-filter schemas for MONITORING
+            invalidate_tool_policy_cache(state)  # re-filter schemas for MONITORING
             _rmode_ref = getattr(hooks, "_render_mode_ref", None)
             if _rmode_ref:
                 _rmode_ref[0] = AgentMode.MONITORING.value
@@ -1363,6 +1664,34 @@ async def run_loop(
                 "running delegates, and team(action='advance') when waves "
                 "complete."
             )})
+
+        _has_plan_now = bool(
+            hooks.has_active_plan and hooks.has_active_plan()
+        )
+        _has_running_del = False
+        if delegate_manager is not None:
+            try:
+                _has_running_del = delegate_manager.has_active_delegates()
+            except Exception:
+                pass
+        _plan_req_team = False
+        if hooks.plan_requires_team_delegation:
+            try:
+                _plan_req_team = hooks.plan_requires_team_delegation()
+            except Exception:
+                pass
+        _pd_reason = pre_delegate_reason(
+            state,
+            config,
+            plan_requires_team_delegation=_plan_req_team,
+            has_active_plan=_has_plan_now,
+            has_running_delegates=_has_running_del,
+            has_non_terminal_team=_has_team,
+            is_delegate_loop=_is_delegate_loop,
+            orchestrator_recovery=state.orchestrator_recovery,
+        )
+        state.pre_delegate_reason = _pd_reason or ""
+        state.must_delegate_before_impl = _pd_reason is not None
 
         guard_reason = check_guards(
             state, config,
@@ -1440,19 +1769,44 @@ async def run_loop(
                         _todo_tool = tools.get("todo")
                         if _plan_tool is not None and _todo_tool is not None:
                             _ps = getattr(_plan_tool, "_store", None)
-                            _active_plan = _ps.find_active() if _ps is not None else None
-                            if _active_plan is not None and _active_plan.pending_steps():
+                            _tm = _cached_team_manager
+                            _active_plan = (
+                                _ps.resolve_work_plan("", _tm, reopen=True)
+                                if _ps is not None
+                                else None
+                            )
+                            from nls.agentic.plan_work import (
+                                incomplete_steps,
+                                plan_needs_recovery,
+                                work_plan_has_open_steps,
+                            )
+
+                            _needs_resume = (
+                                _active_plan is not None
+                                and work_plan_has_open_steps(_active_plan)
+                            )
+                            if _needs_resume:
+                                _open = incomplete_steps(_active_plan)
                                 _pending_labels = [
                                     s.label or s.id
-                                    for s in _active_plan.pending_steps()[:3]
+                                    for s in (
+                                        _active_plan.pending_steps() or _open
+                                    )[:3]
                                 ]
+                                _recovery = plan_needs_recovery(
+                                    _active_plan, _tm,
+                                )
                                 _resume_title = (
                                     f"Resume plan: {_active_plan.title or _active_plan.id}"
                                 )
                                 _resume_desc = (
-                                    f"Loop exited ({_final_reason}) with {len(_active_plan.pending_steps())} "
-                                    f"pending step(s). Pending: {', '.join(_pending_labels)}. "
-                                    f"Use plan(action='view') to inspect current state, then continue."
+                                    f"Loop exited ({_final_reason}). "
+                                    f"plan_id={_active_plan.id} "
+                                    f"status={_active_plan.status} "
+                                    f"recovery={_recovery}. "
+                                    f"Open: {', '.join(_pending_labels)}. "
+                                    "Use plan(action='read', plan_id='...'), "
+                                    "accept_partial / delegate as needed, then continue."
                                 )
                                 _todo_store = getattr(_todo_tool, "get_store", None)
                                 if callable(_todo_store) and config.agent_id:
@@ -1505,6 +1859,10 @@ async def run_loop(
             state.exit_reason = "task_complete"
             break
 
+        # --- Sub-agent budget pacing (completion-focused) ---
+        from nls.agentic.evaluator import inject_subagent_pacing_nudges
+        inject_subagent_pacing_nudges(state, config, context)
+
         # --- Stall detection: "I'm stuck" nudge ---
         from nls.agentic.evaluator import detect_stall
         _stall_msg = detect_stall(state, config)
@@ -1524,6 +1882,14 @@ async def run_loop(
                 break
             state.stall_nudges_given += 1
             context.append({"role": "user", "content": _stall_msg})
+            from nls.agentic.skill_discovery_boost import (
+                trigger_skill_discovery_boost,
+            )
+            trigger_skill_discovery_boost(
+                hooks,
+                iteration=state.iteration,
+                reason="stall_detected",
+            )
             logger.info(
                 "[LOOP:%s] iter %d: STALL nudge #%d injected",
                 state.loop_id, state.iteration,
@@ -1534,11 +1900,12 @@ async def run_loop(
         if wrap_up_signal and wrap_up_signal.is_set():
             wrap_up_signal.clear()
             _wu_msg = (
-                f"URGENT: You have used {state.iteration - state.wait_only_iterations} of "
-                f"{config.max_iterations} effective iterations. Summarize ALL "
-                f"findings you have gathered so far and provide your "
-                f"final response NOW. Do not start new tool calls "
-                f"\u2014 consolidate what you have."
+                f"You have used {state.iteration - state.wait_only_iterations} of "
+                f"{config.max_iterations} effective iterations. "
+                "If core deliverables are not on disk yet, build the next "
+                "piece now — do not exit early just to save iterations. "
+                "If you are blocked or need more budget, call escalate(). "
+                "If the task is truly complete, verify once and finish."
             )
             context.append({"role": "system", "content": _wu_msg})
             logger.info(
@@ -1567,6 +1934,14 @@ async def run_loop(
                     state.just_received_steering = True
                     if _has_orch_hint:
                         state.received_orchestrator_hint = True
+                        from nls.agentic.skill_discovery_boost import (
+                            trigger_skill_discovery_boost,
+                        )
+                        trigger_skill_discovery_boost(
+                            hooks,
+                            iteration=state.iteration,
+                            reason="orchestrator_hint",
+                        )
                     logger.info(
                         "[LOOP:%s] iter %d: STEERING injected %d msgs "
                         "(hint=%s) — ctx_msgs now %d",
@@ -1582,27 +1957,31 @@ async def run_loop(
                 )
                 state.just_received_steering = False
 
-        # A2. Supervisor reminder: while delegates are actively running,
-        # remind the orchestrator to wait rather than do their work.
+        # A2. EM nudges while a wave is executing
         if state.coordinator_mode and delegate_manager is not None:
             try:
-                _any_running = any(
-                    ds.state == "running"
-                    for ds in delegate_manager.list_all()
-                )
-                _supervisor_msg = (
-                    "[SUPERVISOR MODE] Sub-agents are still working. "
-                    "Do NOT create files, directories, or write code "
-                    "yourself right now — wait for them to finish. "
-                    "Actions: wait, team(inspect), team(intervene), "
-                    "or respond to the user. You can review and fix "
-                    "files AFTER the current wave completes."
-                ) if _any_running else None
-                if _supervisor_msg:
-                    context.append({
-                        "role": "system",
-                        "content": _supervisor_msg,
-                    })
+                if delegates_running(delegate_manager):
+                    if getattr(state, "must_await_delegates", False):
+                        context.append({
+                            "role": "system",
+                            "content": (
+                                "[POST-LAUNCH] Wave is executing. Debrief the "
+                                "stakeholder (communicate) if needed, then "
+                                "await_delegates(summary='...') — your "
+                                "management turn is done until escalation, "
+                                "completion, or scheduled review."
+                            ),
+                        })
+                    elif state.coordinator_burn_iters >= 2:
+                        context.append({
+                            "role": "system",
+                            "content": (
+                                "[EM TURN COMPLETE] You are idle-polling, not "
+                                "managing. The board/WM already tracks wave "
+                                "state. If no escalation: await_delegates. "
+                                "If someone is stuck: ONE hint, then await."
+                            ),
+                        })
             except Exception:
                 pass
 
@@ -1614,6 +1993,21 @@ async def run_loop(
                 context = hooks.transform_context(context)
             except Exception:
                 logger.debug("transform_context hook failed", exc_info=True)
+
+        # B-pre. Runtime tool schema filter (no IC tools while wave runs)
+        if config.enable_delegation and not _is_delegate_loop:
+            _filtered, _unlocked, _policy_changed = refresh_tool_schemas(
+                state,
+                _all_schemas,
+                _all_unlocked,
+                state.active_mode,
+                delegate_manager,
+                hooks,
+            )
+            if _policy_changed:
+                _base_schemas = _filtered
+                state.unlocked_tools = _unlocked
+            anchor.available_tools = sorted(state.unlocked_tools)
 
         # C. Compaction check
         if should_compact(context, config, anchor):
@@ -1756,6 +2150,14 @@ async def run_loop(
         state.total_prompt_tokens += response.prompt_tokens
         state.total_completion_tokens += response.completion_tokens
         state.total_tokens += response.total_tokens
+        if (
+            config.enable_delegation
+            and (
+                is_orchestration_dispatch_source(dispatch_source)
+                or delegates_running(delegate_manager)
+            )
+        ):
+            state.coordinator_wake_prompt_tokens += response.prompt_tokens
         state.iter_token_log.append({
             "iter": state.iteration,
             "prompt_tokens": response.prompt_tokens,
@@ -1979,9 +2381,21 @@ async def run_loop(
                             state.files_written.append(_fp)
                     except Exception:
                         pass
+                _iter_args: dict[str, Any] = {}
+                try:
+                    _parsed_iter = (
+                        json.loads(_args_raw)
+                        if isinstance(_args_raw, str)
+                        else _args_raw
+                    )
+                    if isinstance(_parsed_iter, dict):
+                        _iter_args = _parsed_iter
+                except Exception:
+                    pass
                 _iter_tool_calls.append({
                     "name": _tool_name,
                     "call_id": tc.get("id", ""),
+                    "arguments": _iter_args,
                 })
                 _iter_tool_results.append({
                     "success": not result.is_error,
@@ -1997,19 +2411,66 @@ async def run_loop(
                 })
 
                 # --- Context-aware breadcrumb hints ---
-                if not result.is_error:
-                    _bc_hint = _breadcrumb_engine.evaluate(
-                        _build_bc_ctx(_tool_name, result, state, _deferred_actions, anchor)
-                    )
-                    if _bc_hint:
-                        context.append({"role": "system", "content": _bc_hint})
-                        _slog(_session_log_path, {
-                            "event": "breadcrumb",
-                            "loop_id": state.loop_id,
-                            "iteration": state.iteration,
-                            "trigger_tool": _tool_name,
-                            "hint_preview": _bc_hint[:200],
-                        })
+                _bc_ctx = _build_bc_ctx(
+                    _tool_name, result, state, _deferred_actions, anchor,
+                )
+                if not result.is_error or (
+                    _tool_name == "team"
+                    and _bc_ctx.result_details.get("wave_needs_advance")
+                ):
+                    _bc_hint = _breadcrumb_engine.evaluate(_bc_ctx)
+                else:
+                    _bc_hint = None
+                if _bc_hint:
+                    context.append({"role": "system", "content": _bc_hint})
+                    _slog(_session_log_path, {
+                        "event": "breadcrumb",
+                        "loop_id": state.loop_id,
+                        "iteration": state.iteration,
+                        "trigger_tool": _tool_name,
+                        "hint_preview": _bc_hint[:200],
+                    })
+
+                # --- Delegation hallucination guard ---
+                if (
+                    _tool_name == "await_delegates"
+                    and result.is_error
+                    and "no delegates" in (result.content or "").lower()
+                ):
+                    context.append({
+                        "role": "system",
+                        "content": delegation_hallucination_nudge(),
+                    })
+                elif _tool_name == "switch_mode" and not result.is_error:
+                    try:
+                        _sm_args = (
+                            json.loads(_args_raw)
+                            if isinstance(_args_raw, str)
+                            else _args_raw or {}
+                        )
+                        _target_mode = str(
+                            _sm_args.get("mode", "") or "",
+                        ).lower()
+                    except Exception:
+                        _target_mode = ""
+                    if _target_mode in ("monitoring", "delegating"):
+                        _delegates_live = state.delegate_count > 0
+                        if not _delegates_live and delegate_manager is not None:
+                            try:
+                                _delegates_live = (
+                                    delegate_manager.has_active_delegates()
+                                )
+                            except Exception:
+                                pass
+                        if (
+                            not _delegates_live
+                            and state.coordinator_mode
+                            and config.enable_delegation
+                        ):
+                            context.append({
+                                "role": "system",
+                                "content": delegation_hallucination_nudge(),
+                            })
 
                 # --- bash(sleep) → wait() steering ---
                 # The wait() tool provides delegate status, triggers
@@ -2038,6 +2499,10 @@ async def run_loop(
                 if _tool_name == "team" and not result.is_error:
                     if state.has_pending_escalation:
                         state.has_pending_escalation = False
+                        state.pending_escalation_team_id = ""
+                        state.pending_escalation_member_idx = -1
+                        state.pending_escalation_writes = 0
+                        state.pending_escalation_paths = []
                         logger.info(
                             "[LOOP:%s] iter %d: escalation handled — "
                             "cleared has_pending_escalation (team action)",
@@ -2080,6 +2545,84 @@ async def run_loop(
                             "discover_tools unlocked: %s", _newly_unlocked,
                         )
 
+            if state.consecutive_errors >= 2:
+                from nls.agentic.evaluator import Directive, get_directive_message
+                _recovery = get_directive_message(Directive.ERROR_RECOVERY)
+                if _recovery:
+                    context.append({"role": "system", "content": _recovery})
+                    from nls.agentic.skill_discovery_boost import (
+                        trigger_skill_discovery_boost,
+                    )
+                    trigger_skill_discovery_boost(
+                        hooks,
+                        iteration=state.iteration,
+                        reason="error_recovery",
+                    )
+                    logger.info(
+                        "[LOOP:%s] iter %d: ERROR_RECOVERY directive "
+                        "(consecutive_errors=%d)",
+                        state.loop_id, state.iteration,
+                        state.consecutive_errors,
+                    )
+
+            # --- Tool-driven mode transitions (Tier 1 & 2) — before schema filter ---
+            _prev_mode = state.active_mode
+
+            if state.active_mode == AgentMode.RESPONDING:
+                _responding_comm = frozenset({
+                    "communicate", "ask_user", "contacts",
+                    "whatsapp_send", "telegram_send", "email_send",
+                    "gmail_send", "gmail_reply",
+                })
+                _non_comm_calls = [
+                    tc.get("function", {}).get("name", "")
+                    for tc in (response.tool_calls or [])
+                    if tc.get("function", {}).get("name", "") not in _responding_comm
+                ]
+                _delivered_response = bool(response.text) and not _non_comm_calls
+                if _delivered_response:
+                    _restore = state._pre_responding_mode or AgentMode.MONITORING
+                    state.active_mode = _restore
+                    state._pre_responding_mode = None
+                    invalidate_tool_policy_cache(state)
+                    state.mode_override_count = 0
+                    logger.info(
+                        "[LOOP:%s] RESPONDING → %s (response delivered)",
+                        state.loop_id, _restore.value,
+                    )
+            else:
+                _tool_mt = compute_tool_mode_transition(
+                    state,
+                    response.tool_calls or [],
+                    results,
+                    enable_delegation=config.enable_delegation,
+                    plan_tool=_plan_tool,
+                )
+                if _tool_mt is not None:
+                    apply_tool_mode_transition(state, _tool_mt)
+                    if _tool_mt.hint:
+                        context.append({
+                            "role": "system",
+                            "content": _tool_mt.hint,
+                        })
+
+            if state.active_mode != _prev_mode:
+                _rmode = getattr(hooks, "_render_mode_ref", None)
+                if _rmode:
+                    _rmode[0] = state.active_mode.value
+                logger.info(
+                    "[LOOP:%s] AUTO-TRANSITION: %s → %s (iter %d)",
+                    state.loop_id, _prev_mode.value,
+                    state.active_mode.value, state.iteration,
+                )
+                _mt_acc = getattr(hooks, "_accumulator", None)
+                if _mt_acc is not None:
+                    _mt_acc.ingest("MODE_TRANSITION", {
+                        "from_mode": _prev_mode.value,
+                        "to_mode": state.active_mode.value,
+                        "reason": "tool_mode_policy",
+                    })
+
             # --- Mode schema restriction after mid-loop mode switch ---
             if not state._mode_schemas_applied:
                 state._mode_schemas_applied = True
@@ -2100,15 +2643,11 @@ async def run_loop(
                     # the agent explicitly switches to EXECUTING we must give
                     # it every tool that was registered for this agent, not
                     # just the pre-filtered subset.
-                    _exec_schemas: list[dict] = [
-                        _ASK_USER_TOOL_SCHEMA, _DELEGATE_TOOL_SCHEMA,
-                    ]
-                    if config.enable_delegation:
-                        _exec_schemas.append(_COMMUNICATE_TOOL_SCHEMA)
-                        _exec_schemas.append(_SWITCH_MODE_TOOL_SCHEMA)
-                    if config.enable_detached_delegates and delegate_manager is not None:
-                        _exec_schemas.append(_DELEGATE_STATUS_TOOL_SCHEMA)
-                        _exec_schemas.append(_WAIT_TOOL_SCHEMA)
+                    _exec_schemas: list[dict] = virtual_tool_schemas_for_loop(
+                        enable_delegation=config.enable_delegation,
+                        enable_detached_delegates=config.enable_detached_delegates,
+                        delegate_manager=delegate_manager,
+                    )
                     _exec_unlocked: set[str] = set()
                     for _en, _eo in tools.items():
                         if isinstance(_eo, AgentTool):
@@ -2123,6 +2662,16 @@ async def run_loop(
                     # EXECUTING → MONITORING) can filter from the full set.
                     _all_schemas = list(_exec_schemas)
                     _all_unlocked = set(_exec_unlocked)
+                if config.enable_delegation and not _is_delegate_loop:
+                    _base_schemas, state.unlocked_tools, _ = refresh_tool_schemas(
+                        state,
+                        _all_schemas,
+                        _all_unlocked,
+                        state.active_mode,
+                        delegate_manager,
+                        hooks,
+                        force=True,
+                    )
                 _rmode = getattr(hooks, "_render_mode_ref", None)
                 if _rmode:
                     _rmode[0] = state.active_mode.value
@@ -2130,101 +2679,6 @@ async def run_loop(
                     "[LOOP:%s] MODE %s schemas applied mid-loop — %d tools",
                     state.loop_id, state.active_mode.value, len(_base_schemas),
                 )
-
-            # --- Automatic mode transitions ---
-            # After tool execution, detect patterns that suggest a mode
-            # change and transition silently.
-            if state.active_mode not in (AgentMode.CHAT, AgentMode.EXECUTING):
-                _tool_names_this_iter = [
-                    tc.get("function", {}).get("name", "")
-                    for tc in (response.tool_calls or [])
-                ]
-                _prev_mode = state.active_mode
-
-                # Planning → Delegating: agent created a plan with
-                # delegatable steps, or used team directly.
-                if state.active_mode == AgentMode.PLANNING:
-                    _plan_created = False
-                    if "plan" in _tool_names_this_iter:
-                        for tc in (response.tool_calls or []):
-                            if tc.get("function", {}).get("name") == "plan":
-                                _ta = _parse_tool_args_safe(
-                                    tc.get("function", {}).get("arguments", "{}"))
-                                if _ta.get("action") == "create":
-                                    _plan_created = True
-                                    break
-                    if _plan_created or "team" in _tool_names_this_iter:
-                        state.active_mode = AgentMode.DELEGATING
-                        state._mode_schemas_applied = False
-                        state.mode_override_count = 0
-
-                # Delegating → Monitoring: team launched (wait typically follows
-                # on the next iteration, so we transition on launch alone)
-                elif state.active_mode == AgentMode.DELEGATING:
-                    for tc in (response.tool_calls or []):
-                        if tc.get("function", {}).get("name") == "team":
-                            _ta = _parse_tool_args_safe(
-                                tc.get("function", {}).get("arguments", "{}"))
-                            if _ta.get("action") == "launch":
-                                state.active_mode = AgentMode.MONITORING
-                                state._mode_schemas_applied = False
-                                state.mode_override_count = 0
-                                break
-
-                # Monitoring → Evaluating: wave complete detected
-                elif state.active_mode == AgentMode.MONITORING:
-                    for tc in (response.tool_calls or []):
-                        if tc.get("function", {}).get("name") == "team":
-                            _ta = _parse_tool_args_safe(
-                                tc.get("function", {}).get("arguments", "{}"))
-                            if _ta.get("action") == "advance":
-                                state.active_mode = AgentMode.EVALUATING
-                                state._mode_schemas_applied = False
-                                state.mode_override_count = 0
-                                break
-
-                # Responding → prior coordinator mode: after the agent
-                # delivers a text response (no non-comm tool calls), restore
-                # the mode it was in before entering RESPONDING.
-                elif state.active_mode == AgentMode.RESPONDING:
-                    _responding_comm = frozenset({
-                        "communicate", "ask_user", "contacts",
-                        "whatsapp_send", "telegram_send", "email_send",
-                        "gmail_send", "gmail_reply",
-                    })
-                    _non_comm_calls = [
-                        tc.get("function", {}).get("name", "")
-                        for tc in (response.tool_calls or [])
-                        if tc.get("function", {}).get("name", "") not in _responding_comm
-                    ]
-                    _delivered_response = bool(response.text) and not _non_comm_calls
-                    if _delivered_response:
-                        _restore = state._pre_responding_mode or AgentMode.MONITORING
-                        state.active_mode = _restore
-                        state._pre_responding_mode = None
-                        state._mode_schemas_applied = False
-                        state.mode_override_count = 0
-                        logger.info(
-                            "[LOOP:%s] RESPONDING → %s (response delivered)",
-                            state.loop_id, _restore.value,
-                        )
-
-                if state.active_mode != _prev_mode:
-                    _rmode = getattr(hooks, "_render_mode_ref", None)
-                    if _rmode:
-                        _rmode[0] = state.active_mode.value
-                    logger.info(
-                        "[LOOP:%s] AUTO-TRANSITION: %s → %s (iter %d)",
-                        state.loop_id, _prev_mode.value,
-                        state.active_mode.value, state.iteration,
-                    )
-                    _mt_acc = getattr(hooks, "_accumulator", None)
-                    if _mt_acc is not None:
-                        _mt_acc.ingest("MODE_TRANSITION", {
-                            "from_mode": _prev_mode.value,
-                            "to_mode": state.active_mode.value,
-                            "reason": "auto-transition",
-                        })
 
             # --- Communicate deduplication ---
             # When the model's last tool call was communicate(), it already
@@ -2244,9 +2698,8 @@ async def run_loop(
                         )})
 
             # --- Granular coordinator tool control ---
-            # Guardrails apply ONLY while delegates are actively running.
-            # Between waves the orchestrator is free to review, polish,
-            # edit, and fix — that's part of its job as manager.
+            # While delegates run: block overlapping implementation.
+            # Before any team launch: block orchestrator self-build (plan+team first).
             if state.coordinator_mode:
                 _has_running = False
                 _running: list[Any] = []
@@ -2260,7 +2713,35 @@ async def run_loop(
                     except Exception:
                         pass
 
-                if _has_running:
+                _pre_delegate = state.must_delegate_before_impl
+                if _pre_delegate and not _has_running:
+                    _impl_blocked = False
+                    for tc in (response.tool_calls or []):
+                        _tn = tc.get("function", {}).get("name", "")
+                        _ta = _parse_tool_args_safe(
+                            tc.get("function", {}).get("arguments", "{}"))
+                        if pre_delegate_block_message(
+                            _tn, _ta,
+                            active_mode=state.active_mode,
+                            block_reason=state.pre_delegate_reason or None,
+                            orchestrator_recovery=state.orchestrator_recovery,
+                        ):
+                            _impl_blocked = True
+                            break
+                    if _impl_blocked:
+                        context.append({
+                            "role": "system",
+                            "content": coordinator_nudge_pre_delegate(
+                                state.pre_delegate_reason or None,
+                            ),
+                        })
+                        logger.warning(
+                            "[LOOP:%s] iter %d: PRE-DELEGATE block — "
+                            "orchestrator tried to implement without plan/team",
+                            state.loop_id, state.iteration,
+                        )
+
+                if _has_running or _pre_delegate:
                     _HEAVY_WRITE_THRESHOLD = 500
                     _HEAVY_WRITE_LIMIT = 3
                     _COORD_TOOLS = {"team", "plan", "todo", "wait",
@@ -2513,7 +2994,8 @@ async def run_loop(
                                 f"wave of delegates\n"
                                 f"  (b) rewake a failed delegate with "
                                 f"corrective instructions\n"
-                                f"  (c) create a new team for remaining work\n"
+                                f"  (c) plan(add_step) or plan(sub_plan) on the "
+                                f"existing plan — never plan(create) for remainder\n"
                                 f"  (d) report results to the user\n"
                                 f"Do NOT keep writing code manually."
                                 + _queued_hint
@@ -2566,15 +3048,64 @@ async def run_loop(
                             context.append(msg)
                         if _esc_msgs:
                             state.has_pending_escalation = True
+                            from .orchestration_policy import (
+                                parse_escalation_steering,
+                            )
+                            _meta = parse_escalation_steering(
+                                (_esc_msgs[0].get("content") or ""),
+                            )
+                            if _meta.get("team_id"):
+                                state.pending_escalation_team_id = str(
+                                    _meta["team_id"],
+                                )
+                            if _meta.get("member_idx") is not None:
+                                state.pending_escalation_member_idx = int(
+                                    _meta["member_idx"],
+                                )
+                            if _meta.get("writes") is not None:
+                                state.pending_escalation_writes = int(
+                                    _meta["writes"],
+                                )
+                            if _meta.get("paths"):
+                                state.pending_escalation_paths = list(
+                                    _meta["paths"],
+                                )
+                            _member_hint = (
+                                f"member={state.pending_escalation_member_idx}"
+                                if state.pending_escalation_member_idx >= 0
+                                else "member=<index from message>"
+                            )
+                            _team_hint = (
+                                state.pending_escalation_team_id
+                                or "team_id from message"
+                            )
+                            _paths_hint = ""
+                            if state.pending_escalation_paths:
+                                _paths_hint = (
+                                    f"\nRequested paths: "
+                                    f"{', '.join(state.pending_escalation_paths[:6])}"
+                                    f"\nUse team(action='grant_paths', team_id='{_team_hint}', "
+                                    f"{_member_hint}, paths=[...]) to approve file access."
+                                )
                             context.append({
                                 "role": "system",
                                 "content": (
                                     "PRIORITY: You have pending team "
-                                    "escalation(s). You MUST handle them "
-                                    "NOW using team(action='intervene', "
-                                    "...) before any other action. Do NOT "
-                                    "continue coding — address the "
-                                    "escalations first."
+                                    "escalation(s). Handle them NOW with "
+                                    f"team(action='intervene', team_id='{_team_hint}', "
+                                    f"{_member_hint}, decision='extend' or 'hint', "
+                                    "message='specific next actions')"
+                                    + (
+                                        " OR team(action='grant_paths', paths=[...]) "
+                                        "for file_access requests."
+                                        if state.pending_escalation_paths
+                                        else ""
+                                    )
+                                    + ".\n"
+                                    "Do NOT terminate while writes>0 or the "
+                                    "member listed a bounded finish list.\n"
+                                    "Do NOT continue other work until this is resolved."
+                                    + _paths_hint
                                 ),
                             })
                             logger.warning(
@@ -2585,6 +3116,14 @@ async def run_loop(
                             )
                         if _hint_msgs:
                             state.received_orchestrator_hint = True
+                            from nls.agentic.skill_discovery_boost import (
+                                trigger_skill_discovery_boost,
+                            )
+                            trigger_skill_discovery_boost(
+                                hooks,
+                                iteration=state.iteration,
+                                reason="orchestrator_hint_post_tool",
+                            )
                             logger.info(
                                 "[LOOP:%s] iter %d: ORCHESTRATOR HINT "
                                 "received post-tool — delegate will "
@@ -2712,7 +3251,11 @@ async def run_loop(
                         except Exception as _snap_err:
                             logger.debug("browser feedback injection failed: %s", _snap_err)
                     # Fall back to VC buffer if browser tool not accessible
-                    if not _snapped and visual_cortex is not None:
+                    if (
+                        not _snapped
+                        and visual_cortex is not None
+                        and not state.coordinator_mode
+                    ):
                         try:
                             _fb = visual_cortex.get_tool_visual_feedback(
                                 tool_start=time.time() - 3,
@@ -2767,6 +3310,7 @@ async def run_loop(
                                         "plan_id": _refreshed.id,
                                         "title": _refreshed.title,
                                         "todo_id": _refreshed.todo_id or "",
+                                        "project_dir": _refreshed.project_dir or "",
                                         "iteration": state.iteration,
                                     },
                                 ))
@@ -2776,10 +3320,16 @@ async def run_loop(
                                 ):
                                     if _old != _new:
                                         _lbl = _refreshed.steps[_si].label if _si < len(_refreshed.steps) else ""
+                                        _step_id = (
+                                            _refreshed.steps[_si].id
+                                            if _si < len(_refreshed.steps)
+                                            else ""
+                                        )
                                         await emit(on_event, AgentEvent(
                                             EventType.PLAN_UPDATE, {
                                                 "type": "plan_step_update",
                                                 "step_index": _si,
+                                                "step_id": _step_id,
                                                 "status": _new,
                                                 "label": _lbl,
                                                 "plan_id": _refreshed.id,
@@ -2806,6 +3356,63 @@ async def run_loop(
                 except Exception:
                     pass
 
+            # Recovery / delegation lifecycle flags from tool results.
+            _recovery_note_needed = False
+            for tc, r in zip(response.tool_calls, results):
+                _fn = tc.get("function", {}) or {}
+                _tname = _fn.get("name", "")
+                _targs = _parse_tool_args_safe(_fn.get("arguments", "{}"))
+                _details = getattr(r, "details", None) or {}
+                _action = _targs.get("action", "")
+                if (
+                    _tname == "plan"
+                    and _action == "delete"
+                    and not r.is_error
+                ):
+                    state.orchestrator_recovery = True
+                    _recovery_note_needed = True
+                elif _tname == "plan" and _action == "create" and not r.is_error:
+                    state.orchestrator_recovery = False
+                elif _tname == "team" and _action in ("create", "launch") and not r.is_error:
+                    state.orchestrator_recovery = False
+                elif (
+                    _tname == "plan"
+                    and _action == "accept_partial"
+                    and not r.is_error
+                ):
+                    state.orchestrator_recovery = True
+                    _recovery_note_needed = True
+                elif (
+                    _tname == "team"
+                    and _action == "disband"
+                    and not r.is_error
+                ):
+                    state.orchestrator_recovery = True
+                    _recovery_note_needed = True
+                elif _details.get("orchestrator_recovery"):
+                    state.orchestrator_recovery = True
+                    _recovery_note_needed = True
+                elif (
+                    _tname == "team"
+                    and _action == "inspect"
+                    and not r.is_error
+                ):
+                    record_team_inspect(
+                        state, str(_targs.get("team_id", "")),
+                    )
+                elif (
+                    _tname == "team"
+                    and _action == "advance"
+                    and _details.get("outcome") == "failed"
+                ):
+                    state.orchestrator_recovery = True
+                    _recovery_note_needed = True
+            if _recovery_note_needed and state.orchestrator_recovery:
+                context.append({
+                    "role": "system",
+                    "content": recovery_mode_system_note(),
+                })
+
             if any(r.stop_loop for r in results):
                 _stop_result = next(
                     (r for r in results if r.stop_loop), None)
@@ -2813,7 +3420,34 @@ async def run_loop(
                     getattr(_stop_result, "details", {}) or {}
                 ) if _stop_result else {}
                 if _stop_details.get("type") == "task_complete":
+                    if (
+                        _is_delegate_loop
+                        and config.escalate_on_limit
+                        and not getattr(state, "_completion_reviewed", False)
+                    ):
+                        state._completion_reviewed = True
+                        _review = await _await_completion_review(
+                            state, config, copilot_queue, context,
+                            slog_path=_session_log_path,
+                        )
+                        if _review == "rejected":
+                            state.exit_reason = ""
+                            await emit(on_event, AgentEvent(
+                                EventType.TURN_END, {
+                                    "iteration": state.iteration,
+                                    "has_tool_calls": True,
+                                    "tool_calls": _iter_tool_calls,
+                                    "tool_results": _iter_tool_results,
+                                },
+                            ))
+                            continue
                     state.exit_reason = "task_complete"
+                    state.final_response = (
+                        _stop_details.get("summary", "")
+                        or getattr(_stop_result, "content", "")
+                    )
+                elif _stop_details.get("type") == "awaiting_delegates":
+                    state.exit_reason = "awaiting_delegates"
                     state.final_response = (
                         _stop_details.get("summary", "")
                         or getattr(_stop_result, "content", "")
@@ -2832,37 +3466,99 @@ async def run_loop(
                 ))
                 break
 
-            # --- Idle monitoring cycle detection ---
-            # When a coordinator's only tool calls are passive monitoring
-            # (wait, team inspect/list), it's spinning without progress.
-            # After a threshold, nudge it to exit to background.
-            _IDLE_MONITOR_TOOLS = frozenset({"wait", "team"})
-            _IDLE_TEAM_ACTIONS = frozenset({
-                "inspect", "list", "brief",
-            })
-            _iter_tool_names = [
-                tc.get("function", {}).get("name", "")
-                for tc in (response.tool_calls or [])
-            ]
-            _all_idle = (
-                _iter_tool_names
-                and all(n in _IDLE_MONITOR_TOOLS for n in _iter_tool_names)
-            )
-            if _all_idle:
-                _team_calls_ok = True
-                for tc in (response.tool_calls or []):
-                    if tc.get("function", {}).get("name") == "team":
-                        _tc_args = _parse_tool_args_safe(
-                            tc.get("function", {}).get("arguments", "{}"))
-                        if _tc_args.get("action", "") not in _IDLE_TEAM_ACTIONS:
-                            _team_calls_ok = False
-                            break
-                _all_idle = _team_calls_ok
+            if state.exit_reason == "orchestrator_terminated":
+                _term_msg = next(
+                    (r.content for r in results if r.content), "",
+                )
+                if _term_msg:
+                    state.final_response = _term_msg
+                await emit(on_event, AgentEvent(
+                    EventType.TURN_END, {
+                        "iteration": state.iteration,
+                        "has_tool_calls": True,
+                        "tool_calls": _iter_tool_calls,
+                        "tool_results": _iter_tool_results,
+                    },
+                ))
+                break
 
-            if _all_idle and state.delegate_count > 0:
-                state.idle_monitor_cycles += 1
-            else:
-                state.idle_monitor_cycles = 0
+            # --- EM idle-polling detection (not a substitute for management) ---
+            _iter_tool_names = iter_tool_names(response.tool_calls)
+            if state.coordinator_mode and delegate_manager is not None:
+                update_coordinator_counters(
+                    state,
+                    _iter_tool_names,
+                    response.tool_calls,
+                    delegate_manager,
+                )
+                _force_yield, _yield_reason = should_force_coordinator_yield(
+                    state, delegate_manager,
+                    dispatch_source=dispatch_source,
+                )
+                _tm_yield = getattr(hooks, "_cached_team_manager", None)
+                if (
+                    _force_yield
+                    and _tm_yield is not None
+                    and _tm_yield.has_pending_completion_reviews()
+                ):
+                    _cr_block = _tm_yield.completion_review_yield_block_message()
+                    if _cr_block:
+                        logger.info(
+                            "[LOOP:%s] iter %d: coordinator yield blocked — "
+                            "pending completion review(s)",
+                            state.loop_id, state.iteration,
+                        )
+                        context.append({
+                            "role": "system",
+                            "content": f"[EM TURN — COMPLETION REVIEW REQUIRED]\n{_cr_block}",
+                        })
+                        _force_yield = False
+                if _force_yield:
+                    logger.info(
+                        "[LOOP:%s] iter %d: coordinator yield — %s "
+                        "(monitor=%d burn=%d idle=%d)",
+                        state.loop_id, state.iteration, _yield_reason,
+                        state.coordinator_monitor_iters,
+                        state.coordinator_burn_iters,
+                        state.idle_monitor_cycles,
+                    )
+                    state.exit_reason = (
+                        _yield_reason
+                        if _yield_reason != "idle_monitor"
+                        else "idle_monitor_yield"
+                    )
+                    state.final_response = ""
+                    _slog(_session_log_path, {
+                        "event": "coordinator_yield",
+                        "loop_id": state.loop_id,
+                        "iteration": state.iteration,
+                        "reason": _yield_reason,
+                        "monitor_iters": state.coordinator_monitor_iters,
+                        "burn_iters": state.coordinator_burn_iters,
+                        "idle_cycles": state.idle_monitor_cycles,
+                    })
+                    break
+                if state.idle_monitor_cycles >= 2:
+                    _idle_nudge = (
+                        "[EM TURN] Repeated inspect/wait without a "
+                        "management decision. Hint if stuck, evaluate "
+                        "if wave landed, otherwise await_delegates — "
+                        "do not idle-poll the board."
+                    )
+                    if (
+                        _tm_yield is not None
+                        and _tm_yield.has_pending_completion_reviews()
+                    ):
+                        _idle_nudge = (
+                            "[EM TURN] A delegate is waiting for your "
+                            "completion review. Call team(intervene, "
+                            "decision='approve' or 'hint') NOW — do not "
+                            "await_delegates or keep inspecting."
+                        )
+                    context.append({
+                        "role": "system",
+                        "content": _idle_nudge,
+                    })
 
             # Iterations whose ONLY tool call is wait() do not count against
             # the iteration budget — the agent is just polling, not working.
@@ -2873,51 +3569,34 @@ async def run_loop(
             if _wait_only:
                 state.wait_only_iterations += 1
 
-            _IDLE_MONITOR_NUDGE = 3
-            _IDLE_MONITOR_HARD = 5
-            if state.idle_monitor_cycles >= _IDLE_MONITOR_HARD:
-                logger.info(
-                    "[LOOP:%s] iter %d: IDLE MONITOR hard exit — %d "
-                    "consecutive wait/inspect cycles, forcing "
-                    "background yield",
-                    state.loop_id, state.iteration,
-                    state.idle_monitor_cycles,
-                )
-                state.exit_reason = "idle_monitor_yield"
-                state.final_response = ""
-                _slog(_session_log_path, {
-                    "event": "idle_monitor_exit",
-                    "loop_id": state.loop_id,
-                    "iteration": state.iteration,
-                    "idle_cycles": state.idle_monitor_cycles,
-                })
-                break
-            elif state.idle_monitor_cycles >= _IDLE_MONITOR_NUDGE:
-                logger.info(
-                    "[LOOP:%s] iter %d: IDLE MONITOR nudge — %d "
-                    "consecutive wait/inspect cycles with active "
-                    "delegates",
-                    state.loop_id, state.iteration,
-                    state.idle_monitor_cycles,
-                )
-                context.append({
-                    "role": "system",
-                    "content": (
-                        "[LOOP CONTROL] You have been cycling through "
-                        "wait/inspect for "
-                        f"{state.idle_monitor_cycles} iterations "
-                        "without meaningful action. Your delegates "
-                        "are running in the background — you do NOT "
-                        "need to babysit them.\n"
-                        "Call task_complete(summary='...') NOW to "
-                        "exit cleanly. You will be re-activated "
-                        "automatically when delegates finish."
-                    ),
-                })
-
         else:
             state.consecutive_text_only += 1
             state._last_iter_text = response.text
+
+            # Sub-agent loops: fail fast when the model never emits tool_calls
+            # (common on OpenRouter with reasoning-only models).
+            if (
+                _is_delegate_loop
+                and state.total_tool_calls == 0
+                and state.iteration >= 6
+            ):
+                logger.warning(
+                    "[LOOP:%s] delegate exit at iter %d — zero tool_calls "
+                    "after %d iterations (upstream likely not tool-calling)",
+                    state.loop_id,
+                    state.iteration,
+                    state.iteration,
+                )
+                state.exit_reason = "delegate_no_tool_calls"
+                await emit(on_event, AgentEvent(
+                    EventType.TURN_END,
+                    {
+                        "iteration": state.iteration,
+                        "error": True,
+                        "reason": "delegate_no_tool_calls",
+                    },
+                ))
+                break
 
             if response.text and response.text.strip():
                 _last_text_response = response.text
@@ -2946,7 +3625,7 @@ async def run_loop(
                     _restore = state._pre_responding_mode or AgentMode.MONITORING
                     state.active_mode = _restore
                     state._pre_responding_mode = None
-                    state._mode_schemas_applied = False
+                    invalidate_tool_policy_cache(state)
                     state.mode_override_count = 0
                     _rmode = getattr(hooks, "_render_mode_ref", None)
                     if _rmode:
@@ -3011,11 +3690,17 @@ async def run_loop(
             # asking the user "What next?" when it should advance the
             # plan autonomously.
             _coordinator_has_work = False
+            _has_active_plan_work = False
             _active_teams: list = []
-            if state.coordinator_mode and _substantive_delivery:
-                _coordinator_has_work = bool(
-                    hooks.has_active_plan and hooks.has_active_plan()
-                )
+            if hooks.has_active_plan:
+                try:
+                    _has_active_plan_work = bool(hooks.has_active_plan())
+                except Exception:
+                    pass
+            if _substantive_delivery and (
+                state.coordinator_mode or _has_active_plan_work
+            ):
+                _coordinator_has_work = _has_active_plan_work
                 try:
                     _tm_ref = _cached_team_manager
                     if _tm_ref:
@@ -3036,31 +3721,26 @@ async def run_loop(
             # agent already launched teams — nudging it to "take action"
             # just causes pointless wait/inspect/text cycles instead of
             # a clean exit to background.
+            _bg_delegates = state.delegate_count > 0
+            if not _bg_delegates and delegate_manager is not None:
+                try:
+                    _bg_delegates = delegate_manager.has_active_delegates()
+                except Exception:
+                    pass
             _monitoring_should_yield = (
                 state.active_mode == AgentMode.MONITORING
                 and state.coordinator_mode
-                and state.delegate_count > 0
+                and _bg_delegates
             )
 
             # Only inject stall nudges BELOW the hard limit.
             # At the limit, let should_complete_v4 / check_guards handle exit.
+            # Do NOT stall-nudge after a substantive coordinator status turn —
+            # that forced a second model reply after the user already saw text
+            # (e.g. "What would you like me to do first?"). Yield via
+            # should_complete_v4 instead.
             if _substantive_delivery and _coordinator_has_work:
-                if _monitoring_should_yield:
-                    stall_msg = None
-                else:
-                    stall_msg = (
-                        "STOP — you are the orchestrator. Do NOT present "
-                        "summaries or ask the user what to do next. You "
-                        "have an active plan with pending work.\n"
-                        "Take action NOW:\n"
-                        "1. team(action='inspect') — review completed work\n"
-                        "2. team(action='advance') — advance the plan and "
-                        "create the next wave\n"
-                        "3. team(action='launch', team_id='...') — launch "
-                        "a queued wave\n"
-                        "If ALL plan steps are truly complete and verified, "
-                        "call task_complete(summary='...') to end."
-                    )
+                stall_msg = None
             elif _substantive_delivery:
                 stall_msg = None
             elif _monitoring_should_yield:
@@ -3074,28 +3754,45 @@ async def run_loop(
                     "take action with a tool call NOW."
                 )
             elif state.consecutive_text_only >= 2:
-                stall_msg = (
-                    "Your last responses were text, not tool calls. "
-                    "The user's request requires ACTION. Their request: "
-                    f"\"{user_input[:200]}\"\n\n"
-                    "If the previous tool call failed, try a different "
-                    "approach or fix the command syntax and retry. "
-                    "Call a tool NOW. If you are done, call "
-                    "task_complete(summary='...')."
-                )
+                if _monitoring_should_yield:
+                    stall_msg = (
+                        "[LOOP CONTROL] Your delegates are running in the "
+                        "background. Do NOT keep posting status updates in "
+                        "this loop.\n"
+                        "Call await_delegates(summary='...') NOW to exit "
+                        "cleanly. You will be re-activated automatically "
+                        "when waves complete or milestones occur."
+                    )
+                else:
+                    stall_msg = (
+                        "Your last responses were text, not tool calls. "
+                        "The user's request requires ACTION. Their request: "
+                        f"\"{user_input[:200]}\"\n\n"
+                        "If the previous tool call failed, try a different "
+                        "approach or fix the command syntax and retry. "
+                        "Call a tool NOW. If you are done, call "
+                        "task_complete(summary='...')."
+                    )
             elif state.consecutive_text_only == 1 and (
                 state.total_tool_calls == 0 or _had_errors
             ):
-                stall_msg = (
-                    "You responded with text but the task requires "
-                    "action via tools. "
-                    + (
-                        "The previous tool call had an error — fix "
-                        "the issue and retry with corrected arguments. "
-                        if _had_errors else ""
+                if (
+                    not _had_errors
+                    and state.total_tool_calls == 0
+                    and is_conversational_user_turn(user_input)
+                ):
+                    stall_msg = None
+                else:
+                    stall_msg = (
+                        "You responded with text but the task requires "
+                        "action via tools. "
+                        + (
+                            "The previous tool call had an error — fix "
+                            "the issue and retry with corrected arguments. "
+                            if _had_errors else ""
+                        )
+                        + f"Request: \"{user_input[:200]}\""
                     )
-                    + f"Request: \"{user_input[:200]}\""
-                )
             else:
                 stall_msg = None
 
@@ -3113,7 +3810,10 @@ async def run_loop(
                 await emit(on_event, AgentEvent(
                     EventType.TURN_END, {"iteration": state.iteration},
                 ))
-            elif await should_complete_v4(state, config, hooks, vllm_client):
+            elif await should_complete_v4(
+                state, config, hooks, vllm_client, delegate_manager,
+                adapter_name=adapter_name,
+            ):
                 # Delegate completion review: before accepting, ask the
                 # orchestrator to verify the work.  Uses the same escalation
                 # path (hint_queue) so the orchestrator can reject with a
@@ -3311,6 +4011,37 @@ async def run_loop(
 
     apply_final_response_backfill(state, _last_text_response)
 
+    if dispatch_source.startswith("team_wave_complete:") and _cached_team_manager is not None:
+        _wave_team_id = dispatch_source.split(":", 1)[1]
+        try:
+            await _cached_team_manager.handle_wave_review_loop_end(
+                _wave_team_id,
+                tool_calls=state.total_tool_calls,
+            )
+        except Exception:
+            logger.debug("wave review loop end handler failed", exc_info=True)
+        if config.enable_delegation and delegate_manager is not None:
+            try:
+                from nls.agentic.executor import try_auto_launch_pending_wave
+
+                await try_auto_launch_pending_wave(
+                    _cached_team_manager,
+                    delegate_manager,
+                    tools,
+                    config,
+                    state,
+                    hooks,
+                    vllm_client,
+                    on_event,
+                    abort_signal,
+                    user_input,
+                )
+            except Exception:
+                logger.debug(
+                    "pending wave auto-launch after wave review failed",
+                    exc_info=True,
+                )
+
     # Auto-complete active plan + linked todo when loop exits successfully.
     # The model sometimes delivers a final text answer without explicitly
     # calling plan(action='complete'), leaving Kanban items stuck.
@@ -3320,8 +4051,7 @@ async def run_loop(
         _tm = _cached_team_manager
         if _tm is not None:
             try:
-                _active_teams = _tm.list_teams(include_terminal=False)
-                _has_running_team = bool(_active_teams)
+                _has_running_team = _tm.has_orchestrator_blocking_team()
             except Exception:
                 pass
 
@@ -3329,14 +4059,30 @@ async def run_loop(
         logger.debug("[LOOP] skipped plan auto-complete — delegate loop")
     elif state.exit_reason == "task_complete" and _plan_tool is not None and not _has_running_team:
         try:
+            from nls.agentic.plan_work import can_complete_plan
+
             _store = _plan_tool.get_store() if hasattr(_plan_tool, "get_store") else None
-            _active = _store.find_active() if _store else None
-            if _active and _active.status != "done":
+            _tm = _cached_team_manager
+            _active = (
+                _store.resolve_work_plan("", _tm, reopen=False)
+                if _store
+                else None
+            )
+            if (
+                _active
+                and _active.status not in ("done", "archived")
+                and can_complete_plan(_active, _tm)
+            ):
                 await _plan_tool.execute(
-                    {"action": "complete", "force": True},
+                    {"action": "complete", "plan_id": _active.id},
                 )
                 logger.info(
                     "[LOOP] auto-completed plan %s + linked todo on task_complete",
+                    _active.id,
+                )
+            elif _active and _active.status not in ("done", "archived"):
+                logger.info(
+                    "[LOOP] skipped plan auto-complete for %s — completion gate not met",
                     _active.id,
                 )
         except Exception:

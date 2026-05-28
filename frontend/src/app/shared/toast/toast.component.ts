@@ -63,9 +63,9 @@ import { tagColor, humanType } from '../signal-utils';
       display: flex;
       flex-direction: column;
       padding: 12px 16px;
-      background: rgba(14, 14, 18, 0.95);
+      background: var(--glass-bg);
       backdrop-filter: blur(20px);
-      border: 1px solid rgba(255, 255, 255, 0.06);
+      border: 1px solid var(--overlay-3);
       border-left: 3px solid #9a9aaa;
       border-radius: 10px;
       animation: toast-in 0.3s ease-out;
@@ -73,9 +73,9 @@ import { tagColor, humanType } from '../signal-utils';
     }
 
     .toast-dream { border-left-color: #c084fc; }
-    .toast-reach_out { border-left-color: #34d399; }
-    .toast-info { border-left-color: #38bdf8; }
-    .toast-error { border-left-color: #f87171; }
+    .toast-reach_out { border-left-color: var(--accent-success); }
+    .toast-info { border-left-color: var(--accent-primary); }
+    .toast-error { border-left-color: var(--accent-danger); }
 
     /* --- Header --- */
     .toast-header {
@@ -93,9 +93,9 @@ import { tagColor, humanType } from '../signal-utils';
     }
 
     .toast-dream .toast-dot { background: #c084fc; box-shadow: 0 0 6px rgba(192, 132, 252, 0.5); }
-    .toast-reach_out .toast-dot { background: #34d399; box-shadow: 0 0 6px rgba(52, 211, 153, 0.5); }
-    .toast-info .toast-dot { background: #38bdf8; box-shadow: 0 0 6px rgba(56, 189, 248, 0.5); }
-    .toast-error .toast-dot { background: #f87171; box-shadow: 0 0 6px rgba(248, 113, 113, 0.5); }
+    .toast-reach_out .toast-dot { background: var(--accent-success); box-shadow: 0 0 6px rgba(52, 211, 153, 0.5); }
+    .toast-info .toast-dot { background: var(--accent-primary); box-shadow: 0 0 6px var(--accent-primary-glow); }
+    .toast-error .toast-dot { background: var(--accent-danger); box-shadow: 0 0 6px rgba(248, 113, 113, 0.5); }
 
     .toast-label {
       font-size: 10px;
@@ -117,7 +117,7 @@ import { tagColor, humanType } from '../signal-utils';
       transition: color 0.15s;
     }
     .toast-close:hover {
-      color: #c0c0cc;
+      color: var(--text-secondary);
     }
 
     /* --- Body --- */
@@ -129,7 +129,7 @@ import { tagColor, humanType } from '../signal-utils';
 
     .toast-msg {
       font-size: 13px;
-      color: #c0c0cc;
+      color: var(--text-secondary);
       line-height: 1.5;
       white-space: pre-wrap;
       word-break: break-word;
@@ -161,7 +161,7 @@ import { tagColor, humanType } from '../signal-utils';
       gap: 4px;
       margin-top: 8px;
       padding-top: 8px;
-      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      border-top: 1px solid var(--overlay-2);
     }
 
     .toast-pill {

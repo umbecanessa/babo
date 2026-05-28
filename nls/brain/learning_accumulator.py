@@ -145,10 +145,12 @@ class LearningAccumulator:
         self,
         *,
         vllm_client: Any | None = None,
+        adapter_name: str | None = None,
         flush_interval_iters: int = 8,
         wall_clock_flush_seconds: float = 300.0,
     ) -> None:
         self._vllm_client = vllm_client
+        self._adapter_name = adapter_name
         self.flush_interval_iters = flush_interval_iters
         self.wall_clock_flush_seconds = wall_clock_flush_seconds
 
@@ -162,6 +164,12 @@ class LearningAccumulator:
         self._last_flush_time: float = time.time()
         self._total_flushes: int = 0
         self._compress_in_flight: bool = False
+
+    def _micro_extra_body(self) -> dict[str, Any]:
+        from nls.runtime.inference_compat import micro_inference_extra_body
+
+        base = getattr(self._vllm_client, "base_url", "") or ""
+        return micro_inference_extra_body(base, thinking=False)
 
     # ------------------------------------------------------------------
     # Public API: ingest
@@ -433,16 +441,14 @@ class LearningAccumulator:
 
             system_msg = _COMPOUND_PROMPT.format(target=_COMPOUND_TARGET)
             result = await self._vllm_client.generate(
-                adapter_name=None,
+                adapter_name=self._adapter_name,
                 messages=[
                     {"role": "system", "content": system_msg},
                     {"role": "user", "content": existing[:6000]},
                 ],
                 max_tokens=800,
                 temperature=0.3,
-                extra_body={
-                    "chat_template_kwargs": {"enable_thinking": False},
-                },
+                extra_body=self._micro_extra_body(),
             )
             compounded = (
                 result.text if hasattr(result, "text") else str(result or "")
@@ -521,16 +527,14 @@ class LearningAccumulator:
         user_msg = f"Buffer: {buffer_name}\n\n{text}"
 
         result = await self._vllm_client.generate(
-            adapter_name=None,
+            adapter_name=self._adapter_name,
             messages=[
                 {"role": "system", "content": system_msg},
                 {"role": "user", "content": user_msg[:4000]},
             ],
             max_tokens=400,
             temperature=0.3,
-            extra_body={
-                "chat_template_kwargs": {"enable_thinking": False},
-            },
+            extra_body=self._micro_extra_body(),
         )
         out = (
             result.text if hasattr(result, "text") else str(result or "")

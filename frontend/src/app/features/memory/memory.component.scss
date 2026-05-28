@@ -1,17 +1,17 @@
-$bg-main: #050508;
-$bg-card: rgba(255, 255, 255, 0.03);
-$border: rgba(255, 255, 255, 0.06);
-$accent: #38bdf8;
-$accent-green: #34d399;
-$accent-purple: #a78bfa;
-$accent-red: #f87171;
-$accent-amber: #fbbf24;
-$accent-pink: #f472b6;
-$text-heading: #e5e5e5;
-$text-primary: #c5c5d0;
-$text-secondary: #a0a0b0;
-$text-muted: #787890;
-$text-dim: #4a4a5a;
+$bg-main: var(--bg-primary);
+$bg-card: var(--glass-bg);
+$border: var(--glass-border);
+$accent: var(--accent-primary);
+$accent-green: var(--accent-success);
+$accent-purple: var(--accent-primary);
+$accent-red: var(--accent-danger);
+$accent-amber: var(--accent-warn);
+$accent-pink: var(--accent-primary);
+$text-heading: var(--text-primary);
+$text-primary: var(--text-primary);
+$text-secondary: var(--text-secondary);
+$text-muted: var(--text-muted);
+$text-dim: var(--text-muted);
 $font-mono: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
 $radius-sm: 6px;
 $radius-md: 8px;
@@ -20,7 +20,7 @@ $radius-lg: 12px;
 :host {
   display: block;
   padding: 28px 32px 48px;
-  background: $bg-main;
+  background: transparent;
   color: $text-primary;
 }
 
@@ -86,9 +86,11 @@ $radius-lg: 12px;
   gap: 24px;
   padding: 24px;
   background: $bg-card;
-  backdrop-filter: blur(40px);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
   border: 1px solid $border;
   border-radius: $radius-lg;
+  box-shadow: var(--shadow-glass);
   margin-bottom: 24px;
 }
 
@@ -169,7 +171,7 @@ $radius-lg: 12px;
       height: 2px;
       background: $accent;
       border-radius: 2px 2px 0 0;
-      box-shadow: 0 0 8px rgba(56, 189, 248, 0.4);
+      box-shadow: 0 0 8px var(--accent-primary-glow);
     }
   }
 }
@@ -199,10 +201,10 @@ $radius-lg: 12px;
   border-radius: $radius-md;
   transition: border-color 0.2s, background 0.2s;
 
-  &:hover { border-color: rgba(255, 255, 255, 0.1); }
+  &:hover { border-color: var(--overlay-4); }
   &.clickable:hover {
-    background: rgba(56, 189, 248, 0.03);
-    border-color: rgba(56, 189, 248, 0.2);
+    background: var(--accent-primary-glow);
+    border-color: var(--text-muted);
   }
 }
 
@@ -279,10 +281,10 @@ $radius-lg: 12px;
 
   &.epoch { border-left: 3px solid $accent-purple; }
   &.delta { border-left: 3px solid $accent; }
-  &:hover { border-color: rgba(255, 255, 255, 0.1); }
+  &:hover { border-color: var(--overlay-4); }
   &.expanded {
-    background: rgba(56, 189, 248, 0.03);
-    border-color: rgba(56, 189, 248, 0.15);
+    background: var(--accent-primary-glow);
+    border-color: var(--text-muted);
     min-width: 200px;
   }
 }
@@ -356,10 +358,10 @@ $radius-lg: 12px;
   transition: background 0.15s, border-color 0.2s;
   overflow: hidden;
 
-  &:hover { background: rgba(255, 255, 255, 0.02); }
+  &:hover { background: var(--overlay-1); }
   &.rf-expanded {
-    border-color: rgba(56, 189, 248, 0.15);
-    background: rgba(56, 189, 248, 0.02);
+    border-color: var(--text-muted);
+    background: var(--overlay-1);
   }
 }
 
@@ -446,7 +448,7 @@ $radius-lg: 12px;
   transition: background 0.2s, border-color 0.2s;
 
   &.clickable:hover {
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--overlay-2);
   }
 }
 
@@ -480,7 +482,7 @@ $radius-lg: 12px;
 
   &.ds-active {
     opacity: 1;
-    &:hover { background: rgba(255, 255, 255, 0.06); }
+    &:hover { background: var(--overlay-3); }
   }
 
   &.ds-inactive {
@@ -521,7 +523,7 @@ $radius-lg: 12px;
 .view-toggle-btn {
   padding: 6px 14px;
   font-size: 12px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--overlay-2);
   border: 1px solid $border;
   border-radius: $radius-sm;
   color: $text-muted;
@@ -530,8 +532,8 @@ $radius-lg: 12px;
 
   &:hover {
     color: $accent;
-    border-color: rgba(56, 189, 248, 0.3);
-    background: rgba(56, 189, 248, 0.04);
+    border-color: var(--text-muted);
+    background: var(--accent-primary-glow);
   }
 }
 
@@ -539,8 +541,8 @@ $radius-lg: 12px;
   flex: 1;
   max-width: 360px;
   padding: 10px 14px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--overlay-1);
+  border: 1px solid var(--overlay-3);
   border-radius: $radius-md;
   color: $text-primary;
   font-size: 13px;
@@ -549,9 +551,9 @@ $radius-lg: 12px;
 
   &::placeholder { color: $text-muted; }
   &:focus {
-    border-color: rgba(56, 189, 248, 0.4);
-    background: rgba(56, 189, 248, 0.03);
-    box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.08);
+    border-color: var(--text-muted);
+    background: var(--accent-primary-glow);
+    box-shadow: 0 0 0 3px var(--accent-primary-glow);
   }
 }
 
@@ -568,7 +570,7 @@ $radius-lg: 12px;
 .strength-bar {
   width: 100%;
   height: 4px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--overlay-3);
   border-radius: 2px;
   overflow: hidden;
 }
@@ -576,7 +578,7 @@ $radius-lg: 12px;
 .strength-bar-table {
   width: 48px;
   height: 4px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--overlay-3);
   border-radius: 2px;
   overflow: hidden;
 }
@@ -602,7 +604,7 @@ $radius-lg: 12px;
   transition: background 0.15s;
   border-radius: $radius-sm;
   margin: 1px 0;
-  &:hover { background: rgba(255, 255, 255, 0.03); }
+  &:hover { background: var(--overlay-1); }
 }
 
 .tree-arrow {
@@ -632,7 +634,7 @@ $radius-lg: 12px;
 .tree-count {
   font-size: 10px;
   color: $text-dim;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--overlay-2);
   padding: 1px 8px;
   border-radius: 10px;
   font-weight: 500;
@@ -642,17 +644,17 @@ $radius-lg: 12px;
 .tree-fact {
   margin-left: 30px;
   padding: 10px 14px;
-  border-left: 2px solid rgba(255, 255, 255, 0.04);
+  border-left: 2px solid var(--overlay-2);
   cursor: pointer;
   transition: all 0.2s;
   border-radius: 0 $radius-sm $radius-sm 0;
 
   &:hover {
-    background: rgba(255, 255, 255, 0.025);
-    border-left-color: rgba(255, 255, 255, 0.1);
+    background: var(--overlay-1);
+    border-left-color: var(--overlay-4);
   }
   &.selected {
-    background: rgba(56, 189, 248, 0.04);
+    background: var(--accent-primary-glow);
     border-left-color: $accent;
   }
 }
@@ -694,7 +696,7 @@ $radius-lg: 12px;
   padding: 2px 8px;
   border-radius: 10px;
   color: $text-dim;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--overlay-2);
 }
 
 .fluid-toggle-btn {
@@ -707,7 +709,7 @@ $radius-lg: 12px;
   cursor: pointer;
   transition: all 0.2s ease;
   font-weight: 600;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--overlay-2);
   color: $text-dim;
 
   &.is-fluid {
@@ -718,13 +720,13 @@ $radius-lg: 12px;
 
   &:not(.is-fluid) {
     color: $text-dim;
-    border-color: rgba(255, 255, 255, 0.06);
+    border-color: var(--overlay-3);
   }
 
   &:hover {
     border-color: $accent;
     color: $accent;
-    background: rgba(56, 189, 248, 0.08);
+    background: var(--accent-primary-glow);
   }
 }
 
@@ -743,7 +745,7 @@ $radius-lg: 12px;
 .tree-fact-detail {
   margin-top: 10px;
   padding: 12px 14px;
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--overlay-1);
   border: 1px solid $border;
   border-radius: $radius-sm;
 }
@@ -799,7 +801,7 @@ $radius-lg: 12px;
 .hm-bar-bg {
   flex: 1;
   height: 4px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--overlay-2);
   border-radius: 2px;
   overflow: hidden;
   min-width: 40px;
@@ -851,7 +853,7 @@ $radius-lg: 12px;
 
   tbody tr {
     transition: background 0.2s;
-    &:hover { background: rgba(255, 255, 255, 0.02); }
+    &:hover { background: var(--overlay-1); }
   }
 }
 
@@ -899,13 +901,13 @@ $radius-lg: 12px;
   color: $text-muted;
   margin: 20px 0 10px -28px;
   padding: 6px 12px;
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--overlay-1);
   border-radius: $radius-sm;
   display: inline-block;
 
   &.active-tier {
     color: $accent;
-    background: rgba(56, 189, 248, 0.06);
+    background: var(--accent-primary-glow);
   }
 }
 
@@ -916,17 +918,17 @@ $radius-lg: 12px;
   transition: background 0.15s;
   border-radius: $radius-sm;
 
-  &:hover { background: rgba(255, 255, 255, 0.015); }
+  &:hover { background: var(--overlay-1); }
 
   &.tl-expanded {
-    background: rgba(56, 189, 248, 0.03);
-    border: 1px solid rgba(56, 189, 248, 0.12);
+    background: var(--accent-primary-glow);
+    border: 1px solid var(--accent-primary-glow);
     border-radius: $radius-md;
     margin-bottom: 4px;
   }
 
   &.active-node .tl-content {
-    border-left-color: rgba(56, 189, 248, 0.3);
+    border-left-color: var(--text-muted);
   }
 }
 
@@ -936,7 +938,7 @@ $radius-lg: 12px;
   top: 0;
   bottom: 0;
   width: 2px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--overlay-3);
 }
 
 .tl-dot {
@@ -951,11 +953,11 @@ $radius-lg: 12px;
 
   &.epoch {
     border-color: $accent-purple;
-    background: rgba(167, 139, 250, 0.2);
+    background: var(--accent-primary-glow);
   }
   &.delta {
     border-color: $accent;
-    background: rgba(56, 189, 248, 0.2);
+    background: var(--accent-primary-glow);
   }
   &.active-dot {
     box-shadow: 0 0 8px currentColor;
@@ -964,8 +966,8 @@ $radius-lg: 12px;
 }
 
 @keyframes pulse-dot {
-  0%, 100% { box-shadow: 0 0 4px rgba(56, 189, 248, 0.3); }
-  50% { box-shadow: 0 0 12px rgba(56, 189, 248, 0.6); }
+  0%, 100% { box-shadow: 0 0 4px var(--accent-primary-glow); }
+  50% { box-shadow: 0 0 12px var(--accent-primary); }
 }
 
 .tl-content {
@@ -987,7 +989,7 @@ $radius-lg: 12px;
   justify-content: center;
   min-width: 32px;
   padding: 2px 8px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--overlay-3);
   border-radius: 10px;
   font-size: 11px;
   font-weight: 600;
@@ -1006,8 +1008,16 @@ $radius-lg: 12px;
   border-radius: 10px;
   font-weight: 600;
 
-  &.delta { color: $accent; background: rgba(56, 189, 248, 0.1); }
-  &.epoch { color: $accent-purple; background: rgba(167, 139, 250, 0.1); }
+  &.delta {
+    color: var(--accent-primary);
+    background: var(--accent-tint-bg);
+    border: 1px solid var(--accent-tint-border);
+  }
+  &.epoch {
+    color: var(--accent-primary);
+    background: var(--accent-tint-bg);
+    border: 1px solid var(--accent-tint-border);
+  }
 }
 
 // Block detail panel (expanded)
@@ -1051,7 +1061,7 @@ $radius-lg: 12px;
     font-family: $font-mono;
     font-size: 11px;
     color: $text-muted;
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--overlay-1);
     padding: 6px 10px;
     border-radius: $radius-sm;
     display: block;
@@ -1072,14 +1082,14 @@ code.tl-detail-value {
   font-size: 12px;
   font-weight: 500;
   color: $accent;
-  background: rgba(56, 189, 248, 0.08);
-  border: 1px solid rgba(56, 189, 248, 0.3);
+  background: var(--accent-primary-glow);
+  border: 1px solid var(--accent-primary-glow);
   border-radius: $radius-sm;
   cursor: pointer;
   transition: all 0.2s;
 
   &:hover {
-    background: rgba(56, 189, 248, 0.15);
+    background: var(--accent-primary-glow);
     border-color: $accent;
   }
 }
@@ -1112,7 +1122,7 @@ code.tl-detail-value {
 .wm-ws-switcher {
   display: flex;
   gap: 2px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--overlay-2);
   border-radius: 8px;
   padding: 2px;
 }
@@ -1124,7 +1134,7 @@ code.tl-detail-value {
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--text-muted);
   cursor: pointer;
   transition: all 0.15s ease;
   display: flex;
@@ -1132,12 +1142,12 @@ code.tl-detail-value {
   gap: 5px;
 
   &:hover {
-    color: rgba(255, 255, 255, 0.65);
-    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-secondary);
+    background: var(--overlay-2);
   }
 
   &.active {
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--text-primary);
     background: rgba(139, 92, 246, 0.18);
   }
 }
@@ -1146,15 +1156,15 @@ code.tl-detail-value {
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: #34d399;
+  background: var(--accent-success);
   flex-shrink: 0;
 }
 
 .wm-workspace-badge {
   font-size: 10px;
   font-weight: 500;
-  color: #a78bfa;
-  background: rgba(167, 139, 250, 0.12);
+  color: var(--accent-primary);
+  background: var(--accent-primary-glow);
   padding: 2px 8px;
   border-radius: 6px;
   text-transform: capitalize;
@@ -1165,7 +1175,7 @@ code.tl-detail-value {
   font-weight: 600;
   padding: 2px 10px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--overlay-3);
   color: $text-primary;
 }
 
@@ -1221,7 +1231,7 @@ code.tl-detail-value {
   margin-bottom: 2px;
   min-width: 0;
   transition: border-color 0.2s;
-  &:hover { border-color: rgba(255, 255, 255, 0.1); }
+  &:hover { border-color: var(--overlay-4); }
 }
 
 .wm-item-main {
@@ -1242,7 +1252,7 @@ code.tl-detail-value {
   font-size: 10px;
   padding: 1px 8px;
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--overlay-2);
   color: $text-muted;
 }
 
@@ -1279,8 +1289,8 @@ code.tl-detail-value {
 .wm-edit-input {
   flex: 1;
   padding: 8px 12px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(56, 189, 248, 0.3);
+  background: var(--overlay-2);
+  border: 1px solid var(--accent-primary-glow);
   border-radius: $radius-sm;
   color: $text-primary;
   font-size: 13px;
@@ -1288,7 +1298,7 @@ code.tl-detail-value {
 
   &:focus {
     border-color: $accent;
-    box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.1);
+    box-shadow: 0 0 0 2px var(--accent-primary-glow);
   }
 }
 
@@ -1426,7 +1436,7 @@ code.tl-detail-value {
   align-items: center;
   gap: 8px;
   padding: 32px 24px;
-  border: 2px dashed rgba(255, 255, 255, 0.08);
+  border: 2px dashed var(--overlay-3);
   border-radius: $radius-md;
   color: $text-muted;
   font-size: 13px;
@@ -1435,10 +1445,10 @@ code.tl-detail-value {
 
   &.dragover {
     border-color: $accent;
-    background: rgba(56, 189, 248, 0.04);
+    background: var(--accent-primary-glow);
     color: $accent;
   }
-  &:hover { border-color: rgba(255, 255, 255, 0.15); }
+  &:hover { border-color: var(--overlay-5); }
 }
 
 .drop-icon { font-size: 24px; opacity: 0.5; }
@@ -1457,7 +1467,7 @@ code.tl-detail-value {
   gap: 12px;
   margin-top: 12px;
   padding: 10px 14px;
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--overlay-1);
   border: 1px solid $border;
   border-radius: $radius-sm;
   font-size: 13px;
@@ -1493,8 +1503,8 @@ code.tl-detail-value {
 
 .fork-input {
   padding: 10px 14px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--overlay-1);
+  border: 1px solid var(--overlay-3);
   border-radius: $radius-sm;
   color: $text-primary;
   font-size: 13px;
@@ -1505,8 +1515,8 @@ code.tl-detail-value {
 
   &::placeholder { color: $text-dim; }
   &:focus {
-    border-color: rgba(56, 189, 248, 0.4);
-    box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.08);
+    border-color: var(--text-muted);
+    box-shadow: 0 0 0 3px var(--accent-primary-glow);
   }
 }
 
@@ -1567,8 +1577,8 @@ code.tl-detail-value {
   align-items: flex-end;
   align-self: flex-end;
   .message-bubble {
-    background: rgba(56, 189, 248, 0.12);
-    border: 1px solid rgba(56, 189, 248, 0.15);
+    background: var(--accent-primary-glow);
+    border: 1px solid var(--accent-primary-glow);
     color: $text-primary;
   }
 }
@@ -1610,8 +1620,8 @@ code.tl-detail-value {
   align-items: center;
   gap: 4px;
   padding: 2px 8px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--overlay-2);
+  border: 1px solid var(--overlay-3);
   border-radius: 12px;
   font-size: 11px;
 }
@@ -1628,14 +1638,14 @@ code.tl-detail-value {
   padding: 10px 20px;
   font-size: 13px;
   font-weight: 500;
-  color: #050508;
+  color: var(--bg-primary);
   background: $accent;
   border: none;
   border-radius: $radius-sm;
   cursor: pointer;
   transition: all 0.2s;
 
-  &:hover { background: #5dcdfb; }
+  &:hover { background: var(--accent-secondary); }
   &:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 
@@ -1644,7 +1654,7 @@ code.tl-detail-value {
   font-size: 12px;
   font-weight: 500;
   color: $text-muted;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--overlay-2);
   border: 1px solid $border;
   border-radius: $radius-sm;
   cursor: pointer;
@@ -1652,7 +1662,7 @@ code.tl-detail-value {
 
   &:hover {
     color: $text-primary;
-    border-color: rgba(255, 255, 255, 0.12);
+    border-color: var(--overlay-4);
   }
 }
 
@@ -1672,7 +1682,7 @@ code.tl-detail-value {
 
   &:hover {
     color: $text-primary;
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--overlay-2);
     border-color: $border;
   }
   &.btn-danger:hover {
@@ -1701,7 +1711,7 @@ code.tl-detail-value {
 
 .btn-cancel {
   color: $text-muted;
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--overlay-1);
   border-color: $border;
   &:hover { color: $text-primary; }
 }
@@ -1721,7 +1731,7 @@ code.tl-detail-value {
   font-size: 13px;
   color: $text-muted;
   padding: 4px 10px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--overlay-2);
   border-radius: 8px;
 }
 
@@ -1737,7 +1747,7 @@ code.tl-detail-value {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #34d399;
+  background: var(--accent-success);
   margin-right: 4px;
   animation: live-pulse 2s infinite;
 }
@@ -1749,20 +1759,20 @@ code.tl-detail-value {
 
 .mem-episode-card {
   padding: 12px 16px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--overlay-1);
   border: 1px solid $border;
-  border-left: 3px solid rgba(255, 255, 255, 0.1);
+  border-left: 3px solid var(--overlay-4);
   border-radius: 8px;
   cursor: pointer;
   transition: border-color 0.2s ease, background 0.15s ease;
 
-  &:hover { background: rgba(255, 255, 255, 0.045); }
-  &.mem-ep-expanded { border-left-color: rgba(167, 139, 250, 0.5); }
+  &:hover { background: var(--overlay-2); }
+  &.mem-ep-expanded { border-left-color: var(--text-muted); }
   margin-bottom: 8px;
 
   &.current {
-    border-left-color: #818cf8;
-    background: rgba(129, 140, 248, 0.06);
+    border-left-color: var(--accent-primary);
+    background: var(--accent-primary-glow);
   }
 }
 
@@ -1793,7 +1803,7 @@ code.tl-detail-value {
   font-size: 9px;
   padding: 1px 6px;
   background: rgba(52, 211, 153, 0.15);
-  color: #34d399;
+  color: var(--accent-success);
   border-radius: 6px;
   font-weight: 600;
   letter-spacing: 0.5px;
@@ -1811,7 +1821,7 @@ code.tl-detail-value {
   font-size: 10px;
   padding: 2px 8px;
   border-radius: 8px;
-  color: #fff;
+  color: white;
   font-weight: 500;
   flex-shrink: 0;
 }
@@ -1828,18 +1838,18 @@ code.tl-detail-value {
 .mem-ep-body {
   margin-top: 10px;
   padding-top: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-top: 1px solid var(--overlay-3);
 }
 
 .mem-ep-summary {
   font-size: 12px;
-  color: rgba(255, 255, 255, 0.65);
+  color: var(--text-secondary);
   line-height: 1.5;
   padding: 8px 10px;
   margin: 8px 0;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--overlay-1);
   border-radius: 6px;
-  border-left: 2px solid rgba(167, 139, 250, 0.4);
+  border-left: 2px solid var(--accent-primary-glow);
 }
 
 .mem-ep-detail-row {
@@ -1861,9 +1871,9 @@ code.tl-detail-value {
 .mem-ep-topic-pill {
   font-size: 10px;
   padding: 2px 8px;
-  background: rgba(167, 139, 250, 0.1);
+  background: var(--accent-primary-glow);
   border-radius: 8px;
-  color: #a78bfa;
+  color: var(--text-primary);
   max-width: 220px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1880,7 +1890,7 @@ code.tl-detail-value {
 .mem-ep-domain-pill {
   font-size: 10px;
   padding: 1px 6px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--overlay-3);
   border-radius: 8px;
   color: $text-muted;
 }
@@ -1888,7 +1898,7 @@ code.tl-detail-value {
 .mem-ep-arc-visual {
   margin-top: 10px;
   padding: 8px;
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--overlay-1);
   border-radius: 6px;
 }
 

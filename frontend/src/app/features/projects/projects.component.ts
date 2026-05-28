@@ -4,13 +4,16 @@ import { ActivatedRoute } from '@angular/router';
 import { ProjectService } from './project.service';
 import { TeamsPanelComponent } from './teams-panel/teams-panel.component';
 import { BoardPanelComponent } from './board-panel/board-panel.component';
-import { TimelinePanelComponent } from './timeline-panel/timeline-panel.component';
 import { ActivityPanelComponent } from './activity-panel/activity-panel.component';
 import { CommandBarComponent } from './command-bar/command-bar.component';
 import { ChatSidebarComponent } from './chat-sidebar/chat-sidebar.component';
-import { FilesPanelComponent } from './files-panel/files-panel.component';
+import { WorkspaceComponent } from './workspace/workspace.component';
+import { RunPanelComponent } from '../chat/run-panel/run-panel.component';
+import { OverviewBoardStripComponent } from './overview-board-strip/overview-board-strip.component';
+import { RunViewService } from '../../core/services/run-view.service';
+import { PlanSummary } from './project.models';
 
-type PanelTab = 'overview' | 'board' | 'timeline' | 'files';
+type PanelTab = 'overview' | 'board' | 'files';
 
 @Component({
   selector: 'app-projects',
@@ -19,11 +22,12 @@ type PanelTab = 'overview' | 'board' | 'timeline' | 'files';
     CommonModule,
     TeamsPanelComponent,
     BoardPanelComponent,
-    TimelinePanelComponent,
     ActivityPanelComponent,
     CommandBarComponent,
     ChatSidebarComponent,
-    FilesPanelComponent,
+    WorkspaceComponent,
+    RunPanelComponent,
+    OverviewBoardStripComponent,
   ],
   templateUrl: './projects.component.html',
   styleUrl: './projects.component.scss',
@@ -32,6 +36,7 @@ export class ProjectsComponent implements OnInit, OnDestroy {
   agentId = '';
   activeTab = signal<PanelTab>('overview');
   chatOpen = signal(false);
+  pendingFilePath = signal('');
 
   orchActiveCount = computed(() => this.svc.activeTeams().length);
   orchTotalMembers = computed(() => {
@@ -40,33 +45,68 @@ export class ProjectsComponent implements OnInit, OnDestroy {
   });
   orchDoneMembers = computed(() => {
     const teams = this.svc.activeTeams();
-    return teams.reduce((sum, t) => sum + (t.members?.filter(m => m.status === 'done').length ?? 0), 0);
+    return teams.reduce(
+      (sum, t) => sum + (t.members?.filter((m) => m.status === 'done').length ?? 0),
+      0,
+    );
   });
   orchFailedMembers = computed(() => {
     const teams = this.svc.activeTeams();
-    return teams.reduce((sum, t) => sum + (t.members?.filter(m => m.status === 'failed').length ?? 0), 0);
+    return teams.reduce(
+      (sum, t) => sum + (t.members?.filter((m) => m.status === 'failed').length ?? 0),
+      0,
+    );
   });
-  orchPlanProgress = computed(() => {
-    const plans = this.svc.plansByTodoId();
-    const entries = Object.values(plans);
-    if (entries.length === 0) return 0;
-    const totalSteps = entries.reduce((s, p) => s + (p.steps?.length ?? 0), 0);
-    if (totalSteps === 0) return 0;
-    const doneSteps = entries.reduce((s, p) => s + (p.steps?.filter(st => st.status === 'done').length ?? 0), 0);
-    return Math.round((doneSteps / totalSteps) * 100);
+
+  /** Plan steps: done only for %; skipped shown separately (not counted as complete). */
+  orchPlanStats = computed(() => {
+    const entries = Object.values(this.svc.plansByTodoId()) as PlanSummary[];
+    let done = 0;
+    let skipped = 0;
+    let total = 0;
+    for (const plan of entries) {
+      for (const step of plan.steps ?? []) {
+        total++;
+        if (step.status === 'done') {
+          done++;
+        } else if (step.status === 'skipped') {
+          skipped++;
+        }
+      }
+    }
+    const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+    return { done, skipped, total, pct };
   });
-  hasOrchData = computed(() =>
-    this.svc.activeTeams().length > 0 || this.orchPlanProgress() > 0
+
+  orchPlanProgress = computed(() => this.orchPlanStats().pct);
+
+  hasOrchData = computed(
+    () =>
+      this.svc.activeTeams().length > 0
+      || this.orchPlanStats().total > 0,
   );
+
+  orchUnlaunchedCount = computed(() => this.svc.unlaunchedTeams().length);
 
   constructor(
     private route: ActivatedRoute,
     public svc: ProjectService,
+    readonly runView: RunViewService,
   ) {}
 
   ngOnInit(): void {
     this.agentId = this.route.snapshot.params['agentId'];
     this.svc.init(this.agentId);
+    this.route.queryParamMap.subscribe((params) => {
+      const tab = params.get('tab');
+      if (tab === 'overview' || tab === 'board' || tab === 'files') {
+        this.activeTab.set(tab);
+      }
+      const path = params.get('path');
+      if (path) {
+        this.pendingFilePath.set(path);
+      }
+    });
   }
 
   ngOnDestroy(): void {
@@ -77,8 +117,12 @@ export class ProjectsComponent implements OnInit, OnDestroy {
     this.activeTab.set(tab);
   }
 
+  openBoardTab(): void {
+    this.setTab('board');
+  }
+
   toggleChat(): void {
-    this.chatOpen.update(v => !v);
+    this.chatOpen.update((v) => !v);
   }
 
   onCommand(message: string): void {

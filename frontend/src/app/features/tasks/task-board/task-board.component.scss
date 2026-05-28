@@ -12,8 +12,8 @@
   max-width: 320px;
   display: flex;
   flex-direction: column;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: var(--overlay-1);
+  border: 1px solid var(--overlay-2);
   border-radius: 12px;
   overflow: hidden;
 
@@ -27,7 +27,7 @@
   align-items: center;
   gap: 8px;
   padding: 12px 14px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid var(--overlay-2);
   flex-shrink: 0;
 }
 
@@ -41,7 +41,7 @@
 .column-label {
   font-size: 12px;
   font-weight: 600;
-  color: #d0d0e0;
+  color: var(--text-primary);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -49,8 +49,8 @@
 .column-count {
   font-size: 10px;
   font-weight: 500;
-  color: #8a8a9a;
-  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-muted);
+  background: var(--overlay-3);
   padding: 1px 7px;
   border-radius: 8px;
   margin-left: auto;
@@ -59,13 +59,13 @@
 .collapse-btn {
   background: none;
   border: none;
-  color: #6b7280;
+  color: var(--text-muted);
   font-size: 10px;
   cursor: pointer;
   padding: 2px 4px;
   transition: color 0.15s;
 
-  &:hover { color: #c0c0d0; }
+  &:hover { color: var(--text-secondary); }
 }
 
 .column-items {
@@ -81,14 +81,14 @@
     width: 4px;
   }
   &::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--overlay-4);
     border-radius: 2px;
   }
 }
 
 .column-empty {
   font-size: 12px;
-  color: #5a5a6a;
+  color: var(--text-muted);
   font-style: italic;
   text-align: center;
   padding: 20px 0;

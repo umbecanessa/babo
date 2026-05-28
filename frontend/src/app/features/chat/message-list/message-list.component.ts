@@ -18,6 +18,16 @@ import { MarkdownPipe } from '../../../shared/pipes/markdown.pipe';
 import { ApiService } from '../../../core/services/api.service';
 import { WebSocketService } from '../../../core/services/websocket.service';
 import { ChatWorkbenchService } from '../../../core/services/chat-workbench.service';
+import {
+  collectFilePaths,
+  filePathChipLabel,
+  extractPathFromToolContent,
+  fileDisplayName,
+  isInvalidWorkspacePathToken,
+} from '../../../core/services/activity-format.util';
+import { AgentWorkspaceContextService } from '../../../core/services/agent-workspace-context.service';
+import { WorkspaceNavService } from '../../../core/services/workspace-nav.service';
+import { enrichWorkspaceRelativePath } from '../../projects/workspace/workspace-path.util';
 
 // Re-export for template use
 export type { SignalTag };
@@ -75,7 +85,54 @@ export class MessageListComponent implements OnChanges, AfterViewChecked, OnDest
     private api: ApiService,
     private ws: WebSocketService,
     private workbench: ChatWorkbenchService,
+    private workspaceNav: WorkspaceNavService,
+    private workspaceCtx: AgentWorkspaceContextService,
   ) {}
+
+  toolFilePaths(msg: ChatMessage): string[] {
+    const tp = (msg as any).toolProgress as {
+      toolName?: string;
+      arguments?: Record<string, unknown>;
+      filePaths?: string[];
+    } | undefined;
+    if (!tp?.toolName) {
+      return [];
+    }
+    if (tp.filePaths?.length) {
+      const pd = this.workspaceCtx.getProjectDir(this.agentId);
+      return pd
+        ? tp.filePaths.map((p) => enrichWorkspaceRelativePath(p, pd))
+        : tp.filePaths;
+    }
+    const fromArgs = collectFilePaths(
+      tp.toolName,
+      tp.arguments,
+      undefined,
+      (msg as any).content || '',
+    );
+    if (fromArgs.length) {
+      const pd = this.workspaceCtx.getProjectDir(this.agentId);
+      return pd
+        ? fromArgs.map((p) => enrichWorkspaceRelativePath(p, pd))
+        : fromArgs;
+    }
+    const fromContent = extractPathFromToolContent((msg as any).content || '');
+    return fromContent ? [fromContent] : [];
+  }
+
+  fileChipLabel(path: string): string {
+    return filePathChipLabel(path, this.workspaceCtx.getProjectDir(this.agentId));
+  }
+
+  openToolFile(path: string, event: Event): void {
+    event.preventDefault();
+    event.stopPropagation();
+    const cleaned = (path || '').trim();
+    if (!this.agentId || !cleaned || isInvalidWorkspacePathToken(cleaned)) {
+      return;
+    }
+    this.workspaceNav.openFile(this.agentId, cleaned);
+  }
 
   /** Return a display-friendly file type label from a MIME type. */
   attachmentIcon(mimeType: string): 'image' | 'doc' | 'table' | 'code' | 'file' {
@@ -106,6 +163,14 @@ export class MessageListComponent implements OnChanges, AfterViewChecked, OnDest
   /** Only scroll when transcript inputs change — not on every CD (clicks/selection used to jump to bottom). */
   private scrollToBottomAfterView = false;
 
+  collapsedWaveGroups = new Set<string>();
+  private _autoCollapsedWaves = new Set<string>();
+
+  private static readonly _HIGHLIGHT_TOOLS = new Set([
+    'write', 'edit', 'bash', 'delete_file', 'move_file', 'task_complete',
+    'web_search', 'web_fetch', 'server_install', 'semantic_search',
+  ]);
+
   ngOnChanges(changes: SimpleChanges): void {
     if (
       changes['messages'] ||
@@ -114,8 +179,121 @@ export class MessageListComponent implements OnChanges, AfterViewChecked, OnDest
       changes['agenticActive']
     ) {
       this.scrollToBottomAfterView = true;
+      if (changes['messages']) {
+        this._syncWaveAutoCollapse();
+      }
     }
     this._updateGenerationTimer();
+  }
+
+  isInGroupedWave(messageIndex: number): boolean {
+    const msg = this.messages[messageIndex];
+    if (msg?.type !== 'delegate_card' || !msg.delegate?.teamId) return false;
+    return !this.isFirstInWave(messageIndex);
+  }
+
+  isFirstInWave(messageIndex: number): boolean {
+    const msg = this.messages[messageIndex];
+    if (msg?.type !== 'delegate_card' || !msg.delegate?.teamId) return true;
+    const tid = msg.delegate.teamId;
+    for (let j = messageIndex - 1; j >= 0; j--) {
+      const prev = this.messages[j];
+      if (prev?.type === 'delegate_card' && prev.delegate?.teamId === tid) {
+        return false;
+      }
+      if (prev?.type !== 'delegate_card') break;
+    }
+    return true;
+  }
+
+  getWaveMemberIndices(startIndex: number): number[] {
+    const msg = this.messages[startIndex];
+    const tid = msg?.delegate?.teamId;
+    if (!tid) return [startIndex];
+    const indices: number[] = [];
+    for (let j = startIndex; j < this.messages.length; j++) {
+      const m = this.messages[j];
+      if (m?.type !== 'delegate_card' || m.delegate?.teamId !== tid) break;
+      indices.push(j);
+    }
+    return indices;
+  }
+
+  waveKey(teamId: string, waveAttempt?: number): string {
+    return `${teamId}:${waveAttempt || 1}`;
+  }
+
+  waveLabel(msg: ChatMessage): string {
+    const name = msg.delegate?.teamName || '';
+    const match = name.match(/^Wave\s+\d+/i);
+    if (match) return match[0];
+    if (name) return name.split(' - ')[0] || name;
+    return msg.delegate?.teamId?.slice(0, 8) || 'Wave';
+  }
+
+  waveSubtitle(memberIndices: number[]): string {
+    const members = memberIndices.map(i => this.messages[i].delegate!);
+    const done = members.filter(d => d.status === 'done').length;
+    const running = members.filter(d => d.status === 'running').length;
+    const failed = members.filter(d => d.status === 'error').length;
+    if (running > 0) return `${done}/${members.length} done · ${running} working`;
+    if (failed > 0) return `${done}/${members.length} done · ${failed} failed`;
+    return `${done}/${members.length} complete`;
+  }
+
+  waveAnyRunning(memberIndices: number[]): boolean {
+    return memberIndices.some(i => this.messages[i].delegate?.status === 'running');
+  }
+
+  waveAllDone(memberIndices: number[]): boolean {
+    return memberIndices.every(i => {
+      const s = this.messages[i].delegate?.status;
+      return s === 'done' || s === 'error';
+    });
+  }
+
+  isWaveCollapsed(teamId: string, waveAttempt?: number): boolean {
+    return this.collapsedWaveGroups.has(this.waveKey(teamId, waveAttempt));
+  }
+
+  toggleWaveGroup(teamId: string, waveAttempt?: number): void {
+    const key = this.waveKey(teamId, waveAttempt);
+    if (this.collapsedWaveGroups.has(key)) {
+      this.collapsedWaveGroups.delete(key);
+    } else {
+      this.collapsedWaveGroups.add(key);
+    }
+  }
+
+  visibleDelegateTools(delegate: NonNullable<ChatMessage['delegate']>): typeof delegate.toolCalls {
+    const all = delegate.toolCalls || [];
+    const interesting = all.filter(tc => MessageListComponent._HIGHLIGHT_TOOLS.has(tc.name));
+    return interesting.length > 0 ? interesting : all.slice(-5);
+  }
+
+  hiddenDelegateToolCount(delegate: NonNullable<ChatMessage['delegate']>): number {
+    const all = delegate.toolCalls || [];
+    const shown = this.visibleDelegateTools(delegate);
+    return Math.max(0, all.length - shown.length);
+  }
+
+  private _syncWaveAutoCollapse(): void {
+    const seen = new Set<string>();
+    for (let i = 0; i < this.messages.length; i++) {
+      if (!this.isFirstInWave(i)) continue;
+      const msg = this.messages[i];
+      if (msg?.type !== 'delegate_card' || !msg.delegate?.teamId) continue;
+      const indices = this.getWaveMemberIndices(i);
+      if (indices.length < 2) continue;
+      const key = this.waveKey(msg.delegate.teamId, msg.delegate.waveAttempt);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (this._autoCollapsedWaves.has(key)) continue;
+      if (this.waveAllDone(indices) && !this.waveAnyRunning(indices)) {
+        this._autoCollapsedWaves.add(key);
+        this.collapsedWaveGroups.add(key);
+      }
+    }
   }
 
   ngOnDestroy(): void {
@@ -438,13 +616,13 @@ export class MessageListComponent implements OnChanges, AfterViewChecked, OnDest
   /** Get color for a hormone badge. */
   hormoneColor(name: string): string {
     const colors: Record<string, string> = {
-      dopamine: '#34d399',
-      serotonin: '#38bdf8',
-      norepinephrine: '#fbbf24',
-      cortisol: '#f87171',
-      oxytocin: '#a78bfa',
+      dopamine: 'var(--accent-success)',
+      serotonin: 'var(--accent-primary)',
+      norepinephrine: 'var(--accent-warn)',
+      cortisol: 'var(--accent-danger)',
+      oxytocin: 'var(--accent-primary)',
     };
-    return colors[name] || '#9ca3af';
+    return colors[name] || 'var(--text-muted)';
   }
 
   /** Get a short name for a hormone. */

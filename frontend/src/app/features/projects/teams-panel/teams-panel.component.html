@@ -1,154 +1,390 @@
 <div class="waves-dashboard">
+
   @if (waves.length === 0) {
+
     <div class="empty-state">
+
       <span class="empty-icon">☰</span>
+
       <span>No waves or teams yet. Create a plan with delegation to get started.</span>
+
     </div>
+
   }
+
+
 
   @for (wave of waves; track wave.waveIndex) {
+
     <div class="wave-card" [class]="'wave-' + wave.state" [style.--accent]="waveAccent(wave.state)">
-      <!-- Wave header strip -->
+
       <div class="wave-header">
+
         <div class="wave-accent-bar"></div>
+
         <div class="wave-info">
+
           <span class="wave-label">{{ wave.label }}</span>
-          @if (wave.team) {
-            <span class="wave-team-name">{{ wave.team.name }}</span>
+
+          @if (wave.attempts.length > 1) {
+
+            <span class="wave-attempts-badge">{{ wave.attempts.length }} attempts</span>
+
           }
+
+          @if (wave.primaryTeam) {
+
+            <span class="wave-team-name">{{ wave.primaryTeam.name }}</span>
+
+          }
+
         </div>
+
         <div class="wave-stats">
+
           @if (wave.state === 'active') {
+
             <span class="wave-stat wave-stat--live">
+
               <span class="live-dot"></span>
+
               {{ wave.progress.done }}/{{ wave.progress.total }}
+
             </span>
+
             @if (wave.elapsed > 0) {
+
               <span class="wave-stat wave-stat--time">{{ formatDuration(wave.elapsed) }}</span>
+
             }
+
           } @else if (wave.state === 'completed') {
+
             <span class="wave-stat wave-stat--done">✓ {{ wave.progress.done }}/{{ wave.progress.total }}</span>
-            @if (wave.elapsed > 0) {
-              <span class="wave-stat wave-stat--time">{{ formatDuration(wave.elapsed) }}</span>
-            }
+
           } @else if (wave.state === 'failed') {
+
             <span class="wave-stat wave-stat--fail">✗ Failed</span>
+
+          } @else if (wave.state === 'awaiting_launch') {
+
+            <span class="wave-stat wave-stat--unlaunched" title="Team record exists; delegates not launched">⏳ Not launched</span>
+
           } @else {
+
             <span class="wave-stat wave-stat--planned">Planned</span>
+
           }
+
         </div>
-        <!-- Actions -->
-        @if (wave.team && wave.state === 'active') {
+
+        @if (wave.primaryTeam && wave.state === 'active') {
+
           <div class="wave-actions">
-            <button class="wave-action-btn" (click)="onPause(wave.team!.id)" title="Pause">⏸</button>
-            <button class="wave-action-btn wave-action-btn--danger" (click)="onDisband(wave.team!.id)" title="Disband">✕</button>
+
+            <button class="wave-action-btn" (click)="onPause(wave.primaryTeam!.id)" title="Pause">⏸</button>
+
+            <button class="wave-action-btn" (click)="onSkip(wave.primaryTeam!.id)" title="Skip this wave">Skip</button>
+
+            <button class="wave-action-btn wave-action-btn--danger" (click)="onDisband(wave.primaryTeam!.id)" title="Disband">✕</button>
+
           </div>
+
         }
-        @if (wave.team?.status === 'paused') {
+
+        @if (wave.primaryTeam?.status === 'paused') {
+
           <div class="wave-actions">
-            <button class="wave-action-btn wave-action-btn--primary" (click)="onResume(wave.team!.id)" title="Resume">▶</button>
-            <button class="wave-action-btn wave-action-btn--danger" (click)="onDisband(wave.team!.id)" title="Disband">✕</button>
+
+            <button class="wave-action-btn wave-action-btn--primary" (click)="onResume(wave.primaryTeam!.id)" title="Resume">▶</button>
+
+            <button class="wave-action-btn wave-action-btn--danger" (click)="onDisband(wave.primaryTeam!.id)" title="Disband">✕</button>
+
           </div>
+
         }
-        @if (!wave.team && wave.state === 'planned') {
+
+        @if (!wave.primaryTeam && wave.state === 'planned') {
+
           <div class="wave-actions">
+
             <button class="wave-action-btn wave-action-btn--primary" (click)="onForceStart(wave.waveIndex)" title="Force start this wave">▶ Start</button>
+
           </div>
+
         }
+
       </div>
 
-      <!-- Progress bar for active/completed waves -->
-      @if (wave.state !== 'planned' && wave.progress.total > 0) {
+
+
+      @if (wave.state !== 'planned' && wave.progress.total > 0 && wave.primaryTeam) {
+
         <div class="wave-progress-track">
-          @for (member of wave.team?.members ?? []; track member.delegate_number) {
+
+          @for (member of wave.primaryTeam.members; track member.delegate_number) {
+
             <div
+
               class="wave-progress-seg"
+
               [class]="'seg-' + member.status"
+
               [style.width.%]="100 / wave.progress.total"
+
             ></div>
+
           }
+
         </div>
+
       }
 
-      <!-- Member tiles for active waves -->
-      @if (wave.team && (wave.state === 'active' || wave.state === 'completed' || wave.state === 'failed')) {
-        <div class="member-tiles">
-          @for (member of wave.team.members; let i = $index; track member.delegate_number) {
-            <div
-              class="member-tile"
-              [class]="'tile-' + member.status"
-              [class.tile-expanded]="isMemberExpanded(wave.team!.id, i)"
-              (click)="toggleMember(wave.team!.id, i)"
+
+
+      @for (attempt of wave.attempts; track attempt.team.id; let ai = $index) {
+
+        <div
+
+          class="wave-attempt"
+
+          [class]="'attempt-' + attempt.state"
+
+          [class.attempt-collapsed]="wave.attempts.length > 1 && ai > 0 && !isAttemptExpanded(attempt.team.id)"
+
+        >
+
+          @if (wave.attempts.length > 1) {
+
+            <button
+
+              type="button"
+
+              class="attempt-header"
+
+              (click)="toggleAttempt(attempt.team.id)"
+
             >
-              <div class="tile-row">
-                <span class="tile-icon" [style.color]="memberStatusColor(member.status)">
-                  @if (member.status === 'running') {
-                    <span class="tile-spinner"></span>
-                  } @else {
-                    {{ memberIcon(member.status) }}
-                  }
-                </span>
-                <span class="tile-task">{{ taskLabel(member.task) }}</span>
-                <div class="tile-metrics">
-                  @if (member.iterations > 0) {
-                    <span class="tile-metric">i{{ member.iterations }}</span>
-                  }
-                  @if (member.tool_calls > 0) {
-                    <span class="tile-metric">{{ member.tool_calls }}t</span>
-                  }
-                  @if (member.elapsed_seconds > 0) {
-                    <span class="tile-metric tile-metric--time">{{ formatElapsed(member.elapsed_seconds) }}</span>
-                  }
-                </div>
+
+              <span class="attempt-label">{{ attemptLabel(attempt) }}</span>
+
+              <span class="attempt-meta">[{{ attempt.team.id }}] · {{ attempt.state }}</span>
+
+              <span class="attempt-chevron">{{ isAttemptExpanded(attempt.team.id) ? '▾' : '▸' }}</span>
+
+            </button>
+
+          }
+
+
+
+          @if (wave.attempts.length === 1 || ai === 0 || isAttemptExpanded(attempt.team.id)) {
+
+            @if (attempt.state === 'awaiting_launch') {
+
+              <div class="unlaunched-banner">
+
+                Team <code>{{ attempt.team.id }}</code> created — delegates not launched yet.
+
               </div>
 
-              <!-- Expanded detail row -->
-              @if (isMemberExpanded(wave.team!.id, i)) {
-                <div class="tile-detail" (click)="$event.stopPropagation()">
-                  @if (member.result_summary) {
-                    <p class="tile-result">{{ member.result_summary }}</p>
-                  }
-                  <div class="tile-detail-stats">
-                    <span>Iterations: <strong>{{ member.iterations }}</strong></span>
-                    <span>Tools: <strong>{{ member.tool_calls }}</strong></span>
-                    <span>Elapsed: <strong>{{ formatElapsed(member.elapsed_seconds) || '—' }}</strong></span>
+            }
+
+
+
+            @if (attempt.state === 'active' || attempt.state === 'completed' || attempt.state === 'failed') {
+
+              <div class="member-tiles">
+
+                @for (member of attempt.team.members; let i = $index; track member.delegate_number) {
+
+                  <div
+
+                    class="member-tile"
+
+                    [class]="'tile-' + member.status"
+
+                    [class.tile-expanded]="isMemberExpanded(attempt.team.id, i)"
+
+                    (click)="toggleMember(attempt.team.id, i)"
+
+                  >
+
+                    <div class="tile-row">
+
+                      <span class="tile-icon" [style.color]="memberStatusColor(member.status)">
+
+                        @if (member.status === 'running') {
+
+                          <span class="tile-spinner"></span>
+
+                        } @else {
+
+                          {{ memberIcon(member.status) }}
+
+                        }
+
+                      </span>
+
+                      <span class="tile-delegate">#{{ member.delegate_number }}</span>
+
+                      @if (member.step_id) {
+
+                        <span class="tile-step-id">{{ member.step_id }}</span>
+
+                      }
+
+                      <span class="tile-task">{{ taskLabel(member.task) }}</span>
+
+                      <span class="tile-status-badge" [class]="'badge-' + member.status">
+
+                        {{ memberStatusLabel(member.status) }}
+
+                      </span>
+
+                      <div class="tile-metrics">
+
+                        <span class="tile-metric" title="Iterations">{{ member.iterations }} iter</span>
+
+                        <span class="tile-metric" title="Tool calls">{{ member.tool_calls }} tools</span>
+
+                        @if (member.elapsed_seconds > 0) {
+
+                          <span class="tile-metric tile-metric--time" title="Elapsed">
+
+                            {{ formatElapsed(member.elapsed_seconds) }}
+
+                          </span>
+
+                        }
+
+                      </div>
+
+                    </div>
+
+                    <div class="tile-stats-row" (click)="$event.stopPropagation()">
+
+                      <span>Iterations: <strong>{{ member.iterations }}</strong></span>
+
+                      <span>Tools: <strong>{{ member.tool_calls }}</strong></span>
+
+                      <span>Elapsed: <strong>{{ formatElapsed(member.elapsed_seconds) || '—' }}</strong></span>
+
+                    </div>
+
+                    @if (isMemberExpanded(attempt.team.id, i)) {
+
+                      <div class="tile-detail" (click)="$event.stopPropagation()">
+
+                        @if (member.hint_ack) {
+
+                          <p class="tile-hint-ack">Last response: {{ member.hint_ack }}</p>
+
+                        }
+
+                        @if (recentActions(member).length) {
+
+                          <div class="tile-recent">
+
+                            <span class="tile-recent-label">Recent tools</span>
+
+                            <ul class="tile-recent-list">
+
+                              @for (action of recentActions(member); track $index) {
+
+                                <li>{{ action }}</li>
+
+                              }
+
+                            </ul>
+
+                          </div>
+
+                        }
+
+                        @if (member.result_summary) {
+
+                          <p class="tile-result">{{ member.result_summary }}</p>
+
+                        }
+
+                        @if (member.status === 'running') {
+
+                          <button class="tile-hint-btn" (click)="$event.stopPropagation(); openHint(attempt.team.id, i)">Send Hint</button>
+
+                        }
+
+                      </div>
+
+                    }
+
+
+
+                    @if (hintTarget?.teamId === attempt.team.id && hintTarget?.memberIdx === i) {
+
+                      <div class="hint-row" (click)="$event.stopPropagation()">
+
+                        <input
+
+                          class="hint-input"
+
+                          [(ngModel)]="hintText"
+
+                          placeholder="Hint for this agent..."
+
+                          (keydown.enter)="sendHint()"
+
+                          (keydown.escape)="cancelHint()"
+
+                        />
+
+                        <button class="hint-send" (click)="sendHint()">↵</button>
+
+                        <button class="hint-cancel" (click)="cancelHint()">×</button>
+
+                      </div>
+
+                    }
+
                   </div>
-                  @if (member.status === 'running') {
-                    <button class="tile-hint-btn" (click)="$event.stopPropagation(); openHint(wave.team!.id, i)">Send Hint</button>
-                  }
-                </div>
-              }
 
-              <!-- Inline hint input -->
-              @if (hintTarget?.teamId === wave.team!.id && hintTarget?.memberIdx === i) {
-                <div class="hint-row" (click)="$event.stopPropagation()">
-                  <input
-                    class="hint-input"
-                    [(ngModel)]="hintText"
-                    placeholder="Hint for this agent..."
-                    (keydown.enter)="sendHint()"
-                    (keydown.escape)="cancelHint()"
-                  />
-                  <button class="hint-send" (click)="sendHint()">↵</button>
-                  <button class="hint-cancel" (click)="cancelHint()">×</button>
-                </div>
-              }
-            </div>
+                }
+
+              </div>
+
+            }
+
           }
+
         </div>
+
       }
 
-      <!-- Step tiles for planned waves (no team yet) -->
+
+
       @if (wave.state === 'planned' && wave.steps.length > 0) {
+
         <div class="step-tiles">
+
           @for (step of wave.steps; track step.id) {
+
             <div class="step-tile">
+
               <span class="step-icon" [style.color]="stepStatusColor(step.status)">{{ stepIcon(step.status) }}</span>
+
               <span class="step-label">{{ step.label }}</span>
+
             </div>
+
           }
+
         </div>
+
       }
+
     </div>
+
   }
+
 </div>
+

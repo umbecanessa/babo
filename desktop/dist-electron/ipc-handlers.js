@@ -35,7 +35,11 @@ const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const os = __importStar(require("os"));
 const http = __importStar(require("http"));
+const https = __importStar(require("https"));
 const child_process_1 = require("child_process");
+const config_manager_1 = require("./config-manager");
+const capability_scanner_1 = require("./capability-scanner");
+const capability_recommender_1 = require("./capability-recommender");
 // ---------------------------------------------------------------------------
 // Register all IPC handlers
 // ---------------------------------------------------------------------------
@@ -44,8 +48,25 @@ function registerIpcHandlers(permissions, runtime, venv, config, updater) {
     electron_1.ipcMain.handle('app:version', () => electron_1.app.getVersion());
     // ─── Config ───────────────────────────────────────────────────
     electron_1.ipcMain.handle('config:get', () => config.get());
+    // Synchronous boot config for preload (before Angular starts — avoids localhost default).
+    electron_1.ipcMain.on('config:boot', (event) => {
+        const cfg = config.get();
+        event.returnValue = {
+            nestjsUrl: cfg.nestjsUrl,
+            apiUrl: config_manager_1.ConfigManager.nestjsApiBase(cfg.nestjsUrl),
+            runtimeUrl: `http://127.0.0.1:${cfg.runtimePort}`,
+            runtimePort: cfg.runtimePort,
+        };
+    });
     electron_1.ipcMain.handle('config:set', (_event, partial) => {
-        return config.set(partial);
+        const next = config.set(partial);
+        electron_1.BrowserWindow.getAllWindows().forEach((win) => {
+            win.webContents.send('config:changed', {
+                nestjsUrl: next.nestjsUrl,
+                apiUrl: config_manager_1.ConfigManager.nestjsApiBase(next.nestjsUrl),
+            });
+        });
+        return next;
     });
     electron_1.ipcMain.handle('config:reset', () => config.reset());
     electron_1.ipcMain.handle('config:test-connection', async (_event, url) => {
@@ -58,9 +79,89 @@ function registerIpcHandlers(permissions, runtime, venv, config, updater) {
         status: venv.status,
     }));
     electron_1.ipcMain.handle('setup:start', async () => {
-        await venv.setup();
-        config.set({ setupComplete: true });
+        await venv.setup({ prefetchVision: false });
         return venv.status;
+    });
+    electron_1.ipcMain.handle('capabilities:scan-device', async () => {
+        return (0, capability_scanner_1.runCapabilityScan)(venv.getNlsRoot());
+    });
+    electron_1.ipcMain.handle('capabilities:probe-lan', async (_event, host, gpuWorkerSecret) => {
+        const base = await (0, capability_scanner_1.runCapabilityScan)(venv.getNlsRoot());
+        const lan = await (0, capability_scanner_1.probeLanHost)(host, gpuWorkerSecret);
+        return {
+            ...base,
+            scannedAt: new Date().toISOString(),
+            lan,
+        };
+    });
+    electron_1.ipcMain.handle('capabilities:recommend', async (_event, scan, gpuWorkerSecret) => {
+        return (0, capability_recommender_1.recommendProfile)(scan, venv.getNlsRoot(), undefined, {
+            gpuWorkerSecret,
+        });
+    });
+    electron_1.ipcMain.handle('capabilities:test-inference', async (_event, url, apiKey) => {
+        return (0, capability_scanner_1.testInferenceEndpoint)(url, apiKey);
+    });
+    electron_1.ipcMain.handle('capabilities:prefetch-vision', async () => {
+        if (!venv.isReady()) {
+            return { started: false, reason: 'Python environment not ready' };
+        }
+        void venv.prefetchVisionModel({ quiet: true }).catch((err) => {
+            console.warn('Background vision prefetch failed:', err?.message || err);
+        });
+        return { started: true };
+    });
+    electron_1.ipcMain.handle('capabilities:apply-profile', async (_event, raw) => {
+        const profile = JSON.parse(JSON.stringify(raw));
+        const cfg = config.get();
+        const apiBase = config_manager_1.ConfigManager.nestjsApiBase(cfg.nestjsUrl);
+        const partial = { capabilityProfile: profile };
+        const inf = profile.inference;
+        if (inf.tier === 'hosted_babo' || inf.tier === 'byok_cloud') {
+            const relay = `${apiBase}/inference`;
+            inf.url = relay;
+            partial.inferenceUrl = config_manager_1.ConfigManager.normalizeInferenceUrl(`${relay}/v1`);
+            if (inf.model) {
+                partial.inferenceModel = inf.model;
+            }
+            const gpuRelay = `${apiBase}/gpu`;
+            if (profile.visualCortex.tier === 'hosted_babo') {
+                profile.visualCortex.url = gpuRelay;
+            }
+            if (profile.transcribe.tier === 'hosted_babo') {
+                profile.transcribe.url = gpuRelay;
+            }
+            if (profile.embeddings.tier === 'hosted_babo') {
+                profile.embeddings.url = gpuRelay;
+            }
+            const lanVision = profile.visualCortex.tier === 'self_lan' ? profile.visualCortex.url : undefined;
+            const lanTranscribe = profile.transcribe.tier === 'self_lan' ? profile.transcribe.url : undefined;
+            partial.gpuWorkerUrl = lanVision ?? lanTranscribe ?? gpuRelay;
+        }
+        else if (inf.url) {
+            partial.inferenceUrl = config_manager_1.ConfigManager.normalizeInferenceUrl((0, capability_scanner_1.normalizeInferenceBaseUrl)(inf.url));
+            inf.url = partial.inferenceUrl;
+            if (inf.model) {
+                partial.inferenceModel = inf.model;
+            }
+            const visionUrl = profile.visualCortex.tier === 'self_lan' ? profile.visualCortex.url : undefined;
+            const transcribeUrl = profile.transcribe.tier === 'self_lan' ? profile.transcribe.url : undefined;
+            if (visionUrl || transcribeUrl) {
+                partial.gpuWorkerUrl = visionUrl ?? transcribeUrl;
+                partial.gpuWorkerSecret =
+                    profile.visualCortex.secret ?? profile.transcribe.secret;
+            }
+            else if (profile.visualCortex.tier === 'self_local' &&
+                profile.transcribe.tier === 'self_local' &&
+                profile.embeddings.tier === 'self_local') {
+                partial.gpuWorkerUrl = '';
+                partial.gpuWorkerSecret = '';
+            }
+        }
+        else if (inf.model) {
+            partial.inferenceModel = inf.model;
+        }
+        return config.set(partial);
     });
     electron_1.ipcMain.handle('setup:reset', async () => {
         await venv.reset();
@@ -84,27 +185,85 @@ function registerIpcHandlers(permissions, runtime, venv, config, updater) {
     electron_1.ipcMain.handle('runtime:logs', (_event, lines) => {
         return runtime.getLogs(lines);
     });
+    electron_1.ipcMain.handle('runtime:hot-reload-inference', async (_event, body) => {
+        const cfg = config.get();
+        const port = cfg.runtimePort;
+        const payload = JSON.stringify(body ?? {});
+        return new Promise((resolve, reject) => {
+            const req = http.request({
+                hostname: '127.0.0.1',
+                port,
+                path: '/admin/inference/hot-reload',
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Content-Length': Buffer.byteLength(payload),
+                },
+            }, (res) => {
+                let data = '';
+                res.on('data', (chunk) => {
+                    data += chunk;
+                });
+                res.on('end', () => {
+                    if (res.statusCode && res.statusCode >= 400) {
+                        reject(new Error(data || `HTTP ${res.statusCode}`));
+                        return;
+                    }
+                    try {
+                        resolve(data ? JSON.parse(data) : { ok: true });
+                    }
+                    catch {
+                        resolve({ ok: true });
+                    }
+                });
+            });
+            req.on('error', reject);
+            req.write(payload);
+            req.end();
+        });
+    });
     // ─── URLs (for Angular to know where to connect) ──────────────
     electron_1.ipcMain.handle('urls:get', () => {
         const cfg = config.get();
+        const apiUrl = config_manager_1.ConfigManager.nestjsApiBase(cfg.nestjsUrl);
         return {
             runtimeUrl: `http://127.0.0.1:${cfg.runtimePort}`,
             nestjsUrl: cfg.nestjsUrl,
+            apiUrl,
             wsUrl: `ws://127.0.0.1:${cfg.runtimePort}`,
+        };
+    });
+    electron_1.ipcMain.handle('backend:ping', async (_event, nestjsUrl) => {
+        const cfg = config.get();
+        const base = (nestjsUrl?.trim() || cfg.nestjsUrl).replace(/\/+$/, '').replace(/\/api$/i, '');
+        const apiBase = config_manager_1.ConfigManager.nestjsApiBase(base);
+        const result = await pingHttpUrl(`${apiBase}/auth/login`, {
+            method: 'POST',
+            body: '{}',
+        });
+        return {
+            ...result,
+            apiBase,
+            nestjsUrl: base,
         };
     });
     // ─── File System (permission-gated) ───────────────────────────
     electron_1.ipcMain.handle('fs:readFile', async (_event, filePath) => {
-        await permissions.require('filesystem.read', filePath);
+        await permissions.require('filesystem.read', permissions.filesystemScope(filePath));
         return fs.promises.readFile(filePath, 'utf-8');
     });
     electron_1.ipcMain.handle('fs:writeFile', async (_event, filePath, content) => {
-        await permissions.require('filesystem.write', filePath);
+        await permissions.require('filesystem.write', permissions.filesystemScope(filePath));
         await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
         await fs.promises.writeFile(filePath, content, 'utf-8');
     });
+    electron_1.ipcMain.handle('fs:stat', async (_event, filePath) => {
+        await permissions.require('filesystem.read', permissions.filesystemScope(filePath));
+        const st = await fs.promises.stat(filePath);
+        return { isFile: st.isFile(), isDirectory: st.isDirectory() };
+    });
     electron_1.ipcMain.handle('fs:readDir', async (_event, dirPath) => {
-        await permissions.require('filesystem.read', dirPath);
+        await permissions.require('filesystem.read', permissions.filesystemScope(dirPath));
         const entries = await fs.promises.readdir(dirPath, { withFileTypes: true });
         return Promise.all(entries.map(async (entry) => {
             let size = 0;
@@ -179,6 +338,15 @@ function registerIpcHandlers(permissions, runtime, venv, config, updater) {
     });
     // ─── Permissions ──────────────────────────────────────────────
     electron_1.ipcMain.handle('permissions:get', () => permissions.getAll());
+    electron_1.ipcMain.handle('permissions:get-profiles', () => permissions.getProfiles());
+    electron_1.ipcMain.handle('permissions:apply-profile', (_event, profileName) => {
+        permissions.applyProfile(profileName);
+        return permissions.getAll();
+    });
+    electron_1.ipcMain.handle('permissions:reset', () => {
+        permissions.reset();
+        return permissions.getAll();
+    });
     electron_1.ipcMain.handle('permissions:request', async (_event, permission, reason) => {
         return permissions.request(permission, reason);
     });
@@ -273,17 +441,95 @@ async function testConnection(url) {
     }
     return { ok: false, message: 'Connection failed after retries', latency: 0 };
 }
+function isBackendReachableStatus(statusCode) {
+    if (statusCode >= 200 && statusCode < 300)
+        return true;
+    return statusCode === 400 || statusCode === 401 || statusCode === 403 || statusCode === 422;
+}
+/** Reachability check from the main process (no renderer CORS). */
+function pingHttpUrl(url, options) {
+    return new Promise((resolve) => {
+        const start = Date.now();
+        const parsed = new URL(url);
+        const lib = parsed.protocol === 'https:' ? https : http;
+        const method = options?.method ?? 'GET';
+        const body = options?.body;
+        const reqOpts = {
+            hostname: parsed.hostname,
+            port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
+            path: `${parsed.pathname}${parsed.search}`,
+            method,
+            timeout: 8_000,
+            headers: body
+                ? {
+                    'Content-Type': 'application/json',
+                    'Content-Length': Buffer.byteLength(body),
+                }
+                : {},
+        };
+        const req = lib.request(reqOpts, (res) => {
+            res.resume();
+            const statusCode = res.statusCode ?? 0;
+            const ok = isBackendReachableStatus(statusCode);
+            const latency = Date.now() - start;
+            let message = 'No response';
+            if (ok) {
+                message = latency > 0 ? `Reachable · ${latency} ms` : 'Reachable';
+            }
+            else if (statusCode === 404) {
+                message = 'Not found — check server URL';
+            }
+            else if (statusCode > 0) {
+                message = `HTTP ${statusCode}`;
+            }
+            resolve({ ok, statusCode, latency, message });
+        });
+        req.on('error', (err) => {
+            resolve({
+                ok: false,
+                statusCode: 0,
+                latency: Date.now() - start,
+                message: err.message,
+            });
+        });
+        req.on('timeout', () => {
+            req.destroy();
+            resolve({
+                ok: false,
+                statusCode: 0,
+                latency: Date.now() - start,
+                message: 'Connection timed out (8s)',
+            });
+        });
+        if (body)
+            req.write(body);
+        req.end();
+    });
+}
+/** OpenAI-compatible bases use /v1/models; vLLM and others expose /health at the root. */
+function inferenceProbeUrl(baseUrl) {
+    const normalized = baseUrl.replace(/\/+$/, '');
+    if (normalized.endsWith('/health')) {
+        return normalized;
+    }
+    if (normalized.endsWith('/v1')) {
+        return `${normalized}/models`;
+    }
+    return `${normalized}/health`;
+}
 function testConnectionOnce(url) {
     return new Promise((resolve) => {
         const start = Date.now();
-        const target = url.endsWith('/health') ? url : `${url}/health`;
-        const req = http.get(target, { timeout: 5_000 }, (res) => {
+        const target = inferenceProbeUrl(url);
+        const lib = target.startsWith('https:') ? https : http;
+        const req = lib.get(target, { timeout: 5_000 }, (res) => {
             const latency = Date.now() - start;
-            if (res.statusCode === 200) {
+            const code = res.statusCode ?? 0;
+            if (code >= 200 && code < 300) {
                 resolve({ ok: true, message: 'Connected', latency });
             }
             else {
-                resolve({ ok: false, message: `HTTP ${res.statusCode}`, latency });
+                resolve({ ok: false, message: `HTTP ${code}`, latency });
             }
         });
         req.on('error', (err) => {

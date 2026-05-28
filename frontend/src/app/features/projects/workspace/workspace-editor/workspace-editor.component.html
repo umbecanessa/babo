@@ -1,0 +1,46 @@
+<div class="editor-shell">
+  @if (tabs.length > 0) {
+    <div class="tab-bar">
+      @for (tab of tabs; track tab.path) {
+        <div
+          class="tab"
+          [class.active]="activePath === tab.path"
+          (click)="selectTab(tab.path)"
+        >
+          <span class="tab-dot" [class.dirty]="isDirty(tab.path) || tab.dirty"></span>
+          <span class="tab-name">{{ tab.name }}</span>
+          @if (tab.loading) {
+            <span class="tab-spinner">…</span>
+          }
+          <button class="tab-close" type="button" (click)="closeTab(tab.path, $event)">&times;</button>
+        </div>
+      }
+    </div>
+
+    @if (activeTab(); as tab) {
+      <div class="editor-toolbar">
+        <span class="file-path" [title]="tab.path">{{ tab.path }}</span>
+        @if (isDirty(tab.path) || tab.dirty) {
+          <button class="save-btn" type="button" (click)="save.emit(tab.path)">Save</button>
+        }
+      </div>
+    }
+  }
+
+  <div class="editor-main">
+    <div #editorHost class="cm-host"></div>
+
+    @if (!activePath && tabs.length === 0) {
+      <div class="editor-overlay editor-empty">
+        <div class="empty-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="40" height="40">
+            <path d="M17.25 6.75L22.5 12l-5.25 5.25M6.75 17.25L1.5 12l5.25-5.25M14.25 3.75l-4.5 16.5"/>
+          </svg>
+        </div>
+        <p>Select a file from the explorer to open it.</p>
+      </div>
+    } @else if (activeTab()?.loading) {
+      <div class="editor-overlay editor-loading">Loading file…</div>
+    }
+  </div>
+</div>

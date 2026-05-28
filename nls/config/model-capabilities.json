@@ -1,0 +1,25 @@
+{
+  "$comment": "Curated multimodal hints for onboarding. Patterns are case-insensitive substring matches on NLS_HF_MODEL / vLLM model id. Update as you ship new defaults.",
+  "exact": {
+    "Qwen/Qwen3.6-35B-A3B-FP8": { "multimodal": true, "notes": "GX10 MoE; vision via chat completions when vLLM multimodal enabled" },
+    "gpt-4o": { "multimodal": true },
+    "gpt-4o-mini": { "multimodal": true },
+    "openai/gpt-4o": { "multimodal": true },
+    "openai/gpt-4o-mini": { "multimodal": true },
+    "qwen/qwen3.6-35b-a3b": { "multimodal": true, "notes": "Babo Cloud default; OpenRouter MoE" },
+    "qwen/qwen3.5-35b-a3b": { "multimodal": true }
+  },
+  "patterns": [
+    { "match": "qwen3.6", "multimodal": true },
+    { "match": "qwen2.5-vl", "multimodal": true },
+    { "match": "qwen2-vl", "multimodal": true },
+    { "match": "llava", "multimodal": true },
+    { "match": "gpt-4o", "multimodal": true },
+    { "match": "claude-3", "multimodal": true },
+    { "match": "gemini", "multimodal": true },
+    { "match": "llama3.2", "multimodal": false },
+    { "match": "llama3.1", "multimodal": false },
+    { "match": "deepseek-r1", "multimodal": false }
+  ],
+  "default": { "multimodal": "unknown" }
+}

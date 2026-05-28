@@ -162,6 +162,63 @@ async def safe_to_update(request: Request):
 # Chain State
 # ===================================================================
 
+def _enrich_chain_display(
+    chain_data: dict,
+    agent_id: str,
+    request: Request,
+) -> dict:
+    """Fill display gaps: height from blocks, BYO base_model from live inference."""
+    if not isinstance(chain_data, dict):
+        return chain_data
+
+    blocks: list[dict] = []
+    for key in ("consolidated", "frozen_epochs", "active_deltas"):
+        blocks.extend(chain_data.get(key) or [])
+    active_epoch = chain_data.get("active_epoch")
+    if active_epoch:
+        blocks.append(active_epoch)
+    # Genesis may only exist in consolidated — already included above
+
+    if blocks:
+        heights = [int(b.get("height", 0)) for b in blocks if b.get("height") is not None]
+        if heights:
+            max_height = max(heights)
+            if not chain_data.get("current_height"):
+                chain_data["current_height"] = max_height
+            chain_data["block_count"] = len(blocks)
+
+    base = (chain_data.get("base_model") or "").strip().lower()
+    if base in ("", "bring-your-own", "byo"):
+        agent_manager = getattr(request.app.state, "agent_manager", None)
+        runtime = (
+            agent_manager.get_runtime(agent_id)
+            if agent_manager is not None
+            else None
+        )
+        resolved = ""
+        if runtime is not None:
+            cfg = getattr(runtime, "config", {}) or {}
+            resolved = (
+                cfg.get("inference", {}).get("hf_model")
+                or cfg.get("hf_model")
+                or getattr(runtime, "adapter_name", "")
+                or ""
+            )
+        if not resolved:
+            meta_path = _get_agent_dir(request, agent_id) / "meta.json"
+            if meta_path.exists():
+                try:
+                    meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                    resolved = meta.get("base_model") or meta.get("hf_model") or ""
+                except Exception:
+                    pass
+        if resolved:
+            chain_data["base_model"] = resolved
+            chain_data["base_model_label"] = resolved.split("/")[-1]
+
+    return chain_data
+
+
 @router.get("/agents/{agent_id}/chain")
 async def get_agent_chain(agent_id: str, request: Request):
     """Return the full Merkle chain state from ledger.yaml."""
@@ -177,7 +234,24 @@ async def get_agent_chain(agent_id: str, request: Request):
     except Exception as exc:
         raise HTTPException(status_code=500, detail=f"Error reading ledger: {exc}")
 
-    return chain_data
+    chain_data = chain_data or {}
+    try:
+        from nls.ledger.chain_sleep import (
+            reconcile_chain_from_session_meta,
+            sync_manifest_from_db,
+        )
+
+        if not chain_data.get("consolidated") and not chain_data.get("active_epoch"):
+            reconcile_chain_from_session_meta(agent_dir)
+            with open(ledger_path, "r", encoding="utf-8") as f:
+                chain_data = yaml.safe_load(f) or {}
+        sync_manifest_from_db(agent_dir)
+        with open(ledger_path, "r", encoding="utf-8") as f:
+            chain_data = yaml.safe_load(f) or chain_data
+    except Exception as exc:
+        logger.debug("Chain reconcile for %s: %s", agent_id, exc)
+
+    return _enrich_chain_display(chain_data, agent_id, request)
 
 
 # ===================================================================
@@ -1771,6 +1845,65 @@ async def restore_snapshot(agent_id: str, request: Request):
         return {"status": "restored", "manifest": manifest, "snapshot": filename}
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ─── Inference hot reload (desktop settings — no full runtime restart) ───
+
+
+@router.post("/inference/hot-reload")
+async def hot_reload_inference(request: Request):
+    """Apply primary and delegate model ids to the live runtime."""
+    import os
+
+    body = await request.json()
+    hf_model = (body.get("hf_model") or "").strip()
+    delegate_hf_model = body.get("delegate_hf_model")
+    delegate_use_primary = body.get("delegate_use_primary", True)
+
+    model_manager = request.app.state.model_manager
+    agent_manager = request.app.state.agent_manager
+
+    if hf_model:
+        model_manager.hf_model = hf_model
+        if getattr(model_manager, "vllm_client", None) is not None:
+            model_manager.vllm_client.default_model = hf_model
+        os.environ["NLS_HF_MODEL"] = hf_model
+
+    if delegate_use_primary:
+        os.environ.pop("NLS_DELEGATE_HF_MODEL", None)
+        delegate_value = None
+    elif delegate_hf_model is not None:
+        delegate_value = str(delegate_hf_model).strip() or None
+        if delegate_value:
+            os.environ["NLS_DELEGATE_HF_MODEL"] = delegate_value
+        else:
+            os.environ.pop("NLS_DELEGATE_HF_MODEL", None)
+    else:
+        delegate_value = None
+
+    updated = 0
+    for runtime in agent_manager.get_loaded_runtimes().values():
+        if hf_model and getattr(runtime, "vllm_client", None) is not None:
+            runtime.vllm_client.default_model = hf_model
+        if delegate_use_primary:
+            runtime.delegate_model = None
+        elif delegate_hf_model is not None:
+            runtime.delegate_model = delegate_value
+        updated += 1
+
+    logger.info(
+        "Inference hot-reload: hf_model=%s delegate=%s use_primary=%s agents=%d",
+        hf_model or "(unchanged)",
+        delegate_value if not delegate_use_primary else "(primary)",
+        delegate_use_primary,
+        updated,
+    )
+    return {
+        "ok": True,
+        "hf_model": hf_model or model_manager.hf_model,
+        "delegate_hf_model": delegate_value,
+        "agents_updated": updated,
+    }
 
 
 # ─── Visual Cortex ─────────────────────────────────────────────────

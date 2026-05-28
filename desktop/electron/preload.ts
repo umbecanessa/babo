@@ -140,6 +140,9 @@ const nlsDesktopApi = {
 
     getLogs: (lines?: number): Promise<string[]> =>
       ipcRenderer.invoke('runtime:logs', lines),
+
+    hotReloadInference: (body: Record<string, unknown>): Promise<unknown> =>
+      ipcRenderer.invoke('runtime:hot-reload-inference', body),
   },
 
   // ─── URLs (where Angular should connect) ──────────────────────

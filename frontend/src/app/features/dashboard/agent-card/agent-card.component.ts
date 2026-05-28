@@ -2,6 +2,12 @@ import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { Agent } from '../../../core/models/agent.model';
+import {
+  buildAgentSnapshot,
+  AgentSnapshot,
+  AgentVital,
+  vitalHint,
+} from '../../../core/services/agent-snapshot.util';
 
 @Component({
   selector: 'app-agent-card',
@@ -19,6 +25,14 @@ export class AgentCardComponent {
   @Output() delete = new EventEmitter<void>();
   @Output() togglePause = new EventEmitter<void>();
 
+  get snapshot(): AgentSnapshot {
+    return buildAgentSnapshot(this.agent);
+  }
+
+  vitalHint(vital: AgentVital): string {
+    return vitalHint(vital, this.agent.runtime?.heartbeat);
+  }
+
   get isPaused(): boolean {
     return this.agent.userPaused === true;
   }
@@ -26,6 +40,8 @@ export class AgentCardComponent {
   get status(): string {
     if (this.isPaused) return 'paused';
     if (this.remoteMode && !this.online) return 'offline';
+    if (this.snapshot.isBusy && this.agent.runtime?.activity?.user_busy) return 'working';
+    if (this.agent.runtime?.consciousness?.inner_loop?.active_dreaming) return 'dreaming';
     return this.agent.runtime?.status || this.agent.status || 'offline';
   }
 
@@ -36,6 +52,8 @@ export class AgentCardComponent {
       case 'alive': return 'Online';
       case 'sleeping': return 'Sleeping';
       case 'chatting': return 'Chatting';
+      case 'working': return 'Working';
+      case 'dreaming': return 'Daydreaming';
       case 'offline': return 'Offline';
       case 'unreachable': return 'Unreachable';
       default: return this.status;
@@ -43,22 +61,20 @@ export class AgentCardComponent {
   }
 
   get statusColor(): string {
-    if (this.isPaused) return '#8a8a9a';
-    if (this.remoteMode && !this.online) return '#ef4444';
+    if (this.isPaused) return 'var(--text-muted)';
+    if (this.remoteMode && !this.online) return 'var(--accent-danger)';
     switch (this.status) {
-      case 'alive': return '#34d399';
-      case 'sleeping': return '#fbbf24';
-      case 'chatting': return '#38bdf8';
-      case 'offline': return '#8a8a9a';
+      case 'alive': return 'var(--accent-success)';
+      case 'sleeping': return 'var(--accent-warn)';
+      case 'chatting': return 'var(--accent-primary)';
+      case 'working': return 'var(--accent-primary)';
+      case 'dreaming': return '#c084fc';
+      case 'offline': return 'var(--text-muted)';
       default: return '#525252';
     }
   }
 
   get displayName(): string {
     return this.agent.name || this.agent.runtimeAgentId?.substring(0, 8) || this.agent.id?.substring(0, 8) || 'Agent';
-  }
-
-  get factsCount(): number {
-    return this.agent.runtime?.facts_in_memory || 0;
   }
 }

@@ -43,6 +43,8 @@ export interface NlsConfig {
   hfModel?: string;
   gpuWorkerUrl?: string;
   gpuWorkerSecret?: string;
+  /** Must match NestJS `RUNTIME_SHARED_SECRET` for channel relay WS auth */
+  runtimeSharedSecret?: string;
   runtimeHost?: string;
 }
 
@@ -52,6 +54,7 @@ const DEFAULT_CONFIG: NlsConfig = {
   inferenceApiKey: '',
   nestjsUrl: 'https://api.babo.agency',
   runtimePort: 9222,
+  runtimeSharedSecret: 'nls-dev-secret',
   setupComplete: false,
   capabilityProfile: { ...DEFAULT_CAPABILITY_PROFILE },
 };
@@ -91,6 +94,7 @@ export class ConfigManager {
       }
     }
     this.config = { ...this.config, ...next };
+    this.reconcileGpuWorkerFields();
     this.save();
     return { ...this.config };
   }
@@ -161,7 +165,6 @@ export class ConfigManager {
       NLS_SLEEP_ENABLED: 'true',
       NLS_EDUCATION_ENABLED: 'false',
       NLS_DEFAULT_GENESIS: 'standard-v1',
-      NLS_SHARED_SECRET: '',
       NLS_HOST: '127.0.0.1',
       NLS_PORT: String(this.config.runtimePort),
       NLS_DATA_DIR: dataDir,
@@ -175,15 +178,47 @@ export class ConfigManager {
       }),
     };
 
-    if (this.config.gpuWorkerUrl) {
+    const sharedSecret =
+      this.config.runtimeSharedSecret?.trim() ||
+      DEFAULT_CONFIG.runtimeSharedSecret ||
+      '';
+    if (sharedSecret) {
+      env.NLS_SHARED_SECRET = sharedSecret;
+      env.RUNTIME_SHARED_SECRET = sharedSecret;
+    }
+
+    const p = profile;
+    const needsLegacyGpuUrl =
+      p.visualCortex.tier === 'hosted_babo' ||
+      p.visualCortex.tier === 'self_lan' ||
+      p.transcribe.tier === 'hosted_babo' ||
+      p.transcribe.tier === 'self_lan' ||
+      p.embeddings.tier === 'hosted_babo' ||
+      p.embeddings.tier === 'self_lan';
+
+    if (needsLegacyGpuUrl && this.config.gpuWorkerUrl) {
       env.NLS_GPU_WORKER_URL = env.NLS_GPU_WORKER_URL || this.config.gpuWorkerUrl;
     }
-    if (this.config.gpuWorkerSecret) {
+    if (needsLegacyGpuUrl && this.config.gpuWorkerSecret) {
       env.NLS_GPU_WORKER_SECRET =
         env.NLS_GPU_WORKER_SECRET || this.config.gpuWorkerSecret;
     }
 
     return env;
+  }
+
+  /** Drop stale cloud GPU URL when every workload is local (common after profile edits). */
+  private reconcileGpuWorkerFields(): void {
+    const p = this.config.capabilityProfile;
+    if (!p) return;
+    const allLocal =
+      p.visualCortex.tier === 'self_local' &&
+      p.transcribe.tier === 'self_local' &&
+      p.embeddings.tier === 'self_local';
+    if (allLocal) {
+      delete this.config.gpuWorkerUrl;
+      delete this.config.gpuWorkerSecret;
+    }
   }
 
   private load(): void {
@@ -204,7 +239,11 @@ export class ConfigManager {
             merged.inferenceModel = merged.capabilityProfile.inference.model;
           }
         }
+        if (!merged.runtimeSharedSecret?.trim()) {
+          merged.runtimeSharedSecret = DEFAULT_CONFIG.runtimeSharedSecret;
+        }
         this.config = merged;
+        this.reconcileGpuWorkerFields();
         const prevModel = (data as { capabilityProfile?: CapabilityProfile })
           .capabilityProfile?.inference?.model;
         if (merged.capabilityProfile.inference.model !== prevModel) {

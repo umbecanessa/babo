@@ -7,6 +7,7 @@ naturally via ``compose_context()``.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -30,7 +31,7 @@ class DelegateRingTool:
         return (
             "Read or manipulate a running sub-agent's memory rings. "
             "Each delegate has its own SubCryptex with rings: "
-            "task, progress, knowledge, project_facts, credentials, "
+            "task, progress, knowledge, orchestrator, project_facts, credentials, "
             "tactical_goals, skills. Use this to steer delegates by "
             "injecting knowledge they are missing, boosting ring "
             "priority so they notice forgotten context, or reading "
@@ -60,8 +61,8 @@ class DelegateRingTool:
                 "ring": {
                     "type": "string",
                     "enum": [
-                        "task", "progress", "knowledge", "tactical_goals",
-                        "project_facts", "credentials", "skills",
+                        "task", "progress", "knowledge", "orchestrator",
+                        "tactical_goals", "project_facts", "credentials", "skills",
                     ],
                     "description": (
                         "Target ring (required for read/upsert/boost_priority). "
@@ -97,8 +98,12 @@ class DelegateRingTool:
             },
         }
 
-    async def execute(self, **kwargs: Any) -> ToolResult:
-        args = kwargs
+    async def execute(
+        self,
+        params: dict[str, Any],
+        signal: asyncio.Event | None = None,
+    ) -> ToolResult:
+        args = params
         action = args.get("action", "")
         delegate_number = args.get("delegate_number")
 

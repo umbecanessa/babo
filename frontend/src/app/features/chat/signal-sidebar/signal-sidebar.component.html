@@ -72,8 +72,8 @@
         </div>
         }
 
-        <!-- Energy bar -->
-        @if (energy > 0) {
+        <!-- Energy bar (show at 0% too — low energy is meaningful) -->
+        @if (hasEnergyReading) {
           <div class="energy-bar-wrap" title="Energy: {{ energyPercent }}%">
             <span class="energy-icon">&#9889;</span>
             <div class="energy-bar-track">
@@ -344,8 +344,8 @@
       <h3 class="section-title section-title-row">
         <span class="activity-title-dot"></span>
         Activity
-        @if (activityList.length > 0) {
-          <span class="activity-count">{{ activityList.length }}</span>
+        @if (nonExitingActivityCount() > 0) {
+          <span class="activity-count">{{ visibleActivities().length }}{{ hiddenActivityCount() > 0 ? '+' + hiddenActivityCount() : '' }}</span>
         }
         <button class="section-info-btn" (click)="infoActivity?.show()" title="What is Activity?">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -357,7 +357,7 @@
         <p class="no-activity">No activity yet...</p>
       } @else {
         <div class="activity-list">
-          @for (item of activityList; track item.id) {
+          @for (item of visibleActivities(); track item.id) {
             <div class="activity-item"
                  [class]="'activity-item kind-' + item.kind"
                  [class.entering]="item.state === 'entering'"
@@ -368,7 +368,7 @@
               <div class="activity-header">
                 <span class="activity-icon">{{ activityIcon(item.kind) }}</span>
                 <span class="activity-kind-label">{{ activityLabel(item.kind) }}</span>
-                <span class="activity-text">{{ item.text }}</span>
+                <span class="activity-text">{{ activityHeadline(item) }}</span>
                 @if (item.kind === 'channel' && item.metadata?.['sessionKey']) {
                   <span class="activity-thread-link" title="Open thread">
                     <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
@@ -376,6 +376,18 @@
                 }
                 <span class="activity-time">{{ formatTime(item.timestamp) }}</span>
               </div>
+              @if (activityChips(item).length) {
+                <div class="activity-chips">
+                  @for (chip of activityChips(item); track chip.label + (chip.value || '')) {
+                    <span class="activity-chip" [class]="'tone-' + (chip.tone || 'default')">
+                      <span class="activity-chip-k">{{ chip.label }}</span>
+                      @if (chip.value) {
+                        <span class="activity-chip-v">{{ chip.value }}</span>
+                      }
+                    </span>
+                  }
+                </div>
+              }
               @if (item.detail && item.metadata?.['autonomous']) {
                 <div class="activity-live-detail">{{ item.detail }}</div>
               }
@@ -434,7 +446,7 @@
                   <!-- Signal tags (shared, from daydreams/active dreams) -->
                   @if (item.tags.length) {
                     <div class="activity-tags">
-                      @for (tag of item.tags; track tag.raw) {
+                      @for (tag of item.tags; track tag.raw || tag.label) {
                         <span class="activity-tag-pill" [title]="tag.raw">
                           <span class="activity-tag-dot" [style.background]="signalColor(tag.type)"></span>
                           <span class="activity-tag-type">{{ humanType(tag.type) }}</span>
@@ -458,6 +470,15 @@
             </div>
           }
         </div>
+        @if (canExpandActivities()) {
+          <button type="button" class="activity-more-btn" (click)="expandActivities()">
+            Show more ({{ hiddenActivityCount() }} hidden, up to {{ activityCapExpanded }})
+          </button>
+        } @else if (canCollapseActivities()) {
+          <button type="button" class="activity-more-btn activity-more-btn--muted" (click)="collapseActivities()">
+            Show fewer (top {{ activityCapCompact }})
+          </button>
+        }
       }
     </div>
 

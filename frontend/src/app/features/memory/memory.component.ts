@@ -373,16 +373,22 @@ interface ContextGroup {
           @case ('chain') {
             @if (chainState(); as cs) {
               <div class="chain-meta">
-                <span><strong>Height:</strong> {{ cs.current_height }}</span>
-                <span><strong>Base Model:</strong> {{ cs.base_model }}</span>
+                <span><strong>Height:</strong> {{ chainDisplayHeight(cs) }}</span>
+                <span><strong>Base Model:</strong> {{ cs.base_model_label || cs.base_model }}</span>
                 <span><strong>Sovereignty:</strong> {{ cs.sovereignty_mode }}</span>
                 <span class="mono"><strong>Soul Hash:</strong> {{ truncate(cs.soul_hash, 16) }}</span>
               </div>
 
               <div class="chain-timeline">
-                @if (cs.consolidated.length) {
+                @if (genesisBlocks(cs).length) {
+                  <div class="tier-label">Genesis</div>
+                  @for (block of genesisBlocks(cs); track block.height) {
+                    <ng-container *ngTemplateOutlet="blockNode; context: { $implicit: block, active: false }"></ng-container>
+                  }
+                }
+                @if (otherConsolidated(cs).length) {
                   <div class="tier-label">Consolidated</div>
-                  @for (block of cs.consolidated; track block.height) {
+                  @for (block of otherConsolidated(cs); track block.height) {
                     <ng-container *ngTemplateOutlet="blockNode; context: { $implicit: block, active: false }"></ng-container>
                   }
                 }
@@ -415,11 +421,11 @@ interface ContextGroup {
                   (click)="selectForkPoint(block.height)"
                 >
                   <div class="tl-line"></div>
-                  <div class="tl-dot" [class.epoch]="block.block_type === 'epoch'" [class.delta]="block.block_type === 'delta'" [class.active-dot]="active"></div>
+                  <div class="tl-dot" [class.genesis]="block.block_type === 'genesis'" [class.epoch]="block.block_type === 'epoch'" [class.delta]="block.block_type === 'delta'" [class.active-dot]="active"></div>
                   <div class="tl-content">
                     <div class="tl-row">
                       <span class="tl-height">{{ block.height }}</span>
-                      <span class="block-type-badge" [class.epoch]="block.block_type === 'epoch'" [class.delta]="block.block_type === 'delta'">{{ block.block_type }}</span>
+                      <span class="block-type-badge" [class.genesis]="block.block_type === 'genesis'" [class.epoch]="block.block_type === 'epoch'" [class.delta]="block.block_type === 'delta'">{{ block.block_type }}</span>
                       <span class="tl-aku">{{ block.aku_count }} AKU</span>
                       <span class="tl-hash mono">{{ truncate(block.block_hash, 12) }}</span>
                       <span class="tl-ts">{{ block.timestamp | timeAgo }}</span>
@@ -1041,6 +1047,28 @@ export class MemoryComponent implements OnInit {
     this.loadedTabs.add(tab);
   }
 
+  /** Ledger height; falls back to max block height when yaml current_height is stale. */
+  genesisBlocks(cs: ChainState): Block[] {
+    return (cs.consolidated || []).filter(b => b.block_type === 'genesis' || b.height === 0);
+  }
+
+  otherConsolidated(cs: ChainState): Block[] {
+    return (cs.consolidated || []).filter(b => b.block_type !== 'genesis' && b.height !== 0);
+  }
+
+  chainDisplayHeight(cs: ChainState | null): number {
+    if (!cs) return 0;
+    if (cs.current_height > 0) return cs.current_height;
+    const all = [
+      ...(cs.consolidated || []),
+      ...(cs.frozen_epochs || []),
+      ...(cs.active_epoch ? [cs.active_epoch] : []),
+      ...(cs.active_deltas || []),
+    ];
+    if (!all.length) return 0;
+    return Math.max(...all.map(b => b.height ?? 0));
+  }
+
   // ── Overview ──────────────────────────────────────────────
   overviewStats = computed(() => {
     const cs = this.chainState();
@@ -1048,7 +1076,7 @@ export class MemoryComponent implements OnInit {
     const a = this.agent();
     return {
       factsCount: f?.total ?? 0,
-      chainHeight: cs?.current_height ?? 0,
+      chainHeight: this.chainDisplayHeight(cs),
       sleepCount: a?.runtime?.sleep_count ?? 0,
       ansSignals: this.contextItems().length,
       sovereignty: cs?.sovereignty_mode ?? '—',
@@ -1110,7 +1138,7 @@ export class MemoryComponent implements OnInit {
 
       if (wm.instructions?.length) {
         groups.push({
-          type: 'instruction', label: 'Instructions', color: '#ec4899',
+          type: 'instruction', label: 'Instructions', color: 'var(--accent-primary)',
           items: wm.instructions.map((inst, i) => ({
             index: 40000 + i, signal_type: 'instruction',
             domain: inst.source || 'task', content: inst.content || '',
@@ -1120,7 +1148,7 @@ export class MemoryComponent implements OnInit {
       }
       if (primaryGoals?.length) {
         groups.push({
-          type: 'goal', label: 'Goals', color: '#f59e0b',
+          type: 'goal', label: 'Goals', color: 'var(--accent-warn)',
           items: primaryGoals.map((g: any, i: number) => ({
             index: 10000 + i, signal_type: 'goal',
             domain: g.level || 'goal', content: g.content || '',
@@ -1129,11 +1157,11 @@ export class MemoryComponent implements OnInit {
         });
       }
       const slotTypeDefs: { key: string; label: string; color: string }[] = [
-        { key: 'fact', label: 'Active Facts', color: '#34d399' },
-        { key: 'feeling', label: 'Feelings', color: '#a78bfa' },
+        { key: 'fact', label: 'Active Facts', color: 'var(--accent-success)' },
+        { key: 'feeling', label: 'Feelings', color: 'var(--accent-primary)' },
         { key: 'schema', label: 'Schemas', color: '#c084fc' },
-        { key: 'user_state', label: 'User State', color: '#38bdf8' },
-        { key: 'prediction', label: 'Predictions', color: '#fb923c' },
+        { key: 'user_state', label: 'User State', color: 'var(--accent-primary)' },
+        { key: 'prediction', label: 'Predictions', color: 'var(--accent-warn)' },
       ];
       for (const def of slotTypeDefs) {
         const matched = primarySlots.filter(s => s.type === def.key);
@@ -1162,7 +1190,7 @@ export class MemoryComponent implements OnInit {
         const chunks = wm.consolidation_context.split('\n').filter(l => l.trim());
         if (chunks.length) {
           groups.push({
-            type: 'consolidation', label: 'Session Consolidation', color: '#818cf8',
+            type: 'consolidation', label: 'Session Consolidation', color: 'var(--accent-primary)',
             items: chunks.map((c, i) => ({
               index: 50000 + i, signal_type: 'consolidation',
               domain: 'session', content: c.trim(),
@@ -1186,9 +1214,9 @@ export class MemoryComponent implements OnInit {
 
     // Always include ANS context (LEARN/BOND/EVALUATE)
     const ansDefs: { key: string; label: string; color: string; match: (t: string) => boolean }[] = [
-      { key: 'LEARN', label: 'Learn', color: '#34d399', match: t => t === 'LEARN' },
-      { key: 'BOND', label: 'Bond', color: '#38bdf8', match: t => t === 'BOND' || t === 'BONDING' },
-      { key: 'EVALUATE', label: 'Eval', color: '#fbbf24', match: t => t === 'EVALUATE' },
+      { key: 'LEARN', label: 'Learn', color: 'var(--accent-success)', match: t => t === 'LEARN' },
+      { key: 'BOND', label: 'Bond', color: 'var(--accent-primary)', match: t => t === 'BOND' || t === 'BONDING' },
+      { key: 'EVALUATE', label: 'Eval', color: 'var(--accent-warn)', match: t => t === 'EVALUATE' },
     ];
     const items = this.contextItems();
     for (const def of ansDefs) {
@@ -1577,10 +1605,10 @@ export class MemoryComponent implements OnInit {
   domainColor(path: string): string {
     const top = (path || '').split('.')[0];
     const colors: Record<string, string> = {
-      User: '#38bdf8', Agent: '#34d399', World: '#fbbf24', System: '#a78bfa',
-      Project: '#f472b6', General: '#9ca3af', Feedback: '#fb923c',
+      User: 'var(--accent-primary)', Agent: 'var(--accent-success)', World: 'var(--accent-warn)', System: 'var(--accent-primary)',
+      Project: 'var(--accent-primary)', General: 'var(--text-muted)', Feedback: 'var(--accent-warn)',
     };
-    return colors[top] || '#8a8a9a';
+    return colors[top] || 'var(--text-muted)';
   }
 
   parseHormonalFingerprint(fp: any): Record<string, number> {
@@ -1603,10 +1631,10 @@ export class MemoryComponent implements OnInit {
 
   hormoneColor(name: string): string {
     const map: Record<string, string> = {
-      dopamine: '#34d399', serotonin: '#38bdf8', norepinephrine: '#fbbf24',
-      cortisol: '#f87171', oxytocin: '#a78bfa', acetylcholine: '#f472b6',
+      dopamine: 'var(--accent-success)', serotonin: 'var(--accent-primary)', norepinephrine: 'var(--accent-warn)',
+      cortisol: 'var(--accent-danger)', oxytocin: 'var(--accent-primary)', acetylcholine: 'var(--accent-primary)',
     };
-    return map[name] ?? '#8a8a9a';
+    return map[name] ?? 'var(--text-muted)';
   }
 
   parseMsgTags(content: string): { text: string; tags: SignalTag[] } {
@@ -1622,11 +1650,11 @@ export class MemoryComponent implements OnInit {
   }
 
   moodColor(valence: number): string {
-    if (valence >= 0.3) return '#34d399';
-    if (valence >= 0.1) return '#6ee7b7';
+    if (valence >= 0.3) return 'var(--accent-success)';
+    if (valence >= 0.1) return 'var(--accent-success)';
     if (valence >= -0.1) return '#94a3b8';
-    if (valence >= -0.3) return '#fbbf24';
-    return '#f87171';
+    if (valence >= -0.3) return 'var(--accent-warn)';
+    return 'var(--accent-danger)';
   }
 
   moodValence(mood: string | undefined): number {

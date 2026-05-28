@@ -84,6 +84,13 @@ export interface CapabilityScan {
   lan: LanServiceProbe[];
 }
 
+/** Optional sub-agent (delegate) chat model; uses `inference` when unset. */
+export interface DelegateInferenceSettings {
+  model?: string;
+  /** When true, delegates always use `inference.model` */
+  usePrimaryModel?: boolean;
+}
+
 /** User-facing capability profile persisted with desktop config. */
 export interface CapabilityProfile {
   version: 1;
@@ -92,6 +99,7 @@ export interface CapabilityProfile {
   /** Detected or user-stated chat-model vision support */
   inferenceCapabilities?: InferenceCapabilities;
   inference: WorkloadPlacement;
+  delegateInference?: DelegateInferenceSettings;
   visualCortex: WorkloadPlacement;
   transcribe: WorkloadPlacement;
   embeddings: WorkloadPlacement;
@@ -123,13 +131,19 @@ function normalizeBaseUrl(url: string): string {
 }
 
 const BABO_CLOUD_MODEL_IDS = new Set([
-  'anthropic/claude-sonnet-4',
+  'google/gemini-2.5-flash',
+  'google/gemini-2.5-flash-lite',
+  'qwen/qwen3-coder',
+  'deepseek/deepseek-v3.2',
+  'qwen/qwen3.6-35b-a3b',
   'openai/gpt-4o-mini',
+  'anthropic/claude-sonnet-4',
   'openai/gpt-4o',
   'google/gemini-2.0-flash',
 ]);
 
-const DEFAULT_BABO_CLOUD_MODEL = 'anthropic/claude-sonnet-4';
+/** Default Babo Cloud model — must pass OpenRouter tool-calling probe with tool_choice=auto. */
+const DEFAULT_BABO_CLOUD_MODEL = 'google/gemini-2.5-flash';
 
 /** Keep runtime/chat model ids valid for Babo Cloud (OpenRouter-style). */
 export function resolveBaboCloudModelId(model?: string | null): string {
@@ -139,6 +153,7 @@ export function resolveBaboCloudModelId(model?: string | null): string {
     m === 'llama3.2' ||
     m === 'gpt-4o-mini' ||
     m === 'babo-hosted' ||
+    m === 'qwen/qwen3.6-35b-a3b' ||
     /qwen3\.7/i.test(m)
   ) {
     return DEFAULT_BABO_CLOUD_MODEL;
@@ -197,6 +212,26 @@ export function capabilityProfileToRuntimeEnv(
   }
   if (legacy.inferenceApiKey) {
     env.NLS_INFERENCE_API_KEY = legacy.inferenceApiKey;
+  }
+
+  if (
+    legacy.nestjsApiBase &&
+    (inf.tier === 'self_local' || inf.tier === 'self_lan')
+  ) {
+    const apiBase = legacy.nestjsApiBase.replace(/\/+$/, '');
+    env.NLS_BABO_CLOUD_INFERENCE_URL = `${apiBase}/inference/v1`;
+  }
+
+  const del = profile.delegateInference;
+  const primaryModel = env.NLS_HF_MODEL;
+  if (del && !del.usePrimaryModel && del.model?.trim()) {
+    const dm =
+      inf.tier === 'hosted_babo'
+        ? resolveBaboCloudModelId(del.model)
+        : del.model.trim();
+    if (dm && dm !== primaryModel) {
+      env.NLS_DELEGATE_HF_MODEL = dm;
+    }
   }
 
   const vc = profile.visualCortex;

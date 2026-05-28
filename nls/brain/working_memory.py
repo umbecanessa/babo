@@ -305,6 +305,8 @@ class WorkingMemory:
         self._todo_board: str = ""
         # Orchestration state
         self._orch_teams: dict[str, OrchTeamState] = {}
+        self._coordinator_phase: str = "idle"
+        self._coordinator_phase_detail: str = ""
         self._orch_decisions: collections.deque[OrchDecision] = collections.deque(maxlen=8)
         self._orch_escalations: list[OrchDecision] = []
 
@@ -653,12 +655,51 @@ class WorkingMemory:
         self._orch_teams.clear()
         self._orch_decisions.clear()
         self._orch_escalations.clear()
+        self._coordinator_phase = "idle"
+        self._coordinator_phase_detail = ""
+
+    def orch_set_coordinator_phase(self, phase: str, detail: str = "") -> None:
+        """Record coordinator phase for wake context and ring priority."""
+        self._coordinator_phase = (phase or "idle").strip()
+        self._coordinator_phase_detail = (detail or "")[:120]
+
+    def get_orchestration_wake_lines(self) -> list[str]:
+        """Compact one-liners for orchestration wake packets."""
+        lines: list[str] = []
+        if self._coordinator_phase and self._coordinator_phase != "idle":
+            line = f"Coordinator phase: {self._coordinator_phase}"
+            if self._coordinator_phase_detail:
+                line += f" ({self._coordinator_phase_detail})"
+            lines.append(line)
+        pos = self.get_plan_position()
+        if pos:
+            lines.append(f"Plan: {pos[:220]}")
+        active = self.orch_get_active_teams()
+        if active:
+            for team in active[:2]:
+                lines.append(f"Team {team.team_id}: {team.status}")
+        elif self._orch_teams:
+            recent = max(
+                self._orch_teams.values(),
+                key=lambda t: t.completed_at or t.launched_at,
+            )
+            lines.append(f"Last team {recent.team_id}: {recent.status}")
+        pending = self.orch_get_pending_escalations()
+        if pending:
+            lines.append(f"⚠ {len(pending)} pending escalation(s)")
+        return lines
 
     def _render_orch_block(self) -> str:
         """Render the [ORCHESTRATION STATE] block for prompt injection."""
         if not self._orch_teams and not self._orch_decisions and not self._orch_escalations:
             return ""
         parts: list[str] = ["[ORCHESTRATION STATE]"]
+
+        if self._coordinator_phase and self._coordinator_phase != "idle":
+            _phase_line = f"  Phase: {self._coordinator_phase}"
+            if self._coordinator_phase_detail:
+                _phase_line += f" — {self._coordinator_phase_detail}"
+            parts.append(_phase_line)
 
         # Pending escalations first (highest priority)
         if self._orch_escalations:

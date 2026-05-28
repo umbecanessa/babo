@@ -192,9 +192,13 @@ async def _handle_command(
             abort_signal.set()
             await websocket.send_json({
                 "type": "status",
-                "content": "Abort signal sent. Task will stop after current step.",
+                "content": (
+                    "Abort signal sent. Orchestrator will stop after the "
+                    "current step. Running delegates are unchanged — stop "
+                    "them from Project overview or ask the agent to terminate them."
+                ),
             })
-            logger.info("Agent %s: agentic abort requested", agent_id)
+            logger.info("Agent %s: agentic abort requested (orchestrator only)", agent_id)
         else:
             await websocket.send_json({
                 "type": "status",

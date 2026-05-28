@@ -37,14 +37,14 @@ export interface CategoryGroup {
 }
 
 const CATEGORY_COLORS: Record<string, string> = {
-  fixed: '#818cf8',
-  project: '#34d399',
-  domain: '#fbbf24',
+  fixed: 'var(--accent-primary)',
+  project: 'var(--accent-success)',
+  domain: 'var(--accent-warn)',
 };
 
 const RING_COLOR_OVERRIDES: Record<string, string> = {
   behavioral: '#c084fc',
-  environment: '#38bdf8',
+  environment: 'var(--accent-primary)',
 };
 
 const CATEGORY_ORDER = ['fixed', 'project', 'domain'];

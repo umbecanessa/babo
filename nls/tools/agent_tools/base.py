@@ -101,6 +101,23 @@ class AgentTool(Protocol):
 # ---------------------------------------------------------------------------
 
 
+def _sanitize_json_schema(node: Any) -> Any:
+    """Remove values that break strict providers (e.g. Gemini rejects empty enum entries)."""
+    if isinstance(node, dict):
+        out: dict[str, Any] = {}
+        for key, val in node.items():
+            if key == "enum" and isinstance(val, list):
+                cleaned = [v for v in val if v is not None and v != ""]
+                if cleaned:
+                    out[key] = cleaned
+                continue
+            out[key] = _sanitize_json_schema(val)
+        return out
+    if isinstance(node, list):
+        return [_sanitize_json_schema(v) for v in node]
+    return node
+
+
 def tool_to_openai_schema(tool: AgentTool) -> dict[str, Any]:
     """Convert a single AgentTool to OpenAI function-calling format."""
     return {
@@ -108,7 +125,7 @@ def tool_to_openai_schema(tool: AgentTool) -> dict[str, Any]:
         "function": {
             "name": tool.name,
             "description": tool.description,
-            "parameters": tool.parameters,
+            "parameters": _sanitize_json_schema(tool.parameters),
         },
     }
 

@@ -2,14 +2,13 @@ import { Injectable, Injector, signal, computed } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { Observable, tap, catchError, throwError, map } from 'rxjs';
-import { environment } from '../../../environments/environment';
 import { AuthTokens } from '../models/user.model';
+import { ApiService } from './api.service';
 import { WebSocketService } from './websocket.service';
 import { ChatUiSnapshotService } from './chat-ui-snapshot.service';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService {
-  private readonly API = environment.apiUrl;
   private tokenSignal = signal<string | null>(this.getStoredToken());
 
   isAuthenticated = computed(() => !!this.tokenSignal());
@@ -19,7 +18,12 @@ export class AuthService {
     private http: HttpClient,
     private router: Router,
     private injector: Injector,
+    private api: ApiService,
   ) {}
+
+  private get API(): string {
+    return this.api.apiBase;
+  }
 
   register(email: string, password: string, displayName?: string) {
     return this.http.post<AuthTokens>(`${this.API}/auth/register`, {
@@ -33,12 +37,23 @@ export class AuthService {
     });
   }
 
-  handleAuthSuccess(tokens: AuthTokens): void {
+  /**
+   * Store session tokens.
+   * @param redirectTo `false` = stay on current route; string = navigate there; default = dashboard
+   */
+  applyTokens(tokens: AuthTokens, redirectTo: false | string = '/dashboard'): void {
     localStorage.setItem('access_token', tokens.accessToken);
     localStorage.setItem('refresh_token', tokens.refreshToken);
     localStorage.setItem('user_id', tokens.userId);
     this.tokenSignal.set(tokens.accessToken);
-    this.router.navigate(['/dashboard']);
+    if (redirectTo === false) return;
+    if (redirectTo) {
+      void this.router.navigateByUrl(redirectTo);
+    }
+  }
+
+  handleAuthSuccess(tokens: AuthTokens, returnUrl?: string | null): void {
+    this.applyTokens(tokens, returnUrl || '/dashboard');
   }
 
   logout(): void {

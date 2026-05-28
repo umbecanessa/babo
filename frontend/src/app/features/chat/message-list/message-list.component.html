@@ -21,7 +21,8 @@
            [class.channel-outbound-row]="msg.type === 'channel_outbound'"
            [class.drowsy-row]="msg.type === 'drowsy'"
            [class.agentic-row]="msg.type === 'agentic_start' || msg.type === 'agentic_iteration' || msg.type === 'agentic_complete' || msg.type === 'turn_thinking' || msg.type === 'tool_output_chunk' || msg.type === 'tool_progress' || msg.type === 'browser_navigation' || msg.type === 'copilot_ack' || msg.type === 'ask_user'"
-           [class.activity-row]="msg.type === 'activity_status'">
+           [class.activity-row]="msg.type === 'activity_status'"
+           [class.delegate-row]="msg.type === 'delegate_card' && !isInGroupedWave($index)">
 
         @if (msg.type === 'user') {
           <div class="msg-bubble user-bubble transcript-user">
@@ -222,28 +223,118 @@
               <span class="drowsy-responded">Responded</span>
             }
           </div>
+        } @else if (msg.type === 'delegate_card' && msg.delegate && !isInGroupedWave($index) && msg.delegate.teamId && isFirstInWave($index) && getWaveMemberIndices($index).length > 1) {
+          @let memberIndices = getWaveMemberIndices($index);
+          @let waveMsg = msg;
+          <div class="delegate-wave-group"
+               [class.running]="waveAnyRunning(memberIndices)"
+               [class.done]="waveAllDone(memberIndices)">
+            <button type="button" class="delegate-wave-header"
+                    (click)="toggleWaveGroup(waveMsg.delegate!.teamId!, waveMsg.delegate!.waveAttempt)">
+              <span class="delegate-wave-icon">
+                @if (waveAnyRunning(memberIndices)) {
+                  <span class="delegate-spinner"></span>
+                } @else {
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-success)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                }
+              </span>
+              <span class="delegate-wave-title">{{ waveLabel(waveMsg) }}</span>
+              <span class="delegate-wave-sub">{{ waveSubtitle(memberIndices) }}</span>
+              @if (waveMsg.delegate!.waveAttempt && waveMsg.delegate!.waveAttempt > 1) {
+                <span class="delegate-wave-retry">try {{ waveMsg.delegate!.waveAttempt }}</span>
+              }
+              <span class="delegate-wave-chevron"
+                    [class.expanded]="!isWaveCollapsed(waveMsg.delegate!.teamId!, waveMsg.delegate!.waveAttempt)">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </span>
+            </button>
+            @if (!isWaveCollapsed(waveMsg.delegate!.teamId!, waveMsg.delegate!.waveAttempt)) {
+              <div class="delegate-wave-members">
+                @for (mIdx of memberIndices; track mIdx) {
+                  @let member = messages[mIdx];
+                  @if (member.delegate) {
+                    <div class="delegate-member-card"
+                         [class.running]="member.delegate.status === 'running'"
+                         [class.done]="member.delegate.status === 'done'"
+                         [class.error]="member.delegate.status === 'error'">
+                      <button type="button" class="delegate-member-header"
+                              (click)="delegateToggle.emit(member.delegate.number)">
+                        <span class="delegate-member-num">#{{ member.delegate.number }}</span>
+                        <span class="delegate-member-title">{{ member.delegate.task.split('\n')[0] }}</span>
+                        <span class="delegate-member-meta">
+                          @if (member.delegate.status === 'running') {
+                            @if (member.delegate.iterations && member.delegate.maxIterations) {
+                              <span>{{ member.delegate.iterations }}/{{ member.delegate.maxIterations }} iters</span>
+                            } @else {
+                              <span>working…</span>
+                            }
+                          } @else {
+                            <span>{{ member.delegate.totalToolCalls || member.delegate.toolCalls.length }} tools</span>
+                          }
+                        </span>
+                        <span class="delegate-card-chevron" [class.expanded]="member.delegate.expanded">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        </span>
+                      </button>
+                      @if (member.delegate.expanded) {
+                        <div class="delegate-card-body delegate-member-body">
+                          @if (!member.delegate.toolCalls.length && member.delegate.status === 'running') {
+                            <div class="delegate-card-empty">Starting work…</div>
+                          }
+                          @for (tc of visibleDelegateTools(member.delegate); track $index) {
+                            <div class="delegate-tool-row" [class.error]="tc.isError">
+                              <span class="delegate-tool-icon">
+                                @if (tc.result === 'done') {
+                                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--accent-success)" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                } @else if (tc.isError) {
+                                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--accent-danger)" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                } @else {
+                                  <span class="delegate-tool-spinner"></span>
+                                }
+                              </span>
+                              <span class="delegate-tool-name">{{ tc.name }}</span>
+                              @if (tc.args?.path || tc.args?.file_path) {
+                                <span class="delegate-tool-detail">{{ tc.args.path || tc.args.file_path }}</span>
+                              } @else if (tc.args?.command) {
+                                <span class="delegate-tool-detail">$ {{ tc.args.command }}</span>
+                              }
+                            </div>
+                          }
+                          @if (hiddenDelegateToolCount(member.delegate) > 0) {
+                            <div class="delegate-tool-more">+ {{ hiddenDelegateToolCount(member.delegate) }} more in Projects</div>
+                          }
+                          @if (member.delegate.summary && member.delegate.status !== 'running') {
+                            <div class="delegate-card-summary">{{ member.delegate.summary.split('\n\n[DELEGATE')[0] }}</div>
+                          }
+                        </div>
+                      }
+                    </div>
+                  }
+                }
+              </div>
+            } @else {
+              <div class="delegate-wave-collapsed">{{ waveSubtitle(memberIndices) }} — expand for details</div>
+            }
+          </div>
         } @else if (msg.type === 'delegate_card' && msg.delegate) {
-          <!-- Sub-agent delegation card -->
+          <!-- Single sub-agent card (no team group) -->
           <div class="delegate-card" [class.running]="msg.delegate.status === 'running'"
                [class.done]="msg.delegate.status === 'done'" [class.error]="msg.delegate.status === 'error'">
-            <button class="delegate-card-header" (click)="delegateToggle.emit($index)">
+            <button type="button" class="delegate-card-header" (click)="delegateToggle.emit(msg.delegate.number)">
               <span class="delegate-card-icon">
                 @if (msg.delegate.status === 'running') {
                   <span class="delegate-spinner"></span>
                 } @else if (msg.delegate.status === 'done') {
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-success)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
                 } @else {
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-danger)" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                 }
               </span>
-              <span class="delegate-card-title">{{ msg.delegate.task }}</span>
+              <span class="delegate-card-title">{{ msg.delegate.task.split('\n')[0] }}</span>
               <span class="delegate-card-meta">
                 @if (msg.delegate.status === 'running') {
                   @if (msg.delegate.iterations && msg.delegate.maxIterations) {
                     <span class="delegate-card-badge running">{{ msg.delegate.iterations }}/{{ msg.delegate.maxIterations }} iters</span>
-                    @if (msg.delegate.elapsedSeconds) {
-                      <span class="delegate-card-elapsed">{{ msg.delegate.elapsedSeconds }}s</span>
-                    }
                   } @else {
                     <span class="delegate-card-badge running">working...</span>
                   }
@@ -257,13 +348,16 @@
             </button>
             @if (msg.delegate.expanded) {
               <div class="delegate-card-body">
-                @for (tc of msg.delegate.toolCalls; track $index) {
+                @if (!msg.delegate.toolCalls.length && msg.delegate.status === 'running') {
+                  <div class="delegate-card-empty">Starting work…</div>
+                }
+                @for (tc of visibleDelegateTools(msg.delegate); track $index) {
                   <div class="delegate-tool-row" [class.error]="tc.isError">
                     <span class="delegate-tool-icon">
                       @if (tc.result === 'done') {
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--accent-success)" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
                       } @else if (tc.isError) {
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--accent-danger)" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                       } @else {
                         <span class="delegate-tool-spinner"></span>
                       }
@@ -273,21 +367,14 @@
                       <span class="delegate-tool-detail">{{ tc.args.path || tc.args.file_path }}</span>
                     } @else if (tc.args?.command) {
                       <span class="delegate-tool-detail">$ {{ tc.args.command }}</span>
-                    } @else if (tc.args?.query || tc.args?.url) {
-                      <span class="delegate-tool-detail">{{ tc.args.query || tc.args.url }}</span>
                     }
                   </div>
                 }
-                @if (msg.delegate.status === 'running' && msg.delegate.toolCalls.length && msg.delegate.toolCalls[msg.delegate.toolCalls.length - 1].result) {
-                  <div class="delegate-tool-row delegate-generating-row">
-                    <span class="delegate-tool-icon">
-                      <span class="delegate-tool-spinner"></span>
-                    </span>
-                    <span class="delegate-tool-name delegate-generating-label">Crunching data…</span>
-                  </div>
+                @if (hiddenDelegateToolCount(msg.delegate) > 0) {
+                  <div class="delegate-tool-more">+ {{ hiddenDelegateToolCount(msg.delegate) }} more in Projects</div>
                 }
                 @if (msg.delegate.summary && msg.delegate.status !== 'running') {
-                  <div class="delegate-card-summary">{{ msg.delegate.summary }}</div>
+                  <div class="delegate-card-summary">{{ msg.delegate.summary.split('\n\n[DELEGATE')[0] }}</div>
                 }
               </div>
             }
@@ -313,26 +400,51 @@
         } @else if (msg.type === 'tool_progress') {
           <!-- Tool execution progress — compact inline cards -->
           @if (msg.toolProgress?.toolName === 'write' || msg.toolProgress?.toolName === 'write_file' || msg.toolProgress?.toolName === 'create_file') {
-            <div class="tool-inline-card" [class.done]="msg.toolProgress?.done" [class.error]="msg.toolProgress?.isError">
+            <div class="tool-inline-card tool-inline-file" [class.done]="msg.toolProgress?.done" [class.error]="msg.toolProgress?.isError">
               @if (!msg.toolProgress?.done) {
                 <span class="tool-progress-spinner"></span>
               } @else if (msg.toolProgress?.isError) {
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent-danger)" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               } @else {
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent-success)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
               }
               <svg class="tool-inline-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-              <span class="tool-inline-label">{{ msg.toolProgress?.arguments?.path || 'file' }}</span>
+              @for (fp of toolFilePaths(msg); track fp) {
+                <button type="button" class="tool-file-chip" (click)="openToolFile(fp, $event)" [title]="fp">
+                  {{ fileChipLabel(fp) }}
+                </button>
+              } @empty {
+                <span class="tool-inline-label">file</span>
+              }
               <span class="tool-inline-status">{{ msg.toolProgress?.done ? (msg.toolProgress?.isError ? 'Failed' : 'Written') : 'Writing…' }}</span>
+            </div>
+          } @else if (msg.toolProgress?.toolName === 'read' || msg.toolProgress?.toolName === 'read_file' || msg.toolProgress?.toolName === 'edit') {
+            <div class="tool-inline-card tool-inline-file" [class.done]="msg.toolProgress?.done" [class.error]="msg.toolProgress?.isError">
+              @if (!msg.toolProgress?.done) {
+                <span class="tool-progress-spinner"></span>
+              } @else if (msg.toolProgress?.isError) {
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent-danger)" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              } @else {
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent-success)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              }
+              <ng-container [ngTemplateOutlet]="toolIcon" [ngTemplateOutletContext]="{ toolName: msg.toolProgress?.toolName }"></ng-container>
+              @for (fp of toolFilePaths(msg); track fp) {
+                <button type="button" class="tool-file-chip" (click)="openToolFile(fp, $event)" [title]="fp">
+                  {{ fileChipLabel(fp) }}
+                </button>
+              } @empty {
+                <span class="tool-inline-label">{{ msg.toolProgress?.toolName === 'edit' ? 'file' : 'Read file' }}</span>
+              }
+              <span class="tool-inline-status">{{ msg.toolProgress?.done ? (msg.toolProgress?.isError ? 'Failed' : (msg.toolProgress?.toolName === 'edit' ? 'Edited' : 'Read')) : (msg.toolProgress?.toolName === 'edit' ? 'Editing…' : 'Reading…') }}</span>
             </div>
           } @else if (msg.toolProgress?.toolName === 'bash') {
             <div class="tool-inline-card tool-inline-bash" [class.done]="msg.toolProgress?.done" [class.error]="msg.toolProgress?.isError">
               @if (!msg.toolProgress?.done) {
                 <span class="tool-progress-spinner"></span>
               } @else if (msg.toolProgress?.isError) {
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent-danger)" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
               } @else {
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent-success)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
               }
               <svg class="tool-inline-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
               <code class="tool-inline-cmd">{{ (msg.toolProgress?.arguments?.command || '') | slice:0:80 }}{{ (msg.toolProgress?.arguments?.command || '').length > 80 ? '…' : '' }}</code>
@@ -384,7 +496,7 @@
             <div class="skill-review-card" [class.done]="msg.toolProgress?.done"
                  [attr.data-review-id]="$any(msg.toolProgress?.details)?.review_id">
               <div class="skill-review-header">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#818cf8" stroke-width="2">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent-primary)" stroke-width="2">
                   <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
                   <path d="M2 17l10 5 10-5"></path>
                   <path d="M2 12l10 5 10-5"></path>
@@ -453,7 +565,7 @@
               @if (!msg.toolProgress?.done) {
                 <span class="tool-progress-spinner"></span>
               } @else {
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent-success)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
               }
               <svg class="tool-inline-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
               <span class="tool-inline-label">{{ msg.toolProgress?.done ? 'Waited ' + (msg.toolProgress?.arguments?.seconds ?? '') + 's' : 'Waiting ' + (msg.toolProgress?.arguments?.seconds ?? '') + 's…' }}</span>
@@ -463,7 +575,7 @@
             @if ((msg.toolProgress?.groupCount ?? 0) > 1) {
               <div class="tool-inline-card tool-group-card done" [class.error]="msg.toolProgress?.isError"
                    (click)="msg.toolProgress!.groupExpanded = !msg.toolProgress!.groupExpanded">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent-success)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
                 <ng-container [ngTemplateOutlet]="toolIcon" [ngTemplateOutletContext]="{ toolName: msg.toolProgress?.toolName }"></ng-container>
                 <span class="tool-inline-label">{{ msg.content }}</span>
                 <span class="tool-group-chevron" [class.open]="msg.toolProgress?.groupExpanded">&#9662;</span>
@@ -473,9 +585,9 @@
                   @for (item of msg.toolProgress?.groupItems || []; track $index) {
                     <div class="tool-group-item" [class.error]="item.isError">
                       @if (item.isError) {
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--accent-danger)" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                       } @else {
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--accent-success)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
                       }
                       <span>{{ item.label }}</span>
                     </div>
@@ -487,12 +599,12 @@
                 @if (!msg.toolProgress?.done) {
                   <span class="tool-progress-spinner"></span>
                 } @else if (msg.toolProgress?.isError) {
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent-danger)" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 } @else {
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent-success)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
                 }
                 <ng-container [ngTemplateOutlet]="toolIcon" [ngTemplateOutletContext]="{ toolName: msg.toolProgress?.toolName }"></ng-container>
-                <span class="tool-inline-label">{{ msg.toolProgress?.arguments?.path || msg.toolProgress?.arguments?.pattern || msg.toolProgress?.arguments?.query || msg.toolProgress?.arguments?.url || msg.content || msg.toolProgress?.toolName }}</span>
+                <span class="tool-inline-label">{{ msg.toolProgress?.arguments?.pattern || msg.toolProgress?.arguments?.query || msg.toolProgress?.arguments?.url || msg.content || msg.toolProgress?.toolName }}</span>
                 @if (msg.toolProgress?.isError) {
                   <span class="tool-inline-status error">Failed</span>
                 }

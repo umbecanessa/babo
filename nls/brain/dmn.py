@@ -1235,9 +1235,7 @@ class DefaultModeNetwork:
             "Continue my private inner monologue using I/me/my. "
             "Let thoughts flow freely. When I notice a new insight "
             "or connection, "
-            + ("call the nls_signal tool with signal_type='LEARN'."
-               if self.v5_signals else
-               "tag it: [LEARN:Domain.Path|the insight].")
+            + "note it privately; learning is recorded by your autonomic nervous system."
         )
 
         return facts, prompt, "enriched"
@@ -1322,9 +1320,7 @@ class DefaultModeNetwork:
             "genuinely help them? What should I remember for next time?\n\n"
             "Continue my private inner monologue using I/me/my. "
             "Think about what would make our next interaction better. "
-            + ("Call the nls_signal tool with signal_type='LEARN' for any useful insights."
-               if self.v5_signals else
-               "Tag any useful insights: [LEARN:Domain.Path|the insight].")
+            + "Note any useful insights; your autonomic nervous system records them during rest."
         )
 
         return [], prompt, "social_simulation"

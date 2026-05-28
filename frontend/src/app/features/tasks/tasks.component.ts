@@ -6,6 +6,7 @@ import { ApiService } from '../../core/services/api.service';
 import { WebSocketService } from '../../core/services/websocket.service';
 import { TaskBoardComponent } from './task-board/task-board.component';
 import { TodoItem, TodoList, PlanSummary, PlanStepSummary } from './task.models';
+import { THEME_COLORS } from '../../core/theme-colors';
 
 @Component({
   selector: 'app-tasks',
@@ -129,8 +130,7 @@ export class TasksComponent implements OnInit, OnDestroy {
   onCreateList(): void {
     const name = window.prompt('New list name:');
     if (!name?.trim()) return;
-    const colors = ['#818cf8', '#34d399', '#f59e0b', '#f87171', '#38bdf8', '#a78bfa', '#fb923c'];
-    const color = colors[Math.floor(Math.random() * colors.length)];
+    const color = THEME_COLORS.chart[Math.floor(Math.random() * THEME_COLORS.chart.length)];
     this.api.createTodoList(this.agentId, { name: name.trim(), color }).subscribe({
       next: (res) => {
         if (res.list) {
@@ -145,7 +145,7 @@ export class TasksComponent implements OnInit, OnDestroy {
 
   private subscribeWs(): void {
     this.ws.joinAgent(this.agentId);
-    this.wsSub = this.ws.onMessage().subscribe((msg: any) => {
+    this.wsSub = this.ws.onMessage(this.agentId).subscribe((msg: any) => {
       try {
         if (msg?.type === 'todo_update') {
           this.handleTodoUpdate(msg);

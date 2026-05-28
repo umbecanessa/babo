@@ -18,7 +18,21 @@ from typing import Any, Callable
 from nls.tools.agent_tools.base import ToolResult
 
 from .bridge import LoopHooks
-from .delegate_manager import DelegateManager, DelegateSpec
+from .delegate_manager import DelegateManager, DelegateSpec, DELEGATE_DEFAULT_MAX_STEPS
+from .coordinator_guard import (
+    block_executing_mode_escape,
+    monitoring_advance_block_message,
+    pre_delegate_block_message,
+)
+from .orchestration_policy import (
+    block_tool_call,
+    checkback_interval_seconds,
+    invalidate_tool_policy_cache,
+    on_await_delegates,
+    on_evaluating_wave,
+    on_team_launched,
+)
+from .outbound_notify import OUTBOUND_TOOLS, strip_outbound_control_args
 from .events import AgentEvent, EventType, emit
 from .types import (
     AgentMode, COORDINATOR_TOOLS, COORDINATOR_BASH_TIMEOUT_S,
@@ -27,6 +41,18 @@ from .types import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _merge_recipe_preflight(facts: str, task: str, user_task: str = "") -> str:
+    try:
+        from nls.agentic.recipe_hints import match_recipe_hints
+        hint = match_recipe_hints(f"{task}\n{user_task[:500]}")
+        if hint:
+            return f"{facts}\n\n{hint}".strip() if facts else hint
+    except Exception:
+        pass
+    return facts
+
 
 _DELEGATE_EXCLUDED = frozenset({
     "plan", "todo", "delegate", "delegate_status", "delegate_ring",
@@ -165,7 +191,7 @@ def _delegate_log(config: LoopConfig, entry: dict) -> None:
     except Exception:
         pass
 
-_DIGEST_TOOLS = frozenset({"read", "web_fetch", "bash"})
+_DIGEST_TOOLS = frozenset({"read", "web_fetch", "semantic_search"})
 _DIGEST_MIN_CHARS = 2000
 _DIGEST_MAX_PER_LOOP = 8
 
@@ -231,6 +257,132 @@ async def _handle_ask_user(
     return ToolResult(content=f"User answered: {answer_text}")
 
 
+def _escalation_context_summary(
+    state: LoopState,
+    message: str = "",
+    max_iterations: int | None = None,
+    max_total_iterations: int | None = None,
+) -> str:
+    """Compact status block for proactive sub-agent escalation."""
+    _write_count = (
+        state.tool_successes.get("write", 0)
+        + state.tool_successes.get("edit", 0)
+    )
+    _soft = max_iterations if max_iterations is not None else "?"
+    _hard = (
+        max_total_iterations
+        if max_total_iterations is not None
+        else max_iterations
+    )
+    _budget_line = f"iteration: {state.iteration}/{_soft}"
+    if _hard is not None and _hard != _soft:
+        _budget_line += f" (extension cap {_hard})"
+    lines = [
+        message,
+        "",
+        _budget_line,
+        f"tool_calls: {state.total_tool_calls}",
+        f"writes: {_write_count}",
+    ]
+    if state.files_written:
+        lines.append("files_written:")
+        for path in state.files_written[-10:]:
+            lines.append(f"- {path}")
+    if state.cumulative_actions:
+        lines.append("recent_actions: " + ", ".join(state.cumulative_actions[-8:]))
+    return "\n".join(line for line in lines if line is not None)
+
+
+async def _await_orchestrator_escalation(
+    *,
+    reason: str,
+    state: LoopState | None,
+    context_summary: str,
+    config: LoopConfig,
+    copilot_queue: asyncio.Queue | None,
+    esc_cb: Callable | None,
+    wait_seconds: float = 120,
+) -> tuple[str, bool]:
+    """Notify orchestrator and block until intervene or timeout.
+
+    Returns ``(message_for_agent, terminate_loop)``.
+    """
+    if not esc_cb or copilot_queue is None:
+        return (
+            "No orchestrator escalation channel available. "
+            "Work with what you have or use escalate() if you can.",
+            False,
+        )
+
+    try:
+        _r = esc_cb(reason, state, context_summary)
+        if asyncio.iscoroutine(_r):
+            await _r
+    except Exception:
+        logger.debug("orchestrator escalation callback failed", exc_info=True)
+
+    try:
+        decision = await asyncio.wait_for(copilot_queue.get(), timeout=wait_seconds)
+    except asyncio.TimeoutError:
+        return (
+            "Orchestrator did not respond in time. "
+            "Work with what you have or call escalate() with your progress.",
+            False,
+        )
+
+    if isinstance(decision, dict) and "action" in decision:
+        action = decision.get("action", "terminate")
+        msg = decision.get("message", "")
+        extra_iters = int(decision.get("extra_iterations", 10) or 10)
+        if action in ("extend", "hint", "approve"):
+            if state is not None:
+                config.max_iterations += extra_iters
+                config.max_total_iterations += extra_iters
+                config.total_timeout_seconds += max(extra_iters * 30.0, 300.0)
+                state.consecutive_errors = 0
+                state.stall_nudges_given = 0
+            if action == "hint":
+                body = msg or "Try a different approach."
+                return (f"[ORCHESTRATOR HINT] {body}", False)
+            body = msg or f"You have been granted {extra_iters} more iterations."
+            return (f"[ORCHESTRATOR] {body}", False)
+        if state is not None:
+            state.exit_reason = "orchestrator_terminated"
+        body = msg or "The orchestrator ended this task."
+        return (f"[ORCHESTRATOR TERMINATE] {body}", True)
+
+    if isinstance(decision, dict) and "role" in decision:
+        return (decision.get("content", str(decision)), False)
+    if isinstance(decision, str):
+        return (f"Orchestrator answered: {decision}", False)
+    return (f"Orchestrator answered: {decision}", False)
+
+
+async def _handle_sub_agent_escalation(
+    reason: str,
+    message: str,
+    state: LoopState,
+    config: LoopConfig,
+    hooks: LoopHooks | None,
+) -> ToolResult:
+    """Proactive escalation from a worker sub-agent to the orchestrator."""
+    context_summary = _escalation_context_summary(
+        state,
+        message,
+        config.max_iterations,
+        getattr(config, "max_total_iterations", None),
+    )
+    body, terminate = await _await_orchestrator_escalation(
+        reason=reason,
+        state=state,
+        context_summary=context_summary,
+        config=config,
+        copilot_queue=(hooks or LoopHooks()).copilot_queue,
+        esc_cb=config.on_escalation,
+    )
+    return ToolResult(content=body, is_error=terminate)
+
+
 async def _handle_communicate(
     args: dict,
     on_event: Callable | None,
@@ -272,6 +424,29 @@ async def _handle_delegate(
     if not task:
         return ToolResult(content="Error: 'task' parameter is required.", is_error=True)
 
+    from .orchestration_policy import (
+        build_tool_policy_inputs,
+        resolve_allowed_tools,
+    )
+
+    _policy_inputs = build_tool_policy_inputs(
+        state.active_mode,
+        state,
+        None,
+        set(tools.keys()),
+        hooks,
+    )
+    if "delegate" not in resolve_allowed_tools(_policy_inputs):
+        return ToolResult(
+            content=(
+                "BLOCKED: Active plan has delegatable steps — raw delegate() "
+                "is disabled. Use team(action='create', plan_id=..., wave=N) "
+                "then team(action='launch', team_id=...)."
+            ),
+            is_error=True,
+            details={"blocked": True, "use_team": True},
+        )
+
     if delegate_number is None:
         # Sequential path: check cap and assign number here.
         if state.delegate_count >= _MAX_DELEGATES:
@@ -284,9 +459,9 @@ async def _handle_delegate(
         delegate_number = state.delegate_count
 
     try:
-        max_steps = min(int(args.get("max_steps", 15)), 50)
+        max_steps = min(int(args.get("max_steps", DELEGATE_DEFAULT_MAX_STEPS)), 50)
     except (ValueError, TypeError):
-        max_steps = 15
+        max_steps = DELEGATE_DEFAULT_MAX_STEPS
 
     logger.info(
         "[DELEGATE:%d] SPAWN — task=%.200s max_steps=%d parent_iter=%d",
@@ -306,6 +481,7 @@ async def _handle_delegate(
         "delegate_task": task[:200],
         "max_steps": max_steps,
         "iteration": iteration,
+        "step_id": str(args.get("step_id") or "").strip(),
     }))
 
     # Wall-clock timeout scales with the step budget (approx 30s/step including
@@ -333,7 +509,9 @@ async def _handle_delegate(
         enable_parallel_tools=config.enable_parallel_tools,
         enable_delegation=False,
         session_log_dir=config.session_log_dir,
+        delegate_adapter_name=config.delegate_adapter_name,
     )
+    _delegate_model = config.delegate_adapter_name
 
     # Build sub-agent tools: delegates get execution tools only.
     # Excluded: plan (read-only substitute), todo (read-only substitute),
@@ -356,6 +534,7 @@ async def _handle_delegate(
             _facts = hooks.get_preflight_knowledge(task) or ""
         except Exception:
             pass
+    _facts = _merge_recipe_preflight(_facts, task, user_task)
 
     # Resolve project directory and clone tool CWDs (same mechanism as
     # run_delegate_detached) so file tools resolve inside the project dir.
@@ -411,7 +590,20 @@ async def _handle_delegate(
                         "delegate_index": delegate_number,
                         "wave": None,  # wave info not available in blocking path
                     })
+                if _tname == "write":
+                    _cloned._write_counts = {}
+                    _cloned._block_full_rewrite_after_first = True
                 sub_tools[_tname] = _cloned
+            except Exception:
+                pass
+        _pi = sub_tools.get("project_install")
+        if _pi is not None:
+            try:
+                _cloned_pi = _copy.copy(_pi)
+                _cloned_pi._shared_cwd = _delegate_cwd
+                if _pd_abs:
+                    _cloned_pi._cwd = _pd_abs
+                sub_tools["project_install"] = _cloned_pi
             except Exception:
                 pass
     elif _pd or not _workspace_root:
@@ -456,15 +648,52 @@ async def _handle_delegate(
     except Exception:
         pass
 
+    _budget_info = (
+        f"\nITERATION BUDGET: {max_steps} tool-call rounds.\n"
+        "PRIMARY GOAL: Deliver the full task — required artifacts on disk, "
+        "verified once. Do not rush to exit early to save iterations.\n"
+        "If stuck, blocked, or running low on budget, call escalate().\n"
+    )
+
+    _tech_stack_block = ""
+    _file_ownership_block = ""
+    if _plan_tool and hasattr(_plan_tool, "_store"):
+        try:
+            _active_plan = _plan_tool._store.find_active()
+            if _active_plan is not None:
+                from nls.agentic.wave_coordination import (
+                    build_file_ownership_block,
+                    build_tech_stack_block,
+                    resolve_step_owned_paths,
+                )
+                _tech_stack_block = build_tech_stack_block(plan=_active_plan)
+                _owned = resolve_step_owned_paths(None, _pd or "")
+                _file_ownership_block = build_file_ownership_block(
+                    delegate_number=delegate_number or 0,
+                    owned_patterns=_owned,
+                    peer_lines=[],
+                )
+        except Exception:
+            pass
+
+    _write_tool = sub_tools.get("write")
+    _file_ledger_ref = getattr(_write_tool, "_ledger", None) if _write_tool else None
+
     _sub_cryptex = SubCryptex.spawn_from_parent(
         parent=_parent_cryptex,
-        task=f"You are a sub-agent. Complete this specific task:\n\n{task}\n\n"
-             f"Parent task context: {user_task[:300]}",
+        task=(
+            f"You are a sub-agent. Complete this specific task:\n\n{task}\n\n"
+            f"{_budget_info}"
+            f"Parent task context: {user_task[:300]}"
+        ),
         preflight_facts=_facts,
         cwd_info=_cwd_info,
         project_dir_info=_project_dir_info,
         sub_agent_supplement=_SUB_AGENT_SUPPLEMENT,
         context_window_tokens=config.context_window_tokens,
+        tech_stack_block=_tech_stack_block,
+        file_ownership_block=_file_ownership_block,
+        file_ledger=_file_ledger_ref,
     )
 
     # The initial system message is composed by SubCryptex; it guarantees
@@ -484,7 +713,8 @@ async def _handle_delegate(
             "content": (
                 "Execute the task above using tools. "
                 "Prefer structured tool calls (not XML). "
-                f"Task:\n{task}"
+                f"Task:\n{task}\n"
+                f"{_budget_info}"
             ),
         },
     ]
@@ -543,6 +773,7 @@ async def _handle_delegate(
     # not the parent's).
     _sub_hooks._render_mode_ref = ["executing"]  # type: ignore[attr-defined]
     _sub_hooks._loop_state_ref = {}  # type: ignore[attr-defined]
+    _sub_hooks._sub_cryptex = _sub_cryptex  # type: ignore[attr-defined]
 
     try:
         _delegate_start = time.time()
@@ -556,6 +787,7 @@ async def _handle_delegate(
                 on_event=_sub_on_event,
                 abort_signal=abort_signal,
                 user_input=task,
+                adapter_name=_delegate_model,
                 enable_thinking=True,
                 state_holder=_state_holder,
                 wrap_up_signal=_wrap_up,
@@ -797,30 +1029,6 @@ async def _extract_digest(
     return None
 
 
-def _format_digest(digest: dict, original_size: int) -> str:
-    """Format a digest as a compact context replacement."""
-    lines = [f"[Digest of {digest['source']} ({original_size} chars)]"]
-    lines.append(digest["summary"])
-    if digest["insights"]:
-        lines.append("Key points:")
-        for insight in digest["insights"]:
-            lines.append(f"  - {insight}")
-    lines.append("[Full content available — use read tool to re-examine]")
-    return "\n".join(lines)
-
-
-def _fallback_digest(content: str, source: str) -> str:
-    """Create a truncation-based digest when LLM extraction fails."""
-    truncated = content[:500].rstrip()
-    if len(content) > 500:
-        truncated += "\n..."
-    return (
-        f"[Digest of {source} ({len(content)} chars — LLM digest unavailable)]\n"
-        f"{truncated}\n"
-        f"[Full content available — use read tool to re-examine]"
-    )
-
-
 # -------------------------------------------------------------------
 # Independence classification
 # -------------------------------------------------------------------
@@ -866,10 +1074,12 @@ async def _execute_single(
     call: dict,
     config: LoopConfig,
     state: LoopState,
+    tools: dict[str, Any],
     *,
     abort_signal: asyncio.Event | None = None,
     on_event: Callable | None = None,
     hooks: LoopHooks | None = None,
+    delegate_manager: Any | None = None,
 ) -> ToolResult:
     """Execute one tool with timeout and hook integration."""
     fn = call.get("function", {})
@@ -879,10 +1089,114 @@ async def _execute_single(
 
     args = _parse_tool_args(args_str)
 
+    if name == "task_complete" and config.enable_delegation:
+        _bg_running = state.delegate_count > 0
+        if delegate_manager is not None:
+            try:
+                _bg_running = delegate_manager.has_active_delegates()
+            except Exception:
+                pass
+        if (
+            _bg_running
+            and state.active_mode in (AgentMode.MONITORING, AgentMode.DELEGATING)
+        ):
+            return ToolResult(
+                content=(
+                    "BLOCKED: Delegates are still running. Use "
+                    "await_delegates(summary='...') to exit monitoring — "
+                    "NOT task_complete (that means ALL work is finished)."
+                ),
+                is_error=True,
+                details={"blocked": True, "prefer_await_delegates": True},
+            )
+
+    if getattr(state, "must_delegate_before_impl", False):
+        _pre_block = pre_delegate_block_message(
+            name,
+            args,
+            active_mode=state.active_mode,
+            block_reason=getattr(state, "pre_delegate_reason", None) or None,
+            orchestrator_recovery=getattr(
+                state, "orchestrator_recovery", False,
+            ),
+        )
+        if _pre_block:
+            result = ToolResult(
+                content=_pre_block,
+                is_error=True,
+                details={"blocked": True, "pre_delegate": True},
+            )
+            await emit(on_event, AgentEvent(
+                EventType.TOOL_END,
+                {
+                    "tool_name": name,
+                    "call_id": call_id,
+                    "result": result.content,
+                    "blocked": True,
+                    "is_error": True,
+                },
+            ))
+            return result
+
+    _orch_block = block_tool_call(
+        name,
+        args,
+        state,
+        state.active_mode,
+        delegate_manager,
+        has_pending_escalation=getattr(state, "has_pending_escalation", False),
+        hooks=hooks,
+        all_unlocked=set(tools.keys()) | set(state.unlocked_tools),
+    )
+    if _orch_block:
+        result = ToolResult(
+            content=_orch_block,
+            is_error=True,
+            details={"blocked": True, "orchestration_policy": True},
+        )
+        await emit(on_event, AgentEvent(
+            EventType.TOOL_END,
+            {
+                "tool_name": name,
+                "call_id": call_id,
+                "result": result.content,
+                "blocked": True,
+                "is_error": True,
+            },
+        ))
+        return result
+
     await emit(on_event, AgentEvent(
         EventType.TOOL_START,
         {"tool_name": name, "arguments": args, "call_id": call_id, "iteration": state.iteration},
     ))
+
+    # Outbound notification gate (ledger + lifecycle)
+    if hooks and hooks.outbound_check:
+        try:
+            skip_msg = hooks.outbound_check(name, args)
+            if skip_msg:
+                result = ToolResult(
+                    content=skip_msg,
+                    is_error=False,
+                    details={"skipped": True, "outbound_gate": True},
+                )
+                await emit(on_event, AgentEvent(
+                    EventType.TOOL_END,
+                    {
+                        "tool_name": name,
+                        "call_id": call_id,
+                        "result": result.content,
+                        "skipped": True,
+                        "is_error": False,
+                    },
+                ))
+                return result
+        except Exception:
+            logger.debug("outbound_check failed", exc_info=True)
+
+    if name in OUTBOUND_TOOLS:
+        args = strip_outbound_control_args(args)
 
     # Hook: on_before_tool (can block)
     if hooks and hooks.on_before_tool:
@@ -991,6 +1305,7 @@ async def _execute_single(
         {
             "tool_name": name,
             "call_id": call_id,
+            "arguments": args,
             "is_error": result.is_error,
             "result_preview": result.content[:200],
             "iteration": state.iteration,
@@ -1014,12 +1329,12 @@ async def _post_process_result(
     user_task: str,
     digest_count_ref: list[int],
 ) -> ToolResult:
-    """Store a WM digest of large tool results, then pass full content through.
+    """Store cognitive digests in WM without mutating tool output.
 
-    The cognitive digest is written to working memory (for long-term recall)
-    but the tool result content is NOT replaced — the agent must see the full
-    output first.  Context-window compression of old tool results is handled
-    later by the compactor when context pressure builds.
+    Large read/fetch/search results are summarized into working memory /
+    Cryptex for long-term recall.  The tool result returned to the model
+    is always the original content (subject to each tool's own truncation).
+    Bash/list_dir output is never digested here.
     """
     if (
         config.enable_cognitive_digest
@@ -1035,7 +1350,7 @@ async def _post_process_result(
             source = (
                 args.get("path", "")
                 or args.get("url", "")
-                or args.get("command", "")[:80]
+                or args.get("query", "")[:80]
                 or name
             )
             digest = await _extract_digest(
@@ -1052,8 +1367,10 @@ async def _post_process_result(
                 except Exception:
                     pass
                 digest_count_ref[0] += 1
-            # Full result content is intentionally NOT replaced here.
-            # The compactor truncates stale tool results when context fills up.
+                if result.details is None:
+                    result.details = {}
+                result.details["digest_stored"] = True
+                result.details["digest_source"] = source
 
     if hooks and hooks.ans_tool_learning and not result.is_error:
         try:
@@ -1061,7 +1378,32 @@ async def _post_process_result(
         except Exception:
             pass
 
+    if (
+        hooks
+        and hooks.outbound_record
+        and not result.is_error
+        and name in OUTBOUND_TOOLS
+    ):
+        try:
+            hooks.outbound_record(name, args)
+        except Exception:
+            logger.debug("outbound_record failed", exc_info=True)
+
     return result
+
+
+def _can_auto_launch_team(
+    team_manager: Any,
+    delegate_manager: DelegateManager,
+    next_team_id: str,
+) -> bool:
+    """True when the next-wave team can launch without conflicting work."""
+    from .orchestration_policy import should_auto_launch_next_wave
+
+    ok, _reason = should_auto_launch_next_wave(
+        team_manager, delegate_manager, next_team_id,
+    )
+    return ok
 
 
 async def _launch_team_delegates(
@@ -1130,6 +1472,10 @@ async def _launch_team_delegates(
             "max_steps": 25,
             "iteration": state.iteration,
             "team_id": launched.id,
+            "wave_attempt": launched.wave_attempt,
+            "team_name": launched.name,
+            "step_id": m.step_id,
+            "member_idx": launched.members.index(m),
         }))
 
     member_labels = [
@@ -1150,18 +1496,32 @@ async def _launch_team_delegates(
         + f" (batch {launched.batch_id}):\n"
         + "\n".join(member_labels)
         + _queue_note
-        + "\n\nIMPORTANT — your role is now ORCHESTRATOR, not executor:\n"
-        "- DO NOT start performing the same work you just delegated.\n"
-        "- Acknowledge to the user that work is underway.\n"
-        "- Use team(action='inspect', team_id='" + launched.id + "') "
-        "to monitor progress.\n"
-        "- When all members complete, use team(action='advance', team_id='"
-        + launched.id + "') to finalize and advance to next wave.\n\n"
-        "CHOOSE ONE strategy:\n"
-        "A) SHORT task (< 60s): wait(seconds=N), then team(action='inspect').\n"
-        "B) LONG task (> 60s): END YOUR TURN NOW. You will be re-invoked "
-        "via check-back scheduler when progress needs review."
+        + "\n\nYou are the engineering manager — wave is now executing:\n"
+        "- Optional: communicate(status) — one stakeholder update.\n"
+        "- Required: await_delegates(summary='Wave "
+        + str(getattr(launched, "wave_index", 0))
+        + " executing — return on escalation/completion').\n"
+        "- Your job now: end this turn. You wake to steer stuck members, "
+        "review deliverables, and advance the Kanban — not to IC or poll.\n"
+        "- Do NOT wait(60+), inspect loops, write files, or plan(update)."
     )
+
+    _record_phase = None
+    if hooks and hooks.wm_orch_set_coordinator_phase:
+        _record_phase = hooks.wm_orch_set_coordinator_phase
+    on_team_launched(state, launched.id, record_phase=_record_phase)
+    team_manager.clear_pending_auto_launch(launched.id)
+    if hooks and hooks.wm_orch_record_decision:
+        try:
+            hooks.wm_orch_record_decision(
+                "team_launch",
+                f"Launched {launched.name} [{launched.id}]",
+                team_id=launched.id,
+            )
+        except Exception:
+            pass
+    state.active_mode = AgentMode.MONITORING
+    invalidate_tool_policy_cache(state)
 
     # Schedule periodic check-back (same pattern as direct delegate spawn)
     _checkback_job_name = f"team_checkback_{launched.id}"
@@ -1175,34 +1535,31 @@ async def _launch_team_delegates(
             if _agent_id else ""
         )
         _checkback_msg = (
-            f"{_routing}[TEAM CHECK-BACK] Team {launched.name} [{launched.id}]\n\n"
-            f"Step 1: team(action='inspect', team_id='{launched.id}') "
-            "to see current progress.\n\n"
-            "Step 2: Based on inspect results:\n"
-            "  - If members still RUNNING: send hints to stuck ones, then END YOUR TURN.\n"
-            "  - If ALL members reached terminal state (done/failed):\n"
-            f"    a) scheduler(command='remove', name='{_checkback_job_name}') — cancel check-back.\n"
-            f"    b) team(action='advance', team_id='{launched.id}') — finalize.\n"
-            "    c) Advance returns the OUTCOME:\n"
-            "       COMPLETED = all succeeded → deliver results, next phase.\n"
-            "       PARTIAL = mixed → retry failures yourself or new team.\n"
-            "       FAILED = most/all failed → investigate root cause, retry.\n"
-            "    d) Deliver ONE concise summary. Never repeat summaries.\n\n"
-            "CRITICAL: If inspect shows [ALREADY REPORTED], skip silently.\n"
-            "CRITICAL: Do NOT report success when the outcome is FAILED or PARTIAL."
+            f"{_routing}[TEAM CHECK-BACK — EM REVIEW] "
+            f"Team {launched.name} [{launched.id}]\n\n"
+            "Scheduled management check-in. Cryptex WM holds board state.\n\n"
+            f"1) team(inspect, team_id='{launched.id}') — holistic view\n"
+            "2) If member stuck → team(hint) with ONE concrete next step\n"
+            "3) If wave terminal → switch_mode(evaluating), review outputs, "
+            "update plan/Kanban, team(advance)\n"
+            "4) If wave running cleanly → await_delegates(summary='...')\n\n"
+            "Do NOT idle-poll. If nothing changed since last check-in, "
+            "await_delegates immediately.\n"
+            f"If advancing: scheduler(remove, name='{_checkback_job_name}')."
         )
+        _checkback_secs = checkback_interval_seconds(delegates_active=True)
         try:
             _sched_mgr.add_job(_SJ(
                 name=_checkback_job_name,
                 schedule_type="interval",
-                interval_seconds=120.0,
+                interval_seconds=_checkback_secs,
                 action="agent_message",
                 action_message=_checkback_msg,
                 owner="team_manager",
             ))
             logger.info(
-                "[EXEC] team check-back job scheduled: '%s' (every 120s)",
-                _checkback_job_name,
+                "[EXEC] team check-back job scheduled: '%s' (every %.0fs)",
+                _checkback_job_name, _checkback_secs,
             )
         except Exception as _sce:
             logger.warning("[EXEC] team check-back schedule failed: %s", _sce)
@@ -1241,6 +1598,72 @@ async def _launch_team_delegates(
 
     state.delegate_count += len(launched.members)
     return ToolResult(content=_spawn_msg)
+
+
+async def try_auto_launch_pending_wave(
+    team_manager: Any,
+    delegate_manager: DelegateManager,
+    tools: dict[str, Any],
+    config: "LoopConfig",
+    state: "LoopState",
+    hooks: "LoopHooks",
+    vllm_client: Any,
+    on_event: Callable | None,
+    abort_signal: asyncio.Event | None,
+    user_task: str,
+) -> bool:
+    """Launch a pending next-wave team after auto-reconcile (policy-guarded).
+
+    Returns True if delegates were spawned. On block/failure, re-queues pending
+    and schedules a compact EM wake with a launch breadcrumb.
+    """
+    from .orchestration_policy import should_auto_launch_next_wave
+
+    pending = team_manager.pop_pending_auto_launch()
+    if pending is None:
+        return False
+
+    ok, block_reason = should_auto_launch_next_wave(
+        team_manager, delegate_manager, pending.team_id,
+    )
+    if not ok:
+        team = team_manager.load(pending.team_id)
+        if team is not None:
+            team_manager.offer_pending_auto_launch(team, pending.reason)
+        team_manager.schedule_pending_launch_wake(
+            pending.team_id, block_reason, reconcile_reason=pending.reason,
+        )
+        return False
+
+    result = await _launch_team_delegates(
+        team_manager,
+        pending.team_id,
+        delegate_manager,
+        tools,
+        config,
+        state,
+        hooks,
+        vllm_client,
+        on_event,
+        abort_signal,
+        user_task,
+    )
+    if result.is_error:
+        team = team_manager.load(pending.team_id)
+        if team is not None:
+            team_manager.offer_pending_auto_launch(team, pending.reason)
+        team_manager.schedule_pending_launch_wake(
+            pending.team_id,
+            (result.content or "launch failed")[:300],
+            reconcile_reason=pending.reason,
+        )
+        return False
+
+    logger.info(
+        "[EXEC] auto-launched pending wave %s (reason=%s)",
+        pending.team_id, pending.reason,
+    )
+    return True
 
 
 async def run_delegate_detached(
@@ -1315,7 +1738,39 @@ async def run_delegate_detached(
         session_log_dir=config.session_log_dir,
         escalate_on_limit=_has_escalation,
         on_escalation=_escalation_cb,
+        delegate_adapter_name=config.delegate_adapter_name,
     )
+    _delegate_model = config.delegate_adapter_name
+
+    _state_holder: list = (
+        state_holder_out if state_holder_out is not None else []
+    )
+
+    async def _notify_repeated_write(path_str: str, count: int) -> tuple[str, bool]:
+        if _escalation_cb is None:
+            return (
+                "Third full rewrite — no orchestrator channel. "
+                "Use edit() or escalate().",
+                False,
+            )
+        _ls = _state_holder[0] if _state_holder else None
+        _summary = f"Full rewrite #{count} of {path_str}"
+        if _ls is not None:
+            _summary += (
+                f"\niteration: {_ls.iteration}/{sub_config.max_iterations}"
+            )
+            if _ls.files_written:
+                _summary += "\nfiles_written:\n" + "\n".join(
+                    f"- {p}" for p in _ls.files_written[-8:]
+                )
+        return await _await_orchestrator_escalation(
+            reason=f"repeated_write:{path_str}",
+            state=_ls,
+            context_summary=_summary,
+            config=sub_config,
+            copilot_queue=hint_queue,
+            esc_cb=_escalation_cb,
+        )
 
     from nls.tools.agent_tools.plan import PlanReadOnlyTool
     sub_tools = {k: v for k, v in tools.items() if k not in _DELEGATE_EXCLUDED}
@@ -1334,6 +1789,7 @@ async def run_delegate_detached(
             _facts = hooks.get_preflight_knowledge(task) or ""
         except Exception:
             pass
+    _facts = _merge_recipe_preflight(_facts, task, user_task)
 
     # Resolve project directory from active plan (or any prior plan)
     _project_dir_info = ""
@@ -1399,7 +1855,23 @@ async def run_delegate_detached(
                         "delegate_index": spec.delegate_number,
                         "wave": spec.wave,
                     })
+                if _tname == "write":
+                    _cloned._write_counts = {}
+                if _tname == "write" and _escalation_cb is not None:
+                    _cloned._on_repeated_write_escalation = _notify_repeated_write
+                if _tname == "write":
+                    _cloned._block_full_rewrite_after_first = True
                 sub_tools[_tname] = _cloned
+            except Exception:
+                pass
+        _pi = sub_tools.get("project_install")
+        if _pi is not None:
+            try:
+                _cloned_pi = _copy.copy(_pi)
+                _cloned_pi._shared_cwd = _delegate_cwd
+                if _pd_abs:
+                    _cloned_pi._cwd = _pd_abs
+                sub_tools["project_install"] = _cloned_pi
             except Exception:
                 pass
 
@@ -1436,10 +1908,24 @@ async def run_delegate_detached(
     except Exception:
         pass
 
+    _budget_info = (
+        f"\nITERATION BUDGET: {max_steps} tool-call rounds "
+        f"(passive limit hit grants +10 more on first escalation).\n"
+        "PRIMARY GOAL: Deliver the full task — required artifacts on disk, "
+        "verified once. Do not rush to exit early to save iterations.\n"
+        "If stuck, blocked, or running low on budget, call escalate().\n"
+    )
+
+    _write_tool = sub_tools.get("write")
+    _file_ledger_ref = getattr(_write_tool, "_ledger", None)
+
     _sub_cryptex = _SubCryptex.spawn_from_parent(
         parent=_parent_cryptex_d,
-        task=f"You are a sub-agent. Complete this specific task:\n\n{task}\n\n"
-             f"Parent task context: {user_task[:300]}",
+        task=(
+            f"You are a sub-agent. Complete this specific task:\n\n{task}\n\n"
+            f"{_budget_info}"
+            f"Parent task context: {user_task[:300]}"
+        ),
         preflight_facts=_facts,
         cwd_info=_cwd_info,
         project_dir_info=_project_dir_info,
@@ -1447,6 +1933,9 @@ async def run_delegate_detached(
         context_window_tokens=config.context_window_tokens,
         file_manifest=getattr(spec, "file_manifest", None) or [],
         team_briefing=getattr(spec, "team_briefing", "") or "",
+        tech_stack_block=getattr(spec, "tech_stack_block", "") or "",
+        file_ownership_block=getattr(spec, "file_ownership_block", "") or "",
+        file_ledger=_file_ledger_ref,
     )
 
     # Expose SubCryptex to DelegateManager for orchestrator ring access.
@@ -1459,7 +1948,10 @@ async def run_delegate_detached(
         + _cwd_info + _project_dir_info + _SUB_AGENT_SUPPLEMENT
     )
 
-    _user_msg = f"Execute the task above using tools. Task:\n{task}"
+    _user_msg = (
+        f"Execute the task above using tools. Task:\n{task}\n"
+        f"{_budget_info}"
+    )
     if _project_dir_info:
         _user_msg += (
             "\n\nIMPORTANT: Your bash CWD is ALREADY set to the project "
@@ -1473,9 +1965,7 @@ async def run_delegate_detached(
     ]
 
     _dlg_num = delegate_number
-    # Use state_holder_out directly so DelegateManager._progress_monitor
-    # can read the live LoopState during execution (not just after).
-    _state_holder: list = state_holder_out if state_holder_out is not None else []
+    # state_holder is wired above for progress monitor + rewrite escalation
 
     async def _sub_on_event(event: "AgentEvent") -> None:
         if on_event is None:
@@ -1509,6 +1999,7 @@ async def run_delegate_detached(
     )
     sub_hooks._render_mode_ref = ["executing"]  # type: ignore[attr-defined]
     sub_hooks._loop_state_ref = {}  # type: ignore[attr-defined]
+    sub_hooks._sub_cryptex = _sub_cryptex  # type: ignore[attr-defined]
 
     # Delegates must NOT share the orchestrator's abort_signal.  The
     # orchestrator session's finally block always fires abort.set(),
@@ -1530,6 +2021,7 @@ async def run_delegate_detached(
                 on_event=_sub_on_event,
                 abort_signal=None,
                 user_input=task,
+                adapter_name=_delegate_model,
                 enable_thinking=True,
                 state_holder=_state_holder,
                 wrap_up_signal=wrap_up_signal,
@@ -1588,6 +2080,84 @@ async def run_delegate_detached(
     return summary, sub_result
 
 
+async def _handle_await_delegates(
+    args: dict,
+    state: LoopState,
+    delegate_manager: DelegateManager | None,
+    hooks: LoopHooks | None = None,
+) -> ToolResult:
+    """Exit the orchestrator loop while background delegates keep running."""
+    summary = (args.get("summary") or "").strip()
+    if not summary:
+        return ToolResult(
+            content=(
+                "Error: 'summary' is required — describe what wave/delegates "
+                "you are waiting on (shown in logs; optional user handoff)."
+            ),
+            is_error=True,
+        )
+    team_id = (args.get("team_id") or "").strip()
+    if delegate_manager is not None:
+        try:
+            if not delegate_manager.has_active_delegates():
+                return ToolResult(
+                    content=(
+                        "No delegates are running. Use team(action='inspect') "
+                        "or delegate_status. If all work is finished, call "
+                        "task_complete(summary='...') instead."
+                    ),
+                    is_error=True,
+                )
+        except Exception:
+            pass
+
+    _tm = getattr(hooks, "_cached_team_manager", None) if hooks else None
+    if _tm is not None:
+        _block = _tm.completion_review_yield_block_message()
+        if _block:
+            logger.info(
+                "[AWAIT_DELEGATES] blocked — %d pending completion review(s)",
+                len(getattr(_tm, "_pending_completion_reviews", {})),
+            )
+            return ToolResult(
+                content=_block,
+                is_error=True,
+                details={"blocked": True, "pending_completion_review": True},
+            )
+
+    suffix = (
+        "\n\n[Orchestrator loop ending — background work continues. "
+        "You will be re-invoked on completion review, wave completion, "
+        "escalation, or check-back.]"
+    )
+    if team_id:
+        suffix += f"\nMonitoring team: {team_id}"
+    logger.info(
+        "[AWAIT_DELEGATES] yielding loop (mode=%s): %s",
+        state.active_mode.value, summary[:200],
+    )
+    _record = None
+    if hooks and hooks.wm_orch_set_coordinator_phase:
+        _record = hooks.wm_orch_set_coordinator_phase
+    on_await_delegates(state, record_phase=_record)
+    if hooks and hooks.wm_orch_record_decision:
+        try:
+            hooks.wm_orch_record_decision(
+                "await_delegates", summary[:200], team_id=team_id,
+            )
+        except Exception:
+            pass
+    return ToolResult(
+        content=summary + suffix,
+        stop_loop=True,
+        details={
+            "type": "awaiting_delegates",
+            "summary": summary,
+            "team_id": team_id or None,
+        },
+    )
+
+
 async def _handle_wait(
     args: dict,
     on_event: Callable | None,
@@ -1597,6 +2167,8 @@ async def _handle_wait(
     copilot_queue: Any | None = None,
     mid_wait_hook: Callable | None = None,
     idle_monitor_cycles: int = 0,
+    *,
+    state: LoopState | None = None,
 ) -> ToolResult:
     """Handle the ``wait`` virtual tool — sleep then return delegate status.
 
@@ -1609,6 +2181,30 @@ async def _handle_wait(
     except (TypeError, ValueError):
         seconds = 30
     reason = args.get("reason", "")
+
+    _bg_delegates = False
+    if delegate_manager is not None:
+        try:
+            _bg_delegates = delegate_manager.has_active_delegates()
+        except Exception:
+            pass
+    _monitoring = (
+        state is not None
+        and state.active_mode in (AgentMode.MONITORING, AgentMode.DELEGATING)
+    )
+    if _bg_delegates and _monitoring and seconds > 45:
+        return ToolResult(
+            content=(
+                f"Do NOT wait({seconds}s) while delegates run in the background — "
+                "that keeps this loop alive and wastes tokens.\n"
+                "Use await_delegates(summary='...') to exit cleanly after a "
+                "brief status (or communicate first). You will be re-invoked "
+                "automatically when the wave completes or escalates.\n"
+                "For a quick poll only, use wait(seconds=15) then team(inspect)."
+            ),
+            is_error=True,
+            details={"blocked": True, "prefer_await_delegates": True},
+        )
 
     # Enforce increasing floor when the orchestrator is in a monitor loop
     # to reduce context churn from rapid wait/inspect cycles.
@@ -1763,8 +2359,14 @@ async def _handle_delegate_status(
 
     lines = []
     for s in statuses:
+        state_label = s.state
+        if s.state == "running" and delegate_manager is not None:
+            if not delegate_manager.is_delegate_live(s.delegate_number):
+                state_label = "interrupted (no live task — not running)"
+        elif s.state == "interrupted":
+            state_label = "interrupted (runtime stopped — not running)"
         lines.append(
-            f"Delegate #{s.delegate_number}: {s.state} | "
+            f"Delegate #{s.delegate_number}: {state_label} | "
             f"iter {s.iteration}/{s.max_iterations} | "
             f"tc={s.total_tool_calls} | "
             f"{s.elapsed_seconds:.0f}s elapsed | "
@@ -1834,71 +2436,81 @@ async def execute_tools(
 
         args = _parse_tool_args(args_str)
 
-        # Mode enforcement: reject tools not in primary + override sets.
-        _allowed = get_allowed_tools(state.active_mode)
-        if (state.active_mode != AgentMode.EXECUTING
-                and _allowed  # EXECUTING has empty set = all allowed
-                and name not in _allowed
-                and name not in ("get_tool_schema",)):
+        # Mode + runtime policy enforcement (same allowlist as schema filter).
+        from .orchestration_policy import (
+            build_tool_policy_inputs,
+            resolve_allowed_tools,
+            tool_not_allowed_message,
+        )
+
+        _policy_inputs = build_tool_policy_inputs(
+            state.active_mode,
+            state,
+            delegate_manager,
+            set(tools.keys()) | set(state.unlocked_tools),
+            hooks,
+        )
+        _resolved_allowed = resolve_allowed_tools(_policy_inputs)
+        if name not in _resolved_allowed and name not in ("get_tool_schema",):
             ordered_results[idx] = ToolResult(
-                content=(
-                    f"{state.active_mode.value.upper()} MODE: tool "
-                    f"'{name}' is not available. "
-                    f"Switch to a mode that supports it with "
-                    f"switch_mode(mode='evaluating') or "
-                    f"switch_mode(mode='executing')."
+                content=tool_not_allowed_message(
+                    name, state.active_mode, _resolved_allowed,
                 ),
                 is_error=True,
             )
             continue
 
-        if name == "ask_user":
-            if not config.enable_delegation:
-                # Sub-agent → escalate the question to the orchestrator
-                # who can answer directly or relay from the user.
-                question = args.get("question", "What do you need?")
-                _esc_cb = config.on_escalation
-                _cq = (hooks or LoopHooks()).copilot_queue
-
-                if _esc_cb and _cq is not None:
-                    try:
-                        _r = _esc_cb(f"ask_user: {question}", state, question)
-                        if asyncio.iscoroutine(_r):
-                            await _r
-                    except Exception:
-                        logger.debug("ask_user escalation callback failed", exc_info=True)
-
-                    try:
-                        _answer = await asyncio.wait_for(_cq.get(), timeout=120)
-                        if isinstance(_answer, dict) and "message" in _answer:
-                            _answer_text = _answer["message"]
-                        elif isinstance(_answer, dict) and "content" in _answer:
-                            _answer_text = _answer["content"]
-                        elif isinstance(_answer, str):
-                            _answer_text = _answer
-                        else:
-                            _answer_text = str(_answer)
-                        ordered_results[idx] = ToolResult(
-                            content=f"Orchestrator answered: {_answer_text}",
-                        )
-                    except asyncio.TimeoutError:
-                        ordered_results[idx] = ToolResult(
-                            content=(
-                                "Orchestrator did not respond in time. "
-                                "Work with what you have or state what "
-                                "you need in your final response."
-                            ),
-                            is_error=True,
-                        )
-                else:
+        if name == "escalate":
+            if config.enable_delegation:
+                ordered_results[idx] = ToolResult(
+                    content=(
+                        "escalate() is only for worker sub-agents. "
+                        "Use ask_user() to ask the user directly."
+                    ),
+                    is_error=True,
+                )
+                continue
+            _reason = args.get("reason", "question")
+            _message = args.get("message", "")
+            if not _message:
+                ordered_results[idx] = ToolResult(
+                    content="message is required for escalate().",
+                    is_error=True,
+                )
+                continue
+            _paths = args.get("paths") or []
+            if _reason == "file_access":
+                if not isinstance(_paths, list) or not _paths:
                     ordered_results[idx] = ToolResult(
                         content=(
-                            "You are a sub-agent and cannot ask the user "
-                            "directly. Work with what you have or state "
-                            "what you need in your final response."
+                            "paths is required for escalate(reason='file_access'). "
+                            "Example: paths=['.gitignore']"
                         ),
                         is_error=True,
                     )
+                    continue
+                _path_line = "paths_requested: " + ", ".join(
+                    str(p).strip() for p in _paths if str(p).strip()
+                )
+                _message = f"{_message}\n\n{_path_line}"
+            ordered_results[idx] = await _handle_sub_agent_escalation(
+                f"escalate:{_reason}: {_message}",
+                _message,
+                state,
+                config,
+                hooks,
+            )
+            continue
+        if name == "ask_user":
+            if not config.enable_delegation:
+                question = args.get("question", "What do you need?")
+                ordered_results[idx] = await _handle_sub_agent_escalation(
+                    f"ask_user: {question}",
+                    question,
+                    state,
+                    config,
+                    hooks,
+                )
                 continue
             r = await _handle_ask_user(args, on_event, hooks or LoopHooks(), state.iteration, call_id)
             ordered_results[idx] = r
@@ -1952,9 +2564,41 @@ async def execute_tools(
                 )
                 continue
 
+            _plan_req_team = False
+            if hooks and hooks.plan_requires_team_delegation:
+                try:
+                    _plan_req_team = hooks.plan_requires_team_delegation()
+                except Exception:
+                    pass
+            _has_team = False
+            _tm = getattr(hooks, "_cached_team_manager", None) if hooks else None
+            if _tm is not None:
+                try:
+                    _has_team = _tm.has_orchestrator_blocking_team()
+                except Exception:
+                    pass
+            _exec_block = block_executing_mode_escape(
+                _target_mode,
+                active_mode=state.active_mode,
+                plan_requires_team_delegation=_plan_req_team,
+                has_non_terminal_team=_has_team,
+                enable_delegation=config.enable_delegation,
+                is_delegate_loop=not config.enable_delegation,
+                orchestrator_recovery=getattr(
+                    state, "orchestrator_recovery", False,
+                ),
+            )
+            if _exec_block:
+                ordered_results[idx] = ToolResult(
+                    content=_exec_block,
+                    is_error=True,
+                    details={"blocked": True, "mode_escape": True},
+                )
+                continue
+
             _prev_mode = state.active_mode
             state.active_mode = _target_mode
-            state._mode_schemas_applied = False
+            invalidate_tool_policy_cache(state)
             state.mode_override_count = 0
             # Record that the user explicitly requested this switch so
             # Trigger 3 won't immediately override it.
@@ -1970,6 +2614,11 @@ async def execute_tools(
                 _prev_mode.value, _target_mode.value,
                 _reason[:200] if _reason else "no reason",
             )
+            if _target_mode == AgentMode.EVALUATING:
+                _record = None
+                if hooks and hooks.wm_orch_set_coordinator_phase:
+                    _record = hooks.wm_orch_set_coordinator_phase
+                on_evaluating_wave(state, record_phase=_record)
 
             _MODE_HINTS = {
                 AgentMode.PLANNING: (
@@ -1980,31 +2629,33 @@ async def execute_tools(
                     "Do NOT use bash, write, team, or delegate in this mode."
                 ),
                 AgentMode.DELEGATING: (
-                    "DELEGATING MODE active. You are the engineering manager.\n"
-                    "Primary tools: team, delegate, plan, scheduler.\n"
-                    "WORKFLOW: team(create) → team(launch) → "
-                    "switch_mode(mode='monitoring').\n"
-                    "Do NOT create files or run bash — that is "
-                    "the team's job."
+                    "DELEGATING MODE — engineering manager staffing a wave.\n"
+                    "Primary tools: team, plan, todo, scheduler.\n"
+                    "WORKFLOW: plan/create steps → todo/Kanban linkage → "
+                    "team(create) → team(launch) → switch_mode(monitoring).\n"
+                    "Write the brief; your team does the IC work."
                 ),
                 AgentMode.MONITORING: (
-                    "MONITORING MODE active. You are watching progress.\n"
-                    "Primary tools: team(inspect/hint/intervene), wait, "
-                    "communicate.\n"
-                    "When wave completes: switch_mode(mode='evaluating').\n"
-                    "Sub-agents run in the background — you do NOT need "
-                    "to stay in this loop. After one status update, call "
-                    "task_complete(summary='...') to close cleanly. You "
-                    "will be re-activated when delegates finish."
+                    "MONITORING MODE — engineering manager on the combat board.\n"
+                    "Holistic view: team(inspect), team(hint) when stuck, "
+                    "team(intervene) on escalation.\n"
+                    "After launch: communicate(optional) → "
+                    "await_delegates(summary='...') to end your turn.\n"
+                    "Do NOT: IC work (write/bash), idle-poll wait(60+), "
+                    "or repeated inspect loops.\n"
+                    "When wave lands: switch_mode(evaluating) for review."
                 ),
                 AgentMode.EVALUATING: (
-                    "EVALUATING MODE active. Full file/bash access.\n"
-                    "Review output, verify quality, patch small gaps.\n"
-                    "Soft budget: ~10 iterations. Then advance the wave "
-                    "or switch_mode(mode='delegating') for next wave."
+                    "EVALUATING MODE — second pair of eyes / acceptance review.\n"
+                    "Read deliverables, verify against plan criteria, patch "
+                    "small gaps, update Kanban.\n"
+                    "If wave failed but artifacts exist: plan(accept_partial).\n"
+                    "Then team(advance) or launch next wave."
                 ),
                 AgentMode.EXECUTING: (
                     "EXECUTING MODE active. All tools available.\n"
+                    "If a master plan exists, you should be in delegating/monitoring "
+                    "— not self-building wave work.\n"
                     "Direct execution for simple tasks."
                 ),
                 AgentMode.RESPONDING: (
@@ -2048,13 +2699,79 @@ async def execute_tools(
             r = await _handle_delegate_status(args, delegate_manager)
             ordered_results[idx] = r
             continue
+        if name == "await_delegates":
+            r = await _handle_await_delegates(
+                args, state, delegate_manager, hooks=hooks,
+            )
+            ordered_results[idx] = r
+            continue
         if name == "wait":
             _cq = hooks.copilot_queue if hooks else None
             _mwh = hooks.mid_wait_hook if hooks else None
             _idle_cycles = getattr(state, "idle_monitor_cycles", 0)
-            r = await _handle_wait(args, on_event, state.iteration, abort_signal, delegate_manager, copilot_queue=_cq, mid_wait_hook=_mwh, idle_monitor_cycles=_idle_cycles)
+            r = await _handle_wait(
+                args, on_event, state.iteration, abort_signal,
+                delegate_manager, copilot_queue=_cq, mid_wait_hook=_mwh,
+                idle_monitor_cycles=_idle_cycles, state=state,
+            )
             ordered_results[idx] = r
             continue
+
+        # Team advance intercept: after creating the next wave, auto-launch
+        # when no delegates or other active teams are running.
+        if name == "team" and args.get("action") == "advance":
+            team_tool = tools.get("team")
+            if team_tool is not None:
+                _adv_block = monitoring_advance_block_message(
+                    state, str(args.get("team_id") or ""),
+                )
+                if _adv_block:
+                    ordered_results[idx] = ToolResult(
+                        content=_adv_block,
+                        is_error=True,
+                        details={
+                            "blocked": True,
+                            "monitoring_advance": True,
+                        },
+                    )
+                    continue
+                r = await _execute_single(
+                    team_tool, call, config, state, tools,
+                    abort_signal=abort_signal, on_event=on_event, hooks=hooks,
+                    delegate_manager=delegate_manager,
+                )
+                details = getattr(r, "details", None) or {}
+                if (
+                    not r.is_error
+                    and details.get("next_team")
+                    and config.enable_delegation
+                    and delegate_manager is not None
+                ):
+                    _next_id = details.get("team_id", "")
+                    _tm = getattr(team_tool, "_tm", None)
+                    if _tm is not None and _can_auto_launch_team(
+                        _tm, delegate_manager, _next_id,
+                    ):
+                        r = await _launch_team_delegates(
+                            _tm, _next_id, delegate_manager, tools,
+                            config, state, hooks or LoopHooks(),
+                            vllm_client, on_event, abort_signal,
+                            user_task,
+                        )
+                        if not r.is_error:
+                            r = ToolResult(
+                                content=(
+                                    f"{r.content}\n\n"
+                                    f"[AUTO-LAUNCH] No other active waves — "
+                                    f"next wave was launched automatically."
+                                ),
+                                details={
+                                    **details,
+                                    "auto_launched": True,
+                                },
+                            )
+                ordered_results[idx] = r
+                continue
 
         # Team tool launch intercept: execute the tool, then if the
         # result signals needs_delegate_spawn, actually spawn the
@@ -2063,8 +2780,9 @@ async def execute_tools(
             team_tool = tools.get("team")
             if team_tool is not None:
                 r = await _execute_single(
-                    team_tool, call, config, state,
+                    team_tool, call, config, state, tools,
                     abort_signal=abort_signal, on_event=on_event, hooks=hooks,
+                    delegate_manager=delegate_manager,
                 )
                 details = getattr(r, "details", None) or {}
                 if (
@@ -2125,7 +2843,7 @@ async def execute_tools(
                 _args = _parse_tool_args(_fn.get("arguments", "{}"))
                 _task = _args.get("task", "").strip() or "(unnamed)"
                 try:
-                    _ms = min(int(_args.get("max_steps", 15)), 50)
+                    _ms = min(int(_args.get("max_steps", DELEGATE_DEFAULT_MAX_STEPS)), 50)
                 except (ValueError, TypeError):
                     _ms = 15
                 specs.append(DelegateSpec(
@@ -2183,29 +2901,21 @@ async def execute_tools(
             _spawn_msg = (
                 f"{len(specs)} sub-agent(s) spawned in background (batch {batch.batch_id}):\n"
                 + "\n".join(f"  - {lbl}" for lbl in task_labels)
-                + "\n\nIMPORTANT — your role is now ORCHESTRATOR, not executor:\n"
-                "- DO NOT start performing the same work you just delegated. "
-                "The sub-agents are handling it.\n"
-                "- Acknowledge to the user that work is underway. If the user "
-                "is AFK, send the acknowledgment via their preferred channel "
-                "(WhatsApp/Telegram/email) — not just the chat they aren't watching.\n"
-                "- You may do OTHER useful work while waiting, but not the "
-                "delegated tasks.\n\n"
-                "CHOOSE ONE strategy based on how long this will take:\n\n"
-                "A) SHORT task (expected < 60s): use wait(seconds=N) to pause "
-                "once, then call delegate_status to check. "
-                "Never poll delegate_status in a tight loop without a wait.\n\n"
-                "B) LONG task (expected > 60s, or clearly substantial): "
-                "END YOUR TURN NOW — reply briefly to the user and stop. "
-                "You will be AUTOMATICALLY RE-INVOKED when all delegates "
-                "complete, with their results injected. You do NOT need to "
-                "keep your loop running to catch the results. "
-                "Keeping the loop alive just wastes iterations.\n\n"
-                "When results arrive (either via wait→delegate_status or "
-                "via automatic re-invocation), compile and DELIVER the full "
-                "report via the user's preferred channel."
+                + "\n\nEngineering manager — team is executing:\n"
+                "- Optional: communicate(status) once.\n"
+                "- Required: await_delegates(summary='...') to end this turn.\n"
+                "- You wake to steer, review, and advance the board — "
+                "not to IC or idle-poll."
                 + _plan_hint
             )
+            _record_phase = None
+            if hooks and hooks.wm_orch_set_coordinator_phase:
+                _record_phase = hooks.wm_orch_set_coordinator_phase
+            on_team_launched(
+                state, batch.batch_id, record_phase=_record_phase,
+            )
+            state.active_mode = AgentMode.MONITORING
+            invalidate_tool_policy_cache(state)
 
             # Auto-schedule a periodic check-back so the orchestrator is
             # re-invoked every 2 minutes while delegates are running.
@@ -2223,39 +2933,31 @@ async def execute_tools(
                     if _agent_id else ""
                 )
                 _checkback_msg = (
-                    f"{_routing}[DELEGATE CHECK-BACK] "
-                    f"Scheduled check-in for batch {batch.batch_id} "
-                    f"({len(specs)} sub-agent(s)).\n\n"
-                    "Step 1: Call delegate_status(action='list') to see current progress.\n\n"
-                    "Step 2 — FOR EACH STILL-RUNNING agent: if it looks stuck "
-                    "(same iteration, unexpected errors, needs input), send a hint: "
-                    "delegate_status(action='hint', delegate_number=N, message='...').\n\n"
-                    "Step 3 — FOR EACH COMPLETED agent: "
-                    "delegate_status(action='wrap_up', delegate_number=N).\n\n"
-                    "Step 4 — ONCE ALL AGENTS ARE COMPLETE OR WRAPPED UP:\n"
-                    f"  a) FIRST: Cancel this check-back: scheduler(command='remove', name='{_checkback_job_name}')\n"
-                    "  b) Update the Kanban board — mark completed items done, failed items blocked.\n"
-                    "  c) Review your working memory / project plan for the NEXT PHASE.\n"
-                    "  d) Immediately spawn the next team OR execute the next task.\n"
-                    "  e) Deliver ONE concise summary to the user. Do NOT repeat summaries.\n\n"
-                    "CRITICAL RULES:\n"
-                    "- ALWAYS cancel the check-back BEFORE reporting to the user.\n"
-                    "- Do NOT generate a completion message if you already reported.\n"
-                    "- A batch finishing means one PHASE is done — decide next action."
+                    f"{_routing}[DELEGATE CHECK-BACK — EM REVIEW] "
+                    f"Batch {batch.batch_id} ({len(specs)} sub-agent(s)).\n\n"
+                    "Management check-in — review the board, not idle-poll.\n\n"
+                    "1) delegate_status(list) — holistic view\n"
+                    "2) hint stuck members with ONE concrete next step\n"
+                    "3) wrap_up completed members\n"
+                    "4) When batch done: switch_mode(evaluating), review, "
+                    "update plan/Kanban, launch next wave\n"
+                    "5) If still running cleanly: await_delegates(summary='...')\n\n"
+                    f"Cancel when done: scheduler(remove, name='{_checkback_job_name}')"
                 )
+                _checkback_secs = checkback_interval_seconds(delegates_active=True)
                 try:
                     _sched_mgr.add_job(_SJ(
                         name=_checkback_job_name,
                         schedule_type="interval",
-                        interval_seconds=120.0,
+                        interval_seconds=_checkback_secs,
                         action="agent_message",
                         action_message=_checkback_msg,
                         owner="delegate_manager",
                     ))
                     logger.info(
                         "[EXEC] delegate check-back job scheduled: '%s' "
-                        "(every 120s)",
-                        _checkback_job_name,
+                        "(every %.0fs)",
+                        _checkback_job_name, _checkback_secs,
                     )
                 except Exception as _sce:
                     logger.warning(
@@ -2384,7 +3086,11 @@ async def execute_tools(
                 name = fn.get("name", "")
                 args_str = fn.get("arguments", "{}")
                 args = _parse_tool_args(args_str)
-                r = await _execute_single(tool, call, config, state, abort_signal=abort_signal, on_event=on_event, hooks=hooks)
+                r = await _execute_single(
+                    tool, call, config, state, tools,
+                    abort_signal=abort_signal, on_event=on_event, hooks=hooks,
+                    delegate_manager=delegate_manager,
+                )
                 r = await _post_process_result(name, args, r, config, hooks, vllm_client, user_task, digest_count_ref)
                 return idx, r
 
@@ -2412,7 +3118,11 @@ async def execute_tools(
             name = fn.get("name", "")
             args_str = fn.get("arguments", "{}")
             args = _parse_tool_args(args_str)
-            result = await _execute_single(tool, call, config, state, abort_signal=abort_signal, on_event=on_event, hooks=hooks)
+            result = await _execute_single(
+                tool, call, config, state, tools,
+                abort_signal=abort_signal, on_event=on_event, hooks=hooks,
+                delegate_manager=delegate_manager,
+            )
             result = await _post_process_result(name, args, result, config, hooks, vllm_client, user_task, digest_count_ref)
             ordered_results[idx] = result
     else:
@@ -2421,7 +3131,11 @@ async def execute_tools(
             name = fn.get("name", "")
             args_str = fn.get("arguments", "{}")
             args = _parse_tool_args(args_str)
-            result = await _execute_single(tool, call, config, state, abort_signal=abort_signal, on_event=on_event, hooks=hooks)
+            result = await _execute_single(
+                tool, call, config, state, tools,
+                abort_signal=abort_signal, on_event=on_event, hooks=hooks,
+                delegate_manager=delegate_manager,
+            )
             result = await _post_process_result(name, args, result, config, hooks, vllm_client, user_task, digest_count_ref)
             ordered_results[idx] = result
 

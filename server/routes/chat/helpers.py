@@ -29,6 +29,8 @@ _CHAT_TOOLCALL_NUDGE = (
 
 _SIGNAL_TAG_RE = re.compile(r"\[([A-Za-z_]+)(?:[:.]([^\]]*))?\]")
 
+from nls.runtime.response_cleanup import strip_nls_artifacts, strip_nls_signal_calls
+
 _TASK_PATTERNS = re.compile(
     r"\b("
     r"build|create|make|setup|set up|install|deploy|implement|write|"
@@ -64,6 +66,7 @@ _CONVERSATIONAL_PATTERNS = re.compile(
     r"^\s*("
     r"(hi|hello|hey|good morning|good evening|how are you|what's up|sup)\b|"
     r"(who are you|what is your name|what can you do|tell me about)\b|"
+    r"(your name is|call yourself|i('ll| will) call you|you are called)\b|"
     r"(thanks|thank you|bye|goodbye|see you|later)\b|"
     r"(yes|no|ok|okay|sure|yep|nah|nope)\s*[.!?]*\s*$"
     r")",
@@ -133,16 +136,23 @@ _CLASSIFY_PROMPT = (
 
 def _build_nls_metadata(status: dict, **extra: Any) -> dict:
     """Build NLS metadata dict with front-brain sections included."""
+    _facts = status.get("facts_in_memory")
+    if _facts is None:
+        _facts = status.get("fact_count", 0)
     nls: dict = {
         "hormones": status.get("hormones", {}),
         "ans": status.get("ans", {}),
-        "facts_in_memory": status.get("facts_in_memory", 0),
+        "facts_in_memory": _facts,
         "turn_count": status.get("turn_count", 0),
         "sleep_count": status.get("sleep_count", 0),
         "heartbeat": status.get("heartbeat", {}),
     }
     for key in _FRONT_BRAIN_KEYS:
         val = status.get(key)
+        if not val and key == "narrative":
+            val = status.get("narrative_self")
+        if not val and key == "predictive_processing":
+            val = status.get("predictive")
         if val:
             nls[key] = val
     nls.update(extra)
@@ -241,10 +251,37 @@ def _is_task_message(text: str) -> bool:
     return False
 
 
+def _message_implies_agentic_work(text: str) -> bool:
+    """Whether the user message should enter the agentic loop even without inline tool calls."""
+    if not text:
+        return False
+    if "[the user attached" in text.lower():
+        return True
+    return _is_task_message(text)
+
+
+def _runtime_uses_local_vllm(runtime: Any) -> bool:
+    """True when this agent's orchestrator pipeline points at local/LAN vLLM."""
+    try:
+        from nls.runtime.inference_compat import inference_host_is_local
+
+        client, _adapter = runtime.inference_pipeline()
+        if client is None:
+            return False
+        base = (getattr(client, "base_url", "") or "").strip()
+        if not base:
+            return False
+        return inference_host_is_local(base)
+    except Exception:
+        return False
+
+
 async def _classify_intent(
     vllm_client,
     message: str,
     history: list[dict] | None = None,
+    *,
+    adapter_name: str | None = None,
 ) -> str:
     """Classify intent and thinking need in a single LLM call.
 
@@ -263,9 +300,9 @@ async def _classify_intent(
                     })
         msgs.append({"role": "user", "content": message})
         result = await vllm_client.generate(
-            adapter_name=None,
+            adapter_name=adapter_name,
             messages=msgs,
-            max_tokens=5,
+            max_tokens=64,
             temperature=0.0,
             extra_body={"chat_template_kwargs": {"enable_thinking": False}},
         )
@@ -275,6 +312,8 @@ async def _classify_intent(
                 return label.lower()
         if "TASK" in raw:
             return "task_think"
+        if not raw and _is_task_message(message):
+            return "task_think"
         return "chat_nothink"
     except Exception:
         logger.exception("LLM intent classifier failed")
@@ -282,19 +321,8 @@ async def _classify_intent(
 
 
 def _dedup_signal_tags(text: str) -> str:
-    """Remove duplicate signal tags from model output."""
-    seen: set[str] = set()
-    result_parts: list[str] = []
-    last_end = 0
-    for m in _SIGNAL_TAG_RE.finditer(text):
-        key = f"{m.group(1).upper()}:{m.group(2) or ''}"
-        result_parts.append(text[last_end:m.start()])
-        if key not in seen:
-            seen.add(key)
-            result_parts.append(m.group(0))
-        last_end = m.end()
-    result_parts.append(text[last_end:])
-    return "".join(result_parts).strip()
+    """Remove duplicate signal tags and other NLS artifacts from model output."""
+    return strip_nls_artifacts(text)
 
 
 def _build_agentic_metadata(result) -> dict:

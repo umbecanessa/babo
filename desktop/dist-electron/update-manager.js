@@ -81,12 +81,13 @@ class UpdateManager {
         this.mainWindow = win;
         electron_updater_1.autoUpdater.logger = electron_log_1.default;
         electron_updater_1.autoUpdater.logger.transports.file.level = 'debug';
+        const token = process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
         electron_updater_1.autoUpdater.setFeedURL({
             provider: 'github',
-            owner: 'umbecanessa',
-            repo: 'NLS',
-            private: true,
-            token: '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',
+            owner: process.env.GH_RELEASE_OWNER || 'umbecanessa',
+            repo: process.env.GH_RELEASE_REPO || 'babo',
+            private: Boolean(token),
+            ...(token ? { token } : {}),
         });
         electron_updater_1.autoUpdater.autoDownload = false;
         electron_updater_1.autoUpdater.autoInstallOnAppQuit = true;

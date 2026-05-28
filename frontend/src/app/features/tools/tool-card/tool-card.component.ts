@@ -26,20 +26,20 @@ export interface AgentTool {
       flex-direction: column;
       gap: 6px;
       padding: 16px 18px;
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid rgba(255, 255, 255, 0.06);
+      background: var(--overlay-1);
+      border: 1px solid var(--overlay-3);
       border-radius: 10px;
       min-height: 100px;
     }
     .tool-name {
       font-size: 14px;
       font-weight: 600;
-      color: #e5e5e5;
+      color: var(--text-primary);
       font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
     }
     .tool-desc {
       font-size: 12px;
-      color: #787890;
+      color: var(--text-muted);
       line-height: 1.4;
       display: -webkit-box;
       -webkit-line-clamp: 2;
@@ -53,7 +53,7 @@ export interface AgentTool {
       padding: 3px 10px;
       font-size: 10px;
       font-weight: 600;
-      color: #34d399;
+      color: var(--accent-success);
       background: rgba(52, 211, 153, 0.12);
       border: 1px solid rgba(52, 211, 153, 0.2);
       border-radius: 20px;

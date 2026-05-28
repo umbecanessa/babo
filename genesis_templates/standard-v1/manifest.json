@@ -1,0 +1,12 @@
+{
+  "version": "standard-v1",
+  "base_model": "bring-your-own",
+  "description": "Default NLS agent \u2014 brain configs only, BYO inference.",
+  "minted_at": "2026-05-28T18:16:26.460272+00:00",
+  "profile": "standard",
+  "soul_hash": "e76d960d0f809eb4927a2911e6817ee5ca5a778c5c96f2a83b22e7abd36d12f5",
+  "genesis_hash": "590e49e4818108d33f19988aadddfa86b3f1e8cd55dd7c2a264a894d8b1e2759",
+  "adapters": [],
+  "education": null,
+  "moe": null
+}

@@ -10,41 +10,23 @@
         <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
       </svg>
     </button>
+    <button type="button" class="wb-density" (click)="cycleDensity()" [title]="'View: ' + densityLabel()">
+      {{ densityLabel() }}
+    </button>
   </div>
 
   <div class="wb-tabs" role="tablist" aria-label="Workbench scope">
-    <button
-      type="button"
-      role="tab"
-      class="wb-tab"
-      [class.active]="activeTab() === 'all'"
-      [attr.aria-selected]="activeTab() === 'all'"
-      (click)="setTab('all')"
-    >
-      All
-      <span class="wb-tab-badge">{{ counts().all }}</span>
+    <button type="button" role="tab" class="wb-tab" [class.active]="activeTab() === 'all'"
+      [attr.aria-selected]="activeTab() === 'all'" (click)="setTab('all')">
+      All <span class="wb-tab-badge">{{ counts().all }}</span>
     </button>
-    <button
-      type="button"
-      role="tab"
-      class="wb-tab"
-      [class.active]="activeTab() === 'chat'"
-      [attr.aria-selected]="activeTab() === 'chat'"
-      (click)="setTab('chat')"
-    >
-      Chat task
-      <span class="wb-tab-badge">{{ counts().chat }}</span>
+    <button type="button" role="tab" class="wb-tab" [class.active]="activeTab() === 'chat'"
+      [attr.aria-selected]="activeTab() === 'chat'" (click)="setTab('chat')">
+      Chat task <span class="wb-tab-badge">{{ counts().chat }}</span>
     </button>
-    <button
-      type="button"
-      role="tab"
-      class="wb-tab"
-      [class.active]="activeTab() === 'background'"
-      [attr.aria-selected]="activeTab() === 'background'"
-      (click)="setTab('background')"
-    >
-      Background
-      <span class="wb-tab-badge">{{ counts().background }}</span>
+    <button type="button" role="tab" class="wb-tab" [class.active]="activeTab() === 'background'"
+      [attr.aria-selected]="activeTab() === 'background'" (click)="setTab('background')">
+      Background <span class="wb-tab-badge">{{ counts().background }}</span>
     </button>
   </div>
 
@@ -54,47 +36,151 @@
         <p>Tool runs and agent steps will appear here while the agent works.</p>
         <p class="wb-empty-hint">Use <strong>Chat task</strong> for this thread, <strong>Background</strong> for autonomous work.</p>
       </div>
-    } @else if (visibleEntries().length === 0) {
+    } @else if (displayItems().length === 0) {
       <div class="wb-empty wb-empty-tab">
-        <p>No events in this tab.</p>
-        <p class="wb-empty-hint">
-          @if (activeTab() === 'chat') {
-            Foreground runs (messages you send here) show under <strong>Chat task</strong>.
-          } @else {
-            Autonomous / memory work shows under <strong>Background</strong>.
-          }
-        </p>
+        <p>No events match the current view.</p>
+        @if (workbench.density() === 'focused') {
+          <p class="wb-empty-hint">Switch to <strong>Standard</strong> or <strong>Debug</strong> to see reads and activity.</p>
+        }
       </div>
     } @else {
       <ul class="wb-list">
-        @for (e of visibleEntries(); track trackEntry($index, e)) {
-          <li
-            class="wb-row"
-            [attr.data-wb-corr]="e.correlationKey || null"
-            [class.wb-running]="e.status === 'running'"
-            [class.wb-ok]="e.status === 'ok'"
-            [class.wb-err]="e.status === 'error'"
-            [class.wb-focus]="!!e.correlationKey && workbench.focusKey() === e.correlationKey"
-            [class.wb-row-bg]="e.lane === 'background'"
-          >
-            <span class="wb-kind">{{ kindLabel(e.kind) }}</span>
-            @if (e.delegateNumber) {
-              <span class="wb-delegate-badge">Sub #{{ e.delegateNumber }}</span>
-            }
-            <div class="wb-main">
-              <div class="wb-line-title">{{ e.title }}</div>
-              @if (e.subtitle) {
-                <div class="wb-line-sub" [innerHTML]="e.subtitle | ansi"></div>
+        @for (item of displayItems(); track trackDisplayItem($index, item)) {
+          @if (item.type === 'group') {
+            <li class="wb-card wb-card--group"
+              [class.wb-running]="item.status === 'running'"
+              [class.wb-ok]="item.status === 'ok'"
+              [class.wb-err]="item.status === 'error'"
+              [class.wb-card-bg]="item.lane === 'background'">
+              <div class="wb-card-head">
+                <div class="wb-card-tags">
+                  <span class="wb-tag wb-tag--actor" [class.wb-tag--sub]="!!item.delegateNumber">
+                    {{ actorLabel(item.delegateNumber) }}
+                  </span>
+                  <span class="wb-tag wb-tag--parallel">Parallel</span>
+                  <span class="wb-tag wb-tag--muted">{{ groupTitle(item) }}</span>
+                </div>
+                <time class="wb-time">{{ item.ts | date:'HH:mm:ss' }}</time>
+              </div>
+              <div class="wb-group-strip">
+                @for (bucket of groupBuckets(item); track bucket.toolLabel) {
+                  <div class="wb-tool-bucket" [class.wb-tool-bucket--err]="bucket.status === 'error'">
+                    <span class="wb-tag wb-tag--mini" [class.wb-tag--err]="bucket.status === 'error'">{{ bucket.toolLabel }}</span>
+                    @if (bucketErrorText(bucket); as err) {
+                      <pre class="wb-preview wb-preview--err wb-preview--inline" [innerHTML]="err | ansi"></pre>
+                    }
+                    <div class="wb-tool-bucket-files">
+                      @for (child of bucket.entries; track child.id) {
+                        @for (fp of entryFilePaths(child); track fp) {
+                          @let parts = fileParts(fp);
+                          <button type="button" class="wb-file-chip wb-file-chip--inline" (click)="openFile(fp, $event)" [title]="fp">
+                            <svg class="wb-file-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                              <polyline points="14 2 14 8 20 8"/>
+                            </svg>
+                            @if (parts.parent) {
+                              <span class="wb-file-chip-parent">{{ parts.parent }}/</span>
+                            }
+                            <span class="wb-file-chip-name">{{ parts.name }}</span>
+                          </button>
+                        }
+                      }
+                    </div>
+                  </div>
+                }
+              </div>
+            </li>
+          } @else {
+            @let e = item.entry;
+            <li class="wb-card"
+              [attr.data-wb-corr]="e.correlationKey || null"
+              [class.wb-running]="e.status === 'running'"
+              [class.wb-ok]="e.status === 'ok'"
+              [class.wb-err]="e.status === 'error'"
+              [class.wb-focus]="!!e.correlationKey && workbench.focusKey() === e.correlationKey"
+              [class.wb-card-bg]="e.lane === 'background'">
+              <div class="wb-card-head">
+                <div class="wb-card-tags">
+                  <span class="wb-tag wb-tag--actor" [class.wb-tag--sub]="!!e.delegateNumber">
+                    {{ actorLabel(e.delegateNumber) }}
+                  </span>
+                  <span class="wb-tag" [class]="toolTagClass(e)">{{ toolTagLabel(e) }}</span>
+                  @if (statusLabel(e); as st) {
+                    <span class="wb-tag" [class]="e.status === 'error' ? 'wb-tag--err' : 'wb-tag--running'">{{ st }}</span>
+                  }
+                </div>
+                <time class="wb-time">{{ e.ts | date:'HH:mm:ss' }}</time>
+              </div>
+
+              @if (showCardTitle(e)) {
+                <div class="wb-card-detail">{{ e.title }}</div>
               }
+
+              @if (isModeEntry(e) && modeChips(e); as modes) {
+                <div class="wb-mode-flow">
+                  <span class="wb-mode-chip wb-mode-from">{{ modes[0].value }}</span>
+                  <span class="wb-mode-arrow" aria-hidden="true">→</span>
+                  <span class="wb-mode-chip wb-mode-to">{{ modes[1].value }}</span>
+                </div>
+                @if (e.subtitle) {
+                  <p class="wb-card-note">{{ e.subtitle }}</p>
+                }
+              } @else {
+                @if (metaInlineChips(e).length) {
+                  <div class="wb-card-tags wb-card-tags--meta">
+                    @for (chip of metaInlineChips(e); track chip.label + (chip.value || '')) {
+                      <span class="wb-tag" [class]="'wb-tag--' + (chip.tone || 'default')">
+                        <span class="wb-tag-k">{{ chip.label }}</span>
+                        @if (chip.value) {
+                          <span class="wb-tag-v">{{ chip.value }}</span>
+                        }
+                      </span>
+                    }
+                  </div>
+                }
+
+                @if (entryFilePaths(e).length) {
+                  <div class="wb-file-chips">
+                    @for (fp of entryFilePaths(e); track fp) {
+                      @let parts = fileParts(fp);
+                      <button type="button" class="wb-file-chip wb-file-chip--inline" (click)="openFile(fp, $event)" [title]="fp">
+                        <svg class="wb-file-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" aria-hidden="true">
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                          <polyline points="14 2 14 8 20 8"/>
+                        </svg>
+                        @if (parts.parent) {
+                          <span class="wb-file-chip-parent">{{ parts.parent }}/</span>
+                        }
+                        <span class="wb-file-chip-name">{{ parts.name }}</span>
+                      </button>
+                    }
+                  </div>
+                }
+
+                @for (chip of bodyBlocks(e); track chip.label + (chip.value || '')) {
+                  <div class="wb-preview" [class.wb-preview--code]="chip.label === 'Preview'">
+                    @if (chip.label && chip.label !== 'Preview') {
+                      <span class="wb-preview-label">{{ chip.label }}</span>
+                    }
+                    <pre class="wb-preview-body" [innerHTML]="chip.value | ansi"></pre>
+                  </div>
+                }
+
+                @if (entryErrorText(e); as err) {
+                  <pre class="wb-preview wb-preview--err" [innerHTML]="err | ansi"></pre>
+                } @else if (showSubtitle(e)) {
+                  <pre class="wb-preview wb-preview--sub" [innerHTML]="e.subtitle | ansi"></pre>
+                }
+              }
+
               @if (e.detail) {
                 <details class="wb-detail">
                   <summary class="wb-detail-summary">Full output</summary>
                   <pre class="wb-detail-pre" [innerHTML]="e.detail | ansi"></pre>
                 </details>
               }
-            </div>
-            <span class="wb-time">{{ e.ts | date:'HH:mm:ss' }}</span>
-          </li>
+            </li>
+          }
         }
       </ul>
     }

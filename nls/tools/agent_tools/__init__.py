@@ -18,6 +18,7 @@ Core tools that give the agent the power to do anything:
                          standalone Playwright window; same tool name)
     offer_download    -- Offer a workspace file for the user to download
     server_install    -- Install a pip package into the server runtime
+    project_install   -- Install a dependency into the project (.venv / npm)
     request_restart   -- Gracefully restart the server gateway
     scheduler         -- Create cron/interval/one-shot scheduled jobs
     poller            -- Create HTTP polling jobs (monitor APIs, drain queues)
@@ -172,6 +173,7 @@ from .scheduler import (
     create_scheduler_tool,
 )
 from .semantic_search import SemanticSearchTool, create_semantic_search_tool
+from .project_install import ProjectInstallTool, create_project_install_tool
 from .server_install import ServerInstallTool, create_server_install_tool
 from .vision import VisionTool, create_vision_tool
 from .web_fetch import WebFetchTool, create_web_fetch_tool
@@ -272,6 +274,7 @@ def create_coding_tools(
         ),
         create_offer_download_tool(cwd),
         create_server_install_tool(),
+        create_project_install_tool(cwd, shared_cwd=shared_cwd),
         create_request_restart_tool(data_dir=data_dir, agent_id=agent_id),
         create_discover_tools_tool(),
     ]
@@ -351,6 +354,7 @@ __all__ = [
     "VisionTool",
     "OfferDownloadTool",
     "ServerInstallTool",
+    "ProjectInstallTool",
     "RequestRestartTool",
     "SchedulerTool",
     "SchedulerManager",
@@ -376,6 +380,7 @@ __all__ = [
     "create_vision_tool",
     "create_offer_download_tool",
     "create_server_install_tool",
+    "create_project_install_tool",
     "create_request_restart_tool",
     "create_scheduler_tool",
     "create_poller_tool",

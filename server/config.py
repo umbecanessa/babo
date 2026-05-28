@@ -9,6 +9,7 @@ Environment variables:
     NLS_SERVE_PORT          Server port (default: 8443)
     NLS_SERVE_HOST          Server host (default: 0.0.0.0)
     NLS_HF_MODEL            Model id sent to the OpenAI-compatible inference API
+    NLS_DELEGATE_HF_MODEL   Optional model id for sub-agent / delegate loops
     NLS_GENESIS_VERSION     Default genesis template version
     NLS_DATA_DIR            Root data directory (default: ./data)
     NLS_SHARED_SECRET       Shared secret for backend-to-runtime auth
@@ -43,6 +44,10 @@ class ServerSettings(BaseSettings):
     hf_model: str = Field(
         default="gpt-4o-mini",
         description="Model id sent to the OpenAI-compatible inference API.",
+    )
+    delegate_hf_model: str = Field(
+        default="",
+        description="Optional model id for delegate/sub-agent loops (empty = use hf_model).",
     )
     inference_api_key: str = Field(
         default="",

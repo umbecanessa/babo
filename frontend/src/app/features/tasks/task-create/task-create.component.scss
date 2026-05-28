@@ -5,19 +5,19 @@
 .add-btn {
   width: 100%;
   padding: 8px 12px;
-  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border: 1px dashed var(--overlay-4);
   border-radius: 8px;
   background: transparent;
-  color: #8a8a9a;
+  color: var(--text-muted);
   font-size: 12px;
   cursor: pointer;
   transition: background 0.15s, color 0.15s, border-color 0.15s;
   text-align: left;
 
   &:hover {
-    background: rgba(255, 255, 255, 0.04);
-    color: #c0c0d0;
-    border-color: rgba(255, 255, 255, 0.2);
+    background: var(--overlay-2);
+    color: var(--text-secondary);
+    border-color: var(--overlay-5);
   }
 
   .plus {
@@ -28,8 +28,8 @@
 }
 
 .create-form {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--overlay-2);
+  border: 1px solid var(--overlay-4);
   border-radius: 10px;
   padding: 10px;
   display: flex;
@@ -46,32 +46,32 @@
 .input-title {
   width: 100%;
   padding: 8px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--overlay-3);
   border-radius: 6px;
-  background: rgba(0, 0, 0, 0.2);
-  color: #e0e0f0;
+  background: var(--surface-inset-strong);
+  color: var(--text-primary);
   font-size: 13px;
   outline: none;
   transition: border-color 0.15s;
 
   &:focus { border-color: rgba(45, 212, 191, 0.4); }
-  &::placeholder { color: #6b7280; }
+  &::placeholder { color: var(--text-muted); }
 }
 
 .input-desc {
   width: 100%;
   padding: 6px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--overlay-3);
   border-radius: 6px;
-  background: rgba(0, 0, 0, 0.15);
-  color: #c0c0d0;
+  background: var(--surface-inset);
+  color: var(--text-secondary);
   font-size: 12px;
   resize: vertical;
   outline: none;
   font-family: inherit;
 
   &:focus { border-color: rgba(45, 212, 191, 0.3); }
-  &::placeholder { color: #555; }
+  &::placeholder { color: var(--text-muted); }
 }
 
 .form-row {
@@ -83,15 +83,15 @@
 
 .select-field {
   padding: 4px 8px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--overlay-3);
   border-radius: 6px;
-  background: rgba(0, 0, 0, 0.2);
-  color: #c0c0d0;
+  background: var(--surface-inset-strong);
+  color: var(--text-secondary);
   font-size: 11px;
   outline: none;
   cursor: pointer;
 
-  option { background: #1a1a2e; }
+  option { background: var(--bg-secondary); }
 }
 
 .idle-toggle {
@@ -101,13 +101,13 @@
   cursor: pointer;
 
   input[type='checkbox'] {
-    accent-color: #2dd4bf;
+    accent-color: var(--accent-secondary);
     cursor: pointer;
   }
 
   .idle-label {
     font-size: 11px;
-    color: #a0a0b0;
+    color: var(--text-muted);
   }
 }
 
@@ -121,8 +121,8 @@
   padding: 5px 14px;
   border-radius: 6px;
   border: none;
-  background: #2dd4bf;
-  color: #0f172a;
+  background: var(--accent-secondary);
+  color: white;
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
@@ -135,11 +135,11 @@
 .btn-cancel {
   padding: 5px 12px;
   border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--overlay-4);
   background: transparent;
-  color: #8a8a9a;
+  color: var(--text-muted);
   font-size: 12px;
   cursor: pointer;
 
-  &:hover { background: rgba(255, 255, 255, 0.04); }
+  &:hover { background: var(--overlay-2); }
 }

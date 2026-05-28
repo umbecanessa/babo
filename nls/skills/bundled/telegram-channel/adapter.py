@@ -21,6 +21,7 @@ from typing import Any
 import httpx
 
 from nls.tools.agent_tools.base import AgentTool, ToolResult
+from nls.agentic.outbound_notify import FINAL_SUMMARY_SCHEMA_PROPERTY
 
 logger = logging.getLogger(__name__)
 
@@ -109,6 +110,7 @@ class TelegramSendTool:
                         "The reply will be shown as a thread reply."
                     ),
                 },
+                "final_summary": FINAL_SUMMARY_SCHEMA_PROPERTY,
             },
             "required": ["chat_id", "text"],
         }

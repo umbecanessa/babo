@@ -1,7 +1,8 @@
-import { Injectable, signal, computed } from '@angular/core';
+import { Injectable, signal, computed, inject } from '@angular/core';
 import { Subscription } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
 import { WebSocketService } from '../../core/services/websocket.service';
+import { RunViewService } from '../../core/services/run-view.service';
 import { Team, TodoItem, TodoList, PlanSummary, Timeline } from './project.models';
 
 @Injectable({ providedIn: 'root' })
@@ -18,8 +19,15 @@ export class ProjectService {
     this.teams().filter(t => !['completed', 'failed'].includes(t.status))
   );
 
+  /** Teams created by advance but never launched (orchestrator stalled). */
+  unlaunchedTeams = computed(() =>
+    this.teams().filter(t => t.status === 'created'),
+  );
+
   private agentId = '';
   private wsSub?: Subscription;
+
+  private readonly runView = inject(RunViewService);
 
   constructor(
     private api: ApiService,
@@ -28,6 +36,7 @@ export class ProjectService {
 
   init(agentId: string): void {
     this.agentId = agentId;
+    this.runView.bindAgent(agentId);
     this.loadData();
     this.subscribeWs();
   }
@@ -44,6 +53,7 @@ export class ProjectService {
       next: (res) => {
         const teams = res.teams || [];
         this.teams.set(teams);
+        this.runView.hydrateTeams(teams);
         this.autoLoadTimeline(teams);
       },
       error: () => this.teams.set([]),
@@ -80,7 +90,21 @@ export class ProjectService {
 
   loadTimeline(planId: string): void {
     this.api.getTimeline(this.agentId, planId).subscribe({
-      next: (tl) => this.timeline.set(tl),
+      next: (tl) => {
+        this.timeline.set(tl);
+        if (tl?.waves?.length) {
+          const steps = tl.waves.flatMap((w: { steps?: PlanSummary['steps'] }) => w.steps || []);
+          if (steps.length) {
+            this.runView.hydratePlan({
+              id: tl.plan_id,
+              title: tl.title || '',
+              status: tl.status || 'in_progress',
+              progress: '',
+              steps,
+            });
+          }
+        }
+      },
       error: () => this.timeline.set(null),
     });
   }
@@ -205,7 +229,7 @@ export class ProjectService {
 
   private subscribeWs(): void {
     this.ws.joinAgent(this.agentId);
-    this.wsSub = this.ws.onMessage().subscribe((msg: any) => {
+    this.wsSub = this.ws.onMessage(this.agentId).subscribe((msg: any) => {
       try {
         this.handleWsMessage(msg);
       } catch (e) {
@@ -216,6 +240,7 @@ export class ProjectService {
 
   private handleWsMessage(msg: any): void {
     if (!msg?.type) return;
+    this.runView.handleMessage(msg);
 
     switch (msg.type) {
       case 'team_created':
@@ -353,6 +378,7 @@ export class ProjectService {
       next: (res: any) => {
         if (res.plan) {
           this.plansByTodoId.update(plans => ({ ...plans, [todoId]: res.plan }));
+          this.runView.hydratePlan(res.plan, todoId);
         }
       },
     });

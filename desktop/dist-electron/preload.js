@@ -11,6 +11,15 @@
  */
 Object.defineProperty(exports, "__esModule", { value: true });
 const electron_1 = require("electron");
+function readBootConfig() {
+    try {
+        return electron_1.ipcRenderer.sendSync('config:boot');
+    }
+    catch {
+        return null;
+    }
+}
+const bootConfig = readBootConfig();
 // ---------------------------------------------------------------------------
 // Valid event channels (main -> renderer)
 // ---------------------------------------------------------------------------
@@ -19,6 +28,7 @@ const VALID_CHANNELS = [
     'runtime:log',
     'setup:progress',
     'setup:log',
+    'vision:prefetch-progress',
     'permission:requested',
     'mcp:tool-discovered',
     'notification:clicked',
@@ -28,6 +38,7 @@ const VALID_CHANNELS = [
     'update:downloaded',
     'update:installing',
     'update:error',
+    'config:changed',
 ];
 // ---------------------------------------------------------------------------
 // NLS Desktop API exposed to the renderer
@@ -35,6 +46,10 @@ const VALID_CHANNELS = [
 const nlsDesktopApi = {
     platform: process.platform,
     isDesktop: true,
+    /** Filled synchronously from %APPDATA%/babo-desktop/nls-config.json */
+    boot: bootConfig,
+    /** Re-read after setup saves nestjsUrl (boot snapshot can be stale until reload). */
+    getBoot: () => readBootConfig(),
     getVersion: () => electron_1.ipcRenderer.invoke('app:version'),
     // ─── Config ───────────────────────────────────────────────────
     config: {
@@ -49,6 +64,14 @@ const nlsDesktopApi = {
         start: () => electron_1.ipcRenderer.invoke('setup:start'),
         reset: () => electron_1.ipcRenderer.invoke('setup:reset'),
     },
+    capabilities: {
+        scanDevice: () => electron_1.ipcRenderer.invoke('capabilities:scan-device'),
+        probeLan: (host, gpuWorkerSecret) => electron_1.ipcRenderer.invoke('capabilities:probe-lan', host, gpuWorkerSecret),
+        recommend: (scan, gpuWorkerSecret) => electron_1.ipcRenderer.invoke('capabilities:recommend', scan, gpuWorkerSecret),
+        testInference: (url, apiKey) => electron_1.ipcRenderer.invoke('capabilities:test-inference', url, apiKey),
+        prefetchVision: () => electron_1.ipcRenderer.invoke('capabilities:prefetch-vision'),
+        applyProfile: (profile) => electron_1.ipcRenderer.invoke('capabilities:apply-profile', profile),
+    },
     // ─── Runtime (Agent runtime process) ──────────────────────────
     runtime: {
         getStatus: () => electron_1.ipcRenderer.invoke('runtime:status'),
@@ -56,13 +79,18 @@ const nlsDesktopApi = {
         stop: () => electron_1.ipcRenderer.invoke('runtime:stop'),
         restart: () => electron_1.ipcRenderer.invoke('runtime:restart'),
         getLogs: (lines) => electron_1.ipcRenderer.invoke('runtime:logs', lines),
+        hotReloadInference: (body) => electron_1.ipcRenderer.invoke('runtime:hot-reload-inference', body),
     },
     // ─── URLs (where Angular should connect) ──────────────────────
     getUrls: () => electron_1.ipcRenderer.invoke('urls:get'),
+    backend: {
+        ping: (nestjsUrl) => electron_1.ipcRenderer.invoke('backend:ping', nestjsUrl),
+    },
     // ─── File System (permission-gated) ───────────────────────────
     readFile: (filePath) => electron_1.ipcRenderer.invoke('fs:readFile', filePath),
     writeFile: (filePath, content) => electron_1.ipcRenderer.invoke('fs:writeFile', filePath, content),
     readDir: (dirPath) => electron_1.ipcRenderer.invoke('fs:readDir', dirPath),
+    stat: (filePath) => electron_1.ipcRenderer.invoke('fs:stat', filePath),
     showOpenDialog: (options) => electron_1.ipcRenderer.invoke('dialog:open', options),
     showSaveDialog: (options) => electron_1.ipcRenderer.invoke('dialog:save', options),
     // ─── Shell (permission-gated) ─────────────────────────────────
@@ -74,7 +102,16 @@ const nlsDesktopApi = {
     getSystemInfo: () => electron_1.ipcRenderer.invoke('system:info'),
     showNotification: (title, body) => electron_1.ipcRenderer.invoke('notification:show', title, body),
     // ─── Permissions ──────────────────────────────────────────────
+    permissions: {
+        getAll: () => electron_1.ipcRenderer.invoke('permissions:get'),
+        getProfiles: () => electron_1.ipcRenderer.invoke('permissions:get-profiles'),
+        applyProfile: (profileName) => electron_1.ipcRenderer.invoke('permissions:apply-profile', profileName),
+        reset: () => electron_1.ipcRenderer.invoke('permissions:reset'),
+        request: (permission, reason) => electron_1.ipcRenderer.invoke('permissions:request', permission, reason),
+    },
+    /** @deprecated use permissions.getAll */
     getPermissions: () => electron_1.ipcRenderer.invoke('permissions:get'),
+    /** @deprecated use permissions.request */
     requestPermission: (permission, reason) => electron_1.ipcRenderer.invoke('permissions:request', permission, reason),
     // ─── Updates ──────────────────────────────────────────────────
     update: {

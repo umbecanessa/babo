@@ -28,10 +28,21 @@ export class ActivityPanelComponent {
   @Input() teams: Team[] = [];
   @Input() items: TodoItem[] = [];
   @Input() plansByTodoId: Record<string, PlanSummary> = {};
+  /** Compact layout for Overview side column */
+  @Input() compact = false;
+  @Input() maxEntries = 0;
 
   expandedEntries = new Set<string>();
 
   get entries(): ActivityEntry[] {
+    let entries = this.buildEntries();
+    if (this.maxEntries > 0 && entries.length > this.maxEntries) {
+      entries = entries.slice(0, this.maxEntries);
+    }
+    return entries;
+  }
+
+  private buildEntries(): ActivityEntry[] {
     const entries: ActivityEntry[] = [];
 
     for (const team of this.teams) {
@@ -210,9 +221,9 @@ export class ActivityPanelComponent {
   categoryColor(cat: string): string {
     switch (cat) {
       case 'team': return '#60a5fa';
-      case 'member': return '#a78bfa';
-      case 'todo': return '#34d399';
-      case 'plan': return '#fbbf24';
+      case 'member': return 'var(--accent-primary)';
+      case 'todo': return 'var(--accent-success)';
+      case 'plan': return 'var(--accent-warn)';
       default: return '#6b7280';
     }
   }

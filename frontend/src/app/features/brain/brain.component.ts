@@ -8,8 +8,6 @@ import { WebSocketService } from '../../core/services/websocket.service';
 import { StatusBadgeComponent } from '../../shared/components/status-badge.component';
 import { LineChartComponent, LineChartSeries } from '../../shared/components/line-chart.component';
 import { TimeAgoPipe } from '../../shared/pipes/time-ago.pipe';
-import { OnboardingModalComponent } from '../../shared/onboarding/onboarding-modal.component';
-import { ONBOARDING_PAGES } from '../../shared/onboarding/onboarding-content';
 import type {
   Agent,
   AgentRuntimeStatus,
@@ -27,7 +25,7 @@ import type {
 @Component({
   selector: 'app-brain',
   standalone: true,
-  imports: [CommonModule, FormsModule, StatusBadgeComponent, LineChartComponent, TimeAgoPipe, OnboardingModalComponent],
+  imports: [CommonModule, FormsModule, StatusBadgeComponent, LineChartComponent, TimeAgoPipe],
   styleUrl: './brain.component.scss',
   template: `
     <div class="brain-container">
@@ -37,11 +35,6 @@ import type {
           <app-status-badge [status]="displayStatus()" [label]="displayStatus()"></app-status-badge>
         </div>
         <div class="header-actions">
-          <button class="info-btn" (click)="onboardingModal?.show()" title="About this page">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
-            </svg>
-          </button>
           <button
             class="action-btn sleep-btn"
             [disabled]="sleeping()"
@@ -1073,14 +1066,11 @@ import type {
         }
       </main>
 
-      <app-onboarding-modal #onboardingModal [config]="onboardingConfig" />
     </div>
   `,
 })
 export class BrainComponent implements OnInit, OnDestroy {
   Math = Math;
-  @ViewChild('onboardingModal') onboardingModal?: OnboardingModalComponent;
-  onboardingConfig = ONBOARDING_PAGES['brain'];
   private destroy$ = new Subject<void>();
   private agentId = '';
 
@@ -1209,17 +1199,17 @@ export class BrainComponent implements OnInit, OnDestroy {
     const s = this.status();
     const hormones = s?.hormones ?? {};
     const colors: Record<string, string> = {
-      dopamine: '#34d399',
-      serotonin: '#38bdf8',
-      norepinephrine: '#fbbf24',
-      cortisol: '#f87171',
-      oxytocin: '#a78bfa',
+      dopamine: 'var(--accent-success)',
+      serotonin: 'var(--accent-primary)',
+      norepinephrine: 'var(--accent-warn)',
+      cortisol: 'var(--accent-danger)',
+      oxytocin: 'var(--accent-primary)',
     };
     return Object.entries(hormones).map(([key, value]) => ({
       key,
       label: key.charAt(0).toUpperCase() + key.slice(1),
       value: typeof value === 'number' ? Math.min(1, Math.max(0, value)) : 0,
-      color: colors[key] ?? '#38bdf8',
+      color: colors[key] ?? 'var(--accent-primary)',
     }));
   });
 
@@ -1259,8 +1249,8 @@ export class BrainComponent implements OnInit, OnDestroy {
     const hh = this.hormoneHistory();
     if (!hh?.hormones) return [];
     const colors: Record<string, string> = {
-      dopamine: '#34d399', serotonin: '#38bdf8',
-      norepinephrine: '#fbbf24', cortisol: '#f87171', oxytocin: '#a78bfa',
+      dopamine: 'var(--accent-success)', serotonin: 'var(--accent-primary)',
+      norepinephrine: 'var(--accent-warn)', cortisol: 'var(--accent-danger)', oxytocin: 'var(--accent-primary)',
     };
     return Object.entries(hh.hormones)
       .filter(([, pts]) => pts.length > 1)
@@ -1275,7 +1265,7 @@ export class BrainComponent implements OnInit, OnDestroy {
     const nh = this.networkHistory();
     if (!nh?.network) return [];
     const colors: Record<string, string> = {
-      ecn: '#38bdf8', sn: '#fbbf24', dmn: '#a78bfa',
+      ecn: 'var(--accent-primary)', sn: 'var(--accent-warn)', dmn: 'var(--accent-primary)',
     };
     const labels: Record<string, string> = {
       ecn: 'ECN (Executive)', sn: 'SN (Salience)', dmn: 'DMN (Default)',
@@ -1509,11 +1499,11 @@ export class BrainComponent implements OnInit, OnDestroy {
 
   /** Map a valence value (-1..1) to a color from red through neutral to green */
   moodColor(valence: number): string {
-    if (valence >= 0.3) return '#34d399';
-    if (valence >= 0.1) return '#6ee7b7';
+    if (valence >= 0.3) return 'var(--accent-success)';
+    if (valence >= 0.1) return 'var(--accent-success)';
     if (valence >= -0.1) return '#94a3b8';
-    if (valence >= -0.3) return '#fbbf24';
-    return '#f87171';
+    if (valence >= -0.3) return 'var(--accent-warn)';
+    return 'var(--accent-danger)';
   }
 
   /** Rough valence estimate from a mood label */

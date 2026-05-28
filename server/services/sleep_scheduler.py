@@ -295,8 +295,14 @@ class SleepScheduler:
 
         if self._connection_manager is not None:
             try:
+                from server.routes.chat.helpers import _build_nls_metadata
+
                 status = runtime.get_status() if runtime is not None else {}
-                await self._connection_manager.broadcast_prioritized(agent_id, {
+                nls = _build_nls_metadata(
+                    status,
+                    signals_processed=combined.get("signals_processed", 0),
+                )
+                wake_payload = {
                     "type": "sleep_complete",
                     "agent_status": "alive",
                     "sleep_complete": True,
@@ -304,11 +310,37 @@ class SleepScheduler:
                     "training_time": round(
                         combined.get("consolidation_time", 0.0), 1,
                     ),
-                    "facts_in_memory": status.get("facts_in_memory", 0),
-                    "turn_count": status.get("turn_count", 0),
-                    "sleep_count": status.get("sleep_count", 0),
-                    "hormones": status.get("hormones", {}),
-                    "ans": status.get("ans", {}),
+                    "facts_in_memory": nls.get("facts_in_memory", 0),
+                    "turn_count": nls.get("turn_count", 0),
+                    "sleep_count": nls.get("sleep_count", 0),
+                    "hormones": nls.get("hormones", {}),
+                    "ans": nls.get("ans", {}),
+                    "heartbeat": nls.get("heartbeat", {}),
+                    "working_memory": nls.get("working_memory"),
+                    "narrative": nls.get("narrative"),
+                    "theory_of_mind": nls.get("theory_of_mind"),
+                    "predictive_processing": nls.get("predictive_processing"),
+                    "network_dynamics": nls.get("network_dynamics"),
+                    "nls": nls,
+                }
+                await self._connection_manager.broadcast_prioritized(
+                    agent_id, wake_payload,
+                )
+                # Chat UI listens for wake on type=status as well
+                await self._connection_manager.broadcast_prioritized(agent_id, {
+                    "type": "status",
+                    "agent_status": "alive",
+                    "sleep_complete": True,
+                    "content": (
+                        f"Agent is back up ({combined.get('signals_processed', 0)} "
+                        f"signals consolidated)."
+                    ),
+                    **{k: wake_payload[k] for k in (
+                        "facts_in_memory", "turn_count", "sleep_count",
+                        "hormones", "ans", "heartbeat", "working_memory",
+                        "narrative", "theory_of_mind", "predictive_processing",
+                        "network_dynamics",
+                    ) if wake_payload.get(k) is not None},
                 })
             except Exception as exc:
                 logger.warning(
@@ -349,10 +381,15 @@ class SleepScheduler:
     ) -> None:
         nestjs_url = os.environ.get("NESTJS_URL", "")
         shared_secret = (
-            os.environ.get("RUNTIME_SHARED_SECRET")
-            or os.environ.get("RUNTIME_SHARED_SECRET", "")
+            os.environ.get("RUNTIME_SHARED_SECRET", "").strip()
         )
         if not nestjs_url:
+            return
+        if not shared_secret:
+            logger.debug(
+                "Agent %s: soul auto-sync skipped (RUNTIME_SHARED_SECRET unset)",
+                agent_id,
+            )
             return
 
         try:
@@ -376,6 +413,7 @@ class SleepScheduler:
                     },
                     headers={
                         "Authorization": f"Bearer {shared_secret}",
+                        "X-Runtime-Secret": shared_secret,
                         "Content-Type": "application/json",
                     },
                 )

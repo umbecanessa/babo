@@ -49,6 +49,7 @@ class PlanStep:
     status: str = "pending"
     sub_plan_id: str | None = None
     output_files: list[str] = field(default_factory=list)
+    owned_paths: list[str] = field(default_factory=list)
     notes: str = ""
     depends_on: list[str] = field(default_factory=list)
     delegatable: bool = False
@@ -76,6 +77,7 @@ class PlanStep:
             status=d.get("status", "pending"),
             sub_plan_id=d.get("sub_plan_id"),
             output_files=d.get("output_files") or [],
+            owned_paths=d.get("owned_paths") or [],
             notes=d.get("notes") or "",
             depends_on=d.get("depends_on") or [],
             delegatable=d.get("delegatable", False),
@@ -137,6 +139,7 @@ class Plan:
 
     title: str = ""
     requirements: str = ""
+    tech_stack: dict[str, str] = field(default_factory=dict)
     acceptance_criteria: list[str] = field(default_factory=list)
 
     scaffolding: dict[str, dict[str, str]] = field(default_factory=dict)
@@ -233,6 +236,11 @@ class Plan:
         ]
         if self.project_dir:
             parts.append(f"Project directory: {self.project_dir}/")
+        if self.tech_stack:
+            parts.append("Tech stack (mandatory):")
+            for k, v in self.tech_stack.items():
+                if v:
+                    parts.append(f"  - {k}: {v}")
         if self.requirements:
             parts.append(f"Requirements: {self.requirements[:300]}")
         if self.acceptance_criteria:
@@ -278,6 +286,7 @@ class Plan:
             "task": {
                 "title": self.title,
                 "requirements": self.requirements,
+                "tech_stack": self.tech_stack,
                 "acceptance_criteria": self.acceptance_criteria,
             },
             "scaffolding": self.scaffolding,
@@ -301,6 +310,11 @@ class Plan:
             todo_id=d.get("todo_id"),
             title=task.get("title", ""),
             requirements=task.get("requirements", ""),
+            tech_stack={
+                str(k): str(v)
+                for k, v in (task.get("tech_stack") or {}).items()
+                if v
+            },
             acceptance_criteria=task.get("acceptance_criteria", []),
             scaffolding=d.get("scaffolding", {}),
             steps=[PlanStep.from_dict(s) for s in d.get("steps", [])],
@@ -484,13 +498,8 @@ class PlanStore:
 
     # -- Discovery -----------------------------------------------------
 
-    def find_active(self) -> Plan | None:
-        """Return the most recently updated non-done root plan.
-
-        Also considers plans with ``"failed"`` status if they were
-        updated within the last 60 minutes, guiding the agent to
-        fix the existing plan rather than creating a second one.
-        """
+    def find_active_roots(self) -> list[Plan]:
+        """All non-archived root plans that count as still active."""
         import time as _time
 
         candidates = [
@@ -504,9 +513,56 @@ class PlanStore:
                 )
             )
         ]
-        if not candidates:
+        return sorted(candidates, key=lambda p: p.updated_at, reverse=True)
+
+    def find_active(self) -> Plan | None:
+        """Return the most recently updated non-done root plan.
+
+        Also considers plans with ``"failed"`` status if they were
+        updated within the last 60 minutes, guiding the agent to
+        fix the existing plan rather than creating a second one.
+        """
+        roots = self.find_active_roots()
+        if not roots:
             return None
-        return max(candidates, key=lambda p: p.updated_at)
+        return roots[0]
+
+    def find_recoverable(
+        self,
+        team_manager: Any | None = None,
+        *,
+        reopen: bool = True,
+    ) -> Plan | None:
+        """Most recent root plan that needs EM recovery (blocked, partial, false done)."""
+        from nls.agentic.plan_work import find_recoverable_plan
+
+        return find_recoverable_plan(self, team_manager, reopen=reopen)
+
+    def resolve_work_plan(
+        self,
+        plan_id: str = "",
+        team_manager: Any | None = None,
+        *,
+        reopen: bool = True,
+    ) -> Plan | None:
+        """Active plan, else recoverable plan; optional explicit plan_id."""
+        from nls.agentic.plan_work import resolve_work_plan
+
+        return resolve_work_plan(
+            self, plan_id, team_manager, reopen=reopen,
+        )
+
+    def archive_sibling_active_roots(
+        self, keep_plan_id: str, reason: str = "",
+    ) -> list[str]:
+        """Archive every other active root plan (one project = one active plan)."""
+        archived: list[str] = []
+        for plan in self.find_active_roots():
+            if plan.id == keep_plan_id:
+                continue
+            self.archive(plan.id, reason or f"superseded by {keep_plan_id}")
+            archived.append(plan.id)
+        return archived
 
     def find_any_project_dir(self) -> str:
         """Return the project_dir from the most recent root plan that has one.
@@ -818,6 +874,7 @@ class PlanStore:
         self,
         title: str,
         requirements: str = "",
+        tech_stack: dict[str, str] | None = None,
         acceptance_criteria: list[str] | None = None,
         steps: list[dict[str, Any]] | None = None,
         scaffolding: dict[str, dict[str, str]] | None = None,
@@ -853,9 +910,14 @@ class PlanStore:
             if parent and parent.project_dir:
                 _project_dir = parent.project_dir
 
+        _stack: dict[str, str] = {}
+        if tech_stack:
+            _stack = {str(k): str(v) for k, v in tech_stack.items() if v}
+
         plan = Plan(
             title=title,
             requirements=requirements,
+            tech_stack=_stack,
             acceptance_criteria=acceptance_criteria or [],
             scaffolding=scaffolding or {},
             todo_id=todo_id,
@@ -884,6 +946,7 @@ class PlanStore:
                         label=_label,
                         description=s.get("description") or "",
                         output_files=s.get("output_files", []),
+                        owned_paths=s.get("owned_paths") or [],
                         depends_on=s.get("depends_on") or [],
                         delegatable=bool(s.get("delegatable", False)),
                     ))
@@ -902,50 +965,62 @@ class PlanStore:
                     len(plan.steps),
                 )
 
-        # Safety net: ensure delegatable steps have sequential dependencies.
-        # The LLM frequently forgets to wire depends_on, causing all steps
-        # to land in wave 0 and launch simultaneously.
-        if len(plan.steps) >= 2:
-            first = plan.steps[0]
-            delegatable_steps = [s for s in plan.steps if s.delegatable]
-            has_any_deps = any(s.depends_on for s in plan.steps[1:])
-            if has_any_deps:
-                # Some steps have deps — only fill orphans with dep on first
-                for s in plan.steps[1:]:
-                    if s.delegatable and not s.depends_on:
-                        s.depends_on = [first.label]
-                        logger.info(
-                            "PlanStore: auto-injected depends_on=[%s] "
-                            "for orphan step '%s'",
-                            first.label, s.label,
-                        )
-            elif len(delegatable_steps) >= 2 and first.delegatable:
-                # ZERO steps have depends_on — build a heuristic chain.
-                _chain = _build_heuristic_dependency_chain(plan.steps)
-                if _chain:
-                    _patched = 0
-                    for s in plan.steps:
-                        if s.id in _chain and _chain[s.id]:
-                            s.depends_on = _chain[s.id]
-                            _patched += 1
-                    logger.info(
-                        "PlanStore: heuristic chain patched %d steps "
-                        "(no deps existed in plan)",
-                        _patched,
-                    )
-                else:
-                    # Fallback: everything depends on step 1
-                    for s in delegatable_steps[1:]:
-                        if not s.depends_on:
-                            s.depends_on = [first.label]
-                            logger.info(
-                                "PlanStore: flat fallback depends_on=[%s] "
-                                "for step '%s'",
-                                first.label, s.label,
-                            )
+        self.ensure_dependency_safety_net(plan)
+
+        from nls.agentic.wave_coordination import normalize_plan_step_paths
+        normalize_plan_step_paths(plan)
 
         self.save(plan)
         return plan
+
+    def ensure_dependency_safety_net(self, plan: Plan) -> int:
+        """Fill missing depends_on when the graph is empty or has orphans.
+
+        Safe to call after LLM dependency inference — re-applies heuristics
+        if inference wiped or flattened the graph.
+        """
+        patched = 0
+        if len(plan.steps) < 2:
+            return patched
+
+        first = plan.steps[0]
+        delegatable_steps = [s for s in plan.steps if s.delegatable]
+        has_any_deps = any(s.depends_on for s in plan.steps[1:])
+        if has_any_deps:
+            for s in plan.steps[1:]:
+                if s.delegatable and not s.depends_on:
+                    s.depends_on = [first.label]
+                    patched += 1
+                    logger.info(
+                        "PlanStore: auto-injected depends_on=[%s] "
+                        "for orphan step '%s'",
+                        first.label, s.label,
+                    )
+        elif len(delegatable_steps) >= 2 and first.delegatable:
+            _chain = _build_heuristic_dependency_chain(plan.steps)
+            if _chain:
+                for s in plan.steps:
+                    if s.id in _chain and _chain[s.id]:
+                        if s.depends_on != _chain[s.id]:
+                            s.depends_on = _chain[s.id]
+                            patched += 1
+                if patched:
+                    logger.info(
+                        "PlanStore: heuristic chain patched %d steps "
+                        "(no deps existed in plan)",
+                        patched,
+                    )
+            else:
+                for s in delegatable_steps[1:]:
+                    if not s.depends_on:
+                        s.depends_on = [first.label]
+                        patched += 1
+                        logger.info(
+                            "PlanStore: flat fallback depends_on=[%s] "
+                            "for step '%s'",
+                            first.label, s.label,
+                        )
+        return patched
 
     def create_sub_plan(
         self,
@@ -953,6 +1028,7 @@ class PlanStore:
         parent_step_id: str,
         title: str,
         requirements: str = "",
+        tech_stack: dict[str, str] | None = None,
         acceptance_criteria: list[str] | None = None,
         steps: list[dict[str, Any]] | None = None,
         scaffolding: dict[str, dict[str, str]] | None = None,
@@ -966,7 +1042,12 @@ class PlanStore:
 
         sub = self.create_plan(
             title=title,
-            requirements=requirements,
+            requirements=requirements or parent.requirements,
+            tech_stack=(
+                {str(k): str(v) for k, v in tech_stack.items() if v}
+                if tech_stack
+                else dict(parent.tech_stack) if parent.tech_stack else None
+            ),
             acceptance_criteria=acceptance_criteria,
             steps=steps,
             scaffolding=scaffolding,
@@ -984,8 +1065,167 @@ class PlanStore:
 
 
 def get_dependency_graph(plan: Plan) -> dict[str, list[str]]:
-    """Return adjacency list: step_id → [ids it depends on]."""
-    return {step.id: list(step.depends_on) for step in plan.steps}
+    """Return adjacency list: step_id → resolved dependency step IDs."""
+    step_map = {s.id: s for s in plan.steps}
+    label_map = {s.label.lower().strip(): s.id for s in plan.steps}
+    graph: dict[str, list[str]] = {}
+    for step in plan.steps:
+        resolved: list[str] = []
+        for dep in step.depends_on:
+            dep_id = _resolve_dep_id(dep, step_map, label_map)
+            if dep_id in step_map and dep_id != step.id:
+                resolved.append(dep_id)
+        graph[step.id] = resolved
+    return graph
+
+
+def detect_dependency_cycles(plan: Plan) -> list[list[str]]:
+    """Return dependency cycles as lists of step IDs (may be empty)."""
+    graph = get_dependency_graph(plan)
+    cycles: list[list[str]] = []
+    visited: set[str] = set()
+    stack: set[str] = set()
+    path: list[str] = []
+
+    def dfs(node: str) -> None:
+        if node in stack:
+            if node in path:
+                start = path.index(node)
+                cycle = path[start:] + [node]
+                if len(cycle) > 2:
+                    cycles.append(cycle)
+            return
+        if node in visited:
+            return
+        visited.add(node)
+        stack.add(node)
+        path.append(node)
+        for dep in graph.get(node, []):
+            dfs(dep)
+        path.pop()
+        stack.discard(node)
+
+    for step_id in graph:
+        dfs(step_id)
+
+    # Deduplicate rotated cycles
+    unique: list[list[str]] = []
+    seen: set[tuple[str, ...]] = set()
+    for cycle in cycles:
+        core = tuple(cycle[:-1]) if cycle and cycle[0] == cycle[-1] else tuple(cycle)
+        if len(core) < 2:
+            continue
+        key = tuple(sorted(core))
+        if key not in seen:
+            seen.add(key)
+            unique.append(list(core))
+    return unique
+
+
+_SERVICE_MODULE_KW = (
+    "service", "transcription", "assemblyai", "anthropic",
+    "analysis", "email", "nodemailer",
+)
+_API_LAYER_KW = (
+    "api", "endpoint", "rest api", "express", "fastapi",
+    "backend api", "routes",
+)
+
+
+def break_service_before_api_edges(plan: Plan) -> int:
+    """Drop edges where an internal service module depends on the API layer."""
+    step_map = {s.id: s for s in plan.steps}
+    label_map = {s.label.lower().strip(): s.id for s in plan.steps}
+    patched = 0
+
+    def _step_for_ref(ref: str) -> PlanStep | None:
+        sid = _resolve_dep_id(ref, step_map, label_map)
+        return step_map.get(sid)
+
+    for step in plan.steps:
+        ll = step.label.lower()
+        if any(k in ll for k in _API_LAYER_KW):
+            continue
+        if not any(k in ll for k in _SERVICE_MODULE_KW):
+            continue
+        kept: list[str] = []
+        for dep in step.depends_on:
+            dep_step = _step_for_ref(dep)
+            if dep_step is None:
+                kept.append(dep)
+                continue
+            dep_ll = dep_step.label.lower()
+            if any(k in dep_ll for k in _API_LAYER_KW):
+                patched += 1
+                continue
+            kept.append(dep)
+        if kept != step.depends_on:
+            step.depends_on = kept
+    return patched
+
+
+def format_dependency_cycle_hints(plan: Plan) -> str:
+    """Human-readable fix guidance when the graph has cycles."""
+    cycles = detect_dependency_cycles(plan)
+    if not cycles:
+        return ""
+
+    lines = ["Dependency cycles detected:"]
+    step_map = {s.id: s for s in plan.steps}
+    for cycle in cycles[:3]:
+        labels = [
+            f"{sid} ({step_map[sid].label})" if sid in step_map else sid
+            for sid in cycle
+        ]
+        lines.append(f"  • {' → '.join(labels)}")
+    lines.append(
+        "Fix: plan(action='fix_dependencies') or plan(action='update', "
+        "step_id='...', depends_on=[...]). Internal service modules "
+        "(AssemblyAI, Anthropic, email) should depend on schema/DB only — "
+        "NOT on the HTTP API layer. The API step should depend on services."
+    )
+    lines.append(
+        "Do NOT plan(delete) while completed steps exist — that discards "
+        "progress. Use plan(continue_work) only if you truly need a new plan."
+    )
+    return "\n".join(lines)
+
+
+def format_unmet_dependency_hints(
+    plan: Plan,
+    unmet: list[tuple[PlanStep, PlanStep]],
+) -> str:
+    """Concrete hints after team(launch) blocked on prerequisites."""
+    if not unmet:
+        return ""
+
+    lines = [
+        "Suggested fixes:",
+    ]
+    for step, dep in unmet[:6]:
+        dep_ll = dep.label.lower()
+        step_ll = step.label.lower()
+        if any(k in step_ll for k in _SERVICE_MODULE_KW) and any(
+            k in dep_ll for k in _API_LAYER_KW
+        ):
+            lines.append(
+                f"  • Remove \"{dep.label}\" from {step.id} depends_on — "
+                f"service modules are imported by the API, not the reverse."
+            )
+        else:
+            lines.append(
+                f"  • Mark {dep.id} done (or accept_partial) before launching "
+                f"\"{step.label}\", or remove that dependency if work already "
+                f"exists on disk."
+            )
+    cycle_hint = format_dependency_cycle_hints(plan)
+    if cycle_hint:
+        lines.append(cycle_hint)
+    lines.append(
+        "Or run plan(action='fix_dependencies', plan_id='"
+        f"{plan.id}') to auto-repair the graph."
+    )
+    return "\n".join(lines)
 
 
 def _resolve_dep_id(dep: str, step_map: dict[str, Any], label_map: dict[str, str]) -> str:
@@ -1006,6 +1246,49 @@ def _resolve_dep_id(dep: str, step_map: dict[str, Any], label_map: dict[str, str
     return dep
 
 
+def _add_implicit_dep(step: PlanStep, dep_id: str, step_map: dict[str, PlanStep]) -> None:
+    """Append a dependency by step id if both steps exist and not already listed."""
+    if dep_id not in step_map or dep_id == step.id:
+        return
+    if dep_id in step.depends_on:
+        return
+    dep_label = step_map[dep_id].label
+    if dep_label in step.depends_on:
+        return
+    step.depends_on = list(step.depends_on) + [dep_label]
+
+
+def _infer_implicit_dependencies(plan: Plan) -> None:
+    """Add common build-order edges missing from LLM-authored depends_on lists."""
+    step_map = {s.id: s for s in plan.steps}
+
+    def _find(*needles: str) -> PlanStep | None:
+        for s in plan.steps:
+            lbl = s.label.lower()
+            if all(n in lbl for n in needles):
+                return s
+        return None
+
+    models = _find("backend", "data model") or _find("data model", "database")
+    api = _find("backend", "api") or _find("api endpoint")
+    fe_int = _find("integrate", "frontend") or _find("frontend", "backend api")
+    transcription = _find("assembly", "transcription") or _find("transcription", "service")
+    analysis = _find("anthropic", "analysis") or _find("analysis", "service")
+
+    if models and api:
+        _add_implicit_dep(api, models.id, step_map)
+    if api and fe_int:
+        _add_implicit_dep(fe_int, api.id, step_map)
+        if models:
+            _add_implicit_dep(fe_int, models.id, step_map)
+    if models and transcription:
+        _add_implicit_dep(transcription, models.id, step_map)
+    if models and analysis:
+        _add_implicit_dep(analysis, models.id, step_map)
+    if api and analysis:
+        _add_implicit_dep(analysis, api.id, step_map)
+
+
 def get_delegation_waves(plan: Plan) -> list[list[PlanStep]]:
     """Pure topological sort of steps by depends_on into execution waves.
 
@@ -1018,6 +1301,7 @@ def get_delegation_waves(plan: Plan) -> list[list[PlanStep]]:
     numbering stable so ``_try_create_next_wave`` can match the wave
     index used when the team was originally created.
     """
+    _infer_implicit_dependencies(plan)
     step_map = {s.id: s for s in plan.steps}
     label_map = {s.label.lower().strip(): s.id for s in plan.steps}
     placed_ids: set[str] = set()

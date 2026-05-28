@@ -14,7 +14,7 @@
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  background: #0a0a0e;
+  background: transparent;
 }
 
 .browser-panel-toolbar {
@@ -22,14 +22,14 @@
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  background: rgba(14, 14, 18, 0.8);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--glass-bg);
+  border-bottom: 1px solid var(--overlay-3);
   flex-shrink: 0;
 }
 
 .browser-panel-icon {
   flex-shrink: 0;
-  color: rgba(59, 130, 246, 0.6);
+  color: var(--accent-primary);
   display: flex;
   align-items: center;
 }
@@ -41,14 +41,14 @@
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  background: rgba(0, 0, 0, 0.3);
+  background: var(--surface-inset);
   border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--glass-border);
 }
 
 .browser-panel-spinner {
   flex-shrink: 0;
-  color: rgba(59, 130, 246, 0.6);
+  color: var(--accent-primary);
   animation: spin 1.2s linear infinite;
   display: flex;
   align-items: center;
@@ -56,14 +56,14 @@
 
 .browser-panel-title {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.6);
+  color: var(--text-secondary);
   white-space: nowrap;
   flex-shrink: 0;
 }
 
 .browser-panel-url {
   font-size: 11px;
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--text-muted);
   font-family: 'SF Mono', 'Fira Code', monospace;
   white-space: nowrap;
   overflow: hidden;
@@ -73,7 +73,7 @@
 .browser-panel-close {
   background: none;
   border: none;
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--text-muted);
   cursor: pointer;
   padding: 4px;
   border-radius: 4px;
@@ -83,8 +83,8 @@
   transition: color 0.15s, background 0.15s;
 
   &:hover {
-    color: rgba(255, 255, 255, 0.9);
-    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-primary);
+    background: var(--overlay-3);
   }
 }
 
@@ -106,8 +106,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(10, 10, 14, 0.9);
-  color: #f87171;
+  background: var(--glass-bg);
+  color: var(--accent-danger);
   font-size: 13px;
   padding: 20px;
   text-align: center;

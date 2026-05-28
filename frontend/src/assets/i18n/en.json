@@ -1,36 +1,6 @@
 {
-  "onboarding": {
-    "dashboard": {
-      "title": "Welcome to Babo",
-      "p1": "You're about to create something that has never existed before — an AI that <b>actually remembers you</b>. Not through a prompt file. Through its own neural weights, shaped by every conversation you'll have together.",
-      "p2": "Babo agents have <b>personality</b>, <b>values</b>, <b>mood</b>, and <b>curiosity</b>. They sleep to consolidate what they learned. They dream. They browse the web on their own when something sparks their interest. This isn't a chatbot — it's a mind that grows.",
-      "p3": "Hit <b>Create Agent</b> to bring your first one to life. Give it a direction, talk to it, challenge it — and watch it become something uniquely yours."
-    },
-    "create": {
-      "title": "Creating a Mind",
-      "p1": "Your new agent starts with base knowledge and a set of values, but no personal memory. Everything it learns from you will become part of its <b>neural identity</b> — permanently encoded, not pasted into a prompt.",
-      "p2": "Choose an education path that fits your needs. A <b>Scientifico</b> mind thinks analytically; a <b>Classico</b> mind thinks deeply about meaning. Or start from scratch with <b>Tabula Rasa</b>."
-    },
-    "chat": {
-      "title": "Talking to a Living Agent",
-      "p1": "Your agent has its own mood, curiosity, and memory. It might search the web on its own, tell you what it learned while you were away, or ask you questions. This is a conversation with something that <b>evolves</b>.",
-      "p2": "For complex tasks — building, debugging, researching — the agent enters <b>agentic mode</b>: planning steps, using tools, and iterating autonomously. You can see its progress in real time and guide it mid-task.",
-      "p3": "The agent <b>sleeps</b> to consolidate what it learned. If you see a sleep indicator, it will be back shortly with updated knowledge."
-    },
-    "brain": {
-      "title": "Inside the Agent's Mind",
-      "p1": "This dashboard lets you observe your agent's inner life: <b>hormones</b> that shape its mood, <b>signals</b> that track what it's learning, and a <b>circadian schedule</b> that governs when it sleeps.",
-      "p2": "You don't need to manage any of this — it runs autonomously. It's here so you can understand <b>why</b> your agent behaves the way it does."
-    },
-    "tools": {
-      "title": "Actions, Not Just Words",
-      "p1": "Your agent can read files, write code, run commands, and browse the web. These <b>core tools</b> are always available.",
-      "p2": "What's unique: your agent can create its own <b>skills</b> — Python extensions that add new capabilities. When it does, they'll appear here for your review. Nothing runs without your approval."
-    }
-  },
-  "onboarding_btn": {
-    "got_it": "Got it",
-    "lets_go": "Let's go"
+  "common": {
+    "got_it": "Got it"
   },
   "info": {
     "neural_state": {

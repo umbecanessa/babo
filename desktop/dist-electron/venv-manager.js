@@ -112,17 +112,18 @@ class VenvManager {
             try {
                 await this.runInVenv(['-m', 'pip', 'install', '--verbose', '-r', this.requirementsPath], (line) => {
                     if (line.includes('Collecting') || line.includes('Installing')) {
-                        const progress = Math.min(80, this._status.progress + 1);
-                        this.updateStatus('installing', line.trim(), progress);
+                        const summary = this.summarizeInstallLine(line);
+                        if (summary) {
+                            const progress = Math.min(80, this._status.progress + 1);
+                            this.updateStatus('installing', summary, progress);
+                        }
                     }
                 });
                 this.saveRequirementsHash(currentHash);
                 // New pip packages may require post-install setup (e.g. playwright browsers)
                 this.updateStatus('installing', 'Installing browser engine...', 82);
                 await this.installBrowserEngine();
-                // Pre-download Visual Cortex model if torch was newly added
-                this.updateStatus('installing', 'Downloading visual model (Moondream)...', 88);
-                await this.prefetchVisualModel();
+                // Visual model prefetch only when user enables ambient vision (see prefetchVisionModel)
             }
             catch (err) {
                 this.broadcastLog('stderr', `Dependency sync failed: ${err.message}`);
@@ -147,7 +148,31 @@ class VenvManager {
     /**
      * Run the full setup: detect Python, create venv, install deps.
      */
-    async setup() {
+    /**
+     * Pre-download Moondream/SmolVLM weights (call when user enables ambient vision).
+     */
+    async prefetchVisionModel(options) {
+        if (!this.isReady()) {
+            throw new Error('Python environment not ready');
+        }
+        const quiet = options?.quiet ?? false;
+        if (!quiet) {
+            this.updateStatus('installing', 'Downloading visual model (Moondream)...', 85);
+        }
+        else {
+            this.broadcastVisionPrefetch('Downloading screen awareness model…', 0);
+        }
+        await this.prefetchVisualModel(quiet);
+        if (!quiet) {
+            await this.ensureTorchCuda();
+            this.updateStatus('ready', 'Visual model ready', 100);
+        }
+        else {
+            this.broadcastVisionPrefetch('Screen awareness model ready', 100);
+        }
+    }
+    async setup(options) {
+        const prefetchVision = options?.prefetchVision ?? false;
         try {
             this.logStream = fs.createWriteStream(this.setupLogPath, { flags: 'a' });
             this.logStream.write(`\n${'='.repeat(60)}\n` +
@@ -179,10 +204,11 @@ class VenvManager {
             // Step 5: Install browser engine (Chromium + stealth extensions)
             this.updateStatus('installing', 'Installing browser engine (Chromium)...', 82);
             await this.installBrowserEngine();
-            // Step 6: Pre-download Visual Cortex model (Moondream VLM)
-            this.updateStatus('installing', 'Downloading visual model (Moondream)...', 85);
-            await this.prefetchVisualModel();
-            // Step 7: Upgrade to CUDA-enabled PyTorch if an NVIDIA GPU is present
+            if (prefetchVision) {
+                this.updateStatus('installing', 'Downloading visual model (Moondream)...', 85);
+                await this.prefetchVisualModel();
+            }
+            // Step 6/7: Upgrade to CUDA-enabled PyTorch if an NVIDIA GPU is present
             this.updateStatus('installing', 'Checking GPU for CUDA PyTorch...', 88);
             await this.ensureTorchCuda();
             // Step 8: Ensure standalone Node.js (for WhatsApp/Telegram bridges)
@@ -521,36 +547,38 @@ class VenvManager {
             throw new Error(`Requirements file not found: ${this.requirementsPath}`);
         }
         await this.runInVenv(['-m', 'pip', 'install', '--verbose', '-r', this.requirementsPath], (line) => {
-            if (line.includes('Collecting') || line.includes('Installing') || line.includes('Successfully installed')) {
-                const progress = Math.min(84, this._status.progress + 1);
-                this.updateStatus('installing', line.trim(), progress);
+            if (line.includes('Collecting') ||
+                line.includes('Installing') ||
+                line.includes('Successfully installed')) {
+                const summary = this.summarizeInstallLine(line);
+                if (summary) {
+                    const progress = Math.min(84, this._status.progress + 1);
+                    this.updateStatus('installing', summary, progress);
+                }
             }
         });
     }
     async installBrowserEngine() {
-        // browser-use wraps Playwright; its install command sets up Chromium
-        // plus default extensions (uBlock Origin, ClearURLs, etc.).
-        // Falls back to plain Playwright install if browser-use CLI isn't available.
+        // Prefer Playwright CLI (browser_use has no __main__ on some versions).
+        const onLine = (line) => {
+            const summary = this.summarizeInstallLine(line);
+            if (summary) {
+                this.updateStatus('installing', summary, 84);
+            }
+        };
         try {
-            await this.runInVenv(['-m', 'browser_use', 'install'], (line) => {
-                if (line.trim()) {
-                    this.updateStatus('installing', line.trim(), 84);
-                }
-            });
+            await this.runInVenv(['-m', 'playwright', 'install', 'chromium'], onLine);
+            return;
         }
         catch {
-            // Fallback: install Chromium via Playwright directly
-            try {
-                await this.runInVenv(['-m', 'playwright', 'install', 'chromium'], (line) => {
-                    if (line.trim()) {
-                        this.updateStatus('installing', line.trim(), 84);
-                    }
-                });
-            }
-            catch (err) {
-                console.warn('Browser engine install failed:', err.message);
-                this.broadcastLog('stderr', `Browser engine install failed: ${err.message}`);
-            }
+            this.broadcastLog('stdout', 'Playwright install failed, trying browser-use…');
+        }
+        try {
+            await this.runInVenv(['-m', 'browser_use', 'install'], onLine);
+        }
+        catch (err) {
+            console.warn('Browser engine install failed:', err.message);
+            this.broadcastLog('stderr', `Browser engine install failed: ${err.message}`);
         }
     }
     /**
@@ -599,7 +627,10 @@ class VenvManager {
                 '--index-url', 'https://download.pytorch.org/whl/cu128',
             ], (line) => {
                 if (line.includes('Downloading') || line.includes('Installing') || line.includes('Successfully')) {
-                    this.updateStatus('installing', line.trim().slice(0, 80), 89);
+                    const summary = this.summarizeInstallLine(line);
+                    if (summary) {
+                        this.updateStatus('installing', summary, 89);
+                    }
                 }
             });
             this.broadcastLog('stdout', 'CUDA PyTorch installed successfully');
@@ -619,7 +650,7 @@ class VenvManager {
             this.broadcastLog('stderr', `CUDA PyTorch install failed (falling back to CPU torch): ${err.message}`);
         }
     }
-    async prefetchVisualModel() {
+    async prefetchVisualModel(quiet = false) {
         // Pre-download the Moondream VLM to the HuggingFace cache so the
         // Visual Cortex can load from disk at runtime without a network wait.
         // Non-fatal: if this fails the model will be downloaded on first use.
@@ -627,10 +658,21 @@ class VenvManager {
             await this.runInVenv(['-m', 'nls.scripts.prefetch_moondream'], (line) => {
                 if (line.startsWith('PREFETCH:downloading:')) {
                     const model = line.replace('PREFETCH:downloading:', '');
-                    this.updateStatus('installing', `Downloading visual model: ${model}...`, 86);
+                    const msg = `Downloading ${model}…`;
+                    if (quiet) {
+                        this.broadcastVisionPrefetch(msg, 40);
+                    }
+                    else {
+                        this.updateStatus('installing', `Downloading visual model: ${model}...`, 86);
+                    }
                 }
                 else if (line.startsWith('PREFETCH:done')) {
-                    this.updateStatus('installing', 'Visual model cached', 91);
+                    if (quiet) {
+                        this.broadcastVisionPrefetch('Screen awareness model cached', 100);
+                    }
+                    else {
+                        this.updateStatus('installing', 'Visual model cached', 91);
+                    }
                 }
                 else if (line.startsWith('PREFETCH:error:')) {
                     this.broadcastLog('stderr', `Visual model prefetch: ${line.replace('PREFETCH:error:', '')}`);
@@ -643,6 +685,9 @@ class VenvManager {
         catch (err) {
             console.warn('Visual model prefetch failed (non-fatal):', err.message);
             this.broadcastLog('stderr', `Visual model prefetch failed: ${err.message}`);
+            if (quiet) {
+                this.broadcastVisionPrefetch('Will download on first use', 100);
+            }
         }
     }
     // ─── Standalone Node.js (auto-download for bridges) ─────────────
@@ -756,8 +801,10 @@ class VenvManager {
                 fs.mkdirSync(dir, { recursive: true });
             }
         }
-        // Copy genesis templates from NLS source if not present
-        const srcGenesis = path.join(this.nlsRoot, 'data', 'genesis');
+        // Bundled genesis templates (extraResources) — server also seeds on startup.
+        const srcGenesis = electron_1.app.isPackaged
+            ? path.join(process.resourcesPath, 'genesis_templates')
+            : path.join(this.nlsRoot, 'genesis_templates');
         const destGenesis = path.join(dataDir, 'genesis');
         if (fs.existsSync(srcGenesis)) {
             this.copyDirSync(srcGenesis, destGenesis);
@@ -880,6 +927,33 @@ class VenvManager {
             });
         });
     }
+    /** Short UI-safe status from verbose pip/browser install log lines. */
+    summarizeInstallLine(line) {
+        const t = line.trim();
+        if (!t)
+            return null;
+        const collecting = t.match(/^Collecting\s+(\S+)/);
+        if (collecting) {
+            const pkg = collecting[1].split(/[[\s]/)[0];
+            return `Downloading ${pkg}…`;
+        }
+        if (t.startsWith('Installing collected packages')) {
+            return 'Installing Python packages…';
+        }
+        const installed = t.match(/^Successfully installed\s+(.+)/);
+        if (installed) {
+            const count = installed[1].split(/\s+/).filter(Boolean).length;
+            return count > 1 ? `Installed ${count} packages` : 'Package installed';
+        }
+        if (t.includes('Downloading') && t.includes('MB')) {
+            const pkg = t.match(/Downloading\s+(\S+)/)?.[1]?.split(/[[\s]/)[0];
+            return pkg ? `Downloading ${pkg}…` : 'Downloading packages…';
+        }
+        if (t.length > 96) {
+            return `${t.slice(0, 93)}…`;
+        }
+        return t;
+    }
     updateStatus(stage, message, progress, error) {
         this._status.stage = stage;
         this._status.message = message;
@@ -892,6 +966,12 @@ class VenvManager {
     broadcastStatus() {
         for (const win of electron_1.BrowserWindow.getAllWindows()) {
             win.webContents.send('setup:progress', this.status);
+        }
+    }
+    broadcastVisionPrefetch(message, progress) {
+        const payload = { message, progress };
+        for (const win of electron_1.BrowserWindow.getAllWindows()) {
+            win.webContents.send('vision:prefetch-progress', payload);
         }
     }
     broadcastLog(level, message) {

@@ -827,6 +827,9 @@ class VisualCortex:
         self._remote_fail_count = 0
         self._remote_backoff_until = 0.0
 
+        self._vlm_pref: str | None = None
+        self._vlm_shared = False
+
     # ------------------------------------------------------------------
     # Lifecycle
     # ------------------------------------------------------------------
@@ -845,7 +848,7 @@ class VisualCortex:
             logger.info("Visual cortex is disabled in config — not starting")
             return
 
-        from .visual_model import RemoteVLMBackend, SubprocessVLMBackend
+        from .visual_model import RemoteVLMBackend, SharedVLMRegistry
 
         loop = asyncio.get_running_loop()
 
@@ -856,16 +859,19 @@ class VisualCortex:
             )
             logger.info("Visual cortex: remote VLM wired (%s)", self._gpu_worker_url)
 
-        # 2. Load the local VLM inside a subprocess.
-        #    Keeps PyTorch/MPS/CUDA out of the main server process:
-        #    - macOS: prevents fork-safety rogue zombie processes
-        #    - All platforms: crash isolation (VLM OOM ≠ server crash)
+        # 2. Acquire the process-wide shared local VLM subprocess.
+        #    One worker serves all agents; each VisualCortex only owns
+        #    its own capture loop + buffer.
         preference = self.config.model_preference  # "auto", "moondream", etc.
-        self._vlm = SubprocessVLMBackend(preference)
-        logger.info("Visual cortex: loading VLM via subprocess...")
+        self._vlm_pref = preference
+        self._vlm_shared = False
+        logger.info("Visual cortex: acquiring shared VLM worker...")
 
         try:
-            await loop.run_in_executor(None, self._vlm.warmup)
+            self._vlm = SharedVLMRegistry.acquire(preference)
+            self._vlm_shared = True
+            if not self._vlm.is_loaded:
+                await loop.run_in_executor(None, self._vlm.warmup)
             logger.info(
                 "Visual cortex: VLM ready (%s, %s)",
                 type(self._vlm).__name__,
@@ -873,25 +879,37 @@ class VisualCortex:
             )
         except Exception:
             logger.error("Visual cortex: VLM load/warmup failed", exc_info=True)
+            if self._vlm_shared:
+                SharedVLMRegistry.release(preference)
+                self._vlm_shared = False
             self._vlm = None
+            self._vlm_pref = None
+            return
 
         self._running = True
         self._task = asyncio.create_task(self._loop())
         logger.info("Visual cortex started (fps=%.1f)", self.config.fps)
 
     async def stop(self) -> None:
-        """Stop the capture loop and unload the model."""
+        """Stop the capture loop and release the shared VLM worker ref."""
         self._running = False
         if self._task:
             self._task.cancel()
             try:
-                await self._task
-            except asyncio.CancelledError:
+                # Local describe can still run in the default executor after
+                # cancel; wait out one frame timeout before releasing VLM.
+                await asyncio.wait_for(self._task, timeout=35.0)
+            except (asyncio.CancelledError, asyncio.TimeoutError):
                 pass
             self._task = None
 
-        if self._vlm and self._vlm.is_loaded:
-            self._vlm.unload()
+        if self._vlm_shared and self._vlm_pref is not None:
+            from .visual_model import SharedVLMRegistry
+
+            SharedVLMRegistry.release(self._vlm_pref)
+            self._vlm_shared = False
+            self._vlm_pref = None
+        self._vlm = None
         logger.info("Visual cortex stopped")
 
     # ------------------------------------------------------------------
@@ -1297,8 +1315,15 @@ class VisualCortex:
         _local_model_id = ""
         if self._vlm is not None and self._vlm.info is not None:
             _local_model_id = self._vlm.info.model_id
+        import os as _os
+
+        _local_only = (
+            _os.environ.get("NLS_VISUAL_CORTEX_STRATEGY", "").strip()
+            == "dedicated_vlm_local"
+        )
         _remote_healthy = (
-            self._remote_vlm is not None
+            not _local_only
+            and self._remote_vlm is not None
             and self._remote_fail_count < 3
             and time.time() >= self._remote_backoff_until
         )

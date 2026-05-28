@@ -72,7 +72,6 @@ export const routes: Routes = [
     loadComponent: () =>
       import('./features/brain/brain.component').then(m => m.BrainComponent),
   },
-  // IDE route removed — functionality merged into Projects Dashboard
   {
     path: 'settings',
     canActivate: [setupGuard, authGuard],

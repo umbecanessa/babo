@@ -183,9 +183,19 @@ export interface ChatMessage {
     maxIterations?: number;
     elapsedSeconds?: number;
     expanded?: boolean;
+    teamId?: string;
+    waveAttempt?: number;
+    teamName?: string;
   };
   /** Generic metadata bag for channel events, reach-out, etc. */
   metadata?: Record<string, any>;
+  /** Source agent when multiple agents are connected in parallel. */
+  agent_id?: string;
+}
+
+interface RawWsEntry {
+  ws: WebSocket;
+  url: string;
 }
 
 @Injectable({ providedIn: 'root' })
@@ -193,11 +203,8 @@ export class WebSocketService {
   /** Socket.IO socket (used in browser/NestJS mode) */
   private socket: Socket | null = null;
 
-  /** Raw WebSocket (used in Electron/local runtime mode) */
-  private rawWs: WebSocket | null = null;
-
-  /** URL of the active raw WS (idempotent joinAgent across routes). */
-  private rawWsTargetUrl: string | null = null;
+  /** One raw WebSocket per agent (Electron / local runtime). */
+  private rawWsByAgent = new Map<string, RawWsEntry>();
 
   private messagesSubject = new Subject<any>();
   private probeSignalSubject = new Subject<{
@@ -216,19 +223,25 @@ export class WebSocketService {
   /** Set to true when we know a restart is coming (skill review approved). */
   restartExpected = signal(false);
 
-  /** Current reconnection state: null | 'restarting' | 'reconnecting' */
+  /** Current reconnection state for the focused agent. */
   reconnectState = signal<string | null>(null);
 
   /**
-   * When > 0, at least one `onMessage(agentId)` stream is active (chat UI).
-   * Inbound messages are not buffered in that case (live path only).
+   * Per-agent chat UI subscribers. Buffer inbound events when an agent has
+   * zero subscribers (e.g. running in background while another chat is open).
    */
-  private replaySubscriberCount = 0;
+  private replaySubscriberCountByAgent = new Map<string, number>();
 
   /** Per-agent ring buffer for WS payloads when chat UI is not subscribed. */
   private messageBuffers = new Map<string, any[]>();
 
   private static readonly MAX_BUFFERED_PER_AGENT = 400;
+
+  private reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private reconnectAttemptsByAgent = new Map<string, number>();
+  private reconnectStateByAgent = new Map<string, string>();
+  /** Agents that should keep a background WebSocket open. */
+  private trackedAgents = new Set<string>();
 
   constructor(
     private auth: AuthService,
@@ -256,7 +269,7 @@ export class WebSocketService {
   connect(): void {
     if (this.useRawWs) {
       // Raw WebSocket mode is per-agent, handled in joinAgent()
-      this.connected.set(true);
+      this.syncConnectedSignal();
       return;
     }
 
@@ -299,19 +312,8 @@ export class WebSocketService {
   }
 
   joinAgent(agentId: string): void {
-    // Cancel any in-flight reconnect for the previous agent
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
-    }
-    this.reconnectState.set(null);
-
-    const prev = this.currentAgentId();
-    if (prev != null && prev !== agentId) {
-      this.messageBuffers.delete(prev);
-    }
-
     this.currentAgentId.set(agentId);
+    this.trackedAgents.add(agentId);
 
     if (this.useRawWs) {
       this.connectRawWs(agentId);
@@ -321,36 +323,53 @@ export class WebSocketService {
     this.socket?.emit('join', { agentId });
   }
 
-  sendMessage(content: string, sessionKey?: string): void {
+  /** Close the WebSocket for one agent (others keep running). */
+  leaveAgent(agentId: string): void {
+    this.trackedAgents.delete(agentId);
+    this.clearReconnectForAgent(agentId);
+    const entry = this.rawWsByAgent.get(agentId);
+    if (entry) {
+      entry.ws.onclose = null;
+      entry.ws.onerror = null;
+      entry.ws.close();
+      this.rawWsByAgent.delete(agentId);
+    }
+    this.messageBuffers.delete(agentId);
+    if (this.currentAgentId() === agentId) {
+      this.currentAgentId.set(null);
+      this.syncConnectedSignal();
+    }
+  }
+
+  sendMessage(content: string, sessionKey?: string, model?: string): void {
     const payload: any = { type: 'message', content };
     if (sessionKey && sessionKey !== 'websocket:main') {
       payload.session_key = sessionKey;
     }
+    if (model) {
+      payload.model = model;
+    }
+    this.sendPayload(payload);
+  }
 
-    if (this.useRawWs && this.rawWs?.readyState === WebSocket.OPEN) {
-      this.rawWs.send(JSON.stringify(payload));
+  sendCommand(command: string, args?: Record<string, any>): void {
+    this.sendPayload({ type: 'command', command, ...args });
+  }
+
+  send(data: Record<string, any>): void {
+    this.sendPayload(data);
+  }
+
+  private sendPayload(payload: Record<string, any>): void {
+    if (this.useRawWs) {
+      const ws = this.rawWsForCurrent();
+      if (ws?.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(payload));
+      }
       return;
     }
 
     this.socket?.emit('message', payload);
-  }
-
-  sendCommand(command: string, args?: Record<string, any>): void {
-    if (this.useRawWs && this.rawWs?.readyState === WebSocket.OPEN) {
-      this.rawWs.send(JSON.stringify({ type: 'command', command, ...args }));
-      return;
-    }
-
-    this.socket?.emit('message', { type: 'command', command, ...args });
-  }
-
-  send(data: Record<string, any>): void {
-    if (this.useRawWs && this.rawWs?.readyState === WebSocket.OPEN) {
-      this.rawWs.send(JSON.stringify(data));
-      return;
-    }
-
-    this.socket?.emit('message', data);
   }
 
   sendAbort(): void {
@@ -370,7 +389,8 @@ export class WebSocketService {
       return this.messagesSubject.asObservable();
     }
     return new Observable<any>((observer) => {
-      this.replaySubscriberCount++;
+      const count = this.replaySubscriberCountByAgent.get(agentId) ?? 0;
+      this.replaySubscriberCountByAgent.set(agentId, count + 1);
       const buf = this.messageBuffers.get(agentId);
       if (buf?.length) {
         for (const m of buf) {
@@ -379,21 +399,34 @@ export class WebSocketService {
         this.messageBuffers.set(agentId, []);
       }
       const sub = this.messagesSubject.subscribe({
-        next: (m) => observer.next(m),
+        next: (m) => {
+          const aid = m?.agent_id ?? this.currentAgentId();
+          if (aid === agentId) {
+            observer.next(m);
+          }
+        },
         error: (e) => observer.error(e),
         complete: () => observer.complete(),
       });
       return () => {
         sub.unsubscribe();
-        this.replaySubscriberCount--;
+        const n = (this.replaySubscriberCountByAgent.get(agentId) ?? 1) - 1;
+        if (n <= 0) {
+          this.replaySubscriberCountByAgent.delete(agentId);
+        } else {
+          this.replaySubscriberCountByAgent.set(agentId, n);
+        }
       };
     });
   }
 
   /** Push to subscribers; buffer per agent when no chat replay stream is active. */
-  private emitChatMessage(data: any): void {
-    const aid = this.currentAgentId();
-    if (aid && this.replaySubscriberCount === 0) {
+  private emitChatMessage(data: any, sourceAgentId?: string): void {
+    const aid = data?.agent_id ?? sourceAgentId ?? this.currentAgentId();
+    if (aid && !data.agent_id) {
+      data = { ...data, agent_id: aid };
+    }
+    if (aid && (this.replaySubscriberCountByAgent.get(aid) ?? 0) === 0) {
       const arr = this.messageBuffers.get(aid) ?? [];
       arr.push(data);
       if (arr.length > WebSocketService.MAX_BUFFERED_PER_AGENT) {
@@ -425,19 +458,9 @@ export class WebSocketService {
   }
 
   disconnect(): void {
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer);
-      this.reconnectTimer = null;
+    for (const agentId of [...this.rawWsByAgent.keys()]) {
+      this.leaveAgent(agentId);
     }
-    this.reconnectState.set(null);
-
-    if (this.rawWs) {
-      this.rawWs.onclose = null;
-      this.rawWs.onerror = null;
-      this.rawWs.close();
-      this.rawWs = null;
-    }
-    this.rawWsTargetUrl = null;
 
     if (this.socket) {
       this.socket.disconnect();
@@ -446,87 +469,121 @@ export class WebSocketService {
 
     this.connected.set(false);
     this.currentAgentId.set(null);
+    this.trackedAgents.clear();
     this.messageBuffers.clear();
-    this.replaySubscriberCount = 0;
+    this.replaySubscriberCountByAgent.clear();
+    this.reconnectState.set(null);
+  }
+
+  isAgentConnected(agentId: string): boolean {
+    const entry = this.rawWsByAgent.get(agentId);
+    return entry?.ws.readyState === WebSocket.OPEN;
   }
 
   // ─── Raw WebSocket (Electron / local runtime) ─────────────────
 
-  private connectRawWs(agentId: string): void {
-    if (agentId !== this.currentAgentId()) return;
+  private rawWsForCurrent(): WebSocket | null {
+    const agentId = this.currentAgentId();
+    if (!agentId) return null;
+    return this.rawWsByAgent.get(agentId)?.ws ?? null;
+  }
 
+  private syncConnectedSignal(): void {
+    const agentId = this.currentAgentId();
+    if (!agentId) {
+      this.connected.set(false);
+      return;
+    }
+    this.connected.set(this.isAgentConnected(agentId));
+    this.reconnectState.set(this.reconnectStateByAgent.get(agentId) ?? null);
+  }
+
+  private connectRawWs(agentId: string): void {
     const wsBase = this.runtimeWsUrl || 'ws://127.0.0.1:9222';
     const url = `${wsBase}/ws/chat/${agentId}`;
 
-    // Keep one socket per agent across Chat / Tasks / IDE routes (same agentId).
+    const existing = this.rawWsByAgent.get(agentId);
     if (
-      this.rawWs &&
-      this.rawWsTargetUrl === url &&
-      (this.rawWs.readyState === WebSocket.OPEN ||
-        this.rawWs.readyState === WebSocket.CONNECTING)
+      existing &&
+      existing.url === url &&
+      (existing.ws.readyState === WebSocket.OPEN ||
+        existing.ws.readyState === WebSocket.CONNECTING)
     ) {
+      this.syncConnectedSignal();
       return;
     }
 
-    if (this.rawWs) {
-      this.rawWs.onclose = null;
-      this.rawWs.onerror = null;
-      this.rawWs.close();
-      this.rawWs = null;
+    if (existing) {
+      existing.ws.onclose = null;
+      existing.ws.onerror = null;
+      existing.ws.close();
     }
-    this.rawWsTargetUrl = null;
 
-    this.rawWs = new WebSocket(url);
-    this.rawWsTargetUrl = url;
+    const ws = new WebSocket(url);
+    this.rawWsByAgent.set(agentId, { ws, url });
 
-    this.rawWs.onopen = () => {
-      this.connected.set(true);
-      this.emitChatMessage({
-        type: 'status',
-        content: 'Connected to agent',
-        agent_id: agentId,
-      });
+    ws.onopen = () => {
+      this.syncConnectedSignal();
+      this.emitChatMessage(
+        {
+          type: 'status',
+          content: 'Connected to agent',
+          agent_id: agentId,
+        },
+        agentId,
+      );
     };
 
-    this.rawWs.onmessage = (event: MessageEvent) => {
+    ws.onmessage = (event: MessageEvent) => {
       try {
         const data = JSON.parse(event.data);
-        this.emitChatMessage(data);
+        this.emitChatMessage(data, agentId);
       } catch {
         // Non-JSON message, ignore
       }
     };
 
-    this.rawWs.onclose = (ev: CloseEvent) => {
-      this.connected.set(false);
+    ws.onclose = (ev: CloseEvent) => {
+      this.rawWsByAgent.delete(agentId);
+      if (this.currentAgentId() === agentId) {
+        this.connected.set(false);
+      }
       if (ev.code === 4004) {
-        this.emitChatMessage({
-          type: 'status',
-          content: 'Agent no longer exists. Please select or create an agent.',
-        });
-        this.currentAgentId.set(null);
-        this.rawWs = null;
-        this.rawWsTargetUrl = null;
+        this.emitChatMessage(
+          {
+            type: 'status',
+            content: 'Agent no longer exists. Please select or create an agent.',
+            agent_id: agentId,
+          },
+          agentId,
+        );
+        if (this.currentAgentId() === agentId) {
+          this.currentAgentId.set(null);
+        }
+        return;
+      }
+      if (!this.trackedAgents.has(agentId)) {
         return;
       }
       this.attemptReconnect(agentId);
     };
 
-    this.rawWs.onerror = () => {
-      // Only show error if we're not already in a reconnect cycle
-      if (!this.reconnectState()) {
-        this.emitChatMessage({
-          type: 'status',
-          content: 'WebSocket connection error',
-        });
+    ws.onerror = () => {
+      if (!this.reconnectStateByAgent.get(agentId)) {
+        this.emitChatMessage(
+          {
+            type: 'status',
+            content: 'WebSocket connection error',
+            agent_id: agentId,
+          },
+          agentId,
+        );
       }
     };
   }
 
   // ─── Auto-reconnect ─────────────────────────────────────────
 
-  private reconnectTimer: any = null;
-  private reconnectAttempts = 0;
   private readonly MAX_RECONNECT_ATTEMPTS = 30;
 
   /** Signal that a restart is expected (call before approving a skill review). */
@@ -534,42 +591,73 @@ export class WebSocketService {
     this.restartExpected.set(true);
   }
 
+  private clearReconnectForAgent(agentId: string): void {
+    const timer = this.reconnectTimers.get(agentId);
+    if (timer) {
+      clearTimeout(timer);
+      this.reconnectTimers.delete(agentId);
+    }
+    this.reconnectAttemptsByAgent.delete(agentId);
+    this.reconnectStateByAgent.delete(agentId);
+    if (this.currentAgentId() === agentId) {
+      this.reconnectState.set(null);
+    }
+  }
+
   private attemptReconnect(agentId: string): void {
-    if (agentId !== this.currentAgentId()) return;
-    if (this.reconnectTimer) return;
+    if (this.reconnectTimers.has(agentId)) return;
 
     const state = this.restartExpected() ? 'restarting' : 'reconnecting';
-    this.reconnectState.set(state);
-    this.reconnectAttempts = 0;
+    this.reconnectStateByAgent.set(agentId, state);
+    if (this.currentAgentId() === agentId) {
+      this.reconnectState.set(state);
+    }
+    this.reconnectAttemptsByAgent.set(agentId, 0);
 
-    this.emitChatMessage({
-      type: 'status',
-      content: state === 'restarting'
-        ? 'Server restarting...'
-        : 'Connection lost, reconnecting...',
-    });
+    this.emitChatMessage(
+      {
+        type: 'status',
+        content:
+          state === 'restarting'
+            ? 'Server restarting...'
+            : 'Connection lost, reconnecting...',
+        agent_id: agentId,
+      },
+      agentId,
+    );
 
     this.pollAndReconnect(agentId);
   }
 
   private pollAndReconnect(agentId: string): void {
-    if (this.reconnectAttempts >= this.MAX_RECONNECT_ATTEMPTS) {
-      this.reconnectState.set(null);
+    const attempts = this.reconnectAttemptsByAgent.get(agentId) ?? 0;
+    if (attempts >= this.MAX_RECONNECT_ATTEMPTS) {
+      this.reconnectStateByAgent.delete(agentId);
+      if (this.currentAgentId() === agentId) {
+        this.reconnectState.set(null);
+      }
       this.restartExpected.set(false);
-      this.emitChatMessage({
-        type: 'status',
-        content: 'Could not reconnect to server.',
-      });
+      this.emitChatMessage(
+        {
+          type: 'status',
+          content: 'Could not reconnect to server.',
+          agent_id: agentId,
+        },
+        agentId,
+      );
       return;
     }
 
-    const delay = Math.min(2000 * Math.pow(1.3, this.reconnectAttempts), 10000);
-    this.reconnectAttempts++;
+    const delay = Math.min(2000 * Math.pow(1.3, attempts), 10000);
+    this.reconnectAttemptsByAgent.set(agentId, attempts + 1);
 
-    this.reconnectTimer = setTimeout(async () => {
-      this.reconnectTimer = null;
+    const timer = setTimeout(async () => {
+      this.reconnectTimers.delete(agentId);
 
-      if (agentId !== this.currentAgentId()) return;
+      if (!this.trackedAgents.has(agentId)) {
+        this.clearReconnectForAgent(agentId);
+        return;
+      }
 
       try {
         const wsBase = this.runtimeWsUrl || 'ws://127.0.0.1:9222';
@@ -578,15 +666,22 @@ export class WebSocketService {
 
         if (resp.ok) {
           const wasRestart = this.restartExpected();
-          this.reconnectState.set(null);
+          this.reconnectStateByAgent.delete(agentId);
+          if (this.currentAgentId() === agentId) {
+            this.reconnectState.set(null);
+          }
           this.restartExpected.set(false);
           this.connectRawWs(agentId);
-          this.emitChatMessage({
-            type: 'status',
-            content: wasRestart
-              ? 'Server restarted — skills loaded. You can continue chatting.'
-              : 'Reconnected to server.',
-          });
+          this.emitChatMessage(
+            {
+              type: 'status',
+              content: wasRestart
+                ? 'Server restarted — skills loaded. You can continue chatting.'
+                : 'Reconnected to server.',
+              agent_id: agentId,
+            },
+            agentId,
+          );
           return;
         }
       } catch {
@@ -595,5 +690,7 @@ export class WebSocketService {
 
       this.pollAndReconnect(agentId);
     }, delay);
+
+    this.reconnectTimers.set(agentId, timer);
   }
 }

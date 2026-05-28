@@ -315,6 +315,9 @@ class EditTool:
         if not old_text:
             return ToolResult(content="Error: 'old_text' is required.", is_error=True)
 
+        from .file_ledger import normalize_ledger_path
+        path_str = normalize_ledger_path(path_str) or path_str
+
         path = _resolve_path(path_str, self._effective_cwd)
 
         if (
@@ -355,6 +358,19 @@ class EditTool:
                 ),
                 is_error=True,
             )
+
+        if self._ledger is not None:
+            ledger_err = self._ledger.check_mutation_allowed(
+                path_str,
+                self._ledger_meta,
+                file_exists=True,
+            )
+            if ledger_err:
+                ctx = self._ledger.format_path_context(path_str, self._ledger_meta)
+                return ToolResult(
+                    content=f"{ledger_err}\n\n{ctx}",
+                    is_error=True,
+                )
 
         # Staleness guard: refuse if file changed since last read.
         if self._file_state_cache is not None:

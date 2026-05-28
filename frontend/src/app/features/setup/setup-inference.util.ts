@@ -14,8 +14,8 @@ export interface CloudProvider {
  */
 export const BABO_HOSTED_MODEL_ID = 'babo-hosted';
 
-/** Default Babo Cloud chat model (OpenRouter-style id; routed after sign-in). */
-export const DEFAULT_BABO_CLOUD_MODEL = 'anthropic/claude-sonnet-4';
+/** Default Babo Cloud chat model (OpenRouter; reliable agentic tool_calls). */
+export const DEFAULT_BABO_CLOUD_MODEL = 'google/gemini-2.5-flash';
 
 export interface BaboCloudModelOption {
   id: string;
@@ -24,9 +24,13 @@ export interface BaboCloudModelOption {
 
 /** Partner models available through Babo Cloud (api.babo.agency relay). */
 export const BABO_CLOUD_MODELS: BaboCloudModelOption[] = [
-  { id: DEFAULT_BABO_CLOUD_MODEL, label: 'Claude Sonnet' },
+  { id: DEFAULT_BABO_CLOUD_MODEL, label: 'Gemini 2.5 Flash' },
+  { id: 'qwen/qwen3-coder', label: 'Qwen3 Coder' },
+  { id: 'deepseek/deepseek-v3.2', label: 'DeepSeek V3.2' },
   { id: 'openai/gpt-4o-mini', label: 'GPT-4o mini' },
+  { id: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet' },
   { id: 'openai/gpt-4o', label: 'GPT-4o' },
+  { id: 'qwen/qwen3.6-35b-a3b', label: 'Qwen 3.6 35B (legacy)' },
   { id: 'google/gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
 ];
 
@@ -42,6 +46,7 @@ export function resolveBaboCloudModelId(model?: string | null): string {
     m === 'llama3.2' ||
     m === 'gpt-4o-mini' ||
     m === BABO_HOSTED_MODEL_ID ||
+    m === 'qwen/qwen3.6-35b-a3b' ||
     /qwen3\.7/i.test(m)
   ) {
     return DEFAULT_BABO_CLOUD_MODEL;

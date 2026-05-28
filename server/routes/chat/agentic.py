@@ -105,12 +105,13 @@ async def _run_agentic_with_receive(
                     try:
                         await websocket.send_json({
                             "type": "status",
-                            "content": "Stopping...",
+                            "content": "Stopping orchestrator...",
                         })
                     except Exception:
                         pass
                     logger.info(
-                        "Agent %s: abort received via concurrent receive",
+                        "Agent %s: abort received via concurrent receive "
+                        "(orchestrator only)",
                         agent_id,
                     )
             elif msg.get("type") == "user_answer":

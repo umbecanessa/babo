@@ -8,11 +8,11 @@
  *     └── Agent ops  → Local Python Runtime (localhost:9222)
  *
  *   Python Agent Runtime (sidecar)
- *     ├── Inference → GX10 vLLM (remote)
- *     └── Training  → GX10 GPU Worker (remote)
+ *     ├── Inference → OpenAI-compatible API
+ *     └── Sleep     → consolidation on the Python runtime
  *
  * On first launch, the app runs a setup wizard (Python venv creation,
- * GX10 connection configuration).  On subsequent launches, the runtime
+ * runtime connection configuration).  On subsequent launches, the runtime
  * starts automatically.
  */
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
@@ -45,6 +45,29 @@ const ipc_handlers_1 = require("./ipc-handlers");
 const runtime_manager_1 = require("./runtime-manager");
 const venv_manager_1 = require("./venv-manager");
 const config_manager_1 = require("./config-manager");
+/** file:// renderer cannot always read cross-origin responses; widen CORS for the cloud API. */
+function enableRendererCorsForBackend(nestjsUrl) {
+    let origin = '';
+    try {
+        origin = new URL(nestjsUrl).origin;
+    }
+    catch {
+        return;
+    }
+    electron_1.session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+        if (!details.url.startsWith(origin)) {
+            callback({ responseHeaders: details.responseHeaders });
+            return;
+        }
+        const responseHeaders = { ...details.responseHeaders };
+        responseHeaders['Access-Control-Allow-Origin'] = ['*'];
+        responseHeaders['Access-Control-Allow-Methods'] = [
+            'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD',
+        ];
+        responseHeaders['Access-Control-Allow-Headers'] = ['*'];
+        callback({ responseHeaders });
+    });
+}
 const permission_manager_1 = require("./permission-manager");
 const update_manager_1 = require("./update-manager");
 // ---------------------------------------------------------------------------
@@ -227,6 +250,7 @@ electron_1.app.whenReady().then(async () => {
     });
     // Initialize managers
     configManager = new config_manager_1.ConfigManager();
+    enableRendererCorsForBackend(configManager.get().nestjsUrl);
     venvManager = new venv_manager_1.VenvManager();
     permissionManager = new permission_manager_1.PermissionManager();
     runtimeManager = new runtime_manager_1.RuntimeManager(configManager, venvManager);

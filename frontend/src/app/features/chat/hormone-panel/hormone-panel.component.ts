@@ -20,11 +20,11 @@ export class HormonePanelComponent {
 
   get hormoneList(): HormoneDisplay[] {
     return [
-      { name: 'Dopamine', key: 'dopamine', color: '#34d399', value: this.hormones['dopamine'] || 0 },
-      { name: 'Serotonin', key: 'serotonin', color: '#38bdf8', value: this.hormones['serotonin'] || 0 },
-      { name: 'Norepinephrine', key: 'norepinephrine', color: '#fbbf24', value: this.hormones['norepinephrine'] || 0 },
-      { name: 'Cortisol', key: 'cortisol', color: '#f87171', value: this.hormones['cortisol'] || 0 },
-      { name: 'Oxytocin', key: 'oxytocin', color: '#a78bfa', value: this.hormones['oxytocin'] || 0 },
+      { name: 'Dopamine', key: 'dopamine', color: 'var(--accent-success)', value: this.hormones['dopamine'] || 0 },
+      { name: 'Serotonin', key: 'serotonin', color: 'var(--accent-primary)', value: this.hormones['serotonin'] || 0 },
+      { name: 'Norepinephrine', key: 'norepinephrine', color: 'var(--accent-warn)', value: this.hormones['norepinephrine'] || 0 },
+      { name: 'Cortisol', key: 'cortisol', color: 'var(--accent-danger)', value: this.hormones['cortisol'] || 0 },
+      { name: 'Oxytocin', key: 'oxytocin', color: 'var(--accent-primary)', value: this.hormones['oxytocin'] || 0 },
     ];
   }
 }

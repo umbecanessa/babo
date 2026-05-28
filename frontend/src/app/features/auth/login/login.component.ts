@@ -1,7 +1,7 @@
 import { Component, OnInit, OnDestroy, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { AuthService } from '../../../core/services/auth.service';
 import { ApiService } from '../../../core/services/api.service';
 import { HttpClient } from '@angular/common/http';
@@ -30,8 +30,14 @@ export class LoginComponent implements OnInit, OnDestroy {
     private auth: AuthService,
     private http: HttpClient,
     private api: ApiService,
+    private route: ActivatedRoute,
     public theme: ThemeService,
   ) {}
+
+  private returnUrl(): string | null {
+    const q = this.route.snapshot.queryParamMap.get('returnUrl');
+    return q && q.startsWith('/') ? q : null;
+  }
 
   async ngOnInit(): Promise<void> {
     await this.api.whenReady();
@@ -91,7 +97,7 @@ export class LoginComponent implements OnInit, OnDestroy {
 
     this.auth.login(this.email, this.password).subscribe({
       next: (tokens) => {
-        this.auth.handleAuthSuccess(tokens);
+        this.auth.handleAuthSuccess(tokens, this.returnUrl());
         this.loading.set(false);
       },
       error: (err) => {

@@ -93,7 +93,16 @@ Write-Step "Setting version to $newVersion"
 Set-PackageVersion $newVersion
 Write-Ok "package.json updated"
 
-# ── 2. Build Angular frontend ────────────────────────────────────────────
+# ── 2. Regenerate genesis template ───────────────────────────────────────
+
+Write-Step "Regenerating genesis template from nls/config"
+Push-Location ".."
+python scripts/regenerate-genesis.py
+if ($LASTEXITCODE -ne 0) { Pop-Location; Write-Err "Genesis regeneration failed" }
+Pop-Location
+Write-Ok "genesis_templates/standard-v1 synced"
+
+# ── 3. Build Angular frontend ────────────────────────────────────────────
 
 Write-Step "Building Angular frontend (electron config)"
 Push-Location "..\frontend"
@@ -102,14 +111,14 @@ if ($LASTEXITCODE -ne 0) { Pop-Location; Write-Err "Angular build failed" }
 Pop-Location
 Write-Ok "Angular build complete"
 
-# ── 3. Compile Electron TypeScript ────────────────────────────────────────
+# ── 4. Compile Electron TypeScript ────────────────────────────────────────
 
 Write-Step "Compiling Electron TypeScript"
 npm run build:electron
 if ($LASTEXITCODE -ne 0) { Write-Err "Electron TS compilation failed" }
 Write-Ok "Electron compiled"
 
-# ── 4. Package installer ─────────────────────────────────────────────────
+# ── 5. Package installer ─────────────────────────────────────────────────
 
 Write-Step "Packaging NSIS installer"
 if (Test-Path "release") { Remove-Item -Recurse -Force "release" }

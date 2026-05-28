@@ -1,9 +1,9 @@
-$bg-card: rgba(255, 255, 255, 0.03);
-$border: rgba(255, 255, 255, 0.06);
-$accent: #38bdf8;
-$text-heading: #e5e5e5;
-$text-primary: #c5c5d0;
-$text-muted: #787890;
+$bg-card: var(--glass-bg);
+$border: var(--glass-border);
+$accent: var(--accent-primary);
+$text-heading: var(--text-primary);
+$text-primary: var(--text-primary);
+$text-muted: var(--text-muted);
 $radius-lg: 12px;
 
 :host { display: block; }
@@ -23,7 +23,7 @@ $radius-lg: 12px;
   min-height: 190px;
 
   &:hover {
-    border-color: rgba(255, 255, 255, 0.12);
+    border-color: var(--overlay-4);
     transform: translateY(-2px);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
   }
@@ -44,7 +44,7 @@ $radius-lg: 12px;
   flex-shrink: 0;
 
   &[data-channel='email'] {
-    background: rgba(56, 189, 248, 0.1);
+    background: var(--accent-primary-glow);
     color: $accent;
   }
   &[data-channel='telegram'] {
@@ -87,7 +87,7 @@ $radius-lg: 12px;
   letter-spacing: 0.04em;
 
   &.connected {
-    color: #34d399;
+    color: var(--accent-success);
     background: rgba(52, 211, 153, 0.12);
   }
 }
@@ -105,12 +105,12 @@ $radius-lg: 12px;
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s;
-  color: #050508;
+  color: var(--bg-primary);
   background: $accent;
   margin-top: auto;
 
   &:hover:not(:disabled) {
-    box-shadow: 0 0 18px rgba(56, 189, 248, 0.35);
+    box-shadow: 0 0 18px var(--accent-primary-glow);
   }
 
   &:disabled {

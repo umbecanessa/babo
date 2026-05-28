@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from .base import ToolResult
 
@@ -75,6 +75,36 @@ def _resolve_path(path_str: str, cwd: str) -> Path:
     return resolved
 
 
+def format_path_for_agent(
+    path: Path,
+    *,
+    workspace_root: str,
+    effective_cwd: str,
+) -> str:
+    """Format a path for tool output — prefer CWD-relative when inside the project.
+
+    When plan locks CWD to ``workspace/my-app/``, listing/glob should show
+    ``frontend/src/App.tsx`` not ``my-app/frontend/src/App.tsx`` so the model
+    does not re-prefix the project folder on read/bash.
+    """
+    try:
+        resolved = path.resolve()
+    except Exception:
+        resolved = path
+    for base in (Path(effective_cwd), Path(workspace_root)):
+        try:
+            base_resolved = base.resolve()
+        except Exception:
+            base_resolved = base
+        try:
+            rel = resolved.relative_to(base_resolved)
+            display = str(rel).replace("\\", "/")
+            return "." if display in ("", ".") else display
+        except ValueError:
+            continue
+    return str(resolved).replace("\\", "/")
+
+
 def _is_system_skill_path(path: Path) -> bool:
     """Return True if *path* would overwrite a core skill file."""
     norm = path.as_posix().lower()
@@ -99,13 +129,20 @@ class WriteTool:
     def __init__(self, cwd: str, shared_cwd: object | None = None,
                  file_state_cache: object | None = None,
                  ledger: object | None = None,
-                 ledger_meta: dict | None = None) -> None:
+                 ledger_meta: dict | None = None,
+                 on_repeated_write_escalation: Callable[
+                     [str, int],
+                     Awaitable[tuple[str, bool]] | tuple[str, bool] | None,
+                 ] | None = None,
+                 block_full_rewrite_after_first: bool = False) -> None:
         self._cwd = cwd
         self._shared_cwd = shared_cwd
         self._file_state_cache = file_state_cache
         self._write_counts: dict[str, int] = {}
         self._ledger = ledger
         self._ledger_meta: dict = ledger_meta or {"role": "agent"}
+        self._on_repeated_write_escalation = on_repeated_write_escalation
+        self._block_full_rewrite_after_first = block_full_rewrite_after_first
 
     @property
     def _effective_cwd(self) -> str:
@@ -175,6 +212,9 @@ class WriteTool:
         if not path_str:
             return ToolResult(content="Error: 'path' is required.", is_error=True)
 
+        from .file_ledger import normalize_ledger_path
+        path_str = normalize_ledger_path(path_str) or path_str
+
         path = _resolve_path(path_str, self._effective_cwd)
 
         if path.suffix == ".py" and _NLS_INTERNAL_PATTERN.search(content):
@@ -194,6 +234,21 @@ class WriteTool:
             )
 
         try:
+            if self._ledger is not None:
+                ledger_err = self._ledger.check_mutation_allowed(
+                    path_str,
+                    self._ledger_meta,
+                    file_exists=path.exists(),
+                )
+                if ledger_err:
+                    ctx = self._ledger.format_path_context(
+                        path_str, self._ledger_meta,
+                    )
+                    return ToolResult(
+                        content=f"{ledger_err}\n\n{ctx}",
+                        is_error=True,
+                    )
+
             # Staleness guard: refuse if file changed since last read.
             if path.exists() and self._file_state_cache is not None:
                 stale_err = self._file_state_cache.check(str(path.resolve()))
@@ -261,6 +316,42 @@ class WriteTool:
                     "Repeated write #%d to %s (%d lines, %d bytes)",
                     prev_count + 1, path_str, line_count, byte_count,
                 )
+                if self._block_full_rewrite_after_first:
+                    msg += (
+                        "\n\nBLOCKED: Delegates must not fully rewrite the "
+                        "same file twice. Use read() + edit() for fixes."
+                    )
+                    return ToolResult(content=msg, is_error=True)
+                if prev_count >= 2 and self._on_repeated_write_escalation:
+                    _escalation_msg = (
+                        "\n\n⚠ Third full rewrite — waiting for orchestrator "
+                        "guidance (up to 2 minutes)..."
+                    )
+                    try:
+                        _cb = self._on_repeated_write_escalation(
+                            path_str, prev_count + 1,
+                        )
+                        if asyncio.iscoroutine(_cb):
+                            _extra, _terminate = await _cb
+                        elif _cb is not None:
+                            _extra, _terminate = _cb
+                        else:
+                            _extra, _terminate = (
+                                "Orchestrator notified. Use edit() or escalate().",
+                                False,
+                            )
+                        msg += _escalation_msg + "\n\n" + _extra
+                        if _terminate:
+                            return ToolResult(content=msg, is_error=True)
+                    except Exception:
+                        _logger.debug(
+                            "repeated-write escalation failed",
+                            exc_info=True,
+                        )
+                        msg += (
+                            _escalation_msg
+                            + "\n\nEscalation failed — use edit() or escalate()."
+                        )
 
             if (
                 existing_bytes >= self._SHRINK_MIN_EXISTING

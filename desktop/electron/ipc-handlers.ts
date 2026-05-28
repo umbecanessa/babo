@@ -171,6 +171,13 @@ export function registerIpcHandlers(
         partial.gpuWorkerUrl = visionUrl ?? transcribeUrl;
         partial.gpuWorkerSecret =
           profile.visualCortex.secret ?? profile.transcribe.secret;
+      } else if (
+        profile.visualCortex.tier === 'self_local' &&
+        profile.transcribe.tier === 'self_local' &&
+        profile.embeddings.tier === 'self_local'
+      ) {
+        partial.gpuWorkerUrl = '';
+        partial.gpuWorkerSecret = '';
       }
     } else if (inf.model) {
       partial.inferenceModel = inf.model;
@@ -207,6 +214,49 @@ export function registerIpcHandlers(
   ipcMain.handle('runtime:logs', (_event, lines?: number) => {
     return runtime.getLogs(lines);
   });
+
+  ipcMain.handle(
+    'runtime:hot-reload-inference',
+    async (_event, body: Record<string, unknown>) => {
+      const cfg = config.get();
+      const port = cfg.runtimePort;
+      const payload = JSON.stringify(body ?? {});
+      return new Promise((resolve, reject) => {
+        const req = http.request(
+          {
+            hostname: '127.0.0.1',
+            port,
+            path: '/admin/inference/hot-reload',
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Content-Length': Buffer.byteLength(payload),
+            },
+          },
+          (res) => {
+            let data = '';
+            res.on('data', (chunk) => {
+              data += chunk;
+            });
+            res.on('end', () => {
+              if (res.statusCode && res.statusCode >= 400) {
+                reject(new Error(data || `HTTP ${res.statusCode}`));
+                return;
+              }
+              try {
+                resolve(data ? JSON.parse(data) : { ok: true });
+              } catch {
+                resolve({ ok: true });
+              }
+            });
+          },
+        );
+        req.on('error', reject);
+        req.write(payload);
+        req.end();
+      });
+    },
+  );
 
   // ─── URLs (for Angular to know where to connect) ──────────────
 

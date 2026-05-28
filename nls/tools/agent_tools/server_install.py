@@ -51,14 +51,15 @@ class ServerInstallTool:
     @property
     def description(self) -> str:
         return (
-            "Install a PYTHON LIBRARY (from PyPI) into the server's runtime. "
-            "Use this instead of 'bash pip install' — it targets the correct "
-            "Python venv. After install the package is importable immediately.\n"
-            "IMPORTANT: This is ONLY for Python libraries (e.g. 'requests', "
-            "'pandas', 'python-docx'). Do NOT use this for CLI tools like "
-            "'gh' (GitHub CLI), 'docker', 'kubectl', etc. — those are system "
-            "binaries installed via Homebrew/apt, not Python packages. Use "
-            "'bash' to run system CLI tools directly."
+            "Install a PYTHON LIBRARY into Babo's AGENT RUNTIME (the NLS server "
+            "venv) — expands what the agent itself can do (tools, skills, "
+            "optional imports in agent code). NOT for dependencies of the app "
+            "you are building; use project_install for those.\n"
+            "Use instead of 'bash pip install'. After install the package is "
+            "importable in the server process immediately.\n"
+            "Do NOT use for CLI tools ('gh', 'docker', 'kubectl') — use bash. "
+            "For libraries your generated project needs (assemblyai, fastapi, "
+            "etc.) use project_install."
         )
 
     @property

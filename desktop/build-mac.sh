@@ -34,6 +34,9 @@ fi
 
 cd "$SCRIPT_DIR"
 
+echo ">> Regenerating genesis template from nls/config..."
+python3 "$REPO_ROOT/scripts/regenerate-genesis.py"
+
 # ── Code Signing & Notarization ──────────────────────────────────
 # If a Developer ID certificate is in the Keychain, electron-builder
 # will auto-discover and sign.  Set CSC_IDENTITY_AUTO_DISCOVERY=false

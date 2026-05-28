@@ -1,46 +1,67 @@
-import { Component, OnInit, OnDestroy, signal, computed, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
+import { Component, OnInit, OnDestroy, AfterViewInit, signal, computed, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, NavigationEnd, Router } from '@angular/router';
+import { filter } from 'rxjs/operators';
 import { Subscription } from 'rxjs';
 import { WebSocketService, ChatMessage } from '../../core/services/websocket.service';
 import { ChatUiSnapshotService } from '../../core/services/chat-ui-snapshot.service';
 import { ChatWorkbenchService } from '../../core/services/chat-workbench.service';
+import {
+  collectFilePaths,
+  fileDisplayName,
+  normalizeToolArguments,
+  parseAgentMessageText,
+} from '../../core/services/activity-format.util';
+import { toolWorkbenchTitle } from '../../core/services/workbench-labels.util';
 import { ApiService, FileAttachment } from '../../core/services/api.service';
 import { PlatformService } from '../../core/services/platform.service';
 import { VoiceRecorderService } from '../../core/services/voice-recorder.service';
 import { ToastService } from '../../shared/toast/toast.service';
-import { parseTags, parseThinking } from '../../shared/signal-utils';
+import { filterNewLearnTags, labelTags, parseTags, parseThinking } from '../../shared/signal-utils';
 import { Agent } from '../../core/models/agent.model';
 import { MessageListComponent } from './message-list/message-list.component';
 import { SignalSidebarComponent, ActivityKind } from './signal-sidebar/signal-sidebar.component';
 import { AgentBrowserComponent } from './agent-browser/agent-browser.component';
-import { OnboardingModalComponent } from '../../shared/onboarding/onboarding-modal.component';
 import { GoogleConnectModalComponent } from '../../shared/google-connect-modal/google-connect-modal.component';
 import { ChatWorkbenchComponent } from './chat-workbench/chat-workbench.component';
-import { ONBOARDING_PAGES } from '../../shared/onboarding/onboarding-content';
+import { RunPanelComponent } from './run-panel/run-panel.component';
+import { RunViewService } from '../../core/services/run-view.service';
+import { AgentWorkspaceContextService } from '../../core/services/agent-workspace-context.service';
+import { enrichWorkspaceRelativePath } from '../projects/workspace/workspace-path.util';
+import { Day1CoachService } from '../../shared/onboarding/day1-coach.service';
+import { AgentModelService } from '../../core/services/agent-model.service';
+import { ChatModelPickerComponent } from './chat-model-picker/chat-model-picker.component';
+import {
+  agenticAbortLabel,
+  isOrchestrationDispatchSource,
+  isSilentAutonomousCompletion,
+  isUserFacingOrchestrationMessage,
+  isSilentOrchestrationExit,
+} from './orchestration-ui.util';
+
+export { agenticAbortLabel } from './orchestration-ui.util';
 
 @Component({
   selector: 'app-chat',
   standalone: true,
-  imports: [CommonModule, FormsModule, MessageListComponent, SignalSidebarComponent, AgentBrowserComponent, OnboardingModalComponent, GoogleConnectModalComponent, ChatWorkbenchComponent],
+  imports: [CommonModule, FormsModule, MessageListComponent, SignalSidebarComponent, AgentBrowserComponent, GoogleConnectModalComponent, ChatWorkbenchComponent, RunPanelComponent, ChatModelPickerComponent],
   templateUrl: './chat.component.html',
   styleUrl: './chat.component.scss',
 })
-export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
+export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterViewChecked {
+  private static readonly NEURAL_SIDEBAR_KEY = 'nls_neural_sidebar_open';
+
   @ViewChild('messageInput') messageInput!: ElementRef<HTMLTextAreaElement>;
   @ViewChild('waveformCanvas') waveformCanvas!: ElementRef<HTMLCanvasElement>;
   @ViewChild('fileInput') fileInput!: ElementRef<HTMLInputElement>;
   @ViewChild(SignalSidebarComponent) signalSidebar?: SignalSidebarComponent;
-  @ViewChild('onboardingModal') onboardingModal?: OnboardingModalComponent;
-
   agent = signal<Agent | null>(null);
   agentOnline = signal(true);
-  onboardingConfig = ONBOARDING_PAGES['chat'];
   messages = signal<ChatMessage[]>([]);
   inputText = '';
-  sidebarOpen = signal(true);
+  sidebarOpen = signal(ChatComponent.readNeuralSidebarPreference());
   streamingText = signal('');
   streamingReasoning = signal('');
   nlsMetadata = signal<any>(null);
@@ -55,13 +76,6 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
   private _preToolReasoning = '';
   private _iterTextCommitted = false;
   private _pendingIterText = '';  // text generated alongside tool calls, saved before streamingText is cleared
-  private _activePlanStepIdx = -1;
-  private _planBackendDriven = false;
-  private _planStepPrevStatus: ('pending' | 'active' | 'done' | 'error')[] = [];
-
-  // Floating plan checklist
-  planSteps = signal<{ label: string; status: 'pending' | 'active' | 'done' | 'error'; detail?: string }[]>([]);
-  planExpanded = signal(false);
 
   bottomSheetOpen = signal(false);
   daydreams = signal<any[]>([]);
@@ -76,21 +90,11 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
   lastAgenticResult = signal<{ steps: number; tools: number; durationMs: number; aborted: boolean } | null>(null);
   backgroundTaskActive = signal(false);
   private _backgroundTaskId: number = 0;
+  /** Suppress activity-sidebar writes while handling delegate (sub_agent) events. */
+  private _activitySidebarSuppressDepth = 0;
   private _bgPlanSteps: string[] = [];
   private _bgPlanStatuses: string[] = [];
 
-  // Active delegate numbers (presence check only — index looked up dynamically)
-  private _activeDelegates: Set<number> = new Set();
-  // Buffer for sub-agent events that arrive before the delegate card is created
-  private _delegateEventBuffer: Map<number, any[]> = new Map();
-
-  /** Find the current index of a delegate card by its number (stable across splices). */
-  private _findDelegateIdx(msgs: readonly ChatMessage[], dlgNum: number): number {
-    for (let i = msgs.length - 1; i >= 0; i--) {
-      if ((msgs[i] as any).delegate?.number === dlgNum) return i;
-    }
-    return -1;
-  }
 
   // Ask-user state (agent waiting for human input)
   askUserPending = signal(false);
@@ -164,10 +168,18 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
   filteredMessages = computed(() => {
     const thread = this.currentThread();
     const msgs = this.messages();
-    if (thread === 'websocket:main') {
-      return msgs.filter(m => !m.sessionKey || m.sessionKey === 'websocket:main');
+    const threadFiltered = thread === 'websocket:main'
+      ? msgs.filter(m => !m.sessionKey || m.sessionKey === 'websocket:main')
+      : msgs.filter(m => m.sessionKey === thread);
+    if (!this.runView.visible()) {
+      return threadFiltered;
     }
-    return msgs.filter(m => m.sessionKey === thread);
+    return threadFiltered.filter(m => {
+      const t = (m as { type?: string }).type;
+      if (t === 'delegate_card') return false;
+      if (t === 'tool_progress' && this._isOrchestratorToolNoise(m)) return false;
+      return true;
+    });
   });
 
   /** Active thread metadata for context banners */
@@ -186,15 +198,20 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
   // ANS safety net: buffer learnings during agentic tasks
   // so they attach to the completion message, not pre-task chat.
   private _bufferedLearnings: string[] = [];
+  /** Session dedup for Learned chips (backend may still resend). */
+  private _seenLearningKeys = new Set<string>();
 
   private _agenticStepEvents: { step: number; toolCalls: { name: string }[]; toolResults: { success: boolean }[]; durationMs: number }[] = [];
 
   private sub!: Subscription;
+  private routerSub?: Subscription;
+  private paramSub?: Subscription;
   agentId = '';
   private waveformAnimFrame = 0;
 
   constructor(
     private route: ActivatedRoute,
+    private router: Router,
     public ws: WebSocketService,
     public api: ApiService,
     public platform: PlatformService,
@@ -203,12 +220,32 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
     private http: HttpClient,
     private chatUiSnapshot: ChatUiSnapshotService,
     readonly workbench: ChatWorkbenchService,
+    readonly runView: RunViewService,
+    private workspaceCtx: AgentWorkspaceContextService,
+    private day1Coach: Day1CoachService,
+    private agentModels: AgentModelService,
   ) {}
+
+  private _enrichFilePaths(paths: string[]): string[] {
+    const pd = this.workspaceCtx.getProjectDir(this.agentId);
+    if (!pd) return paths;
+    return paths.map((p) => enrichWorkspaceRelativePath(p, pd));
+  }
 
   ngOnInit() {
     this.agentId = this.route.snapshot.params['agentId'];
+    this._seenLearningKeys.clear();
+    this.agentModels.bindAgent(this.agentId);
     this.workbench.bindAgent(this.agentId);
+    this.runView.bindAgent(this.agentId);
     this.restoreChatUiSnapshot();
+    this.hydrateRunFromApi();
+    void this.agentModels.refreshFromConfig();
+    this.routerSub = this.router.events
+      .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
+      .subscribe(() => {
+        void this.agentModels.refreshFromConfig();
+      });
 
     // Load agent info
     this.api.getAgent(this.agentId).subscribe({
@@ -258,6 +295,44 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
         this.triggerSkillSetup(setupSkill);
       }
     }
+
+    this.paramSub = this.route.paramMap.subscribe((params) => {
+      const nextId = params.get('agentId') ?? '';
+      if (!nextId || nextId === this.agentId) return;
+      this.switchChatAgent(nextId);
+    });
+  }
+
+  /** When Angular reuses ChatComponent across /chat/:id navigations. */
+  private switchChatAgent(nextId: string): void {
+    this.persistChatUiSnapshot();
+    this.sub?.unsubscribe();
+
+    this.agentId = nextId;
+    this._seenLearningKeys.clear();
+    this.agentModels.bindAgent(nextId);
+    this.workbench.bindAgent(nextId);
+    this.runView.bindAgent(nextId);
+    this.restoreChatUiSnapshot();
+    this.hydrateRunFromApi();
+    this._restoreBackgroundState();
+
+    this.api.getAgent(nextId).subscribe({
+      next: (agent) => this.agent.set(agent),
+    });
+
+    this.ws.connect();
+    this.ws.joinAgent(nextId);
+    this.loadPersistedThreads();
+
+    this.sub = this.ws.onMessage(nextId).subscribe((msg) => {
+      this.handleRuntimeMessage(msg);
+    });
+  }
+
+  ngAfterViewInit(): void {
+    this.day1Coach.startIfScheduled();
+    this.day1Coach.requestLayoutUpdate();
   }
 
   private triggerSkillSetup(skillName: string): void {
@@ -296,6 +371,8 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
   ngOnDestroy() {
     this.persistChatUiSnapshot();
     this.sub?.unsubscribe();
+    this.routerSub?.unsubscribe();
+    this.paramSub?.unsubscribe();
     // Do not disconnect: shared WebSocket stays open for the agent across
     // Chat / Tasks / IDE so agentic runs are not cancelled on route change.
   }
@@ -311,8 +388,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
     }
     this.activities.set(snap.activities ?? []);
     this.daydreams.set(snap.daydreams ?? []);
-    this.planSteps.set(snap.planSteps ?? []);
-    this.planExpanded.set(snap.planExpanded ?? false);
+    this.runView.restorePersisted(snap.runView ?? null);
     if (snap.latestProbeSignals != null) {
       this.latestProbeSignals.set(snap.latestProbeSignals);
     }
@@ -325,7 +401,11 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.workbench.restoreState(
       snap.workbenchOpen ?? false,
       snap.workbenchEntries ?? [],
+      snap.workbenchDensity,
     );
+    if (snap.sidebarOpen != null) {
+      this.sidebarOpen.set(snap.sidebarOpen);
+    }
   }
 
   /** Merge heartbeat snapshots so partial WS payloads do not wipe BPM or digests. */
@@ -346,8 +426,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
       nlsMetadata: this.nlsMetadata(),
       activities: this.activities(),
       daydreams: this.daydreams(),
-      planSteps: this.planSteps(),
-      planExpanded: this.planExpanded(),
+      runView: this.runView.persisted(),
       latestProbeSignals: this.latestProbeSignals(),
       agenticActive: this.agenticActive(),
       agenticStep: this.agenticStep(),
@@ -357,6 +436,8 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
       backgroundTaskActive: this.backgroundTaskActive(),
       workbenchOpen: this.workbench.panelOpen(),
       workbenchEntries: this.workbench.snapshotState().entries,
+      workbenchDensity: this.workbench.snapshotState().density,
+      sidebarOpen: this.sidebarOpen(),
     });
   }
 
@@ -393,15 +474,17 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
       this.ws.send({ type: 'user_answer', content: text, session_key: threadKey });
       this.askUserPending.set(false);
     } else {
+      const model = this.agentModels.modelForOutgoingMessage();
       if (attachments.length > 0) {
         this.ws.send({
           type: 'message',
           content: text || 'Please examine the attached files.',
           attachments,
           session_key: threadKey,
+          ...(model ? { model } : {}),
         });
       } else {
-        this.ws.sendMessage(text, threadKey);
+        this.ws.sendMessage(text, threadKey, model);
       }
     }
 
@@ -544,7 +627,29 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
   }
 
   toggleSidebar() {
-    this.sidebarOpen.update(v => !v);
+    this.sidebarOpen.update(v => {
+      const next = !v;
+      ChatComponent.persistNeuralSidebarPreference(next);
+      return next;
+    });
+  }
+
+  private static readNeuralSidebarPreference(): boolean {
+    try {
+      const stored = localStorage.getItem(ChatComponent.NEURAL_SIDEBAR_KEY);
+      if (stored === null) return false;
+      return stored === 'true';
+    } catch {
+      return false;
+    }
+  }
+
+  private static persistNeuralSidebarPreference(open: boolean): void {
+    try {
+      localStorage.setItem(ChatComponent.NEURAL_SIDEBAR_KEY, String(open));
+    } catch {
+      // ignore quota / private browsing
+    }
   }
 
   formatMs(ms: number): string {
@@ -566,11 +671,11 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
     const h = this.nlsMetadata()?.hormones;
     if (!h) return null;
     const map: Record<string, { name: string; color: string }> = {
-      dopamine: { name: 'Dop', color: '#34d399' },
-      serotonin: { name: 'Ser', color: '#38bdf8' },
-      norepinephrine: { name: 'Nor', color: '#fbbf24' },
-      cortisol: { name: 'Cor', color: '#f87171' },
-      oxytocin: { name: 'Oxy', color: '#a78bfa' },
+      dopamine: { name: 'Dop', color: 'var(--accent-success)' },
+      serotonin: { name: 'Ser', color: 'var(--accent-primary)' },
+      norepinephrine: { name: 'Nor', color: 'var(--accent-warn)' },
+      cortisol: { name: 'Cor', color: 'var(--accent-danger)' },
+      oxytocin: { name: 'Oxy', color: 'var(--accent-primary)' },
     };
     let top: { name: string; value: number; color: string } | null = null;
     for (const [key, meta] of Object.entries(map)) {
@@ -679,7 +784,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
 
     // Draw waveform
     ctx.lineWidth = 2;
-    ctx.strokeStyle = '#38bdf8';
+    ctx.strokeStyle = 'var(--accent-primary)';
     ctx.beginPath();
 
     const sliceWidth = width / data.length;
@@ -700,10 +805,16 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
     ctx.stroke();
   }
 
+  /** Activity sidebar = orchestrator (EM) only; delegate streams use run panel + workbench. */
+  private _activitySidebarAllowed(): boolean {
+    return this._activitySidebarSuppressDepth === 0;
+  }
+
   /**
    * Update the background activity card's detail text, creating it if needed.
    */
   private _updateBackgroundCardDetail(detail: string): void {
+    if (!this._activitySidebarAllowed()) return;
     if (!this._backgroundTaskId || !this.activities().some(a => a.id === this._backgroundTaskId)) {
       this.backgroundTaskActive.set(true);
       this._backgroundTaskId = Date.now();
@@ -734,11 +845,22 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
     metadata?: Record<string, any>,
   ): number {
     const id = Date.now() + Math.floor(Math.random() * 1000);
+    const formatted = parseAgentMessageText(text);
+    const detailText = detail || formatted.body || '';
     this.activities.update(acts => [{
-      id, kind: kind as any, text,
-      detail: detail || '',
-      tags: [], signals: 0, factsStored: 0, timestamp: new Date(),
-      metadata: { autonomous: true, ...metadata },
+      id,
+      kind: kind as any,
+      text: formatted.headline || text,
+      detail: detailText,
+      tags: [],
+      signals: 0,
+      factsStored: 0,
+      timestamp: new Date(),
+      metadata: {
+        autonomous: true,
+        activityChips: formatted.chips,
+        ...metadata,
+      },
     }, ...acts].slice(0, 30));
     return id;
   }
@@ -794,95 +916,63 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
     }
   }
 
-  /**
-   * Find the best matching pending plan step for a tool call.
-   */
-  private _matchToolToPlanStep(toolName: string, args: any): number {
-    const steps = this.planSteps();
-    if (!steps.length) return -1;
-
-    const keywords: string[] = [];
-    if (args?.path) keywords.push(...args.path.split('/').pop()!.split('.'));
-    if (args?.file_path) keywords.push(...args.file_path.split('/').pop()!.split('.'));
-    if (args?.command) keywords.push(...args.command.split(/\s+/).slice(0, 4));
-    if (args?.url) keywords.push(args.url);
-    keywords.push(toolName);
-
-    const lowerKeywords = keywords.map(k => k.toLowerCase()).filter(k => k.length > 1);
-
-    let bestIdx = -1;
-    let bestScore = 0;
-
-    for (let i = 0; i < steps.length; i++) {
-      if (steps[i].status === 'done' || steps[i].status === 'error') continue;
-      const label = steps[i].label.toLowerCase();
-      let score = 0;
-      for (const kw of lowerKeywords) {
-        if (label.includes(kw)) score += kw.length;
-      }
-      if (score > bestScore) {
-        bestScore = score;
-        bestIdx = i;
-      }
-    }
-
-    if (bestIdx === -1) {
-      bestIdx = steps.findIndex(s => s.status === 'pending');
-    }
-
-    return bestIdx;
+  toggleDelegateExpanded(delegateNumber: number): void {
+    this.runView.toggleDelegateExpanded(delegateNumber);
   }
 
-  private _updatePlanStep(stepIdx: number, patch: Partial<{ status: 'pending' | 'active' | 'done' | 'error'; detail: string }>) {
-    if (stepIdx < 0) return;
-    this.planSteps.update(steps => {
-      const updated = [...steps];
-      updated[stepIdx] = { ...updated[stepIdx], ...patch };
-      return updated;
+  private hydrateRunFromApi(): void {
+    if (!this.agentId) return;
+    this.api.getTeams(this.agentId, true).subscribe({
+      next: (res) => {
+        const teams = res.teams || [];
+        if (teams.length) this.runView.hydrateTeams(teams);
+        const planId = teams.find((t: { plan_id?: string }) => t.plan_id)?.plan_id;
+        if (planId) {
+          this.api.getTimeline(this.agentId, planId).subscribe({
+            next: (tl) => {
+              if (!tl?.waves?.length) return;
+              const steps = tl.waves.flatMap((w: { steps?: unknown[] }) => w.steps || []);
+              if (steps.length) {
+                this.runView.hydratePlan({
+                  id: tl.plan_id,
+                  title: tl.title || '',
+                  status: tl.status || 'in_progress',
+                  progress: '',
+                  steps,
+                });
+              }
+            },
+          });
+        }
+      },
     });
   }
 
-  private _appendPlanStepDetail(stepIdx: number, chunk: string) {
-    if (stepIdx < 0) return;
-    this.planSteps.update(steps => {
-      const updated = [...steps];
-      const prev = updated[stepIdx].detail || '';
-      updated[stepIdx] = { ...updated[stepIdx], detail: prev + chunk };
-      return updated;
-    });
+  private _isOrchestratorToolNoise(msg: ChatMessage): boolean {
+    const tp = (msg as { toolProgress?: { toolName?: string } }).toolProgress;
+    const name = tp?.toolName || '';
+    const noisy = new Set([
+      'read', 'write', 'edit', 'grep', 'glob', 'list_dir', 'bash',
+      'plan', 'team', 'todo', 'delegate', 'delegate_ring', 'semantic_search',
+    ]);
+    return noisy.has(name);
   }
 
-  togglePlanExpanded(): void {
-    this.planExpanded.update(v => !v);
-  }
-
-  toggleDelegateExpanded(msgIdx: number): void {
-    this.messages.update(msgs => {
-      if (!msgs[msgIdx]?.delegate) return msgs;
-      const updated = [...msgs];
-      updated[msgIdx] = {
-        ...updated[msgIdx],
-        delegate: {
-          ...updated[msgIdx].delegate!,
-          expanded: !updated[msgIdx].delegate!.expanded,
-        },
-      };
-      return updated;
-    });
-  }
-
-  get planDoneCount(): number {
-    return this.planSteps().filter(s => s.status === 'done').length;
-  }
-
-  get planTotalCount(): number {
-    return this.planSteps().length;
+  private _suppressOrchestratorToolInChat(msg: Record<string, unknown>): boolean {
+    if (msg['sub_agent'] === true) return false;
+    if (msg['autonomous'] === true) return false;
+    return this.runView.visible();
   }
 
   private handleRuntimeMessage(msg: any) {
     if (!msg._wbDone) {
       msg._wbDone = true;
       this.workbench.recordFromRuntime(msg);
+    }
+    this.runView.handleMessage(msg);
+    const suppressActivitySidebar = msg.sub_agent === true;
+    if (suppressActivitySidebar) {
+      this._activitySidebarSuppressDepth++;
     }
     switch (msg.type) {
       case 'history':
@@ -932,7 +1022,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
               restored.push({
                 type: 'agentic_complete' as any,
                 content: meta.aborted
-                  ? `Task stopped: ${meta.abort_reason || 'Cancelled'}`
+                  ? agenticAbortLabel(true, meta.abort_reason, !!meta.autonomous)
                   : 'Task complete',
                 timestamp: new Date(),
                 agenticComplete: {
@@ -947,14 +1037,24 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
               });
               // Restore plan steps if they were saved in metadata
               if (Array.isArray(meta.plan_steps) && meta.plan_steps.length > 0) {
-                this.planSteps.set(meta.plan_steps.map((s: any) => ({
-                  label: s.label || '',
-                  status: (s.status === 'done' ? 'done' : s.status === 'in_progress' ? 'active' : 'pending') as any,
-                })));
+                this.runView.hydratePlan({
+                  id: meta.plan_id || '',
+                  title: meta.plan_title || 'Restored plan',
+                  status: 'in_progress',
+                  progress: '',
+                  steps: meta.plan_steps.map((s: any, idx: number) => ({
+                    id: s.id || `step-${idx + 1}`,
+                    label: typeof s === 'string' ? s : (s.label || ''),
+                    status: typeof s === 'string' ? 'pending' : (s.status || 'pending'),
+                    depends_on: [],
+                    delegatable: true,
+                  })),
+                });
               }
             }
 
             if (isAssistant && m.content) {
+              if (meta?.autonomous && meta?.communicated) continue;
               const text = m.content as string;
               if (this.isSystemInjection(text)) continue;
               const thought = parseThinking(text);
@@ -1028,9 +1128,10 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
               ...existing,
               ...msg.nls,
               signals: newSignals.slice(-20),  // accumulate, keep last 20
-              sleep_count: existing.sleep_count ?? 0,
-              ans: existing.ans ?? {},
+              sleep_count: msg.nls?.sleep_count ?? existing.sleep_count ?? 0,
+              ans: msg.nls?.ans ?? existing.ans ?? {},
               turn_count: (existing.turn_count ?? 0) + 1,
+              facts_in_memory: msg.nls?.facts_in_memory ?? existing.facts_in_memory ?? 0,
             };
           });
         }
@@ -1058,7 +1159,6 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
           this.agenticStep.set(0);
           this.streamingText.set('');
           this.streamingReasoning.set('');
-          this.planExpanded.set(false);
         }
 
         if (statusText === 'sleeping') {
@@ -1069,11 +1169,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
             timestamp: new Date(),
           }]);
         } else if (statusText === 'alive' && msg.sleep_complete) {
-          this.messages.update(msgs => [...msgs, {
-            type: 'status',
-            content: `Agent woke up (${msg.signals_processed || 0} signals consolidated)`,
-            timestamp: new Date(),
-          }]);
+          // Wake chat bubble handled in case 'sleep_complete'
         } else if (statusText !== 'alive') {
           // Show other status messages (errors, custom content)
           this.messages.update(msgs => [...msgs, {
@@ -1132,11 +1228,20 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
         };
         this.activities.update(acts => [dreamEntry, ...acts].slice(0, 10));
         this.daydreams.update(dreams => [dreamEntry, ...dreams].slice(0, 10));
-        if (msg.signals || msg.facts_stored) {
+        if (msg.facts_in_memory != null) {
           this.nlsMetadata.update(m => ({
             ...m,
-            facts_in_memory: (m?.facts_in_memory || 0) + (msg.facts_stored || 0),
+            facts_in_memory: msg.facts_in_memory,
           }));
+        } else if (msg.facts_stored) {
+          this.nlsMetadata.update(m => {
+            const base = m?.facts_in_memory || 0;
+            if (base <= 0) return m ?? {};
+            return {
+              ...m,
+              facts_in_memory: base + (msg.facts_stored || 0),
+            };
+          });
         }
         break;
       }
@@ -1277,9 +1382,6 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
         this.agenticMaxSteps.set(msg.max_steps || 15);
         this.activityStatus.set('Starting task...');
         this.lastAgenticResult.set(null);
-        this.planSteps.set([]);
-        this.planExpanded.set(false);
-        this._activePlanStepIdx = -1;
         this._agenticStepEvents = [];
         this._preToolReasoning = '';
         this._iterTextCommitted = false;
@@ -1415,38 +1517,46 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
         if (msg.autonomous) {
           this.backgroundTaskActive.set(false);
           const bgAborted = msg.aborted || false;
+          const silentYield = isSilentAutonomousCompletion(msg);
           const bgSteps = msg.total_steps || 0;
           const bgTools = msg.total_tool_calls || 0;
           const bgDur = ((msg.duration_ms || 0) / 1000).toFixed(0);
           const bgLabel = bgAborted
-            ? `Task stopped: ${msg.abort_reason || 'Cancelled'}`
+            ? agenticAbortLabel(true, msg.abort_reason, true)
             : `Task completed (${bgSteps} steps, ${bgTools} tool calls, ${bgDur}s)`;
 
-          // Ensure activity card exists (fallback if agentic_start was missed)
-          if (!this._backgroundTaskId || !this.activities().some(a => a.id === this._backgroundTaskId)) {
-            this._backgroundTaskId = Date.now();
-            this.activities.update(acts => [{
-              id: this._backgroundTaskId, kind: 'todo' as any,
-              text: bgAborted ? 'Task stopped' : 'Task completed',
-              detail: bgLabel, tags: [], signals: 0, factsStored: 0, timestamp: new Date(),
-              metadata: { autonomous: true, completed: true, aborted: bgAborted, source: msg.source || 'system' },
-            }, ...acts].slice(0, 20));
-          } else {
-            this.activities.update(acts => acts.map(a =>
-              a.id === this._backgroundTaskId
-                ? { ...a, text: a.text.replace(/Working on /, 'Completed: ').replace(/\.\.\.$/, ''),
-                    detail: bgLabel, metadata: { ...a.metadata, completed: true, aborted: bgAborted } }
-                : a
-            ));
+          if (!silentYield) {
+            // Ensure activity card exists (fallback if agentic_start was missed)
+            if (!this._backgroundTaskId || !this.activities().some(a => a.id === this._backgroundTaskId)) {
+              this._backgroundTaskId = Date.now();
+              this.activities.update(acts => [{
+                id: this._backgroundTaskId, kind: 'todo' as any,
+                text: bgAborted ? 'Check-in cancelled' : 'Task completed',
+                detail: bgLabel, tags: [], signals: 0, factsStored: 0, timestamp: new Date(),
+                metadata: { autonomous: true, completed: true, aborted: bgAborted, source: msg.source || 'system' },
+              }, ...acts].slice(0, 20));
+            } else {
+              this.activities.update(acts => acts.map(a =>
+                a.id === this._backgroundTaskId
+                  ? { ...a, text: a.text.replace(/Working on /, 'Completed: ').replace(/\.\.\.$/, ''),
+                      detail: bgLabel, metadata: { ...a.metadata, completed: true, aborted: bgAborted } }
+                  : a
+              ));
+            }
           }
-          // Show a compact notification in chat so user knows something finished
-          this.messages.update(msgs => [...msgs, {
-            type: 'status' as any,
-            content: bgAborted
-              ? `Background task stopped: ${msg.abort_reason || 'Cancelled'}`
-              : `Background task completed (${bgSteps} steps, ${bgDur}s)`,
-            timestamp: new Date(),
-          }]);
+          // Skip chat noise for internal orchestration yields (delegates still run)
+          const bgStatus = silentYield
+            ? ''
+            : bgAborted
+              ? agenticAbortLabel(true, msg.abort_reason, true)
+              : `Background task completed (${bgSteps} steps, ${bgDur}s)`;
+          if (bgStatus) {
+            this.messages.update(msgs => [...msgs, {
+              type: 'status' as any,
+              content: bgStatus,
+              timestamp: new Date(),
+            }]);
+          }
           sessionStorage.removeItem(`bg_task_${this.agentId}`);
           break;
         }
@@ -1473,9 +1583,12 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
         this.streamingText.set('');
         this.streamingReasoning.set('');
         this._pendingIterText = '';
-        this.planExpanded.set(false);
 
-        const aborted = msg.aborted || false;
+        const exitReason = String(
+          msg.exit_reason || msg.abort_reason || '',
+        ).trim();
+        const silentYield = isSilentOrchestrationExit(exitReason);
+        const aborted = (msg.aborted || false) && !silentYield;
         const totalSteps = msg.total_steps || 0;
         const totalToolCalls = msg.total_tool_calls || 0;
         const durationMs = msg.duration_ms || 0;
@@ -1489,15 +1602,13 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
 
         this.messages.update(msgs => [...msgs, {
           type: 'agentic_complete' as any,
-          content: aborted
-            ? `Task stopped: ${msg.abort_reason || 'Cancelled'}`
-            : `Task complete`,
+          content: agenticAbortLabel(aborted, exitReason, false),
           timestamp: new Date(),
           agenticComplete: {
             totalSteps,
             totalToolCalls,
             aborted,
-            abortReason: msg.abort_reason || '',
+            abortReason: exitReason,
             durationMs,
             hormones: msg.hormones || {},
             events: stepEvents,
@@ -1522,9 +1633,14 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
 
         // Flush buffered safety-net learnings onto the final message
         if (this._bufferedLearnings.length > 0) {
-          const buffered = [...this._bufferedLearnings];
+          const buffered = filterNewLearnTags(
+            [...this._bufferedLearnings],
+            this._seenLearningKeys,
+          );
           this._bufferedLearnings = [];
-          setTimeout(() => this._appendSignalTags(buffered), 100);
+          if (buffered.length > 0) {
+            setTimeout(() => this._appendSignalTags(buffered), 100);
+          }
         }
 
         // Merge full NLS metadata (hormones, working_memory, etc.)
@@ -1576,66 +1692,16 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
       }
 
       case 'delegate_start': {
-        if (msg.team_id) break;
-        const dlgNum = msg.delegate_number ?? 0;
         const dlgTask = msg.delegate_task || 'Sub-task';
-        const cardMsg: ChatMessage = {
-          type: 'delegate_card',
-          content: dlgTask,
-          timestamp: new Date(),
-          delegate: {
-            number: dlgNum,
-            task: dlgTask,
-            status: 'running',
-            toolCalls: [],
-            expanded: true,
-          },
-        };
-        this.messages.update(msgs => {
-          this._activeDelegates.add(dlgNum);
-          return [...msgs, cardMsg];
-        });
-        const buffered = this._delegateEventBuffer.get(dlgNum) || [];
-        this._delegateEventBuffer.delete(dlgNum);
-        for (const bufferedMsg of buffered) {
-          this.handleRuntimeMessage(bufferedMsg);
-        }
         this.activityStatus.set(`Delegating: ${dlgTask.slice(0, 80)}`);
+        if (!this.runView.expanded()) {
+          this.runView.setExpanded(true);
+        }
         break;
       }
 
       case 'delegate_end': {
-        if (msg.team_id) break;
-        const dlgNum = msg.delegate_number ?? 0;
-        const aborted = msg.aborted || false;
-        const summary = msg.summary || '';
-        const iterations = msg.iterations || 0;
-        const toolCalls = msg.tool_calls || 0;
-        this.messages.update(msgs => {
-          const idx = this._findDelegateIdx(msgs, dlgNum);
-          if (idx < 0) return msgs;
-          const updated = [...msgs];
-          const card = { ...updated[idx].delegate! };
-          if (aborted && card.toolCalls?.length) {
-            card.toolCalls = card.toolCalls.map((tc: any) =>
-              tc.result ? tc : { ...tc, result: 'error', isError: true }
-            );
-          }
-          updated[idx] = {
-            ...updated[idx],
-            delegate: {
-              ...card,
-              status: aborted ? 'error' : 'done',
-              summary,
-              iterations,
-              totalToolCalls: toolCalls,
-              expanded: false,
-            },
-          };
-          return updated;
-        });
-        this._activeDelegates.delete(dlgNum);
-        if (this._activeDelegates.size === 0) {
+        if (this.runView.runningDelegateCount() === 0) {
           this.activityStatus.set('');
         }
         break;
@@ -1655,41 +1721,46 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
         break;
       }
 
-      case 'delegate_progress': {
-        if (msg.team_id) break;
-        const dlgNum = msg.delegate_number ?? -1;
-        const iter = msg.iteration || 0;
-        const maxIter = msg.max_iterations || 0;
-        const elapsed = msg.elapsed_seconds || 0;
-        this.messages.update(msgs => {
-          const idx = this._findDelegateIdx(msgs, dlgNum);
-          if (idx < 0) return msgs;
-          const updated = [...msgs];
-          const card = updated[idx].delegate!;
-          updated[idx] = {
-            ...updated[idx],
-            delegate: {
-              ...card,
-              iterations: iter,
-              maxIterations: maxIter,
-              elapsedSeconds: Math.round(elapsed),
-            },
-          };
-          return updated;
-        });
+      case 'team_created':
+      case 'team_advanced': {
+        const team = msg.team;
+        if (team?.status === 'created') {
+          const name = team.name || team.id || 'Wave';
+          this.activities.update(acts => [{
+            id: Date.now(),
+            kind: 'todo' as ActivityKind,
+            text: 'Wave planned — not launched',
+            detail: `${name} [${team.id}]`,
+            tags: labelTags(['Team', 'Not launched']),
+            signals: 0,
+            factsStored: 0,
+            timestamp: new Date(),
+            metadata: { team_id: team.id, status: 'created' },
+          }, ...acts].slice(0, 20));
+        }
         break;
       }
+
+      case 'team_launched': {
+        const team = msg.team;
+        if (team?.id) {
+          this.activities.update(acts => acts.filter(
+            a => !(a.metadata?.team_id === team.id && a.metadata?.status === 'created'),
+          ));
+        }
+        break;
+      }
+
+      case 'delegate_progress':
+        break;
 
       case 'tool_output_chunk': {
         const chunk = msg.chunk || '';
         const toolName = msg.tool_name || 'bash';
-        if (msg.sub_agent === true && msg.delegate_number != null && this._activeDelegates.has(msg.delegate_number)) {
+        if (msg.sub_agent === true) {
           break;
         }
-        if (msg.sub_agent === true && msg.delegate_number != null) {
-          const buf = this._delegateEventBuffer.get(msg.delegate_number) || [];
-          buf.push(msg);
-          this._delegateEventBuffer.set(msg.delegate_number, buf);
+        if (this._suppressOrchestratorToolInChat(msg)) {
           break;
         }
         this.messages.update(msgs => {
@@ -1728,8 +1799,6 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
             timestamp: new Date(),
           }];
         });
-        // Also append to the active plan step's detail
-        this._appendPlanStepDetail(this._activePlanStepIdx, chunk + '\n');
         break;
       }
 
@@ -1787,8 +1856,11 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
           }
         }
 
-        // For write tools, show file content streaming
-        if (acc.name === 'write' || acc.name === 'write_file' || acc.name === 'create_file') {
+        // For write tools, show file content streaming (skip when run panel owns orchestration UI)
+        if (
+          (acc.name === 'write' || acc.name === 'write_file' || acc.name === 'create_file')
+          && !this.runView.visible()
+        ) {
           // Extract path and content from partial JSON
           let filePath = '';
           let fileContent = '';
@@ -1832,10 +1904,6 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
               timestamp: new Date(),
             }];
           });
-          // Stream file content into the active plan step's detail
-          if (fileContent && this._activePlanStepIdx >= 0) {
-            this._updatePlanStep(this._activePlanStepIdx, { detail: fileContent });
-          }
         } else if (acc.name === 'bash') {
           this.streamingText.set('');
           let command = '';
@@ -1927,6 +1995,9 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
       }
 
       case 'agentic_plan': {
+        if (msg.project_dir) {
+          this.workspaceCtx.setProjectDir(this.agentId, String(msg.project_dir));
+        }
         const rawSteps: any[] = msg.steps || [];
         if (msg.autonomous) {
           if (rawSteps.length > 0) {
@@ -1938,40 +2009,15 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
 
             // Only create a new card if this is a genuinely new plan
             // (not a re-broadcast after verify/update).
-            const existingPlanCard = this.activities().find(
-              a => a.metadata?.['planId'] === planId && planId,
+            this._updateBackgroundCardDetail(
+              `Plan (${labels.length} steps): ${labels.slice(0, 3).join(', ')}${labels.length > 3 ? '…' : ''}`,
             );
-            if (!existingPlanCard) {
-              this._addAutonomousActivityCard('agentic_task',
-                `Plan created (${labels.length} steps)`,
-                labels.slice(0, 4).join(', ') + (labels.length > 4 ? '...' : ''),
-                { planId, planSteps: labels, planStatuses: statuses },
-              );
-            } else {
-              // Update the existing card with latest step statuses
-              existingPlanCard.metadata = {
-                ...existingPlanCard.metadata,
-                planStatuses: statuses,
-              };
-            }
 
             // Track plan steps for step-completed cards
             this._bgPlanSteps = labels;
             this._bgPlanStatuses = statuses;
           }
           break;
-        }
-        if (rawSteps.length > 0) {
-          const hasIds = rawSteps.some((s: any) => typeof s === 'object' && s.id);
-          this._planBackendDriven = hasIds;
-          const parsed = rawSteps.map((s: any) =>
-            typeof s === 'string'
-              ? { label: s, status: 'pending' as const }
-              : { label: s.label || '', status: (s.status === 'done' ? 'done' : s.status === 'failed' ? 'error' : s.status === 'in_progress' ? 'active' : 'pending') as any }
-          );
-          this.planSteps.set(parsed);
-          this._planStepPrevStatus = parsed.map(s => s.status);
-          this.planExpanded.set(true);
         }
         break;
       }
@@ -1986,26 +2032,11 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
           if (bgStepIdx >= 0 && bgStepStatus === 'done') {
             const stepLabel = bgStepIdx < this._bgPlanSteps.length
               ? this._bgPlanSteps[bgStepIdx] : '';
-            this._addAutonomousActivityCard('agentic_task',
-              `Step ${bgStepIdx + 1} completed${stepLabel ? ': ' + stepLabel : ''}`,
-              undefined,
-              { stepIndex: bgStepIdx, planSteps: [...this._bgPlanSteps], planStatuses: [...this._bgPlanStatuses] },
+            this._updateBackgroundCardDetail(
+              `Step ${bgStepIdx + 1} done${stepLabel ? ': ' + stepLabel : ''}`,
             );
           }
           break;
-        }
-        const stepIdx = msg.step_index ?? -1;
-        const rawStatus = msg.status || 'done';
-        const status = rawStatus === 'in_progress' ? 'active'
-          : rawStatus === 'failed' ? 'error'
-          : rawStatus === 'skipped' ? 'done'
-          : rawStatus === 'done' ? 'done'
-          : 'pending';
-        if (stepIdx >= 0) {
-          this._updatePlanStep(stepIdx, { status: status as any });
-          if (stepIdx < this._planStepPrevStatus.length) {
-            this._planStepPrevStatus[stepIdx] = status as any;
-          }
         }
         break;
       }
@@ -2040,30 +2071,52 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
             bgLabel = `Searching: ${args.query || args.term || ''}...`;
           } else if (toolName === 'browser_navigate') {
             bgLabel = `Browsing: ${(args.url || '').slice(0, 60)}...`;
+          } else if (toolName === 'switch_mode') {
+            const parsed = toolWorkbenchTitle('switch_mode', args as Record<string, unknown>);
+            bgLabel = parsed.title;
           } else {
             bgLabel = `Running ${toolName}...`;
           }
           this._updateBackgroundCardDetail(bgLabel);
-          this._addAutonomousActivityCard('agentic_task', bgLabel, undefined, {
-            toolName, callId: msg.call_id || '',
-          });
           break;
         }
         const callId = msg.call_id || '';
         const subAgent = msg.sub_agent === true;
         const dlgNum: number = msg.delegate_number ?? -1;
 
-        if (subAgent) break;
+        if (subAgent && dlgNum >= 0) {
+          break;
+        }
 
+        if (this._suppressOrchestratorToolInChat(msg)) {
+          break;
+        }
+
+        const normArgs = normalizeToolArguments(args);
+        let filePaths: string[] = [];
         let label = toolName;
+        if (toolName === 'plan') {
+          this.workspaceCtx.noteProjectDirFromText(
+            this.agentId,
+            JSON.stringify(normArgs),
+          );
+        }
         if (toolName === 'write' || toolName === 'write_file' || toolName === 'create_file') {
-          label = `Writing ${args.path || args.file_path || 'file'}...`;
+          filePaths = this._enrichFilePaths(collectFilePaths(toolName, normArgs));
+          const name = filePaths[0] ? fileDisplayName(filePaths[0]) : 'file';
+          label = `Writing ${name}…`;
         } else if (toolName === 'bash') {
-          label = args.command ? `$ ${args.command}` : 'Running command...';
+          label = normArgs['command']
+            ? `$ ${normArgs['command']}`
+            : 'Running command...';
         } else if (toolName === 'read' || toolName === 'read_file') {
-          label = `Reading ${args.path || args.file_path || 'file'}...`;
+          filePaths = this._enrichFilePaths(collectFilePaths(toolName, normArgs));
+          const name = filePaths[0] ? fileDisplayName(filePaths[0]) : 'file';
+          label = `Reading ${name}…`;
         } else if (toolName === 'edit') {
-          label = `Editing ${args.path || args.file_path || 'file'}...`;
+          filePaths = this._enrichFilePaths(collectFilePaths(toolName, normArgs));
+          const name = filePaths[0] ? fileDisplayName(filePaths[0]) : 'file';
+          label = `Editing ${name}…`;
         } else if (toolName === 'offer_download') {
           label = `Preparing download: ${args.label || args.path || 'file'}...`;
         } else if (toolName === 'wait') {
@@ -2125,7 +2178,12 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
               updated[i] = {
                 ...m,
                 content: label,
-                toolProgress: { ...m.toolProgress, callId, arguments: args },
+                toolProgress: {
+                  ...m.toolProgress,
+                  callId,
+                  arguments: normArgs,
+                  ...(filePaths.length ? { filePaths } : {}),
+                },
               };
               return updated;
             }
@@ -2136,7 +2194,8 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
             toolProgress: {
               toolName,
               callId,
-              arguments: args,
+              arguments: normArgs,
+              ...(filePaths.length ? { filePaths } : {}),
               done: false,
               iteration: msg.iteration || 0,
             },
@@ -2144,14 +2203,6 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
           }];
         });
 
-        if (this._activePlanStepIdx >= 0) {
-          const prev = this._planStepPrevStatus[this._activePlanStepIdx] || 'pending';
-          this._updatePlanStep(this._activePlanStepIdx, { status: prev });
-        }
-        this._activePlanStepIdx = this._matchToolToPlanStep(toolName, args);
-        if (this._activePlanStepIdx >= 0) {
-          this._updatePlanStep(this._activePlanStepIdx, { status: 'active' });
-        }
         break;
       }
 
@@ -2173,7 +2224,13 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
         const subAgent = msg.sub_agent === true;
         const dlgNum: number = msg.delegate_number ?? -1;
 
-        if (subAgent) break;
+        if (subAgent && dlgNum >= 0) {
+          break;
+        }
+
+        if (this._suppressOrchestratorToolInChat(msg)) {
+          break;
+        }
 
         let doneLabel = toolName;
         if (toolName === 'write' || toolName === 'write_file' || toolName === 'create_file') {
@@ -2200,19 +2257,39 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
           doneLabel = isError ? `${toolName} failed` : `${toolName} done`;
         }
 
+        const endArgs = normalizeToolArguments(msg.arguments || {});
+        if (toolName === 'plan') {
+          this.workspaceCtx.noteProjectDirFromText(
+            this.agentId,
+            msg.result_preview || '',
+          );
+        }
+        const endFilePaths = this._enrichFilePaths(
+          collectFilePaths(
+            toolName,
+            endArgs,
+            msg.result_preview || '',
+          ),
+        );
+
         this.messages.update(msgs => {
           const updated = [...msgs];
           let matchIdx = -1;
           for (let i = updated.length - 1; i >= 0; i--) {
             const m = updated[i] as any;
             if (m.type === 'tool_progress' && m.toolProgress?.callId === callId) {
+              const mergedPaths = endFilePaths.length
+                ? endFilePaths
+                : (m.toolProgress?.filePaths || []);
               updated[i] = {
                 ...m,
                 content: doneLabel,
                 toolProgress: {
                   ...m.toolProgress,
+                  arguments: { ...m.toolProgress?.arguments, ...endArgs },
                   done: true,
                   isError,
+                  ...(mergedPaths.length ? { filePaths: mergedPaths } : {}),
                   ...(details ? { details } : {}),
                 },
               };
@@ -2256,15 +2333,6 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
           return updated;
         });
 
-        if (this._activePlanStepIdx >= 0) {
-          if (this._planBackendDriven) {
-            const prev = this._planStepPrevStatus[this._activePlanStepIdx] || 'pending';
-            this._updatePlanStep(this._activePlanStepIdx, { status: prev });
-          } else {
-            this._updatePlanStep(this._activePlanStepIdx, { status: isError ? 'error' : 'done' });
-          }
-          this._activePlanStepIdx = -1;
-        }
         this.activityStatus.set('');
         break;
       }
@@ -2379,6 +2447,13 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
 
       case 'communicate': {
         this.streamingText.set('');
+        // Auto-surfaced turn text stays in workbench; explicit communicate() + milestones show here.
+        const hideAutonomousChatter =
+          (msg.mid_loop || msg.autonomous)
+          && !isUserFacingOrchestrationMessage(msg);
+        if (hideAutonomousChatter) {
+          break;
+        }
         this.messages.update(msgs => [...msgs, {
           type: 'assistant' as any,
           content: msg.message || '',
@@ -2422,7 +2497,10 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
             const intensity = v >= 0.7 ? 'high' : v >= 0.5 ? 'medium' : 'low';
             return `[${cat}:${intensity}]`;
           });
-        const allTags = [...facts.map(f => `[LEARN:${f}]`), ...emotionTags];
+        const allTags = filterNewLearnTags(
+          [...facts.map(f => `[LEARN:${f}]`), ...emotionTags],
+          this._seenLearningKeys,
+        );
         if (allTags.length === 0) break;
 
         if (this.agenticActive()) {
@@ -2459,23 +2537,43 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
         }, ...acts].slice(0, 15));
         break;
 
-      case 'sleep_complete':
+      case 'sleep_complete': {
+        const nls = msg.nls || {};
+        const signals = msg.signals_processed ?? nls.signals_processed ?? 0;
+        const sleepCycles = msg.sleep_count ?? nls.sleep_count ?? this.nlsMetadata()?.sleep_count ?? 0;
+        this.messages.update(msgs => {
+          const withoutSleeping = msgs.filter(m =>
+            !(m.type === 'status' && typeof m.content === 'string' &&
+              /sleeping/i.test(m.content)),
+          );
+          return [...withoutSleeping, {
+            type: 'status',
+            content: `Agent is back up (${signals} signals consolidated, sleep cycle #${sleepCycles}).`,
+            timestamp: new Date(),
+          }];
+        });
         this.nlsMetadata.update(m => ({
           ...m,
-          ans: msg.ans ?? m?.ans ?? {},
-          hormones: msg.hormones ?? m?.hormones ?? {},
-          heartbeat: this._mergeHeartbeat(m?.heartbeat, msg.heartbeat),
-          facts_in_memory: msg.facts_in_memory ?? m?.facts_in_memory ?? 0,
-          working_memory: msg.working_memory ?? m?.working_memory,
-          narrative: msg.narrative ?? m?.narrative,
-          network_dynamics: msg.network_dynamics ?? m?.network_dynamics,
+          ...nls,
+          ans: msg.ans ?? nls.ans ?? m?.ans ?? {},
+          hormones: msg.hormones ?? nls.hormones ?? m?.hormones ?? {},
+          heartbeat: this._mergeHeartbeat(m?.heartbeat, msg.heartbeat ?? nls.heartbeat),
+          facts_in_memory: msg.facts_in_memory ?? nls.facts_in_memory ?? m?.facts_in_memory ?? 0,
+          sleep_count: sleepCycles,
+          turn_count: msg.turn_count ?? nls.turn_count ?? m?.turn_count ?? 0,
+          working_memory: msg.working_memory ?? nls.working_memory ?? m?.working_memory,
+          narrative: msg.narrative ?? nls.narrative ?? m?.narrative,
+          theory_of_mind: msg.theory_of_mind ?? nls.theory_of_mind ?? m?.theory_of_mind,
+          predictive_processing: msg.predictive_processing ?? nls.predictive_processing ?? m?.predictive_processing,
+          network_dynamics: msg.network_dynamics ?? nls.network_dynamics ?? m?.network_dynamics,
         }));
         this.activities.update(acts => [{
           id: Date.now(), kind: 'sleep_complete' as ActivityKind,
-          text: 'Sleep cycle complete', tags: [],
-          signals: msg.signals_processed || 0, factsStored: 0, timestamp: new Date(),
+          text: `Sleep complete — ${signals} signals`, tags: [],
+          signals, factsStored: 0, timestamp: new Date(),
         }, ...acts].slice(0, 15));
         break;
+      }
 
       case 'consciousness_state':
         this.nlsMetadata.update(m => ({
@@ -2596,6 +2694,9 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
         }
         break;
     }
+    if (suppressActivitySidebar) {
+      this._activitySidebarSuppressDepth--;
+    }
   }
 
   // ─── In-app browser ───────────────────────────────────────
@@ -2605,6 +2706,7 @@ export class ChatComponent implements OnInit, OnDestroy, AfterViewChecked {
   }
 
   private _appendSignalTags(tags: string[]): void {
+    tags = filterNewLearnTags(tags, this._seenLearningKeys);
     if (tags.length === 0) return;
     this.messages.update(msgs => {
       const updated = [...msgs];

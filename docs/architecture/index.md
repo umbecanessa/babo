@@ -6,9 +6,11 @@ Technical documentation for how Babo is built and how data flows.
 
 ## Start here
 
-1. **[Deployment topologies](deployment-topologies.md)** — desktop hub, hosted web, NestJS relay (read first).
-2. **[System overview](overview.md)** — repository map and request path.
-3. **[Data flow](data-flow.md)** — messages, signals, sleep.
+1. **[Production architecture & onboarding](production-architecture-and-onboarding.md)** — ship-ready map + wizard UX (read first for release).
+2. **[Babo Cloud personas & commercial design](babo-cloud-personas-and-commercial-design.md)** — who runs what, BYO vs hosted, email/Google, pricing direction.
+3. **[Deployment topologies](deployment-topologies.md)** — desktop hub, hosted web, NestJS relay.
+4. **[System overview](overview.md)** — repository map and request path.
+5. **[Data flow](data-flow.md)** — messages, signals, sleep.
 
 ---
 
@@ -29,6 +31,9 @@ Technical documentation for how Babo is built and how data flows.
 | [NestJS modules](nestjs-modules/index.md) | Per-module deep dives (`backend/src/`) |
 | [Server runtime](server.md) | FastAPI, startup, routes |
 | [Inference & plugins](inference-and-plugins.md) | BYO API vs lab plugins |
+| [Capability profiles & onboarding](capability-profiles-and-onboarding.md) | Composable local / LAN / hosted setup |
+| [Babo Cloud personas & commercial design](babo-cloud-personas-and-commercial-design.md) | Personas, placements, platform BYO, metering & pricing direction |
+| [Vision worker](vision-worker.md) | Ambient Moondream: local, GX10 container, hosted |
 
 ---
 

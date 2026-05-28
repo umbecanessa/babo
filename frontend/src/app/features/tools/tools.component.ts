@@ -8,8 +8,6 @@ import { HttpClient } from '@angular/common/http';
 import { ApiService } from '../../core/services/api.service';
 import { ToastService } from '../../shared/toast/toast.service';
 import { Agent } from '../../core/models/agent.model';
-import { OnboardingModalComponent } from '../../shared/onboarding/onboarding-modal.component';
-import { ONBOARDING_PAGES } from '../../shared/onboarding/onboarding-content';
 import { IntegrationCardComponent, IntegrationChannelType } from './integration-card/integration-card.component';
 import { SkillCardComponent } from './skill-card/skill-card.component';
 import { ToolCardComponent, AgentTool } from './tool-card/tool-card.component';
@@ -69,7 +67,7 @@ function decodeJwtEmail(): string {
   selector: 'app-tools',
   standalone: true,
   imports: [
-    CommonModule, FormsModule, OnboardingModalComponent,
+    CommonModule, FormsModule,
     IntegrationCardComponent, SkillCardComponent, ToolCardComponent,
     DetailModalComponent, SchemaConfigFormComponent, GoogleConnectModalComponent,
   ],
@@ -87,11 +85,6 @@ function decodeJwtEmail(): string {
           <h1 class="title">Skills &amp; Tools</h1>
           <p class="subtitle">Agent integrations, skills, and tools</p>
         </div>
-        <button class="info-btn" (click)="onboardingModal?.show()" title="About this page">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
-          </svg>
-        </button>
       </header>
 
       <!-- Pending Reviews -->
@@ -668,14 +661,10 @@ function decodeJwtEmail(): string {
       (closed)="closeGoogleModal()"
       (connected)="onGoogleConnected($event)" />
 
-    <app-onboarding-modal #onboardingModal [config]="onboardingConfig" />
   `,
   styleUrl: './tools.component.scss',
 })
 export class ToolsComponent implements OnInit, OnDestroy {
-  @ViewChild('onboardingModal') onboardingModal?: OnboardingModalComponent;
-  onboardingConfig = ONBOARDING_PAGES['tools'];
-
   agent = signal<Agent | null>(null);
   loading = signal<boolean>(true);
   skills = signal<any[]>([]);

@@ -1,6 +1,8 @@
 import { Injectable } from '@angular/core';
 import { ChatMessage } from './websocket.service';
 import type { WorkbenchEntry } from './chat-workbench.service';
+import type { WorkbenchDensity } from './workbench-density.util';
+import type { RunViewPersisted } from '../models/run-view.model';
 
 /**
  * Persists Chat UI state across route changes (Chat → Tasks → Chat) so the
@@ -14,8 +16,7 @@ export interface ChatUiSnapshot {
   nlsMetadata: any;
   activities: any[];
   daydreams: any[];
-  planSteps: { label: string; status: 'pending' | 'active' | 'done' | 'error'; detail?: string }[];
-  planExpanded: boolean;
+  runView?: RunViewPersisted | null;
   latestProbeSignals: {
     signals: Record<string, number>;
     fired: string[];
@@ -32,6 +33,9 @@ export interface ChatUiSnapshot {
   /** Bottom workbench panel (agentic / tool log) */
   workbenchOpen: boolean;
   workbenchEntries: WorkbenchEntry[];
+  workbenchDensity?: WorkbenchDensity;
+  /** Desktop Neural State sidebar */
+  sidebarOpen?: boolean;
 }
 
 @Injectable({ providedIn: 'root' })

@@ -46,7 +46,7 @@ export function recommendProfile(
   } else {
     inference = {
       tier: 'hosted_babo',
-      model: 'anthropic/claude-sonnet-4',
+      model: 'google/gemini-2.5-flash',
       reason: 'Babo Cloud recommended for this device',
     };
   }

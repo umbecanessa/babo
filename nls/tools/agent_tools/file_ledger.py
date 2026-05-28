@@ -22,6 +22,9 @@ import asyncio
 import difflib
 import json
 import logging
+import re
+import threading
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -32,6 +35,111 @@ logger = logging.getLogger(__name__)
 
 _MAX_DIFF_CHARS = 6_000   # cap per ledger entry to avoid bloat
 _SKIP_DIFF_BYTES = 200_000  # skip diffing files larger than this
+
+# Populated per-wave via set_wave_ownership(shared_paths=...); no hardcoded layout.
+_SHARED_PATHS: frozenset[str] = frozenset()
+
+# Scratch paths delegates may create outside their assigned scope (not teammates').
+_SCRATCH_DIR_PREFIXES: tuple[str, ...] = (
+    "tmp/",
+    "temp/",
+    "scratch/",
+    ".tmp/",
+    ".cache/",
+)
+
+
+def is_scratch_path(path: str) -> bool:
+    """True for temp/scratch files delegates may write outside assigned scope."""
+    norm = normalize_ledger_path(path)
+    if not norm:
+        return False
+    base = norm.rsplit("/", 1)[-1].lower()
+    if base.startswith("tmp") or base.startswith(".tmp"):
+        return True
+    if base.endswith((".tmp", ".temp", ".scratch")):
+        return True
+    for prefix in _SCRATCH_DIR_PREFIXES:
+        p = prefix.rstrip("/")
+        if norm == p or norm.startswith(prefix):
+            return True
+    return False
+
+
+def normalize_ledger_path(path_str: str) -> str:
+    """Normalize agent-supplied paths for ledger keys and ownership checks."""
+    if not path_str:
+        return ""
+    p = path_str.strip().strip('"').strip("'")
+    # JSON blob mistake: {"path": "foo.py"
+    if p.startswith("{") and "path" in p:
+        m = re.search(r'["\']path["\']\s*:\s*["\']([^"\']+)', p)
+        if m:
+            p = m.group(1)
+    # Hybrid: packages/foo/C:\Users\... → take absolute tail after drive letter
+    if re.search(r"[/\\][A-Za-z]:\\", p) or re.search(r"^[A-Za-z]:\\", p):
+        m = re.search(r"([A-Za-z]:\\.*)$", p.replace("/", "\\"))
+        if m:
+            p = m.group(1)
+        else:
+            parts = re.split(r"[/\\](?=[A-Za-z]:\\)", p.replace("/", "\\"))
+            if parts:
+                p = parts[-1]
+    p = p.replace("\\", "/")
+    if p.startswith("workspace/"):
+        p = p[len("workspace/"):]
+    return p
+
+
+@dataclass
+class FileIndexEntry:
+    """Derived provenance for one file path."""
+
+    path: str
+    creator_delegate: int | None = None
+    creator_wave: int | None = None
+    creator_role: str = "agent"
+    last_delegate: int | None = None
+    last_wave: int | None = None
+    last_role: str = "agent"
+    edit_count: int = 0
+    last_ts: str = ""
+
+
+@dataclass
+class FileLedgerIndex:
+    """In-memory index rebuilt from ledger JSONL."""
+
+    entries: dict[str, FileIndexEntry] = field(default_factory=dict)
+
+    def apply_entry(self, entry: dict[str, Any]) -> None:
+        """Incrementally update index from one ledger record."""
+        raw_path = entry.get("path", "")
+        path = normalize_ledger_path(raw_path)
+        if not path or path.startswith("{"):
+            return
+        author = entry.get("author") or {}
+        role = author.get("role", "agent")
+        delegate = author.get("delegate_index")
+        wave = author.get("wave")
+        ts = entry.get("ts", "")
+        rec = self.entries.get(path)
+        if rec is None:
+            rec = FileIndexEntry(path=path)
+            rec.creator_role = role
+            rec.creator_delegate = delegate if role == "delegate" else None
+            rec.creator_wave = wave
+            self.entries[path] = rec
+        rec.edit_count += 1
+        rec.last_role = role
+        rec.last_delegate = delegate if role == "delegate" else None
+        rec.last_wave = wave
+        rec.last_ts = ts
+
+    def rebuild(self, history: list[dict[str, Any]]) -> None:
+        self.entries.clear()
+        for entry in history:
+            self.apply_entry(entry)
 
 
 # ---------------------------------------------------------------------------
@@ -44,10 +152,287 @@ class FileLedger:
 
     def __init__(self, ledger_path: Path) -> None:
         self._path = ledger_path
+        self._lock = threading.Lock()
+        self._index = FileLedgerIndex()
+        self._wave_registry: dict[int, dict[int, list[str]]] = {}
+        self._active_wave: int | None = None
+        self._shared_paths: set[str] = set(_SHARED_PATHS)
+        self._released_delegates: dict[int, set[int]] = {}
+        self._project_dir_prefix: str = ""
         try:
             self._path.parent.mkdir(parents=True, exist_ok=True)
         except Exception:
             pass
+        self.refresh_index()
+
+    def refresh_index(self) -> None:
+        """Rebuild the in-memory index from the JSONL file."""
+        with self._lock:
+            self._index.rebuild(self.history(n=10_000))
+
+    def set_wave_ownership(
+        self,
+        wave: int,
+        delegate_paths: dict[int, list[str]],
+        *,
+        shared_paths: list[str] | None = None,
+        project_dir: str | None = None,
+    ) -> None:
+        """Register path patterns per delegate for a parallel wave."""
+        with self._lock:
+            self._wave_registry[wave] = {
+                k: [normalize_ledger_path(p) for p in v]
+                for k, v in delegate_paths.items()
+            }
+            self._active_wave = wave
+            self._released_delegates.pop(wave, None)
+            if project_dir is not None:
+                self._project_dir_prefix = normalize_ledger_path(project_dir)
+            if shared_paths is not None:
+                self._shared_paths = {
+                    normalize_ledger_path(p) for p in shared_paths
+                }
+
+    def clear_active_wave(self, wave: int | None = None) -> None:
+        with self._lock:
+            if wave is None:
+                self._active_wave = None
+            elif self._active_wave == wave:
+                self._active_wave = None
+            if wave is not None:
+                self._released_delegates.pop(wave, None)
+
+    def release_delegate_ownership(self, wave: int, delegate: int) -> None:
+        """Drop exclusive path scope when a delegate finishes their task."""
+        with self._lock:
+            self._released_delegates.setdefault(wave, set()).add(delegate)
+            wave_reg = self._wave_registry.get(wave)
+            if wave_reg is not None:
+                wave_reg.pop(delegate, None)
+
+    def grant_delegate_paths(
+        self,
+        wave: int,
+        delegate: int,
+        paths: list[str],
+    ) -> list[str]:
+        """Append path patterns to a delegate's wave scope (orchestrator grant)."""
+        granted: list[str] = []
+        with self._lock:
+            wave_reg = self._wave_registry.setdefault(wave, {})
+            existing = wave_reg.setdefault(delegate, [])
+            seen = {normalize_ledger_path(p) for p in existing}
+            for raw in paths:
+                norm = normalize_ledger_path(raw)
+                if not norm or norm in seen:
+                    continue
+                existing.append(norm)
+                seen.add(norm)
+                granted.append(norm)
+        return granted
+
+    def set_delegate_paths(
+        self,
+        wave: int,
+        delegate: int,
+        paths: list[str],
+    ) -> None:
+        """Replace a delegate's wave path list (e.g. after plan owned_paths update)."""
+        with self._lock:
+            wave_reg = self._wave_registry.setdefault(wave, {})
+            wave_reg[delegate] = [
+                norm
+                for p in paths
+                if (norm := normalize_ledger_path(p))
+            ]
+
+    def get_index_entry(self, path: str) -> FileIndexEntry | None:
+        norm = normalize_ledger_path(path)
+        return self._index.entries.get(norm)
+
+    def _scope_relative_path(self, path: str) -> str:
+        """Path relative to project_dir when delegate CWD is inside it."""
+        norm = normalize_ledger_path(path)
+        pd = self._project_dir_prefix
+        if not norm or not pd:
+            return norm
+        if norm == pd:
+            return ""
+        prefix = f"{pd}/"
+        if norm.startswith(prefix):
+            return norm[len(prefix):]
+        return norm
+
+    def _path_matches_pattern(self, path: str, pattern: str) -> bool:
+        norm = self._scope_relative_path(path)
+        pat = normalize_ledger_path(pattern)
+        if not norm or not pat:
+            return False
+        if norm == pat:
+            return True
+        if pat.endswith("/"):
+            return norm.startswith(pat)
+        return norm.startswith(pat.rstrip("/") + "/")
+
+    def _delegate_owns_path(
+        self,
+        delegate: int,
+        path: str,
+        wave: int | None,
+    ) -> bool:
+        if wave is None:
+            return True
+        owners = self._wave_registry.get(wave, {})
+        if delegate not in owners:
+            return False
+        patterns = owners.get(delegate, [])
+        if not patterns:
+            return False
+        return any(self._path_matches_pattern(path, p) for p in patterns)
+
+    def _teammate_scope_owner(
+        self,
+        delegate: int,
+        path: str,
+        wave: int | None,
+    ) -> int | None:
+        """Delegate # that owns this path pattern, if not the current author."""
+        if wave is None:
+            return None
+        for other, patterns in self._wave_registry.get(wave, {}).items():
+            if other == delegate:
+                continue
+            if any(self._path_matches_pattern(path, p) for p in patterns):
+                return other
+        return None
+
+    def check_mutation_allowed(
+        self,
+        path: str,
+        author: dict[str, Any],
+        *,
+        file_exists: bool,
+    ) -> str | None:
+        """Return an error message if this write/edit should be blocked."""
+        norm = normalize_ledger_path(path)
+        if not norm or norm.startswith("{"):
+            return (
+                f"Invalid path: {path!r}. Use a relative path like "
+                f"'packages/server/foo.py', not JSON or absolute Windows paths."
+            )
+
+        scope_norm = self._scope_relative_path(norm)
+
+        role = author.get("role", "agent")
+        delegate = author.get("delegate_index")
+        wave = author.get("wave")
+
+        if role == "orchestrator":
+            return None
+
+        _in_my_scope = (
+            role == "delegate"
+            and delegate is not None
+            and wave is not None
+            and self._delegate_owns_path(delegate, scope_norm, wave)
+        )
+
+        if norm in self._shared_paths or scope_norm in self._shared_paths:
+            if role == "delegate" and not _in_my_scope:
+                return (
+                    f"FILE LOCKED: {norm} is a shared integration file. "
+                    f"Do not edit it unless it is listed in your assigned "
+                    f"owned_paths — implement in your module paths otherwise. "
+                    f"Need access? escalate(reason='file_access', paths=['{norm}'], "
+                    f"message='why you need this file')."
+                )
+
+        idx = self.get_index_entry(norm)
+        _released = self._released_delegates.get(wave or -1, set())
+        if (
+            role == "delegate"
+            and delegate is not None
+            and wave is not None
+            and self._active_wave == wave
+            and idx is not None
+            and idx.creator_delegate is not None
+            and idx.creator_delegate != delegate
+            and idx.creator_wave == wave
+            and idx.creator_delegate not in _released
+            and file_exists
+            and not _in_my_scope
+        ):
+            return (
+                f"FILE OWNED BY TEAMMATE: {norm} was created by delegate "
+                f"#{idx.creator_delegate} in wave {wave} and is outside your "
+                f"assigned scope. If both steps share this path, add it to "
+                f"owned_paths on both plan steps."
+            )
+
+        if role == "delegate" and delegate is not None and wave is not None:
+            if delegate in _released:
+                return (
+                    f"DELEGATE COMPLETE: delegate #{delegate} finished wave {wave} — "
+                    f"do not edit files. Hand off to the orchestrator or teammates."
+                )
+            idx = self.get_index_entry(norm)
+            if (
+                idx is not None
+                and idx.creator_delegate is not None
+                and idx.creator_delegate in _released
+                and idx.creator_delegate != delegate
+            ):
+                return None
+            if self._delegate_owns_path(delegate, scope_norm, wave):
+                return None
+            teammate = self._teammate_scope_owner(delegate, scope_norm, wave)
+            if teammate is not None:
+                return (
+                    f"PATH IN TEAMMATE'S ASSIGNMENT: {norm} is inside delegate "
+                    f"#{teammate}'s exclusive wave-{wave} scope. If both delegates "
+                    f"need this file, add the path to owned_paths on both steps."
+                )
+            if is_scratch_path(scope_norm):
+                return None
+            if not file_exists and idx is None:
+                return None
+            if idx is not None and idx.creator_delegate == delegate:
+                return None
+            owners = self._wave_registry.get(wave, {})
+            allowed = owners.get(delegate, [])
+            hint = ", ".join(allowed[:4]) if allowed else "see [FILE OWNERSHIP]"
+            return (
+                f"PATH NOT IN YOUR ASSIGNMENT: {norm} is outside your "
+                f"wave-{wave} file scope. Your paths: {hint}. "
+                f"Scratch files (tmp_*.json, temp/) are OK outside teammate "
+                f"directories. Need this file? escalate(reason='file_access', "
+                f"paths=['{norm}'], message='why you need it')."
+            )
+
+        return None
+
+    def format_path_context(self, path: str, author: dict[str, Any]) -> str:
+        """Short provenance blurb for SubCryptex / tool hints."""
+        norm = normalize_ledger_path(path)
+        lines = [f"[FILE CONTEXT: {norm}]"]
+        idx = self.get_index_entry(norm)
+        if idx and idx.creator_delegate is not None:
+            lines.append(
+                f"  Created by delegate #{idx.creator_delegate} "
+                f"(wave {idx.creator_wave}); last edit #{idx.last_delegate} "
+                f"({idx.edit_count} change(s))."
+            )
+        elif idx:
+            lines.append(f"  {idx.edit_count} recorded change(s); last: {idx.last_role}.")
+        else:
+            lines.append("  No prior ledger history — new file is OK.")
+        delegate = author.get("delegate_index")
+        wave = author.get("wave")
+        if delegate is not None and wave is not None:
+            allowed = self._wave_registry.get(wave, {}).get(delegate, [])
+            if allowed:
+                lines.append(f"  Your wave-{wave} scope: {', '.join(allowed[:5])}")
+        return "\n".join(lines)
 
     # ------------------------------------------------------------------
     # Write path
@@ -98,9 +483,10 @@ class FileLedger:
                 if ln.startswith("-") and not ln.startswith("---")
             )
 
+        norm_path = normalize_ledger_path(file_path)
         entry: dict[str, Any] = {
             "ts": datetime.now(timezone.utc).isoformat(),
-            "path": file_path,
+            "path": norm_path or file_path,
             "action": action,
             "author": author,
             "stats": {"added": added, "removed": removed},
@@ -109,6 +495,8 @@ class FileLedger:
         try:
             with self._path.open("a", encoding="utf-8") as fh:
                 fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+            with self._lock:
+                self._index.apply_entry(entry)
         except Exception:
             logger.debug("FileLedger.record write failed for %s", file_path, exc_info=True)
 

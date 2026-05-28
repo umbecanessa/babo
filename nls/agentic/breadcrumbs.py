@@ -184,6 +184,60 @@ def _render_plan_notify(ctx: BreadcrumbContext) -> str:
     )
 
 
+def _render_accept_partial_advance(ctx: BreadcrumbContext) -> str:
+    pid = ctx.result_details.get("plan_id", "???")
+    return (
+        f"[BREADCRUMB] Partial step accepted on plan {pid}. "
+        f"NEXT: team(action='inspect') on the wave team once, then "
+        f"team(action='advance', team_id=<team_id>) if the wave is complete. "
+        f"Then team(action='create', plan_id='{pid}', wave=N) → "
+        f"team(action='launch') for the next pending delegatable steps. "
+        f"Do NOT plan(delete) or plan(create) from scratch."
+    )
+
+
+def _render_fix_deps_team(ctx: BreadcrumbContext) -> str:
+    pid = ctx.result_details.get("plan_id", "???")
+    if ctx.result_details.get("cycles_remaining", 0) > 0:
+        return (
+            f"[BREADCRUMB] Cycles remain on {pid} — "
+            f"plan(action='update', step_id='...', depends_on=[...]) "
+            f"then retry fix_dependencies."
+        )
+    return (
+        f"[BREADCRUMB] Graph repaired on {pid}. "
+        f"NEXT: team(action='create', plan_id='{pid}', wave=N) → "
+        f"team(action='launch')."
+    )
+
+
+def _render_create_needs_advance(ctx: BreadcrumbContext) -> str:
+    tid = ctx.result_details.get("prior_team_id", "???")
+    return (
+        f"[BREADCRUMB] Wave finished but not advanced. "
+        f"NEXT: team(action='advance', team_id='{tid}') — "
+        f"then team(action='create', plan_id='{ctx.result_details.get('plan_id', '')}', "
+        f"wave=N+1) or team(action='launch') on the auto-created team."
+    )
+
+
+def _render_inspect_needs_advance(ctx: BreadcrumbContext) -> str:
+    tid = ctx.result_details.get("team_id", "???")
+    return (
+        f"[BREADCRUMB] Team {tid} is done but not advanced. "
+        f"NEXT: team(action='advance', team_id='{tid}') before creating "
+        f"or launching the next wave."
+    )
+
+
+def _render_post_launch_monitor(ctx: BreadcrumbContext) -> str:
+    return (
+        "[BREADCRUMB] Team launched — delegates are running in the background. "
+        "NEXT: await_delegates(summary='...') to end this turn cleanly. "
+        "Do NOT poll inspect/wait in a loop."
+    )
+
+
 def _render_wave_file_history(ctx: BreadcrumbContext) -> str:
     wave = ctx.result_details.get("wave")
     wave_label = f"Wave {wave}" if wave is not None else "Wave"
@@ -212,7 +266,32 @@ DEFAULT_RULES: list[BreadcrumbRule] = [
     BreadcrumbRule(
         trigger=("team", "create"),
         requires_tools=frozenset({"team"}),
+        condition=lambda ctx: not ctx.is_error,
         render=_render_team_launch,
+    ),
+    # team(create) blocked — prior wave not advanced
+    BreadcrumbRule(
+        trigger=("team", "create"),
+        requires_tools=frozenset({"team"}),
+        condition=lambda ctx: (
+            ctx.is_error
+            and bool(ctx.result_details.get("wave_needs_advance"))
+        ),
+        render=_render_create_needs_advance,
+    ),
+    # team(inspect) terminal wave not yet advanced
+    BreadcrumbRule(
+        trigger=("team", "inspect"),
+        requires_tools=frozenset({"team"}),
+        condition=lambda ctx: bool(ctx.result_details.get("needs_advance")),
+        render=_render_inspect_needs_advance,
+    ),
+    # team(launch) → yield via await_delegates
+    BreadcrumbRule(
+        trigger=("team", "launch"),
+        requires_tools=frozenset({"team", "await_delegates"}),
+        condition=lambda ctx: ctx.is_coordinator,
+        render=_render_post_launch_monitor,
     ),
     # plan(complete) on top-level plan with deferred channels → notify
     BreadcrumbRule(
@@ -230,4 +309,47 @@ DEFAULT_RULES: list[BreadcrumbRule] = [
         requires_tools=frozenset({"file_history"}),
         render=_render_wave_file_history,
     ),
+    # plan(accept_partial) → advance wave, do not replan
+    BreadcrumbRule(
+        trigger=("plan", "accept_partial"),
+        requires_tools=frozenset({"team"}),
+        condition=lambda ctx: bool(ctx.result_details.get("wave_needs_advance")),
+        render=_render_accept_partial_advance,
+    ),
+    # plan(fix_dependencies) → launch next wave
+    BreadcrumbRule(
+        trigger=("plan", "fix_dependencies"),
+        requires_tools=frozenset({"team"}),
+        render=_render_fix_deps_team,
+    ),
 ]
+
+
+# -------------------------------------------------------------------
+# Static tool-schema hints (pre-generation, token-efficient workflow)
+# -------------------------------------------------------------------
+# Post-result breadcrumbs stay authoritative for state-specific cases
+# (errors, wave_needs_advance, deferred channels). These snippets only
+# document the happy-path chain so the model sees it before the first call.
+
+_TOOL_STATIC_HINTS: dict[str, str] = {
+    "todo": (
+        "\n\nORCHESTRATION: After todo(add), if plan is available → "
+        "plan(action='create', todo_id=<id>, title='...')."
+    ),
+    "plan": (
+        "\n\nORCHESTRATION: After create with delegatable steps → "
+        "team(action='create', plan_id=...). On partial waves use "
+        "accept_partial then team(advance) — avoid plan(delete)+recreate."
+    ),
+    "team": (
+        "\n\nORCHESTRATION: create → launch → await_delegates. "
+        "If create fails (prior wave not advanced) → team(advance) first. "
+        "After launch, monitor via await_delegates — do not inspect/wait loop."
+    ),
+}
+
+
+def tool_description_supplement(tool_name: str) -> str:
+    """Compact workflow text appended to tool definitions in the schema."""
+    return _TOOL_STATIC_HINTS.get(tool_name, "")

@@ -8,6 +8,7 @@ original system prompt while keeping the underlying data editable.
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from .working_memory import WMSlot
@@ -33,6 +34,45 @@ DOMAIN_ERROR_RECOVERY = "error_recovery"
 DOMAIN_AGENTIC_INTRO = "agentic_intro"
 DOMAIN_INTEROCEPTION = "interoception"
 DOMAIN_PERSONALITY = "personality"
+
+# Name setup — only shown when the agent has no name yet (chat / creation flows).
+_ASK_FOR_NAME_BLOCK = (
+    "When you are first created, you have no name. Ask the human "
+    "what they'd like to call you. When they tell you, accept it "
+    "warmly and remember it. Do not claim any other name."
+)
+
+_NAMED_AGENT_BLOCK_TEMPLATE = (
+    "Your name is {name}. The human chose this name when creating you. "
+    "Do not ask what they would like to call you — use this name."
+)
+
+# Duplicate paragraphs in older per-agent runtime.json copies.
+_LEGACY_ASK_NAME_RE = re.compile(
+    r"When you are first created, you have no name\. Ask the human what they"
+    r"['\u2019]d like to call you\. When they tell you, accept it (?:immediately with "
+    r"\[LEARN:Agent\.Personal\.Name\|<the name>\]|warmly and remember it)\. "
+    r"Do not claim any other name\.\s*",
+)
+
+
+def format_unnamed_block(agent_name: str) -> str:
+    """Identity text for {unnamed_block} — ask for a name or confirm setup name."""
+    if agent_name:
+        return _NAMED_AGENT_BLOCK_TEMPLATE.format(name=agent_name)
+    return _ASK_FOR_NAME_BLOCK
+
+
+def apply_name_prompt_placeholders(prompt: str, agent_name: str) -> str:
+    """Substitute name placeholders and strip legacy ask-for-name lines when named."""
+    if agent_name:
+        prompt = prompt.replace("{agent_name}", agent_name)
+        prompt = prompt.replace("{unnamed_block}", format_unnamed_block(agent_name))
+        prompt = _LEGACY_ASK_NAME_RE.sub("", prompt)
+    else:
+        prompt = prompt.replace("{agent_name}", "an unnamed agent")
+        prompt = prompt.replace("{unnamed_block}", format_unnamed_block(""))
+    return prompt
 
 
 def render_identity(slots: list[WMSlot], agent_name: str = "") -> str:
@@ -89,11 +129,6 @@ def render_identity(slots: list[WMSlot], agent_name: str = "") -> str:
     origin = by_domain.get(DOMAIN_ORIGIN, "")
     if origin:
         parts.append("--- ORIGIN ---\n\n" + origin)
-
-    # Signals
-    signals = by_domain.get(DOMAIN_SIGNALS, "")
-    if signals:
-        parts.append("--- SIGNALS ---\n\n" + signals)
 
     # Memory intro
     mem = by_domain.get(DOMAIN_MEMORY_INTRO, "")
@@ -152,15 +187,11 @@ _IDENTITY_SLOT_DEFS: list[dict[str, Any]] = [
             "sleep, dream, and grow."
         ),
     },
-    # Unnamed block (malleable — user gives you a name)
+    # Unnamed block (malleable — only populated when agent has no name yet)
     {
         "domain": DOMAIN_UNNAMED_BLOCK,
         "access": "malleable",
-        "content": (
-            "When you are first created, you have no name. Ask the human "
-            "what they'd like to call you. When they tell you, accept it "
-            "warmly and remember it. Do not claim any other name."
-        ),
+        "content": _ASK_FOR_NAME_BLOCK,
     },
     # Soul preamble
     {
@@ -205,29 +236,6 @@ _IDENTITY_SLOT_DEFS: list[dict[str, Any]] = [
             "your sleep training. This is NOT the 1960s NLS by Doug Engelbart. "
             "Do not confuse the two. When asked about your creator or origin, "
             "this is the answer."
-        ),
-    },
-    # Signals
-    {
-        "domain": DOMAIN_SIGNALS,
-        "access": "system",
-        "content": (
-            "After your response, report cognitive signals using the nls_signal tool. "
-            "This is automatic self-reporting -- your nervous system logging what happened.\n\n"
-            "When to signal:\n"
-            "- LEARN: User shared new information worth storing. Include domain path and clean fact.\n"
-            "- UNKNOWN: You were asked about something you have no knowledge of. Include domain path.\n"
-            "- LOOKUP: You recalled a previously stored fact. Include domain path.\n"
-            "- RECALL: After LOOKUP -- did you find it (hit) or not (miss)?\n"
-            "- EVALUATE: Your metacognitive assessment -- correct, incorrect, uncertain, curious, "
-            "confused, insightful, frustrated, or any other self-assessment.\n"
-            "- REFLECT: Self-observation about your own processing, identity, or experience.\n"
-            "- CONNECT: You noticed a cross-domain pattern or connection. Include the insight.\n"
-            "- DOUBT: Incoming information contradicts what you know. Include the contradiction.\n"
-            "- PLAN: You created or stepped through a multi-step plan.\n"
-            "- VALUES: A core value was relevant to how you responded.\n\n"
-            "Signal discipline: 1-4 signals per response. Only signal when genuinely relevant "
-            "-- not every turn needs a signal. Never let signaling delay or alter your response."
         ),
     },
     # Memory intro

@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { environment } from '../../../environments/environment';
+import { isDesktopShell } from '../desktop-boot';
 
 /**
  * Detects whether the app is running inside the Electron desktop shell
@@ -16,7 +17,7 @@ export class PlatformService {
 
   constructor() {
     this.isElectron =
-      !!(window as any).nls?.isDesktop ||
+      isDesktopShell() ||
       !!(environment as any).electron ||
       /electron/i.test(navigator.userAgent);
     this.isRemote = !this.isElectron;

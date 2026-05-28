@@ -49,8 +49,11 @@ extraResources:
   - from: ../requirements-desktop.txt
     to: nls-source/requirements-desktop.txt
 
-  # Genesis templates are bundled or fetched at runtime
-  # via GenesisSyncClient -- no local bundle needed.
+  # Genesis templates — regenerated from nls/config before each desktop build
+  - from: ../genesis_templates
+    to: genesis_templates
+    filter:
+      - "**/*"
 
 win:
   target:

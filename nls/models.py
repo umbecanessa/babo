@@ -29,6 +29,7 @@ class SovereigntyMode(str, Enum):
 class BlockType(str, Enum):
     """Type of block in the Merkle-Delta chain."""
 
+    GENESIS = "genesis"  # Agent birth — soul + base model fingerprint (height 0)
     DELTA = "delta"  # Incremental memory block from a consolidation session
     EPOCH = "epoch"  # Merged block from TIES-Merging of multiple deltas
 

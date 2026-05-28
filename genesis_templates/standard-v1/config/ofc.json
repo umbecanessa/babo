@@ -1,0 +1,13 @@
+{
+  "somatic_weights": {
+    "cortisol_risk_penalty": -0.30,
+    "dopamine_novelty_bonus": 0.20,
+    "energy_cost_penalty": -0.25,
+    "oxytocin_social_bonus": 0.15,
+    "serotonin_stability_bonus": 0.10
+  },
+  "outcome_history_max": 500,
+  "outcome_ema_alpha": 0.15,
+  "social_value_alpha": 0.10,
+  "max_users": 100
+}

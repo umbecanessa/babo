@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 _NAMING_PATTERNS = [
     r"(?:your name (?:is|will be|shall be))\s+"
-    r"[\"']?([A-Z][a-zA-Z\-']{1,30})[\"']?",
+    r"[\"']?([A-Za-z][A-Za-z0-9\-' ]{0,30})[\"']?",
     r"(?:(?:i(?:'ll| will) )?call you|"
     r"(?:let(?:'s|s)) call you)\s+"
     r"[\"']?([A-Z][a-zA-Z\-']{1,30})[\"']?",

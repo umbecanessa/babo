@@ -105,38 +105,38 @@ export interface ConfigFieldSchema {
     }
   `,
   styles: [`
-    .no-schema { color: var(--text-muted, #787890); font-size: 13px; margin: 0; }
+    .no-schema { color: var(--text-muted, var(--text-muted)); font-size: 13px; margin: 0; }
     .schema-group { margin-bottom: 20px; }
     .schema-group-title {
       font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
-      color: var(--text-muted, #787890); margin: 0 0 10px 0; font-weight: 600;
+      color: var(--text-muted, var(--text-muted)); margin: 0 0 10px 0; font-weight: 600;
     }
     .schema-field { margin-bottom: 14px; }
     .schema-label { display: block; font-size: 13px; font-weight: 500; color: var(--text-primary, #c5c5d0); margin-bottom: 4px; }
-    .required-mark { color: #f87171; }
-    .schema-description { font-size: 12px; color: var(--text-muted, #787890); margin: 0 0 6px 0; line-height: 1.4; }
+    .required-mark { color: var(--accent-danger); }
+    .schema-description { font-size: 12px; color: var(--text-muted, var(--text-muted)); margin: 0 0 6px 0; line-height: 1.4; }
     .schema-input, .schema-select {
       width: 100%; padding: 8px 12px; font-size: 13px; color: var(--text-primary, #c5c5d0);
-      background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px;
+      background: var(--overlay-1); border: 1px solid var(--glass-border); border-radius: 8px;
       outline: none;
     }
     .schema-input-wrap { display: flex; gap: 8px; align-items: center; }
     .schema-input-wrap .schema-input { flex: 1; }
     .reveal-btn {
       padding: 6px 10px; font-size: 12px; color: var(--text-muted); background: transparent;
-      border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; cursor: pointer;
+      border: 1px solid var(--glass-border); border-radius: 8px; cursor: pointer;
     }
     .schema-readonly {
-      padding: 8px 12px; font-size: 13px; color: var(--text-muted); background: rgba(255,255,255,0.02);
-      border: 1px solid rgba(255,255,255,0.06); border-radius: 8px;
+      padding: 8px 12px; font-size: 13px; color: var(--text-muted); background: var(--overlay-1);
+      border: 1px solid var(--glass-border); border-radius: 8px;
     }
     .schema-toggle { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
-    .schema-toggle input { accent-color: var(--accent, #38bdf8); }
+    .schema-toggle input { accent-color: var(--accent-primary); }
     .toggle-text { font-size: 13px; color: var(--text-primary); }
     .schema-save-btn {
       display: inline-flex; align-items: center; gap: 8px; margin-top: 16px;
-      padding: 8px 18px; font-size: 13px; font-weight: 500; color: #050508;
-      background: var(--accent, #38bdf8); border: none; border-radius: 8px; cursor: pointer;
+      padding: 8px 18px; font-size: 13px; font-weight: 500; color: var(--bg-primary);
+      background: var(--accent-primary); border: none; border-radius: 8px; cursor: pointer;
     }
     .schema-save-btn:disabled { opacity: 0.6; cursor: not-allowed; }
     .btn-spinner {

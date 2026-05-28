@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 def setup_tools(
     agent_id: str,
     agent_dir: Path,
-    vllm_client: Any,
+    runtime: Any,
     config: dict[str, Any],
     *,
     skill_loader: Any | None = None,
@@ -27,6 +27,7 @@ def setup_tools(
     theory_of_mind: Any | None = None,
     narrative_self: Any | None = None,
     working_memory: Any | None = None,
+    dual_wm: Any | None = None,
     channel_registry: Any | None = None,
     on_bash_output: Any | None = None,
 ) -> tuple[list[Any], list[dict], Any | None, Any | None]:
@@ -44,12 +45,14 @@ def setup_tools(
     browser_headless = agency_cfg.get("browser_headless", False)
 
     runtime_url = agency_cfg.get("runtime_url", "")
-    if not runtime_url and vllm_client is not None:
-        base = getattr(vllm_client, "base_url", None) or getattr(vllm_client, "_base_url", "")
-        if base:
-            parts = base.rsplit(":", 1)
-            if len(parts) == 2:
-                runtime_url = f"{parts[0]}:8443"
+    if not runtime_url:
+        runtime_url = os.environ.get("NLS_RUNTIME_PUBLIC_URL", "").strip()
+    if not runtime_url:
+        host = os.environ.get("NLS_HOST", "127.0.0.1")
+        port = os.environ.get("NLS_PORT", "9222")
+        runtime_url = f"http://{host}:{port}"
+
+    gpu_worker_secret = os.environ.get("NLS_GPU_WORKER_SECRET", "")
 
     browser_profile_dir = str(agent_dir / "browser_profile")
     browser_cdp_url = os.environ.get("NLS_BROWSER_CDP_URL", "")
@@ -73,6 +76,7 @@ def setup_tools(
         runtime_url=runtime_url,
         data_dir=str(agent_dir.parent.parent),
         agent_id=agent_id,
+        gpu_worker_secret=gpu_worker_secret,
     )
 
     # File-change ledger — inject into write/edit tools so every successful
@@ -98,28 +102,42 @@ def setup_tools(
 
         _NO_THINK_BODY = {"chat_template_kwargs": {"enable_thinking": False}}
 
+        async def _resolve_inference() -> tuple[Any, str | None]:
+            if hasattr(runtime, "inference_pipeline"):
+                return runtime.inference_pipeline()
+            client = getattr(runtime, "vllm_client", None)
+            return client, None
+
         async def _plan_verify(prompt: str) -> str:
-            if vllm_client is None:
+            client, adapter = await _resolve_inference()
+            if client is None:
                 return "ALL_CRITERIA_MET"
             _content = prompt if prompt.startswith("/no_think") else "/no_think\n" + prompt
-            result = await vllm_client.generate(
-                adapter_name=None,
+            from nls.runtime.inference_compat import micro_inference_extra_body
+
+            _upstream = getattr(client, "base_url", "") or ""
+            result = await client.generate(
+                adapter_name=adapter,
                 messages=[{"role": "user", "content": _content}],
                 max_tokens=512, temperature=0.1,
-                extra_body=_NO_THINK_BODY,
+                extra_body=micro_inference_extra_body(_upstream, thinking=False),
             )
             return getattr(result, "text", str(result)).strip()
 
         async def _dep_inference(prompt: str) -> str:
             """Dedicated inference for dependency graph fixing — higher token budget."""
-            if vllm_client is None:
-                raise RuntimeError("No vLLM client for dependency inference")
+            client, adapter = await _resolve_inference()
+            if client is None:
+                raise RuntimeError("No inference client for dependency inference")
             _content = prompt if prompt.startswith("/no_think") else "/no_think\n" + prompt
-            result = await vllm_client.generate(
-                adapter_name=None,
+            from nls.runtime.inference_compat import micro_inference_extra_body
+
+            _upstream = getattr(client, "base_url", "") or ""
+            result = await client.generate(
+                adapter_name=adapter,
                 messages=[{"role": "user", "content": _content}],
                 max_tokens=1024, temperature=0.0,
-                extra_body=_NO_THINK_BODY,
+                extra_body=micro_inference_extra_body(_upstream, thinking=False),
             )
             return getattr(result, "text", str(result)).strip()
 
@@ -153,6 +171,34 @@ def setup_tools(
             # subsequent writes (research notes, new projects) are not placed
             # inside the completed project's folder (KL #403).
             plan_tool.set_cwd_reset_fn(_switch_cwd)
+
+        _ring_wm = dual_wm if dual_wm is not None else working_memory
+        if plan_tool is not None and _ring_wm is not None:
+            if hasattr(_ring_wm, "set_plan_requirements"):
+                def _sync_plan_context(
+                    requirements: str, tech_block: str, _stack: dict,
+                ) -> None:
+                    try:
+                        _ring_wm.set_plan_requirements(requirements)
+                        _ring_wm.set_plan_tech_stack(tech_block)
+                    except Exception:
+                        pass
+
+                def _clear_plan_context() -> None:
+                    try:
+                        if hasattr(_ring_wm, "clear_plan_context"):
+                            _ring_wm.clear_plan_context()
+                    except Exception:
+                        pass
+
+                plan_tool.set_context_sync_fn(_sync_plan_context)
+                plan_tool.set_context_clear_fn(_clear_plan_context)
+                try:
+                    _active = plan_tool.get_store().find_active()
+                    if _active:
+                        plan_tool.sync_context_from_plan(_active)
+                except Exception:
+                    pass
 
         if plan_tool is not None and ans is not None:
             try:
@@ -267,6 +313,9 @@ def setup_tools(
     _plan_tool = next((t for t in tools if getattr(t, "name", "") == "plan"), None)
     if _plan_tool is not None and _team_manager is not None:
         _plan_tool._team_manager = _team_manager
+
+    if _team_manager is not None and _file_ledger is not None:
+        _team_manager.set_file_ledger(_file_ledger)
 
     # Wire plan → todo lifecycle auto-sync.
     _todo_tool = next((t for t in tools if getattr(t, "name", "") == "todo"), None)

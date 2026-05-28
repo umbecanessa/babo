@@ -13,6 +13,7 @@ from typing import Any
 import httpx
 
 from nls.tools.agent_tools.base import AgentTool, ToolResult
+from nls.agentic.outbound_notify import FINAL_SUMMARY_SCHEMA_PROPERTY
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +88,7 @@ class WhatsAppSendTool:
                         "document attachments (e.g. ['report.pdf', 'chart.png'])"
                     ),
                 },
+                "final_summary": FINAL_SUMMARY_SCHEMA_PROPERTY,
             },
             "required": [],
         }

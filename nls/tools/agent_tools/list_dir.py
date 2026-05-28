@@ -29,7 +29,7 @@ _SKIP_DIRS = frozenset({
 })
 
 
-from .write import _resolve_path  # shared dedup-aware resolver
+from .write import _resolve_path, format_path_for_agent  # shared path helpers
 
 
 class ListDirTool:
@@ -114,11 +114,11 @@ class ListDirTool:
                 is_error=True,
             )
 
-        ws_root = Path(self._workspace_root).resolve()
-        try:
-            display_path = str(target.resolve().relative_to(ws_root)).replace("\\", "/") or "."
-        except ValueError:
-            display_path = str(target)
+        display_path = format_path_for_agent(
+            target,
+            workspace_root=self._workspace_root,
+            effective_cwd=self._effective_cwd,
+        )
 
         lines: list[str] = [f"{display_path}/"]
         entry_count = [0]

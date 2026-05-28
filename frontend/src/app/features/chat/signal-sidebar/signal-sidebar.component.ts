@@ -12,7 +12,12 @@ import {
   humanType as _humanType,
   humanizeLabel,
   extractDomain,
+  normalizeActivityTags,
 } from '../../../shared/signal-utils';
+import {
+  type ActivityChip,
+  parseAgentMessageText,
+} from '../../../core/services/activity-format.util';
 
 export type ActivityKind =
   | 'dream'           // passive daydream (replay / exploration)
@@ -76,7 +81,8 @@ export interface ContextItem {
   _salience?: number;
 }
 
-const MAX_VISIBLE_ACTIVITIES = 10;
+const MAX_VISIBLE_ACTIVITIES = 5;
+const MAX_VISIBLE_ACTIVITIES_EXPANDED = 10;
 
 @Component({
   selector: 'app-signal-sidebar',
@@ -116,11 +122,11 @@ export class SignalSidebarComponent implements OnChanges, OnInit, OnDestroy {
     paragraphKeys: ['info.hormones.p1'],
     icon: '🧪',
     legend: [
-      { color: '#34d399', labelKey: 'info.hormones.legend.dopamine', descKey: 'info.hormones.legend.dopamine_desc' },
-      { color: '#38bdf8', labelKey: 'info.hormones.legend.serotonin', descKey: 'info.hormones.legend.serotonin_desc' },
-      { color: '#fbbf24', labelKey: 'info.hormones.legend.norepinephrine', descKey: 'info.hormones.legend.norepinephrine_desc' },
-      { color: '#f87171', labelKey: 'info.hormones.legend.cortisol', descKey: 'info.hormones.legend.cortisol_desc' },
-      { color: '#a78bfa', labelKey: 'info.hormones.legend.oxytocin', descKey: 'info.hormones.legend.oxytocin_desc' },
+      { color: 'var(--accent-success)', labelKey: 'info.hormones.legend.dopamine', descKey: 'info.hormones.legend.dopamine_desc' },
+      { color: 'var(--accent-primary)', labelKey: 'info.hormones.legend.serotonin', descKey: 'info.hormones.legend.serotonin_desc' },
+      { color: 'var(--accent-warn)', labelKey: 'info.hormones.legend.norepinephrine', descKey: 'info.hormones.legend.norepinephrine_desc' },
+      { color: 'var(--accent-danger)', labelKey: 'info.hormones.legend.cortisol', descKey: 'info.hormones.legend.cortisol_desc' },
+      { color: 'var(--accent-primary)', labelKey: 'info.hormones.legend.oxytocin', descKey: 'info.hormones.legend.oxytocin_desc' },
     ],
   };
   activityInfo: InfoModalConfig = {
@@ -130,9 +136,9 @@ export class SignalSidebarComponent implements OnChanges, OnInit, OnDestroy {
     legend: [
       { color: '#c084fc', labelKey: 'info.activity.legend.dream', descKey: 'info.activity.legend.dream_desc' },
       { color: '#c084fc', labelKey: 'info.activity.legend.active_dream', descKey: 'info.activity.legend.active_dream_desc' },
-      { color: '#fbbf24', labelKey: 'info.activity.legend.drive', descKey: 'info.activity.legend.drive_desc' },
-      { color: '#34d399', labelKey: 'info.activity.legend.reach_out', descKey: 'info.activity.legend.reach_out_desc' },
-      { color: '#38bdf8', labelKey: 'info.activity.legend.finding', descKey: 'info.activity.legend.finding_desc' },
+      { color: 'var(--accent-warn)', labelKey: 'info.activity.legend.drive', descKey: 'info.activity.legend.drive_desc' },
+      { color: 'var(--accent-success)', labelKey: 'info.activity.legend.reach_out', descKey: 'info.activity.legend.reach_out_desc' },
+      { color: 'var(--accent-primary)', labelKey: 'info.activity.legend.finding', descKey: 'info.activity.legend.finding_desc' },
     ],
   };
   workingMemoryInfo: InfoModalConfig = {
@@ -140,9 +146,9 @@ export class SignalSidebarComponent implements OnChanges, OnInit, OnDestroy {
     paragraphKeys: ['info.working_memory.p1'],
     icon: '🔮',
     legend: [
-      { color: '#34d399', labelKey: 'info.working_memory.legend.learn', descKey: 'info.working_memory.legend.learn_desc' },
-      { color: '#38bdf8', labelKey: 'info.working_memory.legend.bond', descKey: 'info.working_memory.legend.bond_desc' },
-      { color: '#fbbf24', labelKey: 'info.working_memory.legend.evaluate', descKey: 'info.working_memory.legend.evaluate_desc' },
+      { color: 'var(--accent-success)', labelKey: 'info.working_memory.legend.learn', descKey: 'info.working_memory.legend.learn_desc' },
+      { color: 'var(--accent-primary)', labelKey: 'info.working_memory.legend.bond', descKey: 'info.working_memory.legend.bond_desc' },
+      { color: 'var(--accent-warn)', labelKey: 'info.working_memory.legend.evaluate', descKey: 'info.working_memory.legend.evaluate_desc' },
     ],
   };
   networkInfo: InfoModalConfig = {
@@ -150,13 +156,15 @@ export class SignalSidebarComponent implements OnChanges, OnInit, OnDestroy {
     paragraphKeys: ['info.network.p1', 'info.network.p2'],
     icon: '🌐',
     legend: [
-      { color: '#38bdf8', labelKey: 'info.network.legend.ecn', descKey: 'info.network.legend.ecn_desc' },
-      { color: '#fbbf24', labelKey: 'info.network.legend.sn', descKey: 'info.network.legend.sn_desc' },
-      { color: '#a78bfa', labelKey: 'info.network.legend.dmn', descKey: 'info.network.legend.dmn_desc' },
+      { color: 'var(--accent-primary)', labelKey: 'info.network.legend.ecn', descKey: 'info.network.legend.ecn_desc' },
+      { color: 'var(--accent-warn)', labelKey: 'info.network.legend.sn', descKey: 'info.network.legend.sn_desc' },
+      { color: 'var(--accent-primary)', labelKey: 'info.network.legend.dmn', descKey: 'info.network.legend.dmn_desc' },
     ],
   };
 
   activityList: AnimatedActivity[] = [];
+  /** When true, show up to 10 activity cards instead of 5. */
+  activityExpanded = false;
   expandedActivityId: number | null = null;
   private knownActivityIds = new Set<number>();
 
@@ -247,7 +255,11 @@ export class SignalSidebarComponent implements OnChanges, OnInit, OnDestroy {
 
   private addActivity(entry: ActivityEntry): void {
     this.knownActivityIds.add(entry.id);
-    this.activityList.unshift({ ...entry, state: 'entering' });
+    this.activityList.unshift({
+      ...entry,
+      tags: normalizeActivityTags(entry.tags),
+      state: 'entering',
+    });
 
     // Sort by timestamp descending so newest is always on top,
     // regardless of WebSocket event arrival order.
@@ -265,8 +277,59 @@ export class SignalSidebarComponent implements OnChanges, OnInit, OnDestroy {
     }, 400);
   }
 
+  private activityLimit(): number {
+    return this.activityExpanded
+      ? MAX_VISIBLE_ACTIVITIES_EXPANDED
+      : MAX_VISIBLE_ACTIVITIES;
+  }
+
+  /** Non-exiting activities shown in the feed (newest first). */
+  visibleActivities(): AnimatedActivity[] {
+    return this.activityList
+      .filter(a => a.state !== 'exiting')
+      .slice(0, this.activityLimit());
+  }
+
+  nonExitingActivityCount(): number {
+    return this.activityList.filter(a => a.state !== 'exiting').length;
+  }
+
+  hiddenActivityCount(): number {
+    return Math.max(0, this.nonExitingActivityCount() - this.activityLimit());
+  }
+
+  canExpandActivities(): boolean {
+    return (
+      !this.activityExpanded
+      && this.activityList.filter(a => a.state !== 'exiting').length
+        > MAX_VISIBLE_ACTIVITIES
+    );
+  }
+
+  expandActivities(): void {
+    this.activityExpanded = true;
+    this.trimOverflow();
+  }
+
+  collapseActivities(): void {
+    this.activityExpanded = false;
+    this.trimOverflow();
+  }
+
+  canCollapseActivities(): boolean {
+    return (
+      this.activityExpanded
+      && this.activityList.filter(a => a.state !== 'exiting').length
+        > MAX_VISIBLE_ACTIVITIES
+    );
+  }
+
+  readonly activityCapCompact = MAX_VISIBLE_ACTIVITIES;
+  readonly activityCapExpanded = MAX_VISIBLE_ACTIVITIES_EXPANDED;
+
   private trimOverflow(): void {
-    while (this.activityList.filter(a => a.state !== 'exiting').length > MAX_VISIBLE_ACTIVITIES) {
+    const cap = this.activityLimit();
+    while (this.activityList.filter(a => a.state !== 'exiting').length > cap) {
       for (let i = this.activityList.length - 1; i >= 0; i--) {
         if (this.activityList[i].state !== 'exiting') {
           this.activityList[i].state = 'exiting';
@@ -345,6 +408,28 @@ export class SignalSidebarComponent implements OnChanges, OnInit, OnDestroy {
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
 
+  activityChips(item: ActivityEntry): ActivityChip[] {
+    const stored = item.metadata?.['activityChips'] as ActivityChip[] | undefined;
+    if (stored?.length) return stored;
+    if (item.kind === 'agentic_task' || item.kind === 'todo') {
+      const parsed = parseAgentMessageText(
+        [item.text, item.detail].filter(Boolean).join('\n'),
+      );
+      return parsed.chips;
+    }
+    return [];
+  }
+
+  activityHeadline(item: ActivityEntry): string {
+    if (item.metadata?.['activityChips']?.length) {
+      return item.text;
+    }
+    if (item.kind === 'agentic_task' || item.kind === 'todo') {
+      return parseAgentMessageText(item.text).headline || item.text;
+    }
+    return item.text;
+  }
+
   // ── Heartbeat ──────────────────────────────────────────────
 
   get heartbeat(): any {
@@ -417,11 +502,11 @@ export class SignalSidebarComponent implements OnChanges, OnInit, OnDestroy {
   /** Valence mapped to a color: red (negative) → neutral → green (positive). */
   get valenceColor(): string {
     const v = this.valence;
-    if (v >= 0.3) return '#34d399';   // green -- positive
-    if (v >= 0.05) return '#6ee7b7';  // light green
-    if (v > -0.05) return '#9ca3af';  // neutral grey
+    if (v >= 0.3) return 'var(--accent-success)';   // green -- positive
+    if (v >= 0.05) return 'var(--accent-success)';  // light green
+    if (v > -0.05) return 'var(--text-muted)';  // neutral grey
     if (v > -0.3) return '#fca5a5';   // light red
-    return '#f87171';                  // red -- negative
+    return 'var(--accent-danger)';                  // red -- negative
   }
 
   /** Human label for the current state. */
@@ -440,15 +525,20 @@ export class SignalSidebarComponent implements OnChanges, OnInit, OnDestroy {
     return this.heartbeat.energy ?? 0;
   }
 
+  get hasEnergyReading(): boolean {
+    const e = this.metadata?.heartbeat?.energy;
+    return e !== undefined && e !== null;
+  }
+
   get energyPercent(): number {
     return Math.round(this.energy * 100);
   }
 
   get energyColor(): string {
     const e = this.energy;
-    if (e > 0.6) return '#34d399';
-    if (e > 0.3) return '#fbbf24';
-    return '#f87171';
+    if (e > 0.6) return 'var(--accent-success)';
+    if (e > 0.3) return 'var(--accent-warn)';
+    return 'var(--accent-danger)';
   }
 
   get moodLabel(): string {
@@ -494,7 +584,7 @@ export class SignalSidebarComponent implements OnChanges, OnInit, OnDestroy {
 
   deltaColor(delta: number): string {
     if (Math.abs(delta) < 0.02) return 'transparent';
-    return delta > 0 ? '#34d399' : '#f87171';
+    return delta > 0 ? 'var(--accent-success)' : 'var(--accent-danger)';
   }
 
   // ── Narrative Self ─────────────────────────────────────────
@@ -517,10 +607,10 @@ export class SignalSidebarComponent implements OnChanges, OnInit, OnDestroy {
 
   get episodeMoodColor(): string {
     const arc = this.episodeArc.toLowerCase();
-    if (['warm', 'serene', 'aligned', 'curious'].some(m => arc.includes(m))) return '#34d399';
-    if (['playful', 'engaged', 'focused'].some(m => arc.includes(m))) return '#6ee7b7';
-    if (['tense', 'anxious', 'frustrated'].some(m => arc.includes(m))) return '#f87171';
-    if (['conflicted'].some(m => arc.includes(m))) return '#fbbf24';
+    if (['warm', 'serene', 'aligned', 'curious'].some(m => arc.includes(m))) return 'var(--accent-success)';
+    if (['playful', 'engaged', 'focused'].some(m => arc.includes(m))) return 'var(--accent-success)';
+    if (['tense', 'anxious', 'frustrated'].some(m => arc.includes(m))) return 'var(--accent-danger)';
+    if (['conflicted'].some(m => arc.includes(m))) return 'var(--accent-warn)';
     return '#94a3b8';
   }
 
@@ -682,9 +772,9 @@ export class SignalSidebarComponent implements OnChanges, OnInit, OnDestroy {
 
   get tokenBudgetColor(): string {
     const pct = this.tokenBudgetPercent;
-    if (pct >= 80) return '#f87171';
-    if (pct >= 50) return '#fbbf24';
-    return '#34d399';
+    if (pct >= 80) return 'var(--accent-danger)';
+    if (pct >= 50) return 'var(--accent-warn)';
+    return 'var(--accent-success)';
   }
 
   get tokenBudgetLabel(): string {

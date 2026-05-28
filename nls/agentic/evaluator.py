@@ -16,6 +16,7 @@ The decision space is organized as 5 biological axes:
 from __future__ import annotations
 
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 
@@ -345,6 +346,28 @@ def evaluate_turn(
         return Directive.STALLED
 
     if not tool_outcomes and model_text.strip():
+        from .orchestration_policy import is_conversational_user_turn
+
+        _has_active_plan_hook = False
+        if hooks and hooks.has_active_plan:
+            try:
+                _has_active_plan_hook = bool(hooks.has_active_plan())
+            except Exception:
+                pass
+
+        if (
+            is_conversational_user_turn(user_input)
+            and iteration <= 2
+            and not plan_state.has_pending
+            and not plan_state.sub_plan_pending
+            and not _has_active_plan_hook
+        ):
+            logger.info(
+                "Evaluator: TASK_COMPLETE — conversational turn "
+                "(no tools required)",
+            )
+            return Directive.TASK_COMPLETE
+
         _plan_done = (
             plan_state.just_completed
             or (plan_state.completed_steps > 0 and not plan_state.has_pending)
@@ -447,11 +470,28 @@ def get_directive_message(directive: Directive) -> str | None:
 _MAX_GOAL_BLOCKS = 2
 
 
+def _delegates_in_background(
+    state: "LoopState",
+    delegate_manager: Any | None = None,
+) -> bool:
+    """True when sub-agents are running, including across loop restarts."""
+    if state.delegate_count > 0:
+        return True
+    if delegate_manager is not None:
+        try:
+            return delegate_manager.has_active_delegates()
+        except Exception:
+            pass
+    return False
+
+
 async def should_complete_v4(
     state: "LoopState",
     config: "LoopConfig",
     hooks: Any = None,
     vllm_client: Any = None,
+    delegate_manager: Any | None = None,
+    adapter_name: str | None = None,
 ) -> bool:
     """Determine if the v4 loop should exit with task_complete.
 
@@ -532,6 +572,12 @@ async def should_complete_v4(
                     )
                     return True
 
+                # Coordinator status updates while a plan still has open
+                # steps must not exit the loop — fall through to CONTINUE
+                # (active plan) below.  Yield-on-status only applies when
+                # the orchestrator is asking the user a question and there
+                # is no remaining plan work (handled outside this block).
+
                 # MONITORING wrap-up: orchestrator launched delegates and
                 # produced a status update.  Delegates run in the background
                 # — the orchestrator can exit to save tokens and will be
@@ -539,30 +585,47 @@ async def should_complete_v4(
                 # loop spins in wait→inspect→text cycles burning tokens.
                 # Also covers RESPONDING mode: the agent answered the user
                 # inline while delegates run — same exit logic applies.
+                _recent = state.cumulative_actions[-8:]
+                _used_await = any("await_delegates" in a for a in _recent)
                 _monitoring_wrap_up = (
                     state.active_mode in (AgentMode.MONITORING, AgentMode.RESPONDING)
                     and state.consecutive_text_only >= 1
-                    and state.total_tool_calls > 3
-                    and state.delegate_count > 0
+                    and state.total_tool_calls >= 3
+                    and _delegates_in_background(state, delegate_manager)
                     and len(_last_text) > 100
+                    and _used_await
                 )
                 if _monitoring_wrap_up:
                     logger.info(
-                        "[EVAL] -> COMPLETE (%s with %d delegate(s), "
-                        "status text delivered — yielding to background, "
-                        "text_len=%d)",
-                        state.active_mode.value, state.delegate_count, len(_last_text),
+                        "[EVAL] -> COMPLETE (%s — await_delegates used, "
+                        "background delegate(s), text_len=%d)",
+                        state.active_mode.value, len(_last_text),
                     )
                     return True
+                if (
+                    state.active_mode in (AgentMode.MONITORING, AgentMode.DELEGATING)
+                    and _delegates_in_background(state, delegate_manager)
+                    and state.consecutive_text_only >= 1
+                    and not _used_await
+                ):
+                    logger.info(
+                        "[EVAL] -> CONTINUE (monitoring — call "
+                        "await_delegates, not task_complete or text-only exit)"
+                    )
+                    return False
 
                 # Idle monitoring hard exit: the agent has been cycling
                 # through wait/inspect without progress.  Force exit
                 # even if the agent hasn't called task_complete.
                 _idle_limit = getattr(state, "idle_monitor_cycles", 0)
-                if _idle_limit >= 4 and state.delegate_count > 0:
+                if (
+                    _idle_limit >= 4
+                    and _delegates_in_background(state, delegate_manager)
+                    and _used_await
+                ):
                     logger.info(
-                        "[EVAL] -> COMPLETE (idle monitor hard exit — "
-                        "%d wait/inspect cycles with %d delegate(s))",
+                        "[EVAL] -> COMPLETE (idle monitor exit after "
+                        "await_delegates — %d cycles, delegate_count=%d)",
                         _idle_limit, state.delegate_count,
                     )
                     return True
@@ -641,6 +704,7 @@ async def should_complete_v4(
                 "\n".join(state.cumulative_actions[-20:]),
                 previous_pending=state.last_pending_indices,
                 hints=state.hints or None,
+                adapter_name=adapter_name,
             )
             state.last_pending_indices = pending
             if pending:
@@ -680,6 +744,15 @@ async def should_complete_v4(
         except Exception:
             pass
 
+    if (
+        getattr(state, "must_delegate_before_impl", False)
+        and not getattr(state, "orchestrator_recovery", False)
+    ):
+        logger.info(
+            "[EVAL] -> CONTINUE (orchestrator must plan+team before exiting)"
+        )
+        return False
+
     logger.info("[EVAL] -> COMPLETE (default)")
     return True
 
@@ -714,14 +787,19 @@ def check_guards(
             has_pending_plan
             and state.consecutive_errors < 2
             and config.max_iterations < config.max_total_iterations
+            and not getattr(state, "orchestrator_recovery", False)
+            and state.guard_iteration_extensions < 4
         ):
             new_limit = min(
                 config.max_iterations + config.max_iterations_extension,
                 config.max_total_iterations,
             )
+            state.guard_iteration_extensions += 1
             logger.info(
-                "[GUARD] Budget extended %d → %d (plan has pending steps)",
+                "[GUARD] Budget extended %d → %d (plan has pending steps, "
+                "ext %d/4)",
                 config.max_iterations, new_limit,
+                state.guard_iteration_extensions,
             )
             config.max_iterations = new_limit
         else:
@@ -770,6 +848,7 @@ def check_guards(
                     and has_pending_plan
                     and state.consecutive_errors < 3
                     and sum(state.tool_successes.values()) > 0
+                    and not getattr(state, "orchestrator_recovery", False)
                 )
                 if can_extend:
                     state.timeout_extensions += 1
@@ -810,15 +889,21 @@ _STALL_NUDGE_MESSAGE = (
     "You appear to be stuck — repeating similar actions without progress. "
     "STOP and use a fundamentally different approach:\n"
     "1. Read the error messages carefully — they often contain the fix.\n"
-    "2. If bash/shell commands keep failing, use the write tool to create "
+    "2. Search for a skill: clawhub(action='search', query='...') or "
+    "discover_tools(query='...'). Install matches with "
+    "clawhub(action='install', slug='...').\n"
+    "3. If bash/shell commands keep failing, use the write tool to create "
     "files manually instead of relying on CLI scaffolding tools (e.g. "
     "write tailwind.config.js directly instead of running npx tailwindcss init).\n"
-    "3. If you are on Windows/PowerShell, avoid bash-only syntax. Use "
+    "4. If you are on Windows/PowerShell, avoid bash-only syntax. Use "
     "PowerShell cmdlets or the write tool.\n"
-    "4. If you are a delegate, escalation to the orchestrator happens "
-    "automatically — but pivoting now will save iterations.\n"
-    "5. Skip this step and move on to the next one.\n"
-    "6. If you've tried 2+ approaches, provide a partial result rather "
+    "5. GitHub/gh auth failures: authenticate first with "
+    "bash('echo TOKEN | gh auth login --with-token'), then "
+    "bash('gh auth status').\n"
+    "6. If you are a delegate, call escalate() — the orchestrator can hint "
+    "you or extend budget.\n"
+    "7. Skip this step and move on to the next one only if truly blocked.\n"
+    "8. If you've tried 2+ approaches, provide a partial result rather "
     "than wasting more iterations."
 )
 
@@ -829,8 +914,10 @@ _REPEAT_NUDGE_MESSAGE = (
     "Either:\n"
     "1. Use the result you already got and act on it (read a specific file, "
     "fix the code, write a response).\n"
-    "2. Try a completely different command or tool.\n"
-    "3. If you have enough information, write your final response now.\n"
+    "2. Try clawhub(action='search', query='...') or discover_tools(query='...') "
+    "for a skill that handles this task.\n"
+    "3. Try a completely different command or tool.\n"
+    "4. If you have enough information, write your final response now.\n"
     "Do NOT call the same tool with the same arguments again."
 )
 
@@ -847,25 +934,198 @@ _CYCLE_NUDGE_MESSAGE = (
 )
 
 
+# Bash patterns that look repetitive but are legitimate batch maintenance
+# (delete → verify → delete → verify).  Signatures use the first 200 chars of
+# tool-call JSON from the loop (see loop.py record_tool).
+_INVENTORY_BASH_RE = re.compile(
+    r"(gh\s+repo\s+list|gh\s+auth\s+status|git\s+status|Select-String|"
+    r"Get-ChildItem|\bls\b|\bdir\b|\bgrep\b|\bfind\b)",
+    re.IGNORECASE,
+)
+_MUTATION_BASH_RE = re.compile(
+    r"(gh\s+repo\s+(delete|create)|rm\s+-|Remove-Item|"
+    r"git\s+(push|commit|clone)|npm\s+(install|uninstall)|pip\s+install)",
+    re.IGNORECASE,
+)
+
+
+def _fingerprint_is_inventory(sig: str) -> bool:
+    return bool(_INVENTORY_BASH_RE.search(sig))
+
+
+def _fingerprint_is_mutation(sig: str) -> bool:
+    return bool(_MUTATION_BASH_RE.search(sig))
+
+
+def _recent_bash_all_success(state: "LoopState", window: int = 8) -> bool:
+    recent = state.tool_history[-window:]
+    bash_entries = [(n, err) for n, err in recent if n == "bash"]
+    return len(bash_entries) >= 2 and all(not err for _, err in bash_entries)
+
+
+def _is_productive_bash_maintenance(
+    state: "LoopState",
+    sigs: list[str],
+) -> bool:
+    """Delete/list (or similar) loops where every bash call succeeded."""
+    if not sigs or not _recent_bash_all_success(state, window=min(8, len(sigs))):
+        return False
+    window = sigs[-8:]
+    has_inventory = any(_fingerprint_is_inventory(s) for s in window)
+    has_mutation = any(_fingerprint_is_mutation(s) for s in window)
+    return has_inventory and has_mutation
+
+
+# Orchestrator supervision (inspect / wait) mixed with reads is legitimate.
+_ORCHESTRATOR_SUPERVISION_TOOLS = frozenset({
+    "team", "wait", "await_delegates", "delegate_status", "scheduler",
+})
+_MONITORING_CYCLE_TOOLS = _ORCHESTRATOR_SUPERVISION_TOOLS | frozenset({
+    "read", "list_dir", "glob", "grep",
+})
+_LOOKUP_ONLY_TOOLS = frozenset({
+    "read", "list_dir", "glob", "grep", "web_search", "web_fetch",
+    "semantic_search", "plan",
+})
+_MUTATION_TOOLS = frozenset({
+    "write", "edit", "team", "bash", "delegate", "todo",
+})
+
+_ASSESSMENT_LOOP_NUDGE = (
+    "STOP — you are re-assessing the same project repeatedly without advancing.\n"
+    "The user already knows the high-level status. Do NOT post another summary.\n"
+    "Take ONE of these actions NOW:\n"
+    "1. plan(action='read') then plan(update/accept_partial/complete) to reconcile steps.\n"
+    "2. team(action='create'/'launch'/'advance') for the next pending wave.\n"
+    "3. write/edit/bash to finish the remaining step if you are executing directly.\n"
+    "No more than one list_dir/read pass before a plan or team mutation."
+)
+
+
+def _is_orchestrator_monitoring_cycle(names: list[str]) -> bool:
+    """True for team→read→read / inspect loops — not a status re-scan stall."""
+    if len(names) < 6:
+        return False
+    window = names[-9:]
+    if not all(n in _MONITORING_CYCLE_TOOLS for n in window):
+        return False
+    if not any(n in _ORCHESTRATOR_SUPERVISION_TOOLS for n in window):
+        return False
+    for cycle_len in (2, 3):
+        need = cycle_len * 2
+        if len(window) >= need:
+            tail = window[-need:]
+            if tail[:cycle_len] == tail[cycle_len:]:
+                return True
+    if (
+        window.count("team") >= 1
+        and sum(1 for n in window if n in ("read", "list_dir", "glob", "grep")) >= 2
+    ):
+        return True
+    return False
+
+
+def _detect_assessment_loop(state: "LoopState") -> str | None:
+    """Lookup-only IC re-scan loops — not EM team(inspect)+read supervision.
+
+  Intentionally narrow: orchestrator monitoring repeats team/inspect/read
+  patterns by design. Only nudge when there is no supervision tool in recent
+  history, delegates are not running, and the agent keeps posting status text
+  without plan/team mutations (typical post-crash resume loop).
+    """
+    names = [n for n, _err in state.tool_history]
+    if len(names) < 8:
+        return None
+
+    if state.delegate_count > 0:
+        return None
+    if getattr(state, "idle_monitor_cycles", 0) > 0:
+        return None
+    if _is_orchestrator_monitoring_cycle(names):
+        logger.debug(
+            "[STALL] assessment-loop skipped — orchestrator monitoring cycle",
+        )
+        return None
+
+    if state.active_mode in (
+        AgentMode.MONITORING, AgentMode.EVALUATING, AgentMode.DELEGATING,
+    ):
+        if any(n in _ORCHESTRATOR_SUPERVISION_TOOLS for n in names[-12:]):
+            logger.debug(
+                "[STALL] assessment-loop skipped — %s with supervision tools",
+                state.active_mode.value,
+            )
+            return None
+
+    window = names[-10:]
+    if not all(n in _LOOKUP_ONLY_TOOLS for n in window):
+        return None
+    if any(n in _ORCHESTRATOR_SUPERVISION_TOOLS for n in names[-14:]):
+        return None
+    if any(
+        n in _MUTATION_TOOLS and not err
+        for n, err in state.tool_history[-16:]
+    ):
+        return None
+
+    _ic_rescan = state.active_mode in (
+        AgentMode.EXECUTING, AgentMode.CHAT, AgentMode.RESPONDING,
+    )
+    _repeated_status = (
+        state.consecutive_text_only >= 2
+        or (
+            state.consecutive_text_only >= 1
+            and state.total_tool_calls >= 8
+        )
+    )
+    if not (_ic_rescan and _repeated_status):
+        return None
+
+    logger.info(
+        "[STALL] assessment loop: lookup-only window (%d tools), "
+        "mode=%s, consec_text=%d",
+        len(window), state.active_mode.value, state.consecutive_text_only,
+    )
+    return _ASSESSMENT_LOOP_NUDGE
+
+
 def detect_stall(state: "LoopState", config: "LoopConfig") -> str | None:
     """Detect stall patterns and return a nudge message if stuck.
 
     Returns a system-message string to inject, or None if no stall.
     """
+    _assessment = _detect_assessment_loop(state)
+    if _assessment:
+        return _assessment
     # Pattern 0: exact same tool+args repeated 3+ times (even if successful)
     # Exempt orchestrator monitoring calls (e.g. team(inspect) on same team).
     _MONITORING_TOOL_NAMES = frozenset({
-        "team", "wait", "delegate_status", "scheduler",
+        "team", "wait", "await_delegates", "delegate_status", "scheduler",
     })
     sigs = getattr(state, "tool_call_signatures", [])
     if len(sigs) >= 3:
         last_3 = sigs[-3:]
         if last_3[0] == last_3[1] == last_3[2]:
-            _sig_tool = last_3[0].split("(")[0] if "(" in last_3[0] else last_3[0]
+            _sig_tool = (
+                last_3[0].split(":", 1)[0]
+                if ":" in last_3[0]
+                else last_3[0]
+            )
             if _sig_tool in _MONITORING_TOOL_NAMES:
                 logger.debug(
                     "[STALL] repeated monitoring call (%s) — "
                     "legitimate orchestrator pattern, skipping",
+                    last_3[0][:60],
+                )
+            elif (
+                _sig_tool == "bash"
+                and _fingerprint_is_inventory(last_3[0])
+                and state.consecutive_errors == 0
+                and _is_productive_bash_maintenance(state, sigs)
+            ):
+                logger.debug(
+                    "[STALL] repeated inventory bash (%s) — "
+                    "delete/verify maintenance loop, skipping",
                     last_3[0][:60],
                 )
             else:
@@ -957,6 +1217,16 @@ def detect_stall(state: "LoopState", config: "LoopConfig") -> str | None:
                         )
                         continue
                     sig_window = sigs_all[-(cycle_len * 3):]
+                    if (
+                        set(chunks[0]) <= {"bash"}
+                        and _is_productive_bash_maintenance(state, sigs_all)
+                    ):
+                        logger.debug(
+                            "[STALL] bash maintenance cycle (%s) — "
+                            "mutations + verify, skipping",
+                            " → ".join(chunks[0]),
+                        )
+                        continue
                     if len(set(sig_window)) >= len(sig_window) * 0.7:
                         logger.debug(
                             "[STALL] name cycle detected (%s) but signatures "
@@ -971,3 +1241,74 @@ def detect_stall(state: "LoopState", config: "LoopConfig") -> str | None:
                     return _CYCLE_NUDGE_MESSAGE
 
     return None
+
+
+def inject_subagent_pacing_nudges(
+    state: LoopState,
+    config: LoopConfig,
+    context: list[dict],
+) -> None:
+    """Soft budget nudges for worker sub-agents (completion-focused)."""
+    if config.enable_delegation or config.max_iterations <= 0:
+        return
+
+    effective = state.iteration - state.wait_only_iterations
+    if effective <= 0:
+        return
+
+    ratio = effective / config.max_iterations
+    writes = (
+        state.tool_successes.get("write", 0)
+        + state.tool_successes.get("edit", 0)
+    )
+    reads = (
+        state.tool_successes.get("read", 0)
+        + state.tool_successes.get("list_dir", 0)
+        + state.tool_successes.get("glob", 0)
+    )
+
+    milestones = (
+        (0.5, "50", (
+            f"Half your iteration budget is used ({effective}/{config.max_iterations}). "
+            "If key deliverables are not on disk yet, stop exploring and start "
+            "building the next concrete piece of your task."
+        )),
+        (0.75, "75", (
+            f"Budget is getting tight ({effective}/{config.max_iterations}). "
+            "Finish the file you are on, verify it once, then complete the "
+            "remaining deliverables — or call escalate() if blocked."
+        )),
+        (0.9, "90", (
+            f"Near your iteration limit ({effective}/{config.max_iterations}). "
+            "Prefer escalate() with your progress over silent looping. "
+            "Partial delivery with files beats zero files."
+        )),
+    )
+    for threshold, key, message in milestones:
+        if ratio >= threshold and key not in state.budget_milestones_sent:
+            state.budget_milestones_sent.add(key)
+            context.append({"role": "user", "content": message})
+            logger.info(
+                "[PACING] budget milestone %s%% at iter %d/%d",
+                key, effective, config.max_iterations,
+            )
+
+    if (
+        not state.read_heavy_nudge_sent
+        and effective >= 8
+        and reads >= 6
+        and writes <= 1
+    ):
+        state.read_heavy_nudge_sent = True
+        context.append({
+            "role": "user",
+            "content": (
+                "You have done enough reading. Stop re-reading configs and "
+                "start building. Based on what you have read, what is the "
+                "next concrete deliverable for this task? Create it now."
+            ),
+        })
+        logger.info(
+            "[PACING] read-heavy nudge at iter %d (reads=%d writes=%d)",
+            effective, reads, writes,
+        )

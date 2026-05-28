@@ -1,0 +1,59 @@
+<div class="explorer">
+  <div class="explorer-header">
+    <span class="explorer-title">{{ rootLabel() }}</span>
+    <button class="icon-btn" type="button" title="Refresh" (click)="refresh()" [disabled]="loading()">
+      <svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14">
+        <path d="M8 3a5 5 0 0 0-4.546 2.916l-.832-.416A6 6 0 1 1 8 14V3z"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="explorer-body">
+    @if (loading() && tree().length === 0) {
+      <div class="explorer-empty">Loading…</div>
+    } @else if (error()) {
+      <div class="explorer-empty error">{{ error() }}</div>
+    } @else if (tree().length === 0) {
+      <div class="explorer-empty">No files in workspace.</div>
+    } @else {
+      <div class="tree">
+        @for (node of tree(); track trackNode($index, node)) {
+          <ng-container *ngTemplateOutlet="treeNode; context: { node: node, depth: 0 }" />
+        }
+      </div>
+    }
+  </div>
+</div>
+
+<ng-template #treeNode let-node="node" let-depth="depth">
+  <div
+    class="tree-row"
+    [style.padding-left.px]="depth * 14 + 10"
+    [class.is-dir]="node.isDirectory"
+    [class.active]="isActive(node)"
+    (click)="onNodeClick(node, $event)"
+  >
+    @if (node.isDirectory) {
+      <span class="chevron" [class.open]="node.expanded">&#9656;</span>
+    } @else {
+      <span class="chevron spacer"></span>
+    }
+    <span class="node-icon" [class.dir]="node.isDirectory">
+      @if (node.isDirectory) {
+        &#128193;
+      } @else {
+        &#128196;
+      }
+    </span>
+    <span class="node-name">{{ node.name }}</span>
+    @if (node.loading) {
+      <span class="node-loading">…</span>
+    }
+  </div>
+
+  @if (node.isDirectory && node.expanded && node.children) {
+    @for (child of node.children; track trackNode($index, child)) {
+      <ng-container *ngTemplateOutlet="treeNode; context: { node: child, depth: depth + 1 }" />
+    }
+  }
+</ng-template>

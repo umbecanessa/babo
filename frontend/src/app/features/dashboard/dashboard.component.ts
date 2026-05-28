@@ -1,24 +1,20 @@
-import { Component, OnInit, OnDestroy, signal, ViewChild } from '@angular/core';
+import { Component, OnInit, OnDestroy, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
 import { PlatformService } from '../../core/services/platform.service';
+import { WebSocketService } from '../../core/services/websocket.service';
 import { Agent } from '../../core/models/agent.model';
 import { AgentCardComponent } from './agent-card/agent-card.component';
-import { OnboardingModalComponent } from '../../shared/onboarding/onboarding-modal.component';
-import { ONBOARDING_PAGES } from '../../shared/onboarding/onboarding-content';
-
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterLink, AgentCardComponent, OnboardingModalComponent],
+  imports: [CommonModule, RouterLink, AgentCardComponent],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss',
 })
 export class DashboardComponent implements OnInit, OnDestroy {
-  @ViewChild('onboardingModal') onboardingModal?: OnboardingModalComponent;
-
   agents = signal<Agent[]>([]);
   loading = signal(true);
   error = signal('');
@@ -28,14 +24,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
   runtimeStatus = signal('Connecting to runtime...');
   runtimeAttempts = signal(0);
   relayStatus = signal<Record<string, boolean>>({});
-  onboardingConfig = ONBOARDING_PAGES['dashboard'];
-
   private destroyed = false;
+  private pollTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     private api: ApiService,
     public platform: PlatformService,
     private router: Router,
+    private ws: WebSocketService,
   ) {}
 
   ngOnInit() {
@@ -44,10 +40,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   ngOnDestroy() {
     this.destroyed = true;
+    this.stopPolling();
   }
 
   private async initDashboard(): Promise<void> {
     if (this.platform.isElectron) {
+      await this.api.whenReady();
       this.runtimeStarting.set(true);
       const ready = await this.waitForRuntime();
       this.runtimeStarting.set(false);
@@ -95,21 +93,42 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return false;
   }
 
-  loadAgents() {
-    this.loading.set(true);
-    this.error.set('');
+  loadAgents(silent = false) {
+    if (!silent) {
+      this.loading.set(true);
+      this.error.set('');
+    }
     this.api.getAgents().subscribe({
       next: (agents) => {
         this.agents.set(agents);
         this.loading.set(false);
+        this.startPolling();
         if (this.platform.isRemote) this.loadRelayStatus();
       },
       error: (err) => {
         this.loading.set(false);
-        const msg = err?.error?.message || err?.message || 'Failed to load agents';
-        this.error.set(msg);
+        if (!silent) {
+          const msg = err?.error?.message || err?.message || 'Failed to load agents';
+          this.error.set(msg);
+        }
       },
     });
+  }
+
+  private startPolling(): void {
+    if (this.pollTimer || this.destroyed) return;
+    this.pollTimer = setInterval(() => {
+      if (!this.destroyed && !this.loading() && !this.runtimeStarting()) {
+        this.loadAgents(true);
+      }
+    }, 10_000);
+  }
+
+  private stopPolling(): void {
+    if (this.pollTimer) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = null;
+    }
   }
 
   private loadRelayStatus(): void {
@@ -136,6 +155,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.deletingAgentId.set(id);
     this.api.deleteAgent(id).subscribe({
       next: () => {
+        this.ws.leaveAgent(id);
         this.agents.update(a => a.filter(agent => agent.id !== id));
         this.deletingAgentId.set(null);
       },
@@ -167,9 +187,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   get activeCount(): number {
-    return this.agents().filter(a =>
-      (a.runtime?.status === 'alive' || a.status === 'alive') && !a.userPaused,
-    ).length;
+    return this.agents().filter(a => {
+      if (a.userPaused) return false;
+      const rt = a.runtime;
+      if (rt?.activity?.busy || rt?.activity?.user_busy) return true;
+      if (rt?.consciousness?.inner_loop?.active_dreaming) return true;
+      return a.runtime?.status === 'alive' || a.status === 'alive';
+    }).length;
   }
 
   get pausedCount(): number {

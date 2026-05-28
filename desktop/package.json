@@ -16,6 +16,7 @@
     "build:electron": "tsc -p tsconfig.electron.json",
     "build": "npm run build:angular && npm run build:electron",
     "start": "npm run build:electron && electron .",
+    "dev:ui": "cd ../frontend && npx ng serve --configuration=electron",
     "start:dev": "npm run build:electron && cross-env NODE_ENV=development electron .",
     "pack": "npm run build && electron-builder --dir",
     "dist": "npm run build && electron-builder",

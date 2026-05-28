@@ -88,6 +88,12 @@ class LoopState:
     on_recovery: Callable[[], None] | None = None
 
 
+def _tool_path_from_args(args: dict[str, Any]) -> str:
+    """File path from tool args (read/write/edit use ``path``)."""
+    raw = args.get("path") or args.get("file_path") or ""
+    return raw.strip() if isinstance(raw, str) else ""
+
+
 # ---------------------------------------------------------------------------
 # Pre-hooks
 # ---------------------------------------------------------------------------
@@ -193,14 +199,15 @@ def safety_guard(
 ) -> PreHookResult:
     """NLS infrastructure protection and read-before-edit."""
 
-    if tool_name == "edit" and args.get("file_path"):
-        fpath = args["file_path"]
-        if fpath not in state.files_read:
+    if tool_name == "edit":
+        fpath = _tool_path_from_args(args)
+        if fpath and fpath not in state.files_read:
             return PreHookResult(
                 allow=False,
                 tool_result=ToolResult(
                     content=(
-                        f"You must call read('{fpath}') before editing it. "
+                        f"You must call read('{fpath}') before editing it, "
+                        f"or create it with write() in this session first. "
                         f"This prevents blind edits that break code."
                     ),
                     is_error=True,
@@ -413,10 +420,8 @@ def error_tracker(
             except Exception:
                 pass
 
-    if tool_name == "read" and not is_error:
-        fpath = ""
-        if hasattr(result, "details") and result.details:
-            fpath = result.details.get("file_path", "")
+    if tool_name in ("read", "read_file", "write", "write_file") and not is_error:
+        fpath = _tool_path_from_args(args)
         if fpath:
             state.files_read.add(fpath)
 
@@ -432,9 +437,11 @@ def track_files_read(
     result: ToolResult,
     state: LoopState,
 ) -> None:
-    """Track which files have been read for the read-before-edit guard."""
-    if tool_name == "read" and not result.is_error:
-        fpath = args.get("file_path", "")
+    """Track files the agent has read (or written) for the read-before-edit guard."""
+    if result.is_error or result.blocked_by_hook:
+        return
+    if tool_name in ("read", "read_file", "write", "write_file"):
+        fpath = _tool_path_from_args(args)
         if fpath:
             state.files_read.add(fpath)
 

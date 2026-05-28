@@ -47,7 +47,7 @@ import { UpdateService } from '../../core/services/update.service';
       display: flex;
       align-items: center;
       justify-content: center;
-      background: rgba(0, 0, 0, 0.6);
+      background: var(--backdrop-scrim);
       animation: backdropIn 200ms ease-out forwards;
       padding: 24px;
 
@@ -62,11 +62,11 @@ import { UpdateService } from '../../core/services/update.service';
       background: rgba(15, 15, 25, 0.92);
       backdrop-filter: blur(24px);
       -webkit-backdrop-filter: blur(24px);
-      border: 1px solid rgba(56, 189, 248, 0.12);
+      border: 1px solid var(--accent-primary-glow);
       overflow: hidden;
       animation: cardIn 250ms ease-out forwards;
       box-shadow:
-        0 0 80px rgba(56, 189, 248, 0.06),
+        0 0 80px var(--accent-primary-glow),
         0 25px 50px rgba(0, 0, 0, 0.4);
 
       &.closing { animation: cardOut 150ms ease-in forwards; }
@@ -74,7 +74,7 @@ import { UpdateService } from '../../core/services/update.service';
 
     .accent-bar {
       height: 3px;
-      background: linear-gradient(90deg, var(--accent, #38bdf8), var(--accent-purple, #a78bfa));
+      background: linear-gradient(90deg, var(--accent-primary), var(--accent-primary));
     }
 
     .card-body {
@@ -88,14 +88,14 @@ import { UpdateService } from '../../core/services/update.service';
     .icon-container {
       position: relative;
       margin-bottom: 20px;
-      color: var(--accent, #38bdf8);
+      color: var(--accent-primary);
     }
 
     .icon-glow {
       position: absolute;
       inset: -16px;
       border-radius: 50%;
-      background: radial-gradient(circle, rgba(56, 189, 248, 0.15), transparent 70%);
+      background: radial-gradient(circle, var(--accent-primary-glow), transparent 70%);
     }
 
     .icon-svg { position: relative; }
@@ -104,14 +104,14 @@ import { UpdateService } from '../../core/services/update.service';
       font-family: 'Inter', sans-serif;
       font-size: 1.25rem;
       font-weight: 600;
-      color: #f1f5f9;
+      color: var(--text-primary);
       margin-bottom: 8px;
     }
 
     .version {
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.85rem;
-      color: var(--accent, #38bdf8);
+      color: var(--accent-primary);
       margin-bottom: 12px;
     }
 
@@ -127,8 +127,8 @@ import { UpdateService } from '../../core/services/update.service';
       width: 100%;
       padding: 12px;
       border-radius: 8px;
-      background: rgba(255, 255, 255, 0.02);
-      border: 1px solid rgba(255, 255, 255, 0.04);
+      background: var(--overlay-1);
+      border: 1px solid var(--overlay-2);
     }
 
     .actions {
@@ -142,7 +142,7 @@ import { UpdateService } from '../../core/services/update.service';
       height: 42px;
       border: none;
       border-radius: 10px;
-      background: linear-gradient(135deg, var(--accent, #38bdf8), var(--accent-purple, #a78bfa));
+      background: linear-gradient(135deg, var(--accent-primary), var(--accent-primary));
       color: #0f0f19;
       font-family: 'Inter', sans-serif;
       font-size: 0.875rem;
@@ -152,14 +152,14 @@ import { UpdateService } from '../../core/services/update.service';
 
       &:hover {
         filter: brightness(1.1);
-        box-shadow: 0 0 20px rgba(56, 189, 248, 0.3);
+        box-shadow: 0 0 20px var(--accent-primary-glow);
       }
     }
 
     .btn-secondary {
       flex: 1;
       height: 42px;
-      border: 1px solid rgba(255, 255, 255, 0.1);
+      border: 1px solid var(--overlay-4);
       border-radius: 10px;
       background: transparent;
       color: #94a3b8;
@@ -170,8 +170,8 @@ import { UpdateService } from '../../core/services/update.service';
       transition: border-color 200ms, color 200ms;
 
       &:hover {
-        border-color: rgba(255, 255, 255, 0.2);
-        color: #e2e8f0;
+        border-color: var(--overlay-5);
+        color: var(--text-secondary);
       }
     }
 

@@ -644,7 +644,18 @@ class ChannelRelayClient:
             except asyncio.CancelledError:
                 return
             except Exception as exc:
-                logger.warning("ChannelRelay [%s]: connection lost: %s", self._agent_id, exc)
+                exc_s = str(exc)
+                if "401" in exc_s or "403" in exc_s or "Unauthorized" in exc_s:
+                    logger.warning(
+                        "ChannelRelay [%s]: auth rejected — ensure RUNTIME_SHARED_SECRET "
+                        "matches NestJS (relay URL uses ?secret=...): %s",
+                        self._agent_id, exc_s[:200],
+                    )
+                else:
+                    logger.warning(
+                        "ChannelRelay [%s]: connection lost: %s",
+                        self._agent_id, exc,
+                    )
 
             self._connected = False
             self._ws = None
@@ -928,6 +939,7 @@ _TOOL_PROGRESS_LABELS: dict[str, str] = {
     "plan": "Updating the plan...",
     "skill": "Using a skill...",
     "ask_user": "Asking you a question...",
+    "escalate": "Asking orchestrator for help...",
 }
 
 _SILENT_TOOLS = frozenset({

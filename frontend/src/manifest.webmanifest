@@ -4,8 +4,8 @@
   "description": "Your personal AI agent — always learning, always growing.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0a0a0a",
-  "theme_color": "#6366f1",
+  "background_color": "#eef0f7",
+  "theme_color": "#7c5bf5",
   "orientation": "any",
   "icons": [
     {

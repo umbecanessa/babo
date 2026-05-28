@@ -838,6 +838,12 @@ def create_agent_from_genesis(
     # Write ledger manifest
     save_manifest(agent_dir, state)
 
+    try:
+        from nls.ledger.chain_sleep import ensure_genesis_block
+        ensure_genesis_block(agent_dir)
+    except Exception as exc:
+        logger.warning("Genesis block init failed for %s: %s", agent_id, exc)
+
     # ── 6. Write agent metadata ──
     agent_meta: dict[str, Any] = {
         "agent_id": agent_id,

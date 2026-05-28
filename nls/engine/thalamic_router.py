@@ -165,8 +165,11 @@ class ThalamicRouter:
             return EngagementDepth.DROP  # handled via copilot_queue, not a new loop
 
         # ── User message from primary WS ──
+        # ws_handler pushes these for Phase-0 bookkeeping, then runs the
+        # turn on the foreground path.  Never start a second DEEP loop here
+        # (would race the foreground lock and abort as "user_abort").
         if etype == EventType.USER_MESSAGE and event.source == "ws":
-            return EngagementDepth.DEEP
+            return EngagementDepth.DROP
 
         # ── Channel message ──
         if etype == EventType.CHANNEL_MESSAGE:

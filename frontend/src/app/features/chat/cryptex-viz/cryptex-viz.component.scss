@@ -21,10 +21,10 @@
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 1.2px;
-  color: rgba(255, 255, 255, 0.3);
+  color: var(--text-muted);
   text-transform: uppercase;
   padding: 0 2px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid var(--overlay-3);
   padding-bottom: 3px;
 }
 
@@ -48,7 +48,7 @@
   transition: background 0.15s;
 
   &:hover {
-    background: rgba(255, 255, 255, 0.03);
+    background: var(--overlay-1);
   }
 }
 
@@ -62,7 +62,7 @@
 .ring-name {
   font-size: 10px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.7);
+  color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -72,7 +72,7 @@
 
 .slot-count {
   font-size: 9px;
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--text-muted);
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
 
@@ -89,8 +89,8 @@
   overflow: hidden;
   position: relative;
   border-radius: 3px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--overlay-1);
+  border: 1px solid var(--overlay-3);
   flex-shrink: 0;
 }
 
@@ -105,31 +105,31 @@
   line-height: 18px;
   font-size: 9px;
   text-align: center;
-  color: rgba(255, 255, 255, 0.25);
+  color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   padding: 0 4px;
 
   &.active {
-    color: rgba(255, 255, 255, 0.8);
+    color: var(--text-primary);
     font-weight: 600;
   }
 }
 
 .position-static {
   font-size: 9px;
-  color: rgba(255, 255, 255, 0.35);
+  color: var(--text-muted);
   flex-shrink: 0;
 }
 
 // ── Glassmorphic card ────────────────────────────────────
 
 .ring-card {
-  background: rgba(14, 14, 18, 0.4);
+  background: var(--glass-bg);
   backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.04);
-  border-left: 3px solid var(--ring-color, #64748b);
+  border: 1px solid var(--overlay-2);
+  border-left: 3px solid var(--ring-color, var(--text-muted));
   border-radius: 8px;
   padding: 5px 10px;
   cursor: pointer;
@@ -139,13 +139,13 @@
   gap: 1px;
 
   &:hover {
-    background: rgba(14, 14, 18, 0.55);
-    border-color: rgba(255, 255, 255, 0.08);
+    background: var(--glass-bg);
+    border-color: var(--overlay-3);
   }
 
   &.selected {
-    background: rgba(14, 14, 18, 0.65);
-    border-color: rgba(255, 255, 255, 0.12);
+    background: var(--glass-bg);
+    border-color: var(--overlay-4);
     box-shadow: 0 0 10px rgba(var(--ring-color-rgb, 100, 116, 139), 0.15);
   }
 }
@@ -158,7 +158,7 @@
   gap: 4px;
   font-size: 10px;
   line-height: 1.6;
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--text-secondary);
   overflow: hidden;
 }
 
@@ -181,7 +181,7 @@
 
 .empty-state {
   font-size: 10px;
-  color: rgba(255, 255, 255, 0.25);
+  color: var(--text-muted);
   text-align: center;
   padding: 16px 0;
 }

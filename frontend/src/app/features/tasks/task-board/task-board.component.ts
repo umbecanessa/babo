@@ -14,10 +14,10 @@ export interface BoardColumn {
 
 const COLUMNS: { id: string; label: string; color: string }[] = [
   { id: 'inbox', label: 'Inbox', color: '#94a3b8' },
-  { id: 'queued', label: 'Queued', color: '#818cf8' },
-  { id: 'in_progress', label: 'In Progress', color: '#f59e0b' },
-  { id: 'blocked', label: 'Blocked', color: '#f87171' },
-  { id: 'done', label: 'Done', color: '#34d399' },
+  { id: 'queued', label: 'Queued', color: 'var(--accent-primary)' },
+  { id: 'in_progress', label: 'In Progress', color: 'var(--accent-warn)' },
+  { id: 'blocked', label: 'Blocked', color: 'var(--accent-danger)' },
+  { id: 'done', label: 'Done', color: 'var(--accent-success)' },
   { id: 'deferred', label: 'Deferred', color: '#6b7280' },
 ];
 

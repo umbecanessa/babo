@@ -1,0 +1,303 @@
+import {
+  Component,
+  Input,
+  Output,
+  EventEmitter,
+  OnChanges,
+  SimpleChanges,
+  ElementRef,
+  ViewChild,
+  HostListener,
+  AfterViewInit,
+  OnDestroy,
+  inject,
+  effect,
+} from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { Compartment, EditorState, Extension } from '@codemirror/state';
+import { EditorView, keymap } from '@codemirror/view';
+import {
+  defaultKeymap,
+  history,
+  historyKeymap,
+  indentWithTab,
+} from '@codemirror/commands';
+import { highlightSelectionMatches } from '@codemirror/search';
+import { baboTheme, languageExtension } from '../codemirror.loader';
+import { EditorTab } from '../workspace.models';
+import { ThemeService } from '../../../../core/services/theme.service';
+
+@Component({
+  selector: 'app-workspace-editor',
+  standalone: true,
+  imports: [CommonModule],
+  templateUrl: './workspace-editor.component.html',
+  styleUrl: './workspace-editor.component.scss',
+})
+export class WorkspaceEditorComponent
+  implements OnChanges, AfterViewInit, OnDestroy
+{
+  @ViewChild('editorHost') editorHost?: ElementRef<HTMLDivElement>;
+
+  @Input({ required: true }) tabs: EditorTab[] = [];
+  @Input({ required: true }) activePath = '';
+
+  @Output() tabSelect = new EventEmitter<string>();
+  @Output() tabClose = new EventEmitter<string>();
+  @Output() tabDirty = new EventEmitter<{ path: string; dirty: boolean }>();
+  @Output() save = new EventEmitter<string>();
+
+  private readonly themeService = inject(ThemeService);
+  private readonly themeCompartment = new Compartment();
+  private readonly editableCompartment = new Compartment();
+
+  private view?: EditorView;
+  private readonly states = new Map<string, EditorState>();
+  private readonly dirtyPaths = new Set<string>();
+  private readonly pendingStates = new Set<string>();
+  private resizeObserver?: ResizeObserver;
+  private editorReady = false;
+
+  constructor() {
+    effect(() => {
+      this.themeService.effective();
+      if (this.editorReady) {
+        this.applyEditorTheme();
+      }
+    });
+  }
+
+  ngAfterViewInit(): void {
+    void this.initEditor();
+  }
+
+  ngOnChanges(changes: SimpleChanges): void {
+    if (!this.editorReady) return;
+    if (changes['tabs'] || changes['activePath']) {
+      void this.syncStates().then(() => this.showActiveState());
+    }
+  }
+
+  ngOnDestroy(): void {
+    this.resizeObserver?.disconnect();
+    this.view?.destroy();
+    this.view = undefined;
+    this.states.clear();
+    this.editorReady = false;
+  }
+
+  @HostListener('window:keydown', ['$event'])
+  onKeydown(event: KeyboardEvent): void {
+    if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+      event.preventDefault();
+      if (this.activePath) {
+        this.save.emit(this.activePath);
+      }
+    }
+  }
+
+  selectTab(path: string, event?: Event): void {
+    event?.stopPropagation();
+    this.tabSelect.emit(path);
+  }
+
+  closeTab(path: string, event: Event): void {
+    event.stopPropagation();
+    this.tabClose.emit(path);
+  }
+
+  activeTab(): EditorTab | null {
+    return this.tabs.find((t) => t.path === this.activePath) ?? null;
+  }
+
+  isDirty(path: string): boolean {
+    return this.dirtyPaths.has(path);
+  }
+
+  getContent(path: string): string {
+    const state = this.states.get(path);
+    if (state) return state.doc.toString();
+    return this.tabs.find((t) => t.path === path)?.content ?? '';
+  }
+
+  markSaved(path: string, content?: string): void {
+    const state = this.states.get(path);
+    const next = content ?? state?.doc.toString() ?? '';
+    if (state && state.doc.toString() !== next) {
+      this.states.set(
+        path,
+        state.update({ changes: { from: 0, to: state.doc.length, insert: next } })
+          .state,
+      );
+      if (this.activePath === path && this.view) {
+        this.view.setState(this.states.get(path)!);
+        this.applyEditorTheme();
+      }
+    }
+    this.dirtyPaths.delete(path);
+  }
+
+  private isDark(): boolean {
+    return this.themeService.effective() === 'dark';
+  }
+
+  private baseExtensions(path: string): Extension[] {
+    return [
+      history(),
+      keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
+      highlightSelectionMatches(),
+      this.themeCompartment.of(baboTheme(this.isDark())),
+      EditorView.updateListener.of((update) => {
+        if (!update.docChanged) return;
+        const active = this.activePath;
+        if (!active || active !== path) return;
+        this.dirtyPaths.add(active);
+        this.tabDirty.emit({ path: active, dirty: true });
+      }),
+    ];
+  }
+
+  private stateExtensions(
+    path: string,
+    editable: boolean,
+    lang: Extension = [],
+  ): Extension[] {
+    return [
+      ...this.baseExtensions(path),
+      this.editableCompartment.of(EditorView.editable.of(editable)),
+      lang,
+    ];
+  }
+
+  private async initEditor(): Promise<void> {
+    const host = this.editorHost?.nativeElement;
+    if (!host) return;
+
+    try {
+      this.view = new EditorView({
+        parent: host,
+        state: EditorState.create({
+          doc: '',
+          extensions: this.stateExtensions('', false),
+        }),
+      });
+
+      this.resizeObserver = new ResizeObserver(() => {
+        requestAnimationFrame(() => this.view?.requestMeasure());
+      });
+      this.resizeObserver.observe(host);
+      const main = host.closest('.editor-main');
+      if (main) this.resizeObserver.observe(main);
+
+      this.editorReady = true;
+      await this.syncStates();
+      this.showActiveState();
+    } catch (err) {
+      console.error('CodeMirror editor failed to load', err);
+    }
+  }
+
+  private applyEditorTheme(): void {
+    if (!this.view) return;
+    this.view.dispatch({
+      effects: this.themeCompartment.reconfigure(baboTheme(this.isDark())),
+    });
+  }
+
+  private setEditable(editable: boolean): void {
+    if (!this.view) return;
+    this.view.dispatch({
+      effects: this.editableCompartment.reconfigure(
+        EditorView.editable.of(editable),
+      ),
+    });
+  }
+
+  private async syncStates(): Promise<void> {
+    const open = new Set(this.tabs.map((t) => t.path));
+
+    for (const path of [...this.states.keys()]) {
+      if (!open.has(path)) {
+        this.states.delete(path);
+        this.dirtyPaths.delete(path);
+        this.pendingStates.delete(path);
+      }
+    }
+
+    await Promise.all(
+      this.tabs.filter((t) => !t.loading).map((tab) => this.ensureState(tab)),
+    );
+  }
+
+  private async ensureState(tab: EditorTab): Promise<EditorState> {
+    const existing = this.states.get(tab.path);
+    if (existing) {
+      if (
+        !this.dirtyPaths.has(tab.path) &&
+        existing.doc.toString() !== tab.content
+      ) {
+        const updated = existing.update({
+          changes: {
+            from: 0,
+            to: existing.doc.length,
+            insert: tab.content,
+          },
+        }).state;
+        this.states.set(tab.path, updated);
+        return updated;
+      }
+      return existing;
+    }
+
+    if (this.pendingStates.has(tab.path)) {
+      return (
+        this.states.get(tab.path) ??
+        EditorState.create({
+          doc: tab.content,
+          extensions: this.stateExtensions(tab.path, true),
+        })
+      );
+    }
+
+    this.pendingStates.add(tab.path);
+    const lang = await languageExtension(tab.name, tab.language);
+    const state = EditorState.create({
+      doc: tab.content,
+      extensions: this.stateExtensions(tab.path, true, lang),
+    });
+    this.states.set(tab.path, state);
+    this.pendingStates.delete(tab.path);
+    return state;
+  }
+
+  private showActiveState(): void {
+    if (!this.view) return;
+
+    const tab = this.activeTab();
+    if (!tab || tab.loading || !this.activePath) {
+      this.setEditable(false);
+      return;
+    }
+
+    const state = this.states.get(tab.path);
+    if (!state) {
+      void this.ensureState(tab).then((s) => {
+        if (this.activePath === tab.path) {
+          this.mountState(s);
+        }
+      });
+      return;
+    }
+
+    this.mountState(state);
+  }
+
+  private mountState(state: EditorState): void {
+    if (!this.view) return;
+    this.view.setState(state);
+    this.applyEditorTheme();
+    this.setEditable(true);
+    this.view.focus();
+    requestAnimationFrame(() => this.view?.requestMeasure());
+  }
+}

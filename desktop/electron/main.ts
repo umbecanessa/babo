@@ -21,6 +21,30 @@ import { registerIpcHandlers } from './ipc-handlers';
 import { RuntimeManager } from './runtime-manager';
 import { VenvManager } from './venv-manager';
 import { ConfigManager } from './config-manager';
+
+/** file:// renderer cannot always read cross-origin responses; widen CORS for the cloud API. */
+function enableRendererCorsForBackend(nestjsUrl: string): void {
+  let origin = '';
+  try {
+    origin = new URL(nestjsUrl).origin;
+  } catch {
+    return;
+  }
+
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    if (!details.url.startsWith(origin)) {
+      callback({ responseHeaders: details.responseHeaders });
+      return;
+    }
+    const responseHeaders = { ...details.responseHeaders };
+    responseHeaders['Access-Control-Allow-Origin'] = ['*'];
+    responseHeaders['Access-Control-Allow-Methods'] = [
+      'GET, POST, PUT, PATCH, DELETE, OPTIONS, HEAD',
+    ];
+    responseHeaders['Access-Control-Allow-Headers'] = ['*'];
+    callback({ responseHeaders });
+  });
+}
 import { PermissionManager } from './permission-manager';
 import { UpdateManager } from './update-manager';
 
@@ -227,6 +251,7 @@ app.whenReady().then(async () => {
 
   // Initialize managers
   configManager = new ConfigManager();
+  enableRendererCorsForBackend(configManager.get().nestjsUrl);
   venvManager = new VenvManager();
   permissionManager = new PermissionManager();
   runtimeManager = new RuntimeManager(configManager, venvManager);

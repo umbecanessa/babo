@@ -86,7 +86,7 @@ export class SetupComponent implements OnInit, OnDestroy {
     {
       tier: 'hosted_babo',
       title: 'Babo Cloud',
-      subtitle: 'Claude, GPT, Gemini via your Babo account',
+      subtitle: 'Qwen 3.6, GPT, Claude via your Babo account',
       glyph: '☁',
     },
     {

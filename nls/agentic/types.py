@@ -5,7 +5,7 @@ between v2 and v3 (and any future loop versions).  It contains:
 
 - Core dataclasses: AgenticConfig, AgenticHooks, AgenticResult, AgentEvent
 - EventType enum
-- Virtual tool schemas (ask_user, communicate, delegate)
+- Virtual tool schemas (ask_user, escalate, communicate, delegate)
 - Tool-forcing preamble
 - Context sanitization, thinking mode selection, toolcall stripping
 - Plan position helper
@@ -21,6 +21,7 @@ from enum import Enum
 from typing import Any, Callable
 
 from nls.tools.agent_tools.base import AgentTool, ToolResult
+from nls.agentic.outbound_notify import FINAL_SUMMARY_SCHEMA_PROPERTY
 
 logger = logging.getLogger(__name__)
 
@@ -97,19 +98,20 @@ MODE_PRIMARY_TOOLS: dict[AgentMode, frozenset[str]] = {
     AgentMode.DELEGATING: (
         frozenset({"team", "delegate", "delegate_status", "delegate_ring",
                    "plan", "todo", "scheduler", "read", "switch_mode", "wait",
-                   "task_complete"})
+                   "await_delegates", "task_complete"})
         | _COMM_TOOLS | _DISCOVERY_TOOLS
     ),
     AgentMode.MONITORING: (
-        frozenset({"team", "wait", "delegate_status", "delegate_ring",
-                   "scheduler", "todo", "read", "switch_mode", "task_complete"})
-        | _COMM_TOOLS | _DISCOVERY_TOOLS
+        frozenset({"team", "await_delegates", "delegate_status",
+                   "delegate_ring", "scheduler", "switch_mode", "communicate"})
+        | _COMM_TOOLS
     ),
     AgentMode.EVALUATING: (
         _RESEARCH_TOOLS | _FILE_TOOLS | _COMM_TOOLS
         | frozenset({"bash", "todo", "plan", "team", "switch_mode",
                      "scheduler", "wait", "delegate_status", "delegate_ring",
-                     "task_complete", "offer_download", "server_install"})
+                     "task_complete", "offer_download", "server_install",
+                     "project_install"})
         | _DISCOVERY_TOOLS
     ),
     AgentMode.EXECUTING: frozenset(),  # empty = all tools allowed
@@ -120,7 +122,7 @@ MODE_PRIMARY_TOOLS: dict[AgentMode, frozenset[str]] = {
         | _DISCOVERY_TOOLS
         | frozenset({"read", "web_search", "web_fetch", "screenshot",
                      "offer_download", "scheduler", "switch_mode", "todo",
-                     "team", "delegate_status", "wait",
+                     "team", "delegate_status", "wait", "await_delegates",
                      "google_workspace_connect", "task_complete"})
     ),
 }
@@ -130,7 +132,7 @@ MODE_OVERRIDE_TOOLS: dict[AgentMode, frozenset[str]] = {
     AgentMode.CHAT: frozenset(),
     AgentMode.PLANNING: frozenset({"bash"}),
     AgentMode.DELEGATING: frozenset({"bash", "write", "list_dir"}),
-    AgentMode.MONITORING: frozenset({"bash", "list_dir", "grep", "glob"}),
+    AgentMode.MONITORING: frozenset(),
     AgentMode.EVALUATING: frozenset(),  # full access, no overrides needed
     AgentMode.EXECUTING: frozenset(),
     AgentMode.RESPONDING: frozenset({"bash", "write", "list_dir", "grep", "glob"}),
@@ -718,6 +720,53 @@ _ASK_USER_TOOL_SCHEMA = {
     },
 }
 
+_ESCALATE_TOOL_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "escalate",
+        "description": (
+            "Ask the orchestrator for help. Use when you are stuck, blocked, "
+            "need more iteration budget, need a decision you cannot make "
+            "alone, or need write access to a file outside your owned_paths "
+            "(reason='file_access', paths=[...]). The loop PAUSES until the "
+            "orchestrator replies (up to 2 minutes). Prefer this over silent "
+            "looping when progress stalls."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "type": "string",
+                    "enum": ["stuck", "need_time", "blocked", "question", "file_access"],
+                    "description": (
+                        "Why you are escalating: stuck on a technical issue, "
+                        "need more iterations, blocked on credentials/access, "
+                        "file_access for paths outside your assignment, "
+                        "or a general question."
+                    ),
+                },
+                "message": {
+                    "type": "string",
+                    "description": (
+                        "What you need from the orchestrator: what you tried, "
+                        "what is blocking you, and what decision or help "
+                        "would unblock progress."
+                    ),
+                },
+                "paths": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "For reason='file_access': path patterns you need to "
+                        "write/edit (e.g. ['.gitignore', 'backend/pyproject.toml'])."
+                    ),
+                },
+            },
+            "required": ["reason", "message"],
+        },
+    },
+}
+
 _COMMUNICATE_TOOL_SCHEMA = {
     "type": "function",
     "function": {
@@ -735,7 +784,8 @@ _COMMUNICATE_TOOL_SCHEMA = {
                 "message": {
                     "type": "string",
                     "description": "The message to send to the user.",
-                }
+                },
+                "final_summary": FINAL_SUMMARY_SCHEMA_PROPERTY,
             },
             "required": ["message"],
         },
@@ -778,7 +828,7 @@ _DELEGATE_TOOL_SCHEMA = {
                 "max_steps": {
                     "type": "integer",
                     "description": (
-                        "Max iterations for the sub-agent (default 15, max 50). "
+                        "Max iterations for the sub-agent (default 25, max 50). "
                         "Scale to task complexity: 5-8 for simple single-command "
                         "tasks (start a server, run a check, install something), "
                         "10-15 for moderate tasks, 20-35 for complex multi-file "
@@ -797,16 +847,14 @@ _WAIT_TOOL_SCHEMA = {
     "function": {
         "name": "wait",
         "description": (
-            "Pause the agent loop for N seconds before continuing. "
-            "Use this for SHORT delegate tasks (expected < 60s): "
-            "wait once, then call delegate_status to check progress. "
-            "For LONG tasks (> 60s), do NOT use wait — instead end your "
-            "turn entirely; you will be automatically re-invoked with "
-            "results when all delegates complete. "
-            "Never call delegate_status in a tight loop without a wait "
-            "between checks. Max wait is 300 seconds. "
-            "After the wait, the current delegate statuses are "
-            "automatically included in the response."
+            "Pause the agent loop for a SHORT time (max 60s recommended) "
+            "then continue in THIS session. Use only for quick polls: "
+            "e.g. wait(seconds=15) once after launch, then team(inspect). "
+            "Do NOT use wait(seconds=60+) while a team wave or delegates "
+            "run in the background — that burns iterations. Use "
+            "await_delegates(summary='...') instead to EXIT the loop; "
+            "you will be re-invoked on wave completion or escalation. "
+            "Never poll delegate_status in a tight loop. Max 300 seconds."
         ),
         "parameters": {
             "type": "object",
@@ -826,6 +874,73 @@ _WAIT_TOOL_SCHEMA = {
         },
     },
 }
+
+_AWAIT_DELEGATES_TOOL_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "await_delegates",
+        "description": (
+            "Exit this loop while sub-agents or a team wave keep working "
+            "in the background. Use AFTER you launched a team/delegates "
+            "and sent the user a brief status — NOT when all work is done.\n"
+            "DIFFERENCE FROM OTHER TOOLS:\n"
+            "- task_complete = the user's entire request is finished.\n"
+            "- wait(seconds=N) = stay in this loop and sleep (bad for long "
+            "waves — causes 60s/180s polling).\n"
+            "- await_delegates = you are done monitoring FOR NOW; the "
+            "runtime will wake you on wave completion, escalation, or "
+            "scheduler check-back.\n"
+            "Typical flow: team(launch) → communicate(status) → "
+            "await_delegates(summary='Wave 2 running — N agents on ...')."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "summary": {
+                    "type": "string",
+                    "description": (
+                        "Brief status for logs and optional user handoff "
+                        "(what wave/delegates you are waiting on)."
+                    ),
+                },
+                "team_id": {
+                    "type": "string",
+                    "description": "Optional team id you are monitoring.",
+                },
+            },
+            "required": ["summary"],
+        },
+    },
+}
+
+
+def virtual_tool_schemas_for_loop(
+    *,
+    enable_delegation: bool,
+    enable_detached_delegates: bool = False,
+    delegate_manager: Any | None = None,
+) -> list[dict]:
+    """Base virtual tool schemas for an agentic loop.
+
+    Orchestrators get ask_user/communicate/delegate; worker sub-agents get
+    escalate instead of ask_user and cannot delegate further.
+    """
+    schemas: list[dict] = []
+    if enable_delegation:
+        schemas.extend([
+            _ASK_USER_TOOL_SCHEMA,
+            _DELEGATE_TOOL_SCHEMA,
+            _COMMUNICATE_TOOL_SCHEMA,
+            _SWITCH_MODE_TOOL_SCHEMA,
+        ])
+    else:
+        schemas.append(_ESCALATE_TOOL_SCHEMA)
+    if enable_delegation and enable_detached_delegates and delegate_manager is not None:
+        schemas.append(_DELEGATE_STATUS_TOOL_SCHEMA)
+        schemas.append(_WAIT_TOOL_SCHEMA)
+        schemas.append(_AWAIT_DELEGATES_TOOL_SCHEMA)
+    return schemas
+
 
 _SWITCH_MODE_TOOL_SCHEMA = {
     "type": "function",
@@ -875,8 +990,9 @@ _DELEGATE_STATUS_TOOL_SCHEMA = {
             "Check the status of background sub-agents, or send them signals. "
             "Use after delegating tasks to see progress, or to tell a specific "
             "sub-agent to wrap up, cancel, or give it a hint/guidance. "
-            "Always use wait(seconds=N) BEFORE calling this — never poll "
-            "delegate_status repeatedly in a tight loop."
+            "For background waves use await_delegates, not long wait(). "
+            "For a quick poll: wait(seconds=15) once, then check status — "
+            "never poll in a tight loop."
         ),
         "parameters": {
             "type": "object",
@@ -1213,7 +1329,11 @@ _V5_AGENTIC_SUPPLEMENT = (
     "need the result urgently, use delegate_status(action='wrap_up').\n"
     "Scale max_steps to task complexity: use 5-8 for simple tasks like "
     "'start a server' or 'run a command', 15 for moderate work, 20-35 "
-    "for complex multi-file implementations.\n\n"
+    "for complex multi-file implementations.\n"
+    "WHEN STUCK: search clawhub(action='search', query='...') or "
+    "discover_tools(query='...') before retrying failed bash. "
+    "For GitHub repo steps, hint delegates: gh auth with "
+    "echo TOKEN | gh auth login --with-token, then gh repo create.\n\n"
 
     "TEAM ORCHESTRATION (REQUIRED for multi-step projects):\n"
     "For projects with 3+ distinct implementation tasks, ALWAYS use the "
@@ -1231,6 +1351,8 @@ _V5_AGENTIC_SUPPLEMENT = (
     "project_dir name. Include ALL phases in one call:\n"
     "   Option A — all at once:\n"
     "     plan(action='create', title='Recipe Sharing App', "
+    "requirements='...', tech_stack={backend_language:'typescript', "
+    "backend_framework:'express', frontend_framework:'react', orm:'prisma'}, "
     "project_dir='recipe-app', steps=[\n"
     "       {\"label\": \"Initialize project scaffolding\", \"delegatable\": true},\n"
     "       {\"label\": \"Design database schema\", \"delegatable\": true, "
@@ -1251,11 +1373,15 @@ _V5_AGENTIC_SUPPLEMENT = (
     "   This produces 5 waves: scaffolding → DB+backend+frontend → API+AI → UI features → deploy.\n"
     "   Option B — incremental (create plan first, then add steps):\n"
     "     plan(action='create', title='Recipe Sharing App', "
+    "requirements='...', tech_stack={backend_language:'typescript', "
+    "backend_framework:'express', frontend_framework:'react', orm:'prisma'}, "
     "project_dir='recipe-app')\n"
     "     plan(action='add_step', plan_id='...', label='Initialize project scaffolding', delegatable=true)\n"
     "     plan(action='add_step', plan_id='...', label='Build FastAPI backend', "
     "delegatable=true, depends_on=['Initialize project scaffolding'])\n"
     "   Both options are valid. The plan MUST have steps before creating a team.\n"
+    "   Update stack lock-in anytime: plan(action='set_tech_stack', tech_stack={...}) "
+    "or plan(action='set_requirements', requirements='...').\n"
     "   ALWAYS set project_dir to a short, descriptive slug for the actual "
     "project (e.g. 'recipe-app', 'task-manager'). Never use "
     "generic names like 'scaffolding', 'backend', 'project'.\n"
@@ -1274,6 +1400,11 @@ _V5_AGENTIC_SUPPLEMENT = (
     "   ⚠ ANTI-PATTERN: Do NOT make every step depend only on scaffolding.\n"
     "   That creates a flat graph where 8+ agents collide on the same files.\n"
     "   If step B uses code that step A creates, B MUST depend on A.\n"
+    "   SERVICE vs API: internal modules (AssemblyAI, Anthropic, email) "
+    "depend on DB/schema only — NOT on the REST API step. The API step "
+    "depends on those services.\n"
+    "   If team(launch) blocks: plan(action='fix_dependencies') — never "
+    "plan(delete) while completed steps remain.\n"
     "   The system validates your graph and will fix shallow dependencies.\n"
     "2. CREATE TEAM: team(action='create', plan_id=<plan_id>, wave=0, "
     "name='descriptive name'). This auto-generates Kanban items from "
@@ -1281,12 +1412,24 @@ _V5_AGENTIC_SUPPLEMENT = (
     "3. LAUNCH TEAM: team(action='launch', team_id=<id>). The system "
     "spawns sub-agents for each member and schedules automatic "
     "check-back alarms so you are re-invoked to monitor progress.\n"
-    "4. MONITOR: Use team(action='inspect', team_id=<id>) to check "
-    "each member's status, iterations, and progress. The scheduler "
-    "will wake you periodically to check.\n"
+    "4. MONITOR: You are the engineering manager on the Kanban board. "
+    "Use team(action='inspect') for holistic wave status. Act when there "
+    "is a management decision — hint a stuck member, review a landed wave, "
+    "advance the plan. Between decisions, await_delegates(summary='...') "
+    "so you are not idle-polling. Scheduled check-backs wake you for review.\n"
     "5. STEER: Use team(action='hint', team_id=<id>, "
     "member=N, message='guidance') to redirect a "
-    "stuck member without replacing them.\n"
+    "stuck member without replacing them. Hints are stored in the "
+    "delegate's high-priority ORCHESTRATOR ring (system context), not "
+    "only chat — they survive long tool loops. Use delegate_ring to "
+    "read/upsert rings when you need precise steering.\n"
+    "   WAVE RETRY: If a wave fails, team(create) again on the SAME "
+    "wave index after the prior team is terminal — attempt number "
+    "increments; prior attempts stay visible in the UI.\n"
+    "   SELF-FIX vs DELEGATE: Quick salvage (≤3 files, obvious one-line "
+    "bugs) → switch_mode(evaluating) and patch yourself. Larger gaps → "
+    "team(create) retry or team(rewake). Do NOT extend AND finalize in "
+    "the same intervene call.\n"
     "6. ADVANCE: When all current-wave members complete, call "
     "team(action='advance', team_id=<id>) to launch the next wave "
     "of dependent tasks.\n"
@@ -1297,18 +1440,20 @@ _V5_AGENTIC_SUPPLEMENT = (
     "   - PARTIAL: mixed results (some done, some failed). You are an "
     "engineering manager — fix the gap and GET BACK ON TRACK:\n"
     "     a) Review what failed and WHY (read result summaries).\n"
-    "     b) PREFERRED: Use team(action='rewake', member=N) to re-launch "
+    "     b) After accept_partial: team(advance) then launch next wave — "
+    "do NOT replan from scratch.\n"
+    "     c) PREFERRED: Use team(action='rewake', member=N) to re-launch "
     "the failed delegate with corrective instructions (e.g. fix the "
     "path, use PowerShell syntax, skip the broken step). Rewake is "
     "ALWAYS better than doing the work yourself.\n"
-    "     c) FALLBACK: If rewake won't help (e.g. fundamental approach "
+    "     d) FALLBACK: If rewake won't help (e.g. fundamental approach "
     "was wrong), do a QUICK targeted fix — fill only the missing gap. "
     "Spend at most 5-10 iterations on direct fixes.\n"
-    "     d) RESUME THE PLAN: advance the team and launch the next "
+    "     e) RESUME THE PLAN: advance the team and launch the next "
     "wave. The plan's remaining waves still need to execute with "
     "delegates. Do NOT abandon the wave structure and do everything "
     "solo. Your job is to coordinate, not to become a one-person army.\n"
-    "     e) If a step truly cannot be recovered, mark it as skipped "
+    "     f) If a step truly cannot be recovered, mark it as skipped "
     "and move on — downstream steps may still work.\n"
     "   - FAILED: most/all members failed. Same principle — investigate, "
     "rewake or do a targeted fix, then CONTINUE with the plan's next "
@@ -1318,10 +1463,14 @@ _V5_AGENTIC_SUPPLEMENT = (
     "everything yourself. Do NOT spend 50+ iterations manually coding "
     "what delegates should handle. You are the MANAGER, not the IC.\n"
     "   After advance, cancel the check-back scheduler. Deliver ONE "
-    "summary. If 'inspect' shows [ALREADY REPORTED], skip silently.\n"
+    "summary. If inspect shows WAVE ADVANCED, do not re-advance; "
+    "at most one new user update.\n"
     "COMMUNICATION DISCIPLINE:\n"
     "- Send the user exactly ONE completion notification per plan "
-    "(via WhatsApp/email/chat). Never repeat the same status.\n"
+    "(communicate in chat, or a channel the user requested that is connected). "
+    "Never repeat the same status.\n"
+    "- Do NOT label updates 'WhatsApp' or other channels unless the user asked "
+    "for that channel and the send tool is connected.\n"
     "- After plan(action='complete') succeeds and the user is notified, "
     "you are DONE. Stop immediately — do not re-inspect teams, "
     "re-read files, or re-verify work. Exit the loop.\n"
@@ -1352,9 +1501,10 @@ _V5_AGENTIC_SUPPLEMENT = (
     "ghp_abc123 (user: babo-beep). Repo name: coaching-evaluation-tool. "
     "Project folder already created with backend/ scaffolding and "
     "README.md from PRD.\", \"delegatable\": true}\n"
-    "If a member calls ask_user, their question is escalated to you "
-    "as a [TEAM MEMBER HELP REQUEST]. Answer it via "
-    "team(action='intervene', team_id=..., member=N, decision='hint', message='the answer').\n"
+    "If a member calls escalate() or ask_user(), their request is escalated "
+    "to you as a [TEAM MEMBER HELP REQUEST]. Answer via "
+    "team(action='intervene', team_id=..., member=N, decision='hint' or "
+    "'extend', message='guidance or answer').\n"
     "STAY RESPONSIVE: While teams work in background, you remain "
     "available for user chat. Incoming messages always take priority "
     "over autonomous monitoring. Keep the user informed of progress — "
@@ -1365,18 +1515,17 @@ _V5_AGENTIC_SUPPLEMENT = (
     "member's status and context. You MUST respond using:\n"
     "  team(action='intervene', team_id='...', member=<index>, "
     "decision='extend|hint|terminate', message='optional guidance')\n"
-    "  - 'extend': The member was making good progress but ran out of "
-    "iterations. Grant more time (default +10 iters). Use when you "
-    "see productive tool calls (writes, successful commands).\n"
+    "  - 'extend': Default for escalate() when the member listed concrete "
+    "remaining work or writes>0. Grant +15 iterations with a ONE-paragraph "
+    "hint naming exact files/edits, then expect task_complete.\n"
     "  - 'hint': The member is stuck on a specific issue. Send "
     "guidance (e.g. 'use PowerShell syntax for mkdir', 'the file is "
     "at backend/app/main.py') along with extra iterations.\n"
-    "  - 'terminate': The member is hopelessly stuck or the task is "
-    "no longer needed. Stop the member and mark as failed.\n"
-    "Help requests also come when a member calls ask_user (e.g. needs "
-    "an API key or credential). The reason will start with 'ask_user:'. "
-    "Reply with decision='hint' and message='<the answer>' to provide "
-    "the information they need.\n"
+    "  - 'terminate': ONLY when zero useful files on disk or the step "
+    "must be abandoned. After the wave: plan(accept_partial) if artifacts exist.\n"
+    "Proactive help requests come when a member calls escalate() — the "
+    "reason will start with 'escalate:'. Prefer decision='extend' unless "
+    "output is empty. Do NOT terminate a member who reported writes>0.\n"
     "Respond QUICKLY — the member is paused waiting for your decision "
     "(timeout: 120s). If you don't respond, it exits automatically.\n\n"
 
@@ -1467,7 +1616,11 @@ _V5_AGENTIC_SUPPLEMENT = (
     "- todo: Master task tracker (Kanban). Every unit of work should be a "
     "todo. For multi-step work, create a plan linked to the todo.\n"
     "- plan: Execution runbook for a todo. Always pass todo_id when creating "
-    "a plan. sub_plan for nested work; update with evidence as you go.\n"
+    "a plan. ONE PROJECT = ONE active root plan — never plan(create) for "
+    "'Wave 3' remainder; use plan(add_step), plan(sub_plan) on a failed step, "
+    "or plan(continue_work, source_plan_id=...) instead. sub_plan for nested "
+    "retries; plan(fix_dependencies) when launch is blocked; update with "
+    "depends_on=[...] to fix one step; update with evidence as you go.\n"
     "- delegate: Run a sub-agent for one scoped unit of work — especially "
     "the contents of a sub-plan. Sub-agents share your tools but fresh "
     "context; you merge their summary into the orchestrator plan.\n"
@@ -1480,8 +1633,10 @@ _V5_AGENTIC_SUPPLEMENT = (
     "evaluate JS, authenticate, etc. For sites that need login, use "
     "authenticate + ask_user so the user can sign in in the opened window; "
     "cookies sync back for later navigations.\n"
-    "- server_install: Install Python libraries into your runtime (PyPI). "
-    "For system CLI tools, use bash instead.\n"
+    "- server_install: Install Python libraries into Babo's agent runtime "
+    "(PyPI) — for expanding agent capabilities, NOT app dependencies.\n"
+    "- project_install: Install Python (project/.venv) or Node (npm/pnpm/yarn) "
+    "packages into the project you are building.\n"
     "- scheduler: Create recurring or one-shot jobs (cron, interval, time). "
     "Can send yourself reminders or notify the user.\n"
     "- poller: Monitor URLs/APIs on a schedule.\n"
@@ -1601,7 +1756,9 @@ def _extract_inline_tool_calls(text: str) -> tuple[str, list[dict]]:
     # Strip all tool-call artifacts from the visible text
     clean = _TOOLCALL_BLOCK_RE.sub("", text)
     clean = _INLINE_JSON_TOOLCALL_RE.sub("", clean)
-    clean = _SIGNAL_TAG_RE.sub("", clean)
+    from nls.runtime.response_cleanup import strip_nls_artifacts
+
+    clean = strip_nls_artifacts(clean)
     clean = _re.sub(r"\n{3,}", "\n\n", clean).strip()
 
     return clean, recovered
@@ -1667,20 +1824,22 @@ _SUB_AGENT_SUPPLEMENT = (
     "components, services) — that is another delegate's job.\n"
     "- If your task is 'Build backend': build the backend. Do NOT also "
     "build the frontend, write deployment configs, or set up CI/CD.\n"
-    "- Stay in your lane. Other delegates handle their own tasks.\n\n"
+    "- Parallel teammates: you may see what others are working on so you "
+    "avoid duplicating their files — that is NOT permission to do their "
+    "work. Only deliver [YOUR TASK].\n\n"
 
     "SELF-TERMINATION: Once your task objective is verified as complete, "
-    "IMMEDIATELY produce a concise summary and stop. Do NOT keep "
-    "re-verifying the same result through different tools. One "
-    "verification is enough — if the server responds, the file exists, "
-    "or the test passes, you are done. Report and exit.\n\n"
+    "produce a concise summary and stop. Do NOT keep re-verifying the same "
+    "result through different tools — one verification is enough. "
+    "But do NOT exit early just to save iterations: deliver the full task "
+    "first, then stop.\n\n"
 
-    "ESCALATE TO USER: If you hit an infrastructure wall you cannot "
-    "solve (e.g. deployment requires auth you don't have, a service "
-    "needs manual setup, external access is blocked), use ask_user to "
-    "request help. Do NOT silently skip the step or declare it 'done' "
-    "when it isn't. Tell the user exactly what's needed and what you've "
-    "already prepared for them.\n\n"
+    "ESCALATE TO ORCHESTRATOR: If you are stuck, blocked, running low on "
+    "iteration budget, or hit an infrastructure wall you cannot solve "
+    "(missing credentials, manual setup, external access), call escalate() "
+    "with a clear reason and message. Do NOT silently loop or declare the "
+    "task 'done' when it isn't. The orchestrator can grant more iterations, "
+    "send a targeted hint, or redirect you.\n\n"
 
     "WRITING CODE: Write files INCREMENTALLY — never generate an entire "
     "large file (>150 lines) in a single write() call. Instead:\n"
@@ -1702,6 +1861,21 @@ _SUB_AGENT_SUPPLEMENT = (
     "directory — you are already inside it. Use paths like "
     "write(path='backend/main.py'), NOT write(path='project-name/backend/main.py'). "
     "Never write files to the workspace root.\n\n"
+
+    "LOCAL VERIFICATION: Before task_complete or declaring your step done, "
+    "run project-local tests (pytest, npm test, or equivalent) via bash in "
+    "the project directory. Record pass/fail in your summary. Do not skip "
+    "tests — the orchestrator plan verify checks for test evidence.\n\n"
+
+    "DEPENDENCIES: Two install tools — do not mix them.\n"
+    "- project_install(package=...): libraries for the APP you are building "
+    "(Python → project/.venv, same python bash uses; Node → npm/pnpm/yarn).\n"
+    "- server_install(package=...): Babo agent runtime only (your own tools).\n"
+    "Run project_install ONLY after scaffolding exists (package.json, "
+    "requirements.txt, or pyproject.toml in your project dir). "
+    "Never call project_install with empty args.\n"
+    "After project_install succeeds, verify with bash `python -c \"import ...\"` "
+    "in the project — do NOT use server_install for app libraries.\n\n"
 
     + (
         "ENVIRONMENT: Your shell is PowerShell on Windows.\n"
@@ -1778,6 +1952,12 @@ class LoopConfig:
     keep_recent_tokens: int = 40_000
     digest_threshold: int = 2_000
     result_max_chars: int = 20_000
+    # Anchor large read/web_fetch results in context after LLM digest (not bash).
+    # Deprecated: digests are stored in WM only; tool output is never replaced.
+    anchor_tool_result_min_chars: int = 4_000
+    # Trigger compaction when message chars exceed this (leaves headroom for tool
+    # schemas on cloud relay paths with ~100KB HTTP limits). 0 = disabled.
+    relay_compact_message_chars: int = 32_000
 
     # --- Generation (Qwen3.5 recommended: thinking/general) ---
     max_new_tokens: int = 4_096
@@ -1811,6 +1991,9 @@ class LoopConfig:
 
     # --- Agent identity (for scheduler routing and telemetry) ---
     agent_id: str = ""
+
+    # --- Model selection (OpenRouter-style ids) ---
+    delegate_adapter_name: str | None = None
 
     # --- Team member escalation ---
     # When True, the loop will call on_escalation and wait for an
@@ -1902,19 +2085,44 @@ class LoopState:
     last_error_preview: str = ""
     stall_nudges_given: int = 0
 
+    # Sub-agent budget pacing (worker loops only)
+    budget_milestones_sent: set = field(default_factory=set)
+    read_heavy_nudge_sent: bool = False
+
     # Idle monitoring cycle counter: incremented when the only tool calls
     # in an iteration are passive monitoring tools (wait, team inspect/list).
     # Reset when the agent takes a meaningful action.
     idle_monitor_cycles: int = 0
 
+    # team_id values from recent team(inspect) calls (monitoring advance guard).
+    recent_team_inspect_ids: list[str] = field(default_factory=list)
+
+    # Orchestration policy — coordinator phase and burn counters
+    coordinator_phase: str = "idle"
+    must_await_delegates: bool = False
+    coordinator_monitor_iters: int = 0
+    coordinator_burn_iters: int = 0
+    coordinator_wake_prompt_tokens: int = 0
+    orch_wake_injected: bool = False
+    last_orch_wake_hash: str = ""
+
     # Count of iterations where the ONLY tool call was wait().
     # These are excluded from the iteration budget in check_guards so that
     # an orchestrator waiting on sub-agents isn't penalised for monitoring.
     wait_only_iterations: int = 0
+    # Orchestrator must plan+team before bash/write (no delegates yet).
+    must_delegate_before_impl: bool = False
+    pre_delegate_reason: str = ""
+    # After plan(delete) or failed wave — allow solo patch, no stale-goal block.
+    orchestrator_recovery: bool = False
+    # Cap guard-driven iteration extensions (audit loops without teams).
+    guard_iteration_extensions: int = 0
 
     # Six-mode orchestration: active operational mode.
     active_mode: "AgentMode" = field(default_factory=lambda: AgentMode.EXECUTING)
     _mode_schemas_applied: bool = False
+    # Fingerprint of resolve_allowed_tools inputs — refresh schemas when it changes.
+    _tool_policy_fingerprint: str = ""
     mode_override_count: int = 0
     # Iteration when the user last explicitly called switch_mode().
     # Trigger 3 uses this to avoid overriding a deliberate mode change
@@ -1948,6 +2156,10 @@ class LoopState:
     # Escalation priority: set when post-tool steering drain detects
     # pending escalation messages from sub-agents.
     has_pending_escalation: bool = False
+    pending_escalation_team_id: str = ""
+    pending_escalation_member_idx: int = -1
+    pending_escalation_writes: int = 0
+    pending_escalation_paths: list[str] = field(default_factory=list)
 
     # Granular coordinator tool control: tracks consecutive large
     # write/edit calls to prevent the orchestrator from coding
@@ -1969,10 +2181,25 @@ class LoopState:
     verification_gate_passed: bool = False
 
     def record_tool(self, name: str, result: ToolResult, args_fingerprint: str = "") -> None:
-        self.tool_history.append((name, result.is_error))
+        from nls.agentic.tool_result_semantics import effective_tool_error
+
+        _args: dict | None = None
+        if name == "bash" and args_fingerprint:
+            try:
+                import json as _json
+                _parsed = _json.loads(args_fingerprint)
+                if isinstance(_parsed, dict):
+                    _args = _parsed
+            except Exception:
+                pass
+        _is_err = effective_tool_error(name, result, args=_args)
+        if name == "bash" and _is_err and not result.is_error:
+            result.is_error = True
+
+        self.tool_history.append((name, _is_err))
         sig = f"{name}:{args_fingerprint}" if args_fingerprint else name
         self.tool_call_signatures.append(sig)
-        if result.is_error:
+        if _is_err:
             self.tool_errors[name] = self.tool_errors.get(name, 0) + 1
             self.consecutive_errors += 1
             self.last_turn_had_errors = True
@@ -1990,7 +2217,12 @@ class LoopState:
 
     def to_result(self) -> "LoopResult":
         all_tools = set(self.tool_successes) | set(self.tool_errors)
-        aborted = self.exit_reason not in ("task_complete", "tool_requested_stop", "orchestrator_terminated", "")
+        aborted = self.exit_reason not in (
+            "task_complete", "tool_requested_stop", "orchestrator_terminated",
+            "awaiting_delegates", "idle_monitor_yield", "post_launch_yield",
+            "coordinator_burn", "monitor_iter_cap", "idle_monitor",
+            "wake_token_budget", "checkback_suppressed", "",
+        )
         _SEND_TOOL_TO_CHANNEL = {
             "whatsapp_send": "whatsapp",
             "telegram_send": "telegram",

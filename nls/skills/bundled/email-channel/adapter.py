@@ -23,6 +23,7 @@ from typing import Any
 import httpx
 
 from nls.tools.agent_tools.base import AgentTool, ToolResult
+from nls.agentic.outbound_notify import FINAL_SUMMARY_SCHEMA_PROPERTY
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +124,7 @@ class EmailSendTool:
                         "(e.g. ['report.pdf', 'data.csv'])"
                     ),
                 },
+                "final_summary": FINAL_SUMMARY_SCHEMA_PROPERTY,
             },
             "required": ["to", "subject", "body"],
         }

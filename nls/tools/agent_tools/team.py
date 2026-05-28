@@ -10,9 +10,21 @@ import asyncio
 import logging
 from typing import Any
 
+from nls.agentic.breadcrumbs import tool_description_supplement
 from nls.tools.agent_tools.base import ToolResult
 
 logger = logging.getLogger(__name__)
+
+# Common model mistakes → supported actions
+_TEAM_ACTION_ALIASES: dict[str, str] = {
+    "wrap_up": "advance",
+    "wrapup": "advance",
+    "complete": "advance",
+    "finish": "advance",
+    "status": "inspect",
+    "check": "inspect",
+    "monitor": "inspect",
+}
 
 
 class TeamTool:
@@ -37,10 +49,13 @@ class TeamTool:
             "4) team(action='launch', team_id=...). "
             "Steps with no depends_on form wave 0. "
             "Actions: create, list, inspect, launch, advance, hint, "
-            "brief, pause, resume, disband, intervene, rewake.\n"
+            "brief, pause, resume, disband, intervene, rewake, grant_paths.\n"
+            "GRANT_PATHS: When a delegate escalates for file_access (e.g. "
+            ".gitignore), use grant_paths to rent them write scope mid-wave.\n"
             "REWAKE: If a member finished/failed but work is incomplete, "
             "use rewake to resume the SAME delegate with new instructions "
             "instead of spawning a brand new one."
+            + tool_description_supplement("team")
         )
 
     @property
@@ -55,6 +70,7 @@ class TeamTool:
                         "create", "list", "inspect", "launch",
                         "advance", "brief", "hint", "intervene",
                         "pause", "resume", "disband", "rewake",
+                        "grant_paths",
                     ],
                     "description": "The team operation to perform.",
                 },
@@ -84,7 +100,8 @@ class TeamTool:
                     "type": "integer",
                     "description": (
                         "Member index (0-based) within the team "
-                        "(required for 'hint', 'intervene', and 'rewake')."
+                        "(required for 'hint', 'intervene', 'rewake', "
+                        "and 'grant_paths')."
                     ),
                 },
                 "message": {
@@ -113,6 +130,14 @@ class TeamTool:
                         "used with decision='extend'|'hint'. For 'rewake': default 15."
                     ),
                 },
+                "paths": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": (
+                        "Path patterns to grant (required for 'grant_paths'). "
+                        "Examples: '.gitignore', 'backend/', 'README.md'."
+                    ),
+                },
                 "mission": {
                     "type": "string",
                     "description": "Team mission statement (optional for 'create').",
@@ -137,6 +162,16 @@ class TeamTool:
         signal: asyncio.Event | None = None,
     ) -> ToolResult:
         action = (params.get("action") or "").strip().lower()
+        if not action:
+            return ToolResult(
+                content=(
+                    "action is required. Use one of: create, list, inspect, "
+                    "launch, advance, brief, hint, intervene, pause, resume, "
+                    "disband, rewake, grant_paths."
+                ),
+                is_error=True,
+            )
+        action = _TEAM_ACTION_ALIASES.get(action, action)
         try:
             handler = {
                 "create": self._create,
@@ -151,6 +186,7 @@ class TeamTool:
                 "resume": self._resume,
                 "disband": self._disband,
                 "rewake": self._rewake,
+                "grant_paths": self._grant_paths,
             }.get(action)
             if handler is None:
                 return ToolResult(
@@ -181,9 +217,8 @@ class TeamTool:
 
         wave_int = int(wave)
 
-        # Guard: prevent duplicate teams for the same plan+wave
+        # Guard: only one non-terminal team per plan+wave (retries append attempts)
         existing = self._tm.list_teams(include_terminal=False)
-        # Also include terminal teams (completed) for ordering check
         all_teams = self._tm.list_teams(include_terminal=True)
         for t in existing:
             if t.plan_id == plan_id and t.wave_index == wave_int:
@@ -192,7 +227,10 @@ class TeamTool:
                         f"A team already exists for plan {plan_id} wave {wave_int}: "
                         f"{t.name} [{t.id}] (status: {t.status}).\n"
                         f"Use team(action='launch', team_id='{t.id}') to launch it, "
-                        f"or team(action='inspect', team_id='{t.id}') to check status."
+                        f"or team(action='inspect', team_id='{t.id}') to check status.\n"
+                        f"If that wave failed and you need a retry, wait until it is "
+                        f"terminal (failed/completed) then team(create) again — "
+                        f"attempt number increments and prior attempts stay visible."
                     ),
                     is_error=True,
                 )
@@ -201,7 +239,7 @@ class TeamTool:
         # previous wave for the same plan exists but hasn't completed.
         for t in all_teams:
             if t.plan_id == plan_id and t.wave_index < wave_int:
-                if t.status not in ("completed", "partial", "failed"):
+                if t.status not in ("completed", "partial", "failed", "cancelled"):
                     return ToolResult(
                         content=(
                             f"Cannot create wave {wave_int} — wave {t.wave_index} "
@@ -211,6 +249,23 @@ class TeamTool:
                             f"start it."
                         ),
                         is_error=True,
+                    )
+                if not t.completion_reported:
+                    return ToolResult(
+                        content=(
+                            f"Cannot create wave {wave_int} — wave {t.wave_index} "
+                            f"({t.name} [{t.id}]) finished but was never advanced.\n"
+                            f"Call team(action='advance', team_id='{t.id}') first, "
+                            f"then team(action='launch') on the next wave team "
+                            f"(or inspect the auto-created team)."
+                        ),
+                        is_error=True,
+                        details={
+                            "action": "create",
+                            "wave_needs_advance": True,
+                            "prior_team_id": t.id,
+                            "plan_id": plan_id,
+                        },
                     )
 
         # Pre-flight: validate plan exists and has steps before calling create_team
@@ -299,10 +354,16 @@ class TeamTool:
                 f"spawn as slots free up."
             )
 
+        _attempt_note = ""
+        if team.wave_attempt > 1:
+            _attempt_note = f" | Attempt: {team.wave_attempt}"
+            if team.supersedes_team_id:
+                _attempt_note += f" (after {team.supersedes_team_id})"
+
         return ToolResult(
             content=(
                 f"Team created: {team.name} [{team.id}]\n"
-                f"Plan: {team.plan_id} | Wave: {team.wave_index}\n"
+                f"Plan: {team.plan_id} | Wave: {team.wave_index}{_attempt_note}\n"
                 f"Members ({len(team.members)}):\n"
                 + "\n".join(
                     f"  [{i}] {m.task} (step: {m.step_id})"
@@ -358,7 +419,17 @@ class TeamTool:
             )
             summary += _hint
 
-        return ToolResult(content=summary)
+        _details: dict[str, Any] = {
+            "team_id": team.id,
+            "action": "inspect",
+            "status": team.status,
+        }
+        if team.is_terminal and not team.completion_reported:
+            _details["needs_advance"] = True
+        if team.completion_reported:
+            _details["wave_advanced"] = True
+
+        return ToolResult(content=summary, details=_details)
 
     async def _launch(self, params: dict[str, Any]) -> ToolResult:
         team_id = (params.get("team_id") or "").strip()
@@ -383,31 +454,57 @@ class TeamTool:
         if team.plan_id and self._tm._plan_store is not None:
             _plan = self._tm._plan_store.load(team.plan_id)
             if _plan:
-                _unmet = []
+                from nls.agentic.plan_store import (
+                    _resolve_dep_id,
+                    format_unmet_dependency_hints,
+                )
+
+                _step_map = {s.id: s for s in _plan.steps}
+                _label_map = {
+                    s.label.lower().strip(): s.id for s in _plan.steps
+                }
+                _unmet_lines: list[str] = []
+                _unmet_pairs: list[tuple[Any, Any]] = []
                 for member in team.members:
                     if not member.step_id:
                         continue
                     _step = _plan.get_step(member.step_id)
                     if not _step or not getattr(_step, "depends_on", None):
                         continue
-                    for dep_label in _step.depends_on:
-                        _dep_step = next(
-                            (s for s in _plan.steps if s.label == dep_label),
-                            None,
+                    for dep_ref in _step.depends_on:
+                        dep_id = _resolve_dep_id(
+                            dep_ref, _step_map, _label_map,
                         )
-                        if _dep_step and _dep_step.status not in ("done", "skipped"):
-                            _unmet.append(
-                                f"  • \"{_step.label}\" depends on "
-                                f"\"{dep_label}\" (status: {_dep_step.status})"
+                        _dep_step = _step_map.get(dep_id)
+                        if _dep_step is None:
+                            _dep_step = next(
+                                (
+                                    s for s in _plan.steps
+                                    if s.label == dep_ref
+                                    or s.id == dep_ref
+                                ),
+                                None,
                             )
-                if _unmet:
+                        if _dep_step and _dep_step.status not in (
+                            "done", "skipped",
+                        ):
+                            _unmet_lines.append(
+                                f"  • \"{_step.label}\" depends on "
+                                f"\"{_dep_step.label}\" "
+                                f"(status: {_dep_step.status})"
+                            )
+                            _unmet_pairs.append((_step, _dep_step))
+                if _unmet_lines:
+                    _fix_hints = format_unmet_dependency_hints(
+                        _plan, _unmet_pairs,
+                    )
                     return ToolResult(
                         content=(
                             f"Cannot launch team '{team_id}' — unmet "
                             f"dependencies:\n"
-                            + "\n".join(_unmet)
-                            + "\n\nComplete the prerequisite steps first, "
-                            f"then retry launch."
+                            + "\n".join(_unmet_lines)
+                            + "\n\n"
+                            + _fix_hints
                         ),
                         is_error=True,
                     )
@@ -443,6 +540,8 @@ class TeamTool:
         if not team_id:
             return ToolResult(content="team_id is required.", is_error=True)
 
+        self._tm.reconcile_with_delegates(team_id=team_id, persist=True)
+
         team_before = self._tm.load(team_id)
         if team_before and team_before.completion_reported:
             # Cancel any lingering check-back scheduler for this team
@@ -455,8 +554,8 @@ class TeamTool:
                         pass
             return ToolResult(
                 content=(
-                    f"Team {team_id} was already advanced and reported. "
-                    f"No further action needed — move to the next phase."
+                    f"Team {team_id} was already advanced (wave closed). "
+                    f"No further advance needed — inspect plan for next work."
                 ),
                 details={"team_id": team_id, "action": "advance", "already_reported": True},
             )
@@ -464,6 +563,37 @@ class TeamTool:
         try:
             result = await self._tm.advance_team(team_id)
         except ValueError as e:
+            team = self._tm.load(team_id)
+            if team is not None and team.is_terminal:
+                try:
+                    result = await self._tm.reconcile_terminal_team(team_id)
+                except Exception:
+                    result = None
+                if result is not None:
+                    if result.id != team_id:
+                        return ToolResult(
+                            content=(
+                                f"Team {team_id} reconciled (was terminal). "
+                                f"Next wave: {result.name} [{result.id}]"
+                            ),
+                            details={
+                                "team_id": result.id,
+                                "action": "advance",
+                                "next_team": True,
+                                "reconciled": True,
+                            },
+                        )
+                    return ToolResult(
+                        content=(
+                            f"Team {team_id} reconciled (status={team.status}). "
+                            "Use switch_mode(evaluating) to review outputs."
+                        ),
+                        details={
+                            "team_id": team_id,
+                            "action": "advance",
+                            "reconciled": True,
+                        },
+                    )
             return ToolResult(content=str(e), is_error=True)
         if result is None:
             _t = self._tm._teams.get(team_id)
@@ -487,15 +617,12 @@ class TeamTool:
                     f"Team {team_id} completed and advanced!\n"
                     f"Next wave team ready: {result.name} [{result.id}]\n"
                     f"Members ({len(result.members)}):\n{_member_summaries}\n\n"
-                    f"[BEFORE LAUNCHING NEXT WAVE]\n"
-                    f"1. Review the output from the completed wave — read key "
-                    f"files, check structure, verify quality.\n"
-                    f"2. Fix any gaps or issues you spot (missing files, wrong "
-                    f"structure, incomplete config).\n"
-                    f"3. When satisfied, launch: "
-                    f"team(action='launch', team_id='{result.id}')\n\n"
-                    f"Do NOT skip the review — catching problems now prevents "
-                    f"cascading failures in the next wave."
+                    f"[NEXT WAVE]\n"
+                    f"If no other wave is active, the system may auto-launch "
+                    f"this team when you advance from the tool executor.\n"
+                    f"Otherwise: review completed outputs, then "
+                    f"team(action='launch', team_id='{result.id}').\n"
+                    f"Do NOT advance or launch terminal/old wave teams."
                 ),
                 details={
                     "team_id": result.id,
@@ -554,7 +681,7 @@ class TeamTool:
         }.get(_outcome, "")
 
         _wave_note = (
-            "All plan steps completed — project is done!"
+            "All steps in this plan are done (this plan only)."
             if not _remaining
             else (
                 f"No auto-wave was created, but {len(_remaining)} plan "
@@ -566,6 +693,8 @@ class TeamTool:
             content=(
                 f"Team {team_id} outcome: {_outcome.upper()}\n"
                 f"{_wave_note}\n\n"
+                f"[WAVE CLOSED] Review outputs before launching another team. "
+                f"If the user asked for updates, send ONE concise message now.\n\n"
                 f"Member results:\n{_member_lines}\n\n"
                 f"ACTION REQUIRED: {_guidance}"
             ),
@@ -697,6 +826,21 @@ class TeamTool:
                 is_error=True,
             )
 
+        self._tm.reconcile_with_delegates(team_id=team_id, persist=True)
+        team = self._tm._teams.get(team_id)
+        if team is None:
+            return ToolResult(content=f"Team '{team_id}' not found.", is_error=True)
+        member = team.members[idx]
+
+        if member.status == "done" and decision == "approve":
+            return ToolResult(
+                content=(
+                    f"Member #{idx} (delegate #{member.delegate_number}) "
+                    "already completed. Call team(action='advance', "
+                    f"team_id='{team_id}') to close the wave."
+                ),
+            )
+
         dm = self._tm._delegate_manager
         if dm is None:
             return ToolResult(content="No delegate manager available.", is_error=True)
@@ -706,23 +850,72 @@ class TeamTool:
         # satisfied and it can exit cleanly.
         _dm_action = "terminate" if decision == "approve" else decision
 
-        result = await dm.intervene(
-            member.delegate_number,
-            action=_dm_action,
-            message=message or ("Approved by orchestrator." if decision == "approve" else ""),
-            extra_iterations=extra_iters,
-        )
+        if decision == "terminate":
+            # Cancel the asyncio task first so inspect reflects reality quickly.
+            # intervene(terminate) only helps delegates blocked on escalation wait.
+            cancelled = False
+            try:
+                cancelled = await dm.cancel(member.delegate_number)
+            except Exception:
+                pass
+            if not cancelled:
+                result = await dm.intervene(
+                    member.delegate_number,
+                    action="terminate",
+                    message=message or "Terminated by orchestrator.",
+                    extra_iterations=extra_iters,
+                )
+            else:
+                result = True
+            if result is True:
+                member.status = "cancelled"
+                member.result_summary = (
+                    (message or "Terminated by orchestrator.")[:500]
+                )
+                self._tm.save(team)
+        else:
+            result = await dm.intervene(
+                member.delegate_number,
+                action=_dm_action,
+                message=message or (
+                    "Approved by orchestrator." if decision == "approve" else ""
+                ),
+                extra_iterations=extra_iters,
+            )
         if result is not True:
             err_detail = result if isinstance(result, str) else (
                 f"delegate #{member.delegate_number} not found"
             )
             _rewake_hint = ""
             if "already finished" in str(err_detail):
+                self._tm.reconcile_with_delegates(team_id=team_id, persist=True)
+                team = self._tm._teams.get(team_id)
+                member = team.members[idx] if team else member
+                if member.status == "done":
+                    if decision == "approve":
+                        return ToolResult(
+                            content=(
+                                f"Member #{idx} (delegate #{member.delegate_number}) "
+                                "already finished — synced to done. "
+                                f"Call team(action='advance', team_id='{team_id}')."
+                            ),
+                        )
+                    return ToolResult(
+                        content=(
+                            f"Member #{idx} already finished (delegate "
+                            f"#{member.delegate_number}, status={member.status}). "
+                            f"Use team(action='advance', team_id='{team_id}') "
+                            "or team(action='rewake', ...) to continue work."
+                        ),
+                        is_error=True,
+                    )
                 _rewake_hint = (
                     f"\n\nTo resume this delegate with new instructions, use:\n"
                     f"  team(action='rewake', team_id='{team_id}', "
                     f"member={idx}, message='<what needs to be done>')"
                 )
+            else:
+                _rewake_hint = ""
             return ToolResult(
                 content=(
                     f"Could not intervene on member #{idx}: {err_detail}"
@@ -730,6 +923,9 @@ class TeamTool:
                 ),
                 is_error=True,
             )
+
+        if decision in ("approve", "hint", "terminate"):
+            self._tm.clear_completion_review(member.delegate_number)
 
         action_desc = {
             "extend": f"Extended by {extra_iters} iterations",
@@ -872,7 +1068,66 @@ class TeamTool:
             else:
                 _reason = f"Cannot disband team '{team_id}' (status: {_t.status})."
             return ToolResult(content=_reason, is_error=True)
-        return ToolResult(content=f"Team {team_id} disbanded — all delegates cancelled.")
+        return ToolResult(
+            content=f"Team {team_id} disbanded — all delegates cancelled.",
+            details={
+                "team_id": team_id,
+                "action": "disband",
+                "orchestrator_recovery": True,
+            },
+        )
+
+    async def _grant_paths(self, params: dict[str, Any]) -> ToolResult:
+        team_id = (params.get("team_id") or "").strip()
+        member_idx = params.get("member")
+        paths = params.get("paths") or []
+        message = (params.get("message") or "").strip()
+
+        if not team_id:
+            active = [
+                t for t in self._tm._teams.values()
+                if not t.is_terminal
+            ]
+            if len(active) == 1:
+                team_id = active[0].id
+            else:
+                return ToolResult(
+                    content=(
+                        f"team_id is required for grant_paths "
+                        f"({len(active)} non-terminal teams found)."
+                    ),
+                    is_error=True,
+                )
+        member_idx = self._auto_resolve_member(team_id, member_idx)
+        if member_idx is None:
+            return ToolResult(content="member is required.", is_error=True)
+        if not isinstance(paths, list) or not paths:
+            return ToolResult(
+                content=(
+                    "paths is required — array of path patterns "
+                    "(e.g. ['.gitignore'] or ['backend/config.py'])."
+                ),
+                is_error=True,
+            )
+
+        ok, detail = await self._tm.grant_member_paths(
+            team_id,
+            int(member_idx),
+            [str(p) for p in paths],
+            message=message,
+        )
+        if not ok:
+            return ToolResult(content=detail, is_error=True)
+        return ToolResult(
+            content=detail,
+            details={
+                "team_id": team_id,
+                "member": int(member_idx),
+                "action": "grant_paths",
+                "paths": paths,
+                "orchestrator_recovery": False,
+            },
+        )
 
 
 def create_team_tool(team_manager: Any) -> TeamTool:

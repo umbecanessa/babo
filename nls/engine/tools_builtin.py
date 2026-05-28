@@ -138,7 +138,7 @@ class FileTreeTool:
 
         lines: list[str] = []
 
-        def _walk(dir_path: Path, level: int, prefix: str) -> None:
+        def _walk(dir_path: Path, level: int, indent: str) -> None:
             if level > depth:
                 return
             try:
@@ -147,28 +147,25 @@ class FileTreeTool:
                     key=lambda p: (not p.is_dir(), p.name.lower()),
                 )
             except OSError as exc:
-                lines.append(f"{prefix}[permission denied: {exc}]")
+                lines.append(f"{indent}[permission denied: {exc}]")
                 return
 
-            for entry in entries:
-                if entry.name.startswith(".") or entry.name in _SKIP_DIR_NAMES:
-                    continue
-                if glob_pat and entry.is_file() and not fnmatch.fnmatch(entry.name, glob_pat):
-                    continue
-                rel = entry.relative_to(root)
+            visible = [
+                e for e in entries
+                if not e.name.startswith(".") and e.name not in _SKIP_DIR_NAMES
+                and not (glob_pat and e.is_file() and not fnmatch.fnmatch(e.name, glob_pat))
+            ]
+
+            for entry in visible:
                 if entry.is_dir():
-                    try:
-                        size_label = "<dir>"
-                    except OSError:
-                        size_label = "<dir>"
-                    lines.append(f"{prefix}{rel}/ {size_label}")
-                    _walk(entry, level + 1, prefix)
+                    lines.append(f"{indent}{entry.name}/ <dir>")
+                    _walk(entry, level + 1, indent + "  ")
                 else:
                     try:
                         size = entry.stat().st_size
                     except OSError:
                         size = 0
-                    lines.append(f"{prefix}{rel} ({size} bytes)")
+                    lines.append(f"{indent}{entry.name} ({size} bytes)")
 
         _walk(root, 1, "")
         body = "\n".join(lines) if lines else "(empty directory)"

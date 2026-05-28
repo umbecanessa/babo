@@ -59,7 +59,7 @@ export interface InfoModalConfig {
             }
 
             <button class="dismiss-btn" (click)="dismiss()">
-              {{ 'onboarding_btn.got_it' | translate }}
+              {{ 'common.got_it' | translate }}
             </button>
           </div>
         </div>
@@ -74,7 +74,7 @@ export interface InfoModalConfig {
       display: flex;
       align-items: center;
       justify-content: center;
-      background: rgba(0, 0, 0, 0.6);
+      background: var(--backdrop-scrim);
       animation: backdropIn 200ms ease-out forwards;
       padding: 24px;
 
@@ -92,11 +92,11 @@ export interface InfoModalConfig {
       background: rgba(15, 15, 25, 0.92);
       backdrop-filter: blur(24px);
       -webkit-backdrop-filter: blur(24px);
-      border: 1px solid rgba(56, 189, 248, 0.12);
+      border: 1px solid var(--accent-primary-glow);
       overflow: hidden;
       animation: cardIn 250ms ease-out forwards;
       box-shadow:
-        0 0 80px rgba(56, 189, 248, 0.06),
+        0 0 80px var(--accent-primary-glow),
         0 25px 50px rgba(0, 0, 0, 0.4);
       display: flex;
       flex-direction: column;
@@ -130,7 +130,7 @@ export interface InfoModalConfig {
       position: absolute;
       inset: -12px;
       border-radius: 50%;
-      background: radial-gradient(circle, rgba(56, 189, 248, 0.15), transparent 70%);
+      background: radial-gradient(circle, var(--accent-primary-glow), transparent 70%);
     }
 
     .icon-emoji {
@@ -143,7 +143,7 @@ export interface InfoModalConfig {
       font-family: 'Inter', sans-serif;
       font-size: 1.25rem;
       font-weight: 600;
-      color: #f1f5f9;
+      color: var(--text-primary);
       margin-bottom: 16px;
       line-height: 1.3;
     }
@@ -171,8 +171,8 @@ export interface InfoModalConfig {
       margin: 8px 0 4px;
       padding: 14px 16px;
       border-radius: 10px;
-      background: rgba(255, 255, 255, 0.025);
-      border: 1px solid rgba(255, 255, 255, 0.04);
+      background: var(--overlay-1);
+      border: 1px solid var(--overlay-2);
     }
 
     .legend-item {
@@ -222,7 +222,7 @@ export interface InfoModalConfig {
 
       &:hover {
         filter: brightness(1.1);
-        box-shadow: 0 0 20px rgba(56, 189, 248, 0.3);
+        box-shadow: 0 0 20px var(--accent-primary-glow);
       }
 
       &:active {

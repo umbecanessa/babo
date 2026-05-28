@@ -15,6 +15,10 @@ SubprocessVLMBackend wraps any local backend in a dedicated child
 process so the main server never loads PyTorch/MPS/CUDA, providing
 crash isolation and macOS fork-safety.
 
+SharedVLMRegistry + VLMRequestQueue ensure all agents share one
+subprocess and serialize describe calls through a bounded queue that
+drops stale frames under load.
+
 All local inference keeps pixels on-device.
 """
 
@@ -29,10 +33,17 @@ import subprocess
 import sys
 import threading
 import time
+from collections import deque
+from concurrent.futures import Future
 from dataclasses import asdict, dataclass
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Callable, Protocol, TypeVar, runtime_checkable
 
 logger = logging.getLogger(__name__)
+
+_T = TypeVar("_T")
+_DESCRIBE_KINDS = frozenset({"describe", "describe_fast"})
+_STALE_DESCRIBE_RESULT: tuple[str, str] = ("", "")
+_STALE_FAST_RESULT = ""
 
 # ---------------------------------------------------------------------------
 # Shared prompts
@@ -742,6 +753,8 @@ class SubprocessVLMBackend:
 
     def warmup(self) -> None:
         with self._lock:
+            if self._loaded:
+                return
             self._loading = True
             try:
                 self._spawn()
@@ -840,6 +853,329 @@ class SubprocessVLMBackend:
         buf = io.BytesIO()
         image.save(buf, format="JPEG", quality=70)
         return base64.b64encode(buf.getvalue()).decode()
+
+
+# ===================================================================
+# Process-wide VLM request queue (one worker thread, bounded backlog)
+# ===================================================================
+
+
+@dataclass
+class _VLMJob:
+    kind: str
+    fn: Callable[[], Any]
+    future: Future[Any]
+    enqueued_at: float
+
+
+class VLMRequestQueue:
+    """Serialize VLM work from all agents through one dispatcher thread.
+
+    Describe requests are bounded (``NLS_VLM_QUEUE_MAX``, default 8).
+    When the backlog is full, the oldest pending describe jobs are dropped
+    with an empty result so callers do not pile up 45s timeouts.
+    Warmup/unload jobs are prioritized to the front of the queue.
+    """
+
+    def __init__(self, *, max_pending: int | None = None) -> None:
+        raw = max_pending if max_pending is not None else int(
+            os.environ.get("NLS_VLM_QUEUE_MAX", "8"),
+        )
+        self._max_pending = max(1, raw)
+        self._pending: deque[_VLMJob] = deque()
+        self._cond = threading.Condition()
+        self._shutdown = False
+        self._worker = threading.Thread(
+            target=self._loop,
+            name="vlm-request-queue",
+            daemon=True,
+        )
+        self._worker.start()
+
+    def submit(
+        self,
+        kind: str,
+        fn: Callable[[], _T],
+        *,
+        timeout: float = 60.0,
+        priority: bool = False,
+    ) -> _T:
+        if self._shutdown and kind != "shutdown":
+            raise RuntimeError("VLM request queue is shut down")
+
+        future: Future[Any] = Future()
+        job = _VLMJob(kind=kind, fn=fn, future=future, enqueued_at=time.time())
+
+        with self._cond:
+            if self._shutdown and kind != "shutdown":
+                raise RuntimeError("VLM request queue is shut down")
+            if kind in _DESCRIBE_KINDS:
+                self._trim_describe_backlog_locked()
+            if priority:
+                self._pending.appendleft(job)
+            else:
+                self._pending.append(job)
+            self._cond.notify()
+
+        return future.result(timeout=timeout)
+
+    def initiate_shutdown(self, *, drain: bool = False) -> None:
+        """Stop accepting describe jobs; optionally keep pending work."""
+        with self._cond:
+            if self._shutdown:
+                return
+            self._shutdown = True
+            if not drain:
+                self._cancel_pending_describes_locked()
+
+    def finalize_shutdown(self) -> None:
+        """Drain the worker thread after unload (or other teardown work)."""
+        with self._cond:
+            self._pending.append(
+                _VLMJob(
+                    kind="shutdown",
+                    fn=lambda: None,
+                    future=Future(),
+                    enqueued_at=time.time(),
+                ),
+            )
+            self._cond.notify_all()
+        self._worker.join(timeout=5.0)
+
+    def shutdown(self, *, drain: bool = False) -> None:
+        self.initiate_shutdown(drain=drain)
+        self.finalize_shutdown()
+
+    def stats(self) -> dict[str, int]:
+        with self._cond:
+            pending = len(self._pending)
+            describe_pending = sum(
+                1 for j in self._pending if j.kind in _DESCRIBE_KINDS
+            )
+        return {
+            "pending": pending,
+            "describe_pending": describe_pending,
+            "max_pending": self._max_pending,
+        }
+
+    def _trim_describe_backlog_locked(self) -> None:
+        describe_jobs = [j for j in self._pending if j.kind in _DESCRIBE_KINDS]
+        overflow = len(describe_jobs) - self._max_pending + 1
+        if overflow <= 0:
+            return
+        dropped = 0
+        for _ in range(overflow):
+            for idx, job in enumerate(self._pending):
+                if job.kind not in _DESCRIBE_KINDS:
+                    continue
+                del self._pending[idx]
+                self._resolve_dropped(job)
+                dropped += 1
+                break
+        if dropped:
+            logger.info(
+                "VLM queue: dropped %d stale describe job(s) (max_pending=%d)",
+                dropped,
+                self._max_pending,
+            )
+
+    def _cancel_pending_describes_locked(self) -> None:
+        kept: deque[_VLMJob] = deque()
+        dropped = 0
+        for job in self._pending:
+            if job.kind in _DESCRIBE_KINDS:
+                self._resolve_dropped(job)
+                dropped += 1
+            else:
+                kept.append(job)
+        self._pending = kept
+        if dropped:
+            logger.info(
+                "VLM queue: cancelled %d pending describe job(s) on shutdown",
+                dropped,
+            )
+
+    @staticmethod
+    def _resolve_dropped(job: _VLMJob) -> None:
+        if job.future.done():
+            return
+        if job.kind == "describe_fast":
+            job.future.set_result(_STALE_FAST_RESULT)
+        elif job.kind == "describe":
+            job.future.set_result(_STALE_DESCRIBE_RESULT)
+        else:
+            job.future.cancel()
+
+    def _loop(self) -> None:
+        while True:
+            with self._cond:
+                while not self._pending:
+                    self._cond.wait()
+                job = self._pending.popleft()
+
+            if job.kind == "shutdown":
+                break
+
+            if job.future.cancelled():
+                continue
+
+            try:
+                job.future.set_result(job.fn())
+            except Exception as exc:
+                if not job.future.done():
+                    job.future.set_exception(exc)
+
+        with self._cond:
+            self._cancel_pending_describes_locked()
+
+
+class QueuedVLMBackend:
+    """VLMBackend-shaped proxy: all work goes through ``VLMRequestQueue``."""
+
+    def __init__(
+        self,
+        backend: SubprocessVLMBackend,
+        request_queue: VLMRequestQueue,
+    ) -> None:
+        self._backend = backend
+        self._queue = request_queue
+
+    def warmup(self) -> None:
+        if self._backend.is_loaded or self._backend.is_loading:
+            return
+        self._queue.submit(
+            "warmup",
+            self._backend.warmup,
+            timeout=120.0,
+            priority=True,
+        )
+
+    def describe(self, image: Any) -> tuple[str, str]:
+        return self._queue.submit(
+            "describe",
+            lambda: self._backend.describe(image),
+            timeout=50.0,
+        )
+
+    def describe_fast(self, image: Any) -> str:
+        return self._queue.submit(
+            "describe_fast",
+            lambda: self._backend.describe_fast(image),
+            timeout=50.0,
+        )
+
+    def unload(self) -> None:
+        self._queue.submit(
+            "unload",
+            self._backend.unload,
+            timeout=15.0,
+            priority=True,
+        )
+
+    @property
+    def is_loaded(self) -> bool:
+        return self._backend.is_loaded
+
+    @property
+    def is_loading(self) -> bool:
+        return self._backend.is_loading
+
+    @property
+    def info(self) -> ModelInfo | None:
+        return self._backend.info
+
+
+# ===================================================================
+# Process-wide shared VLM worker (one subprocess for all agents)
+# ===================================================================
+
+
+class SharedVLMRegistry:
+    """Reference-counted pool of shared VLM workers + request queues.
+
+    Each agent gets its own ``VisualCortex`` capture loop, but all agents
+    share one local VLM subprocess **and** one ``VLMRequestQueue`` per
+    model preference.  Without this, loading N agents spawns N SmolVLM
+    workers on CUDA and floods the GPU with parallel describe calls.
+    """
+
+    _lock = threading.Lock()
+    _backends: dict[str, SubprocessVLMBackend] = {}
+    _queues: dict[str, VLMRequestQueue] = {}
+    _refcounts: dict[str, int] = {}
+
+    @classmethod
+    def acquire(cls, preference: str = "auto") -> QueuedVLMBackend:
+        key = preference or "auto"
+        with cls._lock:
+            backend = cls._backends.get(key)
+            queue = cls._queues.get(key)
+            if backend is None or queue is None:
+                backend = SubprocessVLMBackend(preference=key)
+                queue = VLMRequestQueue()
+                cls._backends[key] = backend
+                cls._queues[key] = queue
+                logger.info(
+                    "SharedVLM: created worker+queue for preference=%r",
+                    key,
+                )
+            cls._refcounts[key] = cls._refcounts.get(key, 0) + 1
+            logger.info(
+                "SharedVLM: acquire preference=%r refs=%d queue=%s pid=%s",
+                key,
+                cls._refcounts[key],
+                queue.stats(),
+                backend._proc.pid if getattr(backend, "_proc", None) else "pending",
+            )
+            return QueuedVLMBackend(backend, queue)
+
+    @classmethod
+    def release(cls, preference: str = "auto") -> None:
+        key = preference or "auto"
+        with cls._lock:
+            rc = cls._refcounts.get(key, 0)
+            if rc <= 0:
+                logger.warning(
+                    "SharedVLM: release preference=%r with refs=0 (ignored)",
+                    key,
+                )
+                return
+            rc -= 1
+            cls._refcounts[key] = rc
+            backend = cls._backends.get(key)
+            queue = cls._queues.get(key)
+            logger.info(
+                "SharedVLM: release preference=%r refs=%d queue=%s",
+                key,
+                rc,
+                queue.stats() if queue else {},
+            )
+            if rc == 0:
+                if queue is not None:
+                    # Reject new describes before unload so a stopping agent's
+                    # in-flight executor thread cannot respawn the worker.
+                    queue.initiate_shutdown()
+                    if backend is not None and backend.is_loaded:
+                        try:
+                            queue.submit(
+                                "unload",
+                                backend.unload,
+                                timeout=15.0,
+                                priority=True,
+                            )
+                        except Exception as exc:
+                            logger.warning(
+                                "SharedVLM: queued unload failed: %s", exc,
+                            )
+                            if backend is not None:
+                                backend.unload()
+                    queue.finalize_shutdown()
+                elif backend is not None:
+                    backend.unload()
+                cls._backends.pop(key, None)
+                cls._queues.pop(key, None)
+                cls._refcounts.pop(key, None)
+                logger.info("SharedVLM: worker unloaded preference=%r", key)
 
 
 # ===================================================================

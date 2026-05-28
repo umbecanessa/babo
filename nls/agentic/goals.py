@@ -8,9 +8,16 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+_THINKING_BLOCK_RE = re.compile(
+    r"<think>.*?</think>",
+    re.DOTALL,
+)
+_FENCE_RE = re.compile(r"^```(?:json)?\s*|\s*```$", re.IGNORECASE | re.MULTILINE)
 
 _MAX_GOALS = 5
 
@@ -50,7 +57,8 @@ _TASK_EXTRACT_SYSTEM = (
     "'take your time', 'be thorough' are methodology hints or permissions.\n"
     "- These are NOT goals — they are context the agent can use.\n"
     "- If no hints, return empty hints [].\n\n"
-    "Return ONLY the JSON object. No explanation.\n\n"
+    "Return ONLY the JSON object. No explanation, no markdown fences, "
+    "no thinking tags.\n\n"
     "Examples:\n"
     'User: "Log into GitHub and clone the repo then analyze the project"\n'
     'Output: {"goals": ["Log into GitHub", "Clone the repo", '
@@ -91,9 +99,51 @@ _GOAL_EVAL_SYSTEM = (
 )
 
 
+def _generation_text(result: Any) -> str:
+    return (result.text if hasattr(result, "text") else str(result or "")).strip()
+
+
+def _json_parse_surface(text: str) -> str:
+    text = _THINKING_BLOCK_RE.sub("", text).strip()
+    text = _FENCE_RE.sub("", text).strip()
+    return text
+
+
+def _heuristic_task_goals(user_input: str) -> list[str]:
+    """Fallback when the extractor model returns non-JSON (common on cloud relays)."""
+    low = user_input.lower()
+    if "[the user attached" in low:
+        return ["Complete the user's request"]
+    if len(user_input.strip()) < 20:
+        return []
+    if re.match(
+        r"^\s*(hi|hello|hey|thanks|thank you|your name is|good morning)\b",
+        low,
+    ):
+        return []
+    task_markers = (
+        "build", "create", "deploy", "implement", "monorepo", "github",
+        "install", "set up", "setup", "analyze", "refactor", "write",
+        "run ", "execute", "scaffold", "migration", "end-to-end",
+        "platform", "repository", "repo ",
+    )
+    if any(m in low for m in task_markers):
+        return ["Complete the user's request"]
+    return []
+
+
+def _micro_extra_body(vllm_client: Any) -> dict[str, Any]:
+    from nls.runtime.inference_compat import micro_inference_extra_body
+
+    base = getattr(vllm_client, "base_url", "") or ""
+    return micro_inference_extra_body(base, thinking=False)
+
+
 async def extract_goals(
     vllm_client: Any,
     user_input: str,
+    *,
+    adapter_name: str | None = None,
 ) -> tuple[list[str], list[str], list[dict]]:
     """Extract coarse-grained goals, methodology hints, and deferred actions.
 
@@ -107,20 +157,42 @@ async def extract_goals(
                     {"role": "system", "content": _TASK_EXTRACT_SYSTEM},
                     {"role": "user", "content": user_input},
                 ],
-                adapter_name=None,
+                adapter_name=adapter_name,
                 max_tokens=256,
                 temperature=0.1,
-                extra_body={
-                    "chat_template_kwargs": {"enable_thinking": False},
-                },
+                extra_body=_micro_extra_body(vllm_client),
             ),
             timeout=15,
         )
-        text = (result.text or "").strip()
+        text = _json_parse_surface(_generation_text(result))
         start = text.find("{")
         end = text.rfind("}")
         if start != -1 and end != -1:
-            parsed = json.loads(text[start : end + 1])
+            blob = text[start : end + 1]
+            try:
+                parsed = json.loads(blob)
+            except json.JSONDecodeError:
+                # Truncated / slightly malformed JSON from reasoning models
+                goals_m = re.search(
+                    r'"goals"\s*:\s*\[(.*?)\]',
+                    blob,
+                    re.DOTALL,
+                )
+                if goals_m:
+                    inner = "[" + goals_m.group(1) + "]"
+                    try:
+                        goals = json.loads(inner)
+                        if isinstance(goals, list):
+                            return (
+                                [str(g).strip() for g in goals if str(g).strip()][
+                                    :_MAX_GOALS
+                                ],
+                                [],
+                                [],
+                            )
+                    except json.JSONDecodeError:
+                        pass
+                raise
             if isinstance(parsed, dict):
                 goals = [
                     str(g).strip()
@@ -150,6 +222,10 @@ async def extract_goals(
                 )
     except Exception:
         logger.warning("Goal extraction failed", exc_info=True)
+    heuristic = _heuristic_task_goals(user_input)
+    if heuristic:
+        logger.info("Goal extraction heuristic: %s", heuristic)
+        return heuristic, [], []
     return [], [], []
 
 
@@ -160,6 +236,7 @@ async def evaluate_goals(
     *,
     previous_pending: list[int] | None = None,
     hints: list[str] | None = None,
+    adapter_name: str | None = None,
 ) -> list[int]:
     """Return indices of goals that are still pending.
 
@@ -187,12 +264,10 @@ async def evaluate_goals(
                         {"role": "system", "content": _GOAL_EVAL_SYSTEM},
                         {"role": "user", "content": prompt},
                     ],
-                    adapter_name=None,
+                    adapter_name=adapter_name,
                     max_tokens=128,
                     temperature=0.1,
-                    extra_body={
-                        "chat_template_kwargs": {"enable_thinking": False},
-                    },
+                    extra_body=_micro_extra_body(vllm_client),
                 ),
                 timeout=15,
             )

@@ -104,11 +104,11 @@ import { UpdateService } from '../../core/services/update.service';
       border-radius: 8px;
       cursor: pointer;
       transition: background 150ms;
-      color: var(--accent, #38bdf8);
+      color: var(--accent-primary);
       -webkit-app-region: no-drag;
 
       &:hover {
-        background: rgba(255, 255, 255, 0.06);
+        background: var(--overlay-3);
       }
     }
 
@@ -123,15 +123,15 @@ import { UpdateService } from '../../core/services/update.service';
       width: 8px;
       height: 8px;
       border-radius: 50%;
-      background: var(--accent, #38bdf8);
+      background: var(--accent-primary);
       animation: pulse-dot 2s ease-in-out infinite;
 
       &.downloading {
-        background: var(--accent-amber, #fbbf24);
+        background: var(--accent-amber, var(--accent-warn));
         animation: pulse-dot 1s ease-in-out infinite;
       }
       &.ready {
-        background: var(--accent-green, #34d399);
+        background: var(--accent-green, var(--accent-success));
         animation: pulse-dot 1.5s ease-in-out infinite;
       }
     }
@@ -157,8 +157,8 @@ import { UpdateService } from '../../core/services/update.service';
       background: rgba(15, 15, 25, 0.95);
       backdrop-filter: blur(24px);
       -webkit-backdrop-filter: blur(24px);
-      border: 1px solid rgba(56, 189, 248, 0.1);
-      box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5), 0 0 40px rgba(56, 189, 248, 0.04);
+      border: 1px solid var(--accent-primary-glow);
+      box-shadow: 0 16px 48px var(--overlay-5), 0 0 40px var(--accent-primary-glow);
       overflow: hidden;
       animation: panelIn 150ms ease-out;
     }
@@ -170,7 +170,7 @@ import { UpdateService } from '../../core/services/update.service';
 
     .panel-accent {
       height: 2px;
-      background: linear-gradient(90deg, var(--accent, #38bdf8), var(--accent-purple, #a78bfa));
+      background: linear-gradient(90deg, var(--accent-primary), var(--accent-primary));
     }
 
     .panel-body {
@@ -188,14 +188,14 @@ import { UpdateService } from '../../core/services/update.service';
       font-family: 'Inter', sans-serif;
       font-size: 0.875rem;
       font-weight: 600;
-      color: #f1f5f9;
+      color: var(--text-primary);
     }
 
     .panel-version {
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.75rem;
-      color: var(--accent, #38bdf8);
-      background: rgba(56, 189, 248, 0.08);
+      color: var(--accent-primary);
+      background: var(--accent-primary-glow);
       padding: 2px 8px;
       border-radius: 6px;
     }
@@ -204,7 +204,7 @@ import { UpdateService } from '../../core/services/update.service';
       font-family: 'JetBrains Mono', monospace;
       font-size: 0.8rem;
       font-weight: 600;
-      color: var(--accent-amber, #fbbf24);
+      color: var(--accent-amber, var(--accent-warn));
     }
 
     .release-notes {
@@ -217,14 +217,14 @@ import { UpdateService } from '../../core/services/update.service';
       overflow-y: auto;
     }
 
-    .error-title { color: var(--accent-red, #f87171); }
-    .error-text { color: var(--accent-red, #f87171); opacity: 0.85; }
+    .error-title { color: var(--accent-red, var(--accent-danger)); }
+    .error-text { color: var(--accent-red, var(--accent-danger)); opacity: 0.85; }
 
     .progress-track {
       width: 100%;
       height: 6px;
       border-radius: 3px;
-      background: rgba(255, 255, 255, 0.06);
+      background: var(--overlay-3);
       overflow: hidden;
       margin-bottom: 8px;
     }
@@ -232,7 +232,7 @@ import { UpdateService } from '../../core/services/update.service';
     .progress-fill {
       height: 100%;
       border-radius: 3px;
-      background: linear-gradient(90deg, var(--accent, #38bdf8), var(--accent-purple, #a78bfa));
+      background: linear-gradient(90deg, var(--accent-primary), var(--accent-primary));
       transition: width 300ms ease-out;
     }
 
@@ -255,7 +255,7 @@ import { UpdateService } from '../../core/services/update.service';
       height: 36px;
       border: none;
       border-radius: 8px;
-      background: linear-gradient(135deg, var(--accent, #38bdf8), var(--accent-purple, #a78bfa));
+      background: linear-gradient(135deg, var(--accent-primary), var(--accent-primary));
       color: #0f0f19;
       font-family: 'Inter', sans-serif;
       font-size: 0.8rem;
@@ -265,7 +265,7 @@ import { UpdateService } from '../../core/services/update.service';
 
       &:hover {
         filter: brightness(1.1);
-        box-shadow: 0 0 16px rgba(56, 189, 248, 0.25);
+        box-shadow: 0 0 16px var(--accent-primary-glow);
       }
     }
 
@@ -277,7 +277,7 @@ import { UpdateService } from '../../core/services/update.service';
     .btn-ghost {
       height: 36px;
       padding: 0 10px;
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--overlay-3);
       border-radius: 8px;
       background: transparent;
       color: #94a3b8;
@@ -288,8 +288,8 @@ import { UpdateService } from '../../core/services/update.service';
       transition: border-color 150ms, color 150ms;
 
       &:hover {
-        border-color: rgba(255, 255, 255, 0.15);
-        color: #e2e8f0;
+        border-color: var(--overlay-5);
+        color: var(--text-secondary);
       }
     }
   `,

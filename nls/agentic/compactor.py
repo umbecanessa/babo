@@ -134,8 +134,8 @@ class CompactionDelta:
 # Token estimation
 # -------------------------------------------------------------------
 
-def _estimate_tokens(context: list[dict]) -> int:
-    """Estimate token count as chars / 4 (rough heuristic)."""
+def _estimate_message_chars(context: list[dict]) -> int:
+    """Total character count across all message bodies (excludes tool schemas)."""
     total_chars = 0
     for msg in context:
         content = msg.get("content") or ""
@@ -143,7 +143,12 @@ def _estimate_tokens(context: list[dict]) -> int:
             total_chars += len(content)
         for tc in msg.get("tool_calls", []):
             total_chars += len(tc.get("function", {}).get("arguments", ""))
-    return total_chars // 4
+    return total_chars
+
+
+def _estimate_tokens(context: list[dict]) -> int:
+    """Estimate token count as chars / 4 (rough heuristic)."""
+    return _estimate_message_chars(context) // 4
 
 
 # -------------------------------------------------------------------
@@ -265,13 +270,20 @@ def should_compact(
     config: LoopConfig,
     anchor: CompactionAnchor,
 ) -> bool:
-    """Check if compaction is needed based on token budget.
+    """Check if compaction is needed based on token budget or relay body size.
 
     Uses ``config.compaction_trigger_ratio`` (default 0.85) as a safety
     margin to trigger compaction proactively before the model hits a hard
-    context-length error.
+    context-length error.  When ``relay_compact_message_chars`` is set,
+    compaction also triggers when message bodies alone exceed that threshold
+    (leaves headroom for tool JSON schemas on cloud relay paths).
     """
-    est = _estimate_tokens(context)
+    msg_chars = _estimate_message_chars(context)
+    relay_threshold = getattr(config, "relay_compact_message_chars", 0)
+    if relay_threshold and msg_chars > relay_threshold:
+        return True
+
+    est = msg_chars // 4
     hard_limit = config.context_window_tokens - config.reserve_tokens
     ratio = getattr(config, "compaction_trigger_ratio", 0.85)
     proactive_threshold = int(hard_limit * ratio)
@@ -435,19 +447,12 @@ def _simple_compact(
     config: LoopConfig,
     force: bool = False,
 ) -> list[dict]:
-    """Fallback: simple recency-based compaction (no LLM call)."""
-    for msg in context:
-        if msg.get("role") == "tool":
-            content = msg.get("content") or ""
-            if content.startswith("[Digest of "):
-                continue
-            if len(content) > config.result_max_chars:
-                half = config.result_max_chars // 2
-                msg["content"] = (
-                    content[:half]
-                    + f"\n\n[...truncated {len(content) - half} chars...]"
-                )
+    """Fallback: simple recency-based compaction (no LLM call).
 
+    Does not truncate tool result bodies — bash/list_dir output is preserved
+    in kept messages.  Large reads keep their full tool output; cognitive
+    digests live in working memory only.
+    """
     est = _estimate_tokens(context)
     threshold = config.context_window_tokens - config.reserve_tokens
     if not force and est <= threshold:
@@ -515,18 +520,6 @@ async def compact(
 
     Falls back to simple compaction if LLM call fails.
     """
-    for msg in context:
-        if msg.get("role") == "tool":
-            content = msg.get("content") or ""
-            if content.startswith("[Digest of "):
-                continue
-            if len(content) > config.result_max_chars:
-                half = config.result_max_chars // 2
-                msg["content"] = (
-                    content[:half]
-                    + f"\n\n[...truncated {len(content) - half} chars...]"
-                )
-
     keep = config.keep_recent_tokens // 2 if force else config.keep_recent_tokens
     cut = _find_cut_point(context, keep)
     if cut <= 1:

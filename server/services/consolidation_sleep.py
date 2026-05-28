@@ -25,6 +25,8 @@ async def _summarize_consolidation(
     vllm_client: Any,
     agent_id: str,
     signal_texts: list[str],
+    *,
+    adapter_name: str | None = None,
 ) -> str | None:
     if not vllm_client or not signal_texts:
         return None
@@ -35,7 +37,11 @@ async def _summarize_consolidation(
         f"{joined}"
     )
     try:
+        from nls.runtime.inference_compat import micro_inference_extra_body
+
+        _upstream = getattr(vllm_client, "base_url", "") or ""
         result = await vllm_client.generate(
+            adapter_name=adapter_name,
             messages=[
                 {
                     "role": "system",
@@ -46,6 +52,7 @@ async def _summarize_consolidation(
             max_tokens=256,
             temperature=0.3,
             top_p=0.9,
+            extra_body=micro_inference_extra_body(_upstream, thinking=False),
         )
         text = result.text if hasattr(result, "text") else str(result)
         return text.strip() or None
@@ -112,9 +119,13 @@ async def run_consolidation_cycle(
         except Exception as exc:
             logger.warning("Agent %s: fact store during sleep failed: %s", agent_id, exc)
 
-    vllm_client = getattr(runtime, "vllm_client", None)
+    from nls.runtime.inference_compat import resolve_agent_inference
+
+    vllm_client, adapter_name = resolve_agent_inference(runtime)
     texts = [_extract_signal_text(s) for s in signals_to_process if _extract_signal_text(s)]
-    summary = await _summarize_consolidation(vllm_client, agent_id, texts)
+    summary = await _summarize_consolidation(
+        vllm_client, agent_id, texts, adapter_name=adapter_name,
+    )
     if summary:
         narrative = getattr(runtime, "narrative_self", None)
         if narrative is not None and hasattr(narrative, "append_consolidation_note"):
@@ -127,7 +138,11 @@ async def run_consolidation_cycle(
     notify = getattr(runtime, "notify_sleep_complete", None)
     if notify is not None:
         try:
-            notify(sleep_type="sleep", consolidation_summary=summary or "")
+            notify(
+                sleep_type="sleep",
+                consolidation_summary=summary or "",
+                signals_processed=len(signals_to_process),
+            )
         except Exception as exc:
             logger.debug("Agent %s: notify_sleep_complete: %s", agent_id, exc)
 

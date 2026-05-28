@@ -1,11 +1,12 @@
-import { Component, OnInit, signal, computed, ViewChild, ElementRef } from '@angular/core';
+import { Component, OnInit, OnDestroy, signal, computed } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { ApiService } from '../../core/services/api.service';
+import { AgentModelService } from '../../core/services/agent-model.service';
+import { PlatformService } from '../../core/services/platform.service';
+import { ChatModelPickerComponent } from '../chat/chat-model-picker/chat-model-picker.component';
 import { GenesisTemplate } from '../../core/models/agent.model';
-import { OnboardingModalComponent } from '../../shared/onboarding/onboarding-modal.component';
-import { ONBOARDING_PAGES } from '../../shared/onboarding/onboarding-content';
 
 /** Describes a selectable model size option in the UI. */
 interface ModelOption {
@@ -228,15 +229,12 @@ const SOUL_WISH_SUGGESTIONS: Record<string, string[]> = {
 @Component({
   selector: 'app-creation',
   standalone: true,
-  imports: [CommonModule, FormsModule, OnboardingModalComponent],
+  imports: [CommonModule, FormsModule, ChatModelPickerComponent],
   templateUrl: './creation.component.html',
   styleUrl: './creation.component.scss',
 })
-export class CreationComponent implements OnInit {
-  @ViewChild('onboardingModal') onboardingModal?: OnboardingModalComponent;
-
+export class CreationComponent implements OnInit, OnDestroy {
   phase = signal<'selecting' | 'soul-wish' | 'waiting' | 'creating' | 'done'>('selecting');
-  onboardingConfig = ONBOARDING_PAGES['create'];
   phaseText = signal('');
   agentId = signal('');
   error = signal('');
@@ -310,20 +308,37 @@ export class CreationComponent implements OnInit {
     'Ready.',
   ];
 
-  constructor(private api: ApiService, private router: Router) {}
+  constructor(
+    private api: ApiService,
+    private router: Router,
+    readonly modelService: AgentModelService,
+    private platform: PlatformService,
+  ) {}
 
-  ngOnInit(): void {
+  async ngOnInit(): Promise<void> {
+    if (this.platform.isElectron) {
+      await this.api.whenReady();
+    }
+
+    const modelsReady = this.modelService.refreshFromConfig();
+
     this.api.getGenesisTemplates().subscribe({
       next: (templates) => {
         const valid = templates.filter(t => !t.error);
-        // Use API results if available, otherwise fall back to static paths
         this.applyTemplates(valid.length > 0 ? valid : FALLBACK_TEMPLATES);
       },
       error: () => {
-        // API unreachable — show static path cards so the user can still choose
         this.applyTemplates(FALLBACK_TEMPLATES);
       },
     });
+
+    await modelsReady;
+  }
+
+  ngOnDestroy(): void {
+    if (this.modelService.creationMode()) {
+      this.modelService.endCreationMode();
+    }
   }
 
   private applyTemplates(templates: GenesisTemplate[]): void {
@@ -453,6 +468,10 @@ export class CreationComponent implements OnInit {
 
   confirmSelection(): void {
     if (!this.selectedVersion()) return;
+    if (!this.modelService.loaded()) {
+      void this.modelService.refreshFromConfig();
+    }
+    this.modelService.beginCreationMode();
     this.phase.set('soul-wish');
   }
 
@@ -499,7 +518,13 @@ export class CreationComponent implements OnInit {
       sovereignty: 'local',
       soulWish: this.soulWish() || undefined,
     }).subscribe({
-      next: (agent) => {
+      next: async (agent) => {
+        const runtimeId = agent.runtimeAgentId || agent.id;
+        try {
+          await this.modelService.applyCreationDraftToAgent(runtimeId);
+        } catch {
+          /* model defaults are optional; chat still works with install default */
+        }
         this.phaseText.set('Ready.');
         this.agentId.set(agent.id);
         this.phase.set('done');

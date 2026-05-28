@@ -62,7 +62,35 @@ export interface AgentRuntimeStatus {
   theory_of_mind?: TheoryOfMindStatus;
   predictive_processing?: PredictiveStatus;
   network_dynamics?: NetworkDynamicsStatus;
+  activity?: AgentActivityStatus;
+  consciousness?: AgentConsciousnessStatus;
+  orchestrator_model?: string | null;
+  delegate_model?: string | null;
+  last_interaction?: string;
   [key: string]: any;
+}
+
+export interface AgentActivityStatus {
+  busy?: boolean;
+  user_busy?: boolean;
+  foreground_source?: string;
+  orchestrator_model?: string | null;
+  delegate_model?: string | null;
+}
+
+export interface AgentConsciousnessStatus {
+  state?: string;
+  user_paused?: boolean;
+  last_conscious_at?: number | null;
+  last_user_message_at?: number | null;
+  priority?: number;
+  inner_loop?: {
+    running?: boolean;
+    paused?: boolean;
+    drowsy?: boolean;
+    active_dreaming?: boolean;
+    pending_sleep_reason?: string | null;
+  };
 }
 
 // ─── Heartbeat (Temporal Self) ──────────────────────────────────

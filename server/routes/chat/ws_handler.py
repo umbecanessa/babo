@@ -42,6 +42,8 @@ from .helpers import (
     _augment_with_attachments,
     _build_nls_metadata,
     _dedup_signal_tags,
+    _message_implies_agentic_work,
+    _runtime_uses_local_vllm,
 )
 from .history import (
     _salvage_agentic_context,
@@ -114,21 +116,26 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
     try:
         # Send initial status
         status = runtime.get_status()
+        nls = _build_nls_metadata(
+            status,
+            agent_name=status.get("agent_name") or runtime.agent_name,
+        )
         await websocket.send_json({
             "type": "status",
             "agent_status": "alive",
-            "agent_name": status.get("name") or None,
-            "facts_in_memory": status.get("facts_in_memory", 0),
-            "turn_count": status.get("turn_count", 0),
-            "sleep_count": status.get("sleep_count", 0),
-            "hormones": status.get("hormones", {}),
-            "ans": status.get("ans", {}),
-            "heartbeat": status.get("heartbeat", {}),
-            "working_memory": status.get("working_memory", {}),
-            "narrative": status.get("narrative", {}),
-            "theory_of_mind": status.get("theory_of_mind", {}),
-            "predictive_processing": status.get("predictive_processing", {}),
-            "network_dynamics": status.get("network_dynamics", {}),
+            "agent_name": status.get("agent_name") or runtime.agent_name or None,
+            "facts_in_memory": nls.get("facts_in_memory", 0),
+            "turn_count": nls.get("turn_count", 0),
+            "sleep_count": nls.get("sleep_count", 0),
+            "hormones": nls.get("hormones", {}),
+            "ans": nls.get("ans", {}),
+            "heartbeat": nls.get("heartbeat", {}),
+            "working_memory": nls.get("working_memory", {}),
+            "narrative": nls.get("narrative", {}),
+            "theory_of_mind": nls.get("theory_of_mind", {}),
+            "predictive_processing": nls.get("predictive_processing", {}),
+            "network_dynamics": nls.get("network_dynamics", {}),
+            "nls": nls,
         })
 
         chat_history = [
@@ -202,18 +209,15 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                     async for token in runtime.process_message_stream_async(
                         wake_prompt, history=history,
                         force_thinking=False,
+                        include_tools=False,
+                        model_override=runtime.resolve_orchestrator_model(None),
                     ):
                         if isinstance(token, tuple):
                             _kind, _text = token
                             if _kind == "thinking":
-                                await websocket.send_json({
-                                    "type": "reasoning_token",
-                                    "content": _text,
-                                })
+                                pass  # wake uses System 1 — do not surface reasoning in UI
                             elif _kind == "thinking_end":
-                                await websocket.send_json({
-                                    "type": "reasoning_end",
-                                })
+                                pass
                             continue
 
                         wake_response += token
@@ -251,6 +255,7 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                     # Strip code artifacts and orphan think tags from the greeting
                     final_wake = re.sub(r"</?tool_code>", "", final_wake).strip()
                     final_wake = final_wake.replace("</think>", "").replace("<think>", "").strip()
+                    final_wake = _dedup_signal_tags(final_wake)
                     _wake_reasoning = getattr(runtime, "_last_stream_thinking", "") or ""
                     _wake_signals = [
                         {"type": getattr(s, "signal_type", ""),
@@ -265,7 +270,6 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                     await websocket.send_json({
                         "type": "response_end",
                         "response": final_wake,
-                        "reasoning": _wake_reasoning,
                         "latency_ms": round(wake_latency, 1),
                         "nls": _build_nls_metadata(
                             wake_status,
@@ -419,6 +423,9 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                 "Agent %s: received message (%d chars): %.80s",
                 agent_id, len(user_input), user_input,
             )
+            _request_model = runtime.resolve_orchestrator_model(
+                (msg.get("model") or "").strip() or None
+            )
             t0 = time.perf_counter()
 
             if consciousness_scheduler is not None:
@@ -525,13 +532,6 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
             # ═══════════════════════════════════════════════════
             agentic_enabled = runtime.is_agentic_enabled()
             first_response_has_tools = False
-            # Thinking must stay True for agentic tool calling.
-            # The RLHF safety spiral was caused by _AGENTIC_SYSTEM_SUPPLEMENT
-            # (now removed), not by thinking itself.  With the supplement
-            # gone and v3's preamble in place, thinking=True produced
-            # the first successful tool call.  thinking=False + /no_think
-            # removes the model's planning ability and it reverts to chatbot.
-            needs_thinking = True
 
             if agentic_enabled:
                 full_response = ""
@@ -549,6 +549,7 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                 try:
                     _pre_goals, _pre_hints = await runtime.extract_task_goals(
                         user_input,
+                        model_override=_request_model,
                     )
                     logger.info(
                         "Agent %s: [AGENTIC] goals=%s hints=%s",
@@ -559,6 +560,20 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                         "Agent %s: pre-goal extraction failed",
                         agent_id, exc_info=True,
                     )
+
+                _conversational_turn = (
+                    not _pre_goals
+                    and not _message_implies_agentic_work(user_input)
+                    and "[the user attached" not in user_input.lower()
+                )
+                if _conversational_turn:
+                    needs_thinking = await runtime.classify_thinking_need(
+                        user_input, history,
+                        model_override=_request_model,
+                    )
+                else:
+                    # Tool-heavy turns: keep thinking on for planning/tool selection.
+                    needs_thinking = True
 
                 _gen_input = user_input
                 if _pre_goals:
@@ -582,19 +597,25 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                 _SIGNAL_STARTS = ("```tool_call", "<tool_call>")
                 try:
                     async for token in runtime.process_message_stream_async(
-                        _gen_input, history=history,
+                        _gen_input,
+                        history=history,
+                        model_override=_request_model,
+                        force_thinking=needs_thinking,
+                        include_tools=not _conversational_turn,
                     ):
                         if isinstance(token, tuple):
                             _kind, _text = token
                             if _kind == "thinking":
-                                await websocket.send_json({
-                                    "type": "reasoning_token",
-                                    "content": _text,
-                                })
+                                if needs_thinking:
+                                    await websocket.send_json({
+                                        "type": "reasoning_token",
+                                        "content": _text,
+                                    })
                             elif _kind == "thinking_end":
-                                await websocket.send_json({
-                                    "type": "reasoning_end",
-                                })
+                                if needs_thinking:
+                                    await websocket.send_json({
+                                        "type": "reasoning_end",
+                                    })
                             continue
 
                         full_response += token
@@ -682,10 +703,19 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                 _visible = _TOOLCALL_BLOCK_RE.sub("", _visible).strip()
                 _visible = _INLINE_JSON_TOOLCALL_RE.sub("", _visible).strip()
                 full_response = _dedup_signal_tags(_visible)
+                if full_response != _visible.strip():
+                    try:
+                        await websocket.send_json({
+                            "type": "response_replace",
+                            "response": full_response,
+                        })
+                    except Exception:
+                        pass
 
+                _stream_client, _ = runtime.inference_pipeline(_request_model)
                 stream_tool_calls = getattr(
-                    runtime.vllm_client, "last_stream_tool_calls", None,
-                ) if hasattr(runtime, "vllm_client") and runtime.vllm_client else None
+                    _stream_client, "last_stream_tool_calls", None,
+                ) if _stream_client is not None else None
                 first_response_has_tools = (
                     has_tool_calls(full_response) or bool(stream_tool_calls)
                 )
@@ -706,6 +736,7 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
 
                     result = await runtime.process_message_async(
                         _nudged_input, history=history,
+                        model_override=_request_model,
                     )
                     regen_response = result.response or ""
                     regen_response = _TOOLCALL_BLOCK_RE.sub(
@@ -751,28 +782,39 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                         )
                     continue
 
-                # Force agentic only when pre-goals exist but the model
-                # produced no visible answer (cannot satisfy as plain chat).
-                if (
-                    not first_response_has_tools
-                    and _pre_goals
-                    and not (full_response or "").strip()
-                ):
+                # Force agentic when pre-goals exist but no visible answer
+                # (original rule), or on cloud/OpenRouter-style backends when
+                # the model replied in chat without API tool_calls (common on
+                # remote relays). Local vLLM keeps the battle-tested path:
+                # enter agentic only when the first stream actually has tools.
+                _cloud_inference = not _runtime_uses_local_vllm(runtime)
+                _force_agentic = not first_response_has_tools and (
+                    (_pre_goals and not (full_response or "").strip())
+                    or (
+                        _cloud_inference
+                        and _message_implies_agentic_work(user_input)
+                    )
+                )
+                if _force_agentic:
                     logger.info(
-                        "Agent %s: model didn't call tools but %d task "
-                        "goals detected and no visible text — forcing "
-                        "agentic loop",
-                        agent_id, len(_pre_goals),
+                        "Agent %s: forcing agentic loop — goals=%d "
+                        "cloud=%s task_like=%s visible_len=%d",
+                        agent_id,
+                        len(_pre_goals),
+                        _cloud_inference,
+                        _message_implies_agentic_work(user_input),
+                        len((full_response or "").strip()),
                     )
                     first_response_has_tools = True
-                    full_response = None
-                    try:
-                        await websocket.send_json({
-                            "type": "response_replace",
-                            "response": "",
-                        })
-                    except Exception:
-                        pass
+                    if _pre_goals and not (full_response or "").strip():
+                        full_response = None
+                        try:
+                            await websocket.send_json({
+                                "type": "response_replace",
+                                "response": "",
+                            })
+                        except Exception:
+                            pass
                     if _initial_thinking:
                         try:
                             await websocket.send_json({
@@ -793,6 +835,7 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
 
                     result = await runtime.process_message_async(
                         user_input, history=history,
+                        model_override=_request_model,
                     )
                     regen_response = result.response or ""
                     regen_response = (
@@ -849,9 +892,10 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                     # ═══════════════════════════════════
                     # AGENTIC PATH — tools detected
                     # ═══════════════════════════════════
+                    _first_client, _ = runtime.inference_pipeline(_request_model)
                     _first_tc = getattr(
-                        runtime.vllm_client, "last_stream_tool_calls", None,
-                    ) if hasattr(runtime, "vllm_client") and runtime.vllm_client else None
+                        _first_client, "last_stream_tool_calls", None,
+                    ) if _first_client is not None else None
                     # Forced agentic with no visible streamed text: never replay
                     # tool calls from an unrelated prior turn.
                     if full_response is None:
@@ -1119,6 +1163,7 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                         _agentic_coro = runtime.process_message_agentic_async(
                             user_input=user_input,
                             history=history,
+                            model_override=_request_model,
                             on_event=_on_event,
                             abort_signal=agentic_abort,
                             first_response=full_response,
@@ -1239,6 +1284,9 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                                 "total_tool_calls": agentic_result.total_tool_calls,
                                 "aborted": agentic_result.aborted,
                                 "abort_reason": agentic_result.abort_reason,
+                                "exit_reason": getattr(
+                                    agentic_result, "exit_reason", "",
+                                ) or "",
                                 "duration_ms": round(agentic_result.total_duration_ms, 1),
                                 "hormones": _live_hormones,
                                 "working_memory": _wm_final,
@@ -1416,6 +1464,7 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                 else:
                     result = await runtime.process_message_async(
                         user_input, history=history,
+                        model_override=_request_model,
                     )
                     result_dict = {
                         "response": result.response,
@@ -1507,6 +1556,13 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                 }
                 if _sk and _sk != "websocket:main":
                     _resp_json["session_key"] = _sk
+                try:
+                    await websocket.send_json({
+                        "type": "response_replace",
+                        "response": _final_resp,
+                    })
+                except Exception:
+                    pass
                 await websocket.send_json(_resp_json)
 
                 if result_dict.get("name_update"):
@@ -1553,6 +1609,7 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                 try:
                     async for token in runtime.process_message_stream_async(
                         user_input, history=history,
+                        model_override=_request_model,
                     ):
                         if isinstance(token, tuple):
                             _kind, _text = token
@@ -1794,6 +1851,7 @@ async def _dispatch_agentic_event(
             "plan_id": data.get("plan_id", ""),
             "title": data.get("title", ""),
             "todo_id": data.get("todo_id", ""),
+            "project_dir": data.get("project_dir", ""),
             **_sa_tag,
         })
 
@@ -1801,6 +1859,7 @@ async def _dispatch_agentic_event(
         await websocket.send_json({
             "type": "plan_step_update",
             "step_index": data.get("step_index", -1),
+            "step_id": data.get("step_id", ""),
             "status": data.get("status", "done"),
             "label": data.get("label", ""),
             "plan_id": data.get("plan_id", ""),
@@ -1829,6 +1888,7 @@ async def _dispatch_agentic_event(
             "type": "tool_execution_end",
             "tool_name": data.get("tool_name", ""),
             "call_id": data.get("call_id", ""),
+            "arguments": data.get("arguments", {}),
             "is_error": data.get("is_error", False),
             "result_preview": data.get("result_preview", ""),
             "iteration": data.get("iteration", 0),
@@ -1873,16 +1933,35 @@ async def _dispatch_agentic_event(
         }
         if data.get("team_id"):
             _spawn_payload["team_id"] = data["team_id"]
+        if data.get("wave_attempt") is not None:
+            _spawn_payload["wave_attempt"] = data["wave_attempt"]
+        if data.get("team_name"):
+            _spawn_payload["team_name"] = data["team_name"]
+        if data.get("step_id"):
+            _spawn_payload["step_id"] = data["step_id"]
+        if data.get("member_idx") is not None:
+            _spawn_payload["member_idx"] = data["member_idx"]
         await websocket.send_json(_spawn_payload)
 
     elif etype == "delegate_start":
-        await websocket.send_json({
+        _start_payload: dict = {
             "type": "delegate_start",
             "delegate_number": data.get("delegate_number", 0),
             "delegate_task": data.get("delegate_task", ""),
             "max_steps": data.get("max_steps", 8),
             "iteration": data.get("iteration", 0),
-        })
+        }
+        if data.get("team_id"):
+            _start_payload["team_id"] = data["team_id"]
+        if data.get("wave_attempt") is not None:
+            _start_payload["wave_attempt"] = data["wave_attempt"]
+        if data.get("team_name"):
+            _start_payload["team_name"] = data["team_name"]
+        if data.get("step_id"):
+            _start_payload["step_id"] = data["step_id"]
+        if data.get("member_idx") is not None:
+            _start_payload["member_idx"] = data["member_idx"]
+        await websocket.send_json(_start_payload)
 
     elif etype == "delegate_complete":
         await websocket.send_json({

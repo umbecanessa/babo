@@ -65,6 +65,8 @@ def _build_scoped_config(parent_config: LoopConfig) -> LoopConfig:
         keep_recent_tokens=parent_config.keep_recent_tokens,
         digest_threshold=parent_config.digest_threshold,
         result_max_chars=parent_config.result_max_chars,
+        anchor_tool_result_min_chars=parent_config.anchor_tool_result_min_chars,
+        relay_compact_message_chars=parent_config.relay_compact_message_chars,
         max_new_tokens=parent_config.max_new_tokens,
         compaction_timeout=parent_config.compaction_timeout,
         temperature=parent_config.temperature,

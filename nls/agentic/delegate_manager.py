@@ -21,6 +21,9 @@ from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
 
+DELEGATE_DEFAULT_MAX_STEPS = 25
+DELEGATE_UNASSIGNED_NUMBER = -1
+
 
 # ---------------------------------------------------------------------------
 # Data types
@@ -31,11 +34,13 @@ class DelegateSpec:
     """Specification for a single delegate to spawn."""
     task: str
     delegate_number: int
-    max_steps: int = 15
+    max_steps: int = DELEGATE_DEFAULT_MAX_STEPS
     args: dict = field(default_factory=dict)
     file_manifest: list[str] = field(default_factory=list)
     team_briefing: str = ""
     wave: int | None = None
+    tech_stack_block: str = ""
+    file_ownership_block: str = ""
 
 
 @dataclass
@@ -267,6 +272,14 @@ class DelegateManager:
             if s.batch_id == batch_id
         ]
 
+    def is_delegate_live(self, delegate_number: int) -> bool:
+        """True only when a delegate has a running asyncio task."""
+        ds = self._delegates.get(delegate_number)
+        if ds is None or ds.state != "running":
+            return False
+        task = ds.asyncio_task
+        return task is not None and not task.done()
+
     async def wrap_up(self, delegate_number: int) -> bool:
         """Signal a delegate to finalize its work."""
         ds = self._delegates.get(delegate_number)
@@ -293,56 +306,78 @@ class DelegateManager:
         ds = self._delegates.get(delegate_number)
         return ds.sub_cryptex if ds else None
 
+    def _apply_ring_ops(self, sub_cryptex: Any, ring_ops: list[dict] | None) -> None:
+        if not ring_ops or sub_cryptex is None:
+            return
+        for op in ring_ops:
+            try:
+                _action = op.get("action", "upsert")
+                if _action == "boost_priority":
+                    sub_cryptex.boost_priority(
+                        op.get("ring", ""),
+                        float(op.get("boost", 0.2)),
+                    )
+                else:
+                    sub_cryptex.upsert(
+                        ring_id=op.get("ring", ""),
+                        domain=op.get("domain", "orchestrator"),
+                        content=op.get("content", ""),
+                        salience=float(op.get("salience", 0.9)),
+                    )
+            except Exception:
+                pass
+
     async def hint(
         self,
         delegate_number: int,
         message: str,
         ring_ops: list[dict] | None = None,
+        *,
+        also_chat_hint: bool = False,
+        directive_domain: str | None = None,
     ) -> bool:
         """Inject a steering hint into a running delegate's context.
 
-        The hint is pushed into the delegate's ``hint_queue`` which is
-        wired as its ``copilot_queue``.  The loop picks it up on the
-        next iteration via ``_get_steering_messages()``.
-
-        If ``ring_ops`` is provided, each op is applied to the delegate's
-        SubCryptex before the text hint is sent::
-
-            ring_ops=[{"ring": "knowledge", "domain": "Fix", "content": "..."}]
+        Directives are written to the SubCryptex ``orchestrator`` ring
+        (high priority, survives context compaction).  A short chat hint is
+        optional via ``also_chat_hint`` (default False).
         """
+        from .orchestrator_hint import (
+            apply_orchestrator_directive,
+            build_orchestrator_ring_ops,
+        )
+
         ds = self._delegates.get(delegate_number)
         if not ds or ds.state != "running":
             return False
 
-        # Apply structured ring operations if the delegate has a SubCryptex
-        if ring_ops and ds.sub_cryptex is not None:
-            for op in ring_ops:
-                try:
-                    _action = op.get("action", "upsert")
-                    if _action == "boost_priority":
-                        ds.sub_cryptex.boost_priority(
-                            op.get("ring", ""),
-                            float(op.get("boost", 0.2)),
-                        )
-                    else:
-                        ds.sub_cryptex.upsert(
-                            ring_id=op.get("ring", ""),
-                            domain=op.get("domain", "orchestrator"),
-                            content=op.get("content", ""),
-                            salience=float(op.get("salience", 0.9)),
-                        )
-                except Exception:
-                    pass
+        sc = ds.sub_cryptex
+        if sc is not None and message.strip():
+            apply_orchestrator_directive(
+                sc, message, domain=directive_domain,
+            )
+            ds.sub_cryptex.boost_priority("orchestrator", 0.15)
 
-        ds.hint_queue.put_nowait({
-            "role": "user",
-            "content": (
-                f"[ORCHESTRATOR HINT] {message}"
-            ),
-        })
+        _ops = list(ring_ops or [])
+        if message.strip() and not any(
+            o.get("ring") == "orchestrator" for o in _ops
+        ):
+            _ops.extend(build_orchestrator_ring_ops(
+                message, domain=directive_domain,
+            ))
+        self._apply_ring_ops(sc, _ops)
+
+        if also_chat_hint and message.strip():
+            ds.hint_queue.put_nowait({
+                "role": "user",
+                "content": (
+                    "[ORCHESTRATOR HINT] See ORCHESTRATOR directives in "
+                    f"your system context. {message[:300]}"
+                ),
+            })
         logger.info(
-            "[DelegateManager] hint sent to delegate #%d: %.200s",
-            delegate_number, message,
+            "[DelegateManager] hint sent to delegate #%d (ring=yes chat=%s): %.200s",
+            delegate_number, also_chat_hint, message,
         )
         return True
 
@@ -384,24 +419,23 @@ class DelegateManager:
                 f"before your intervention reached it."
             )
 
-        if ring_ops and ds.sub_cryptex is not None:
-            for op in ring_ops:
-                try:
-                    _action = op.get("action", "upsert")
-                    if _action == "boost_priority":
-                        ds.sub_cryptex.boost_priority(
-                            op.get("ring", ""),
-                            float(op.get("boost", 0.2)),
-                        )
-                    else:
-                        ds.sub_cryptex.upsert(
-                            ring_id=op.get("ring", ""),
-                            domain=op.get("domain", "orchestrator"),
-                            content=op.get("content", ""),
-                            salience=float(op.get("salience", 0.9)),
-                        )
-                except Exception:
-                    pass
+        from .orchestrator_hint import (
+            apply_orchestrator_directive,
+            infer_directive_domain,
+        )
+
+        sc = ds.sub_cryptex
+        if sc is not None and message.strip():
+            apply_orchestrator_directive(
+                sc, message,
+                domain=infer_directive_domain(message, action=action),
+            )
+            if action in ("extend", "hint"):
+                sc.boost_priority("progress", 0.1)
+            elif action == "terminate":
+                sc.boost_priority("orchestrator", 0.2)
+
+        self._apply_ring_ops(sc, ring_ops)
 
         ds.hint_queue.put_nowait({
             "action": action,
@@ -514,9 +548,15 @@ class DelegateManager:
             return None
         return list(batch.results)
 
+    def running_count(self) -> int:
+        """Number of delegates currently running."""
+        return sum(
+            1 for ds in self._delegates.values() if ds.state == "running"
+        )
+
     def has_active_delegates(self) -> bool:
         """True if any delegate is still running."""
-        return any(ds.state == "running" for ds in self._delegates.values())
+        return self.running_count() > 0
 
     def aggregate_token_usage(self) -> dict[str, int]:
         """Sum prompt/completion/total tokens across all finished delegates."""
@@ -625,7 +665,7 @@ class DelegateManager:
                     delegate_number=ddata["delegate_number"],
                     task=ddata["task"],
                     batch_id=ddata["batch_id"],
-                    max_iterations=ddata.get("max_iterations", 15),
+                    max_iterations=ddata.get("max_iterations", DELEGATE_DEFAULT_MAX_STEPS),
                     start_time=time.time() - ddata.get("elapsed", 0),
                     wrap_up=asyncio.Event(),
                     state="interrupted" if ddata.get("state") == "running" else ddata.get("state", "done"),

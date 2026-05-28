@@ -2,7 +2,7 @@ import { Pipe, PipeTransform } from '@angular/core';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 
 const ANSI_COLORS: Record<number, string> = {
-  30: '#1e1e2e', 31: '#f38ba8', 32: '#a6e3a1', 33: '#f9e2af',
+  30: 'var(--bg-secondary)', 31: '#f38ba8', 32: '#a6e3a1', 33: '#f9e2af',
   34: '#89b4fa', 35: '#cba6f7', 36: '#94e2d5', 37: '#cdd6f4',
   39: 'inherit',
   90: '#585b70', 91: '#f38ba8', 92: '#a6e3a1', 93: '#f9e2af',
@@ -10,7 +10,7 @@ const ANSI_COLORS: Record<number, string> = {
 };
 
 const ANSI_BG: Record<number, string> = {
-  40: '#1e1e2e', 41: '#f38ba8', 42: '#a6e3a1', 43: '#f9e2af',
+  40: 'var(--bg-secondary)', 41: '#f38ba8', 42: '#a6e3a1', 43: '#f9e2af',
   44: '#89b4fa', 45: '#cba6f7', 46: '#94e2d5', 47: '#cdd6f4',
   49: 'transparent',
 };

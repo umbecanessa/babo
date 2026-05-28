@@ -196,8 +196,8 @@ class EmailHistoryTool:
             "properties": {
                 "direction": {
                     "type": "string",
-                    "enum": ["sent", "received", ""],
-                    "description": "Filter to 'sent' or 'received'. Leave empty for both.",
+                    "enum": ["sent", "received"],
+                    "description": "Filter to 'sent' or 'received'. Omit for both.",
                 },
                 "query": {
                     "type": "string",

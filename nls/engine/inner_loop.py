@@ -357,7 +357,10 @@ class InnerLoop:
                     self.stats.total_breaths += 1
 
                     # Only breathe when BYO inference is available
-                    can_breathe = self._use_model_a or self._vllm_client is not None
+                    can_breathe = self._use_model_a or (
+                        hasattr(self.runtime, "inference_available")
+                        and self.runtime.inference_available()
+                    )
                     if can_breathe:
                         try:
                             await self._breath(self_state)
@@ -655,8 +658,23 @@ class InnerLoop:
             except Exception:
                 pass
 
+        _plan_work_open = False
+        try:
+            from nls.agentic.plan_work import runtime_has_open_plan_work
+
+            _plan_work_open = runtime_has_open_plan_work(rt)
+        except Exception:
+            pass
+
         drive_goal = None
-        if not _cortisol_blocked and not _abort_blocked and not _completion_blocked and not _has_pending_todos and not _team_active:
+        if (
+            not _cortisol_blocked
+            and not _abort_blocked
+            and not _completion_blocked
+            and not _has_pending_todos
+            and not _team_active
+            and not _plan_work_open
+        ):
             try:
                 drive_goal = rt.tick_drives()
             except Exception as exc:
@@ -671,6 +689,11 @@ class InnerLoop:
         elif _team_active:
             logger.debug(
                 "Agent %s: skipping drives/daydreaming — team is active",
+                agent_id,
+            )
+        elif _plan_work_open:
+            logger.debug(
+                "Agent %s: skipping drives — plan/todo work in progress",
                 agent_id,
             )
 
@@ -759,6 +782,17 @@ class InnerLoop:
                 )
             dmn_eligible = False
             active_dream_eligible = False
+
+        # Suppress DMN while orchestration plan or in-progress todos remain.
+        if _plan_work_open:
+            if dmn_eligible or active_dream_eligible:
+                logger.info(
+                    "Agent %s: DMN suppressed — incomplete plan/todo work",
+                    agent_id,
+                )
+            dmn_eligible = False
+            active_dream_eligible = False
+
         if dmn_eligible:
             try:
                 # Check for active dream first (tool-using, foraging).
@@ -1183,17 +1217,19 @@ class InnerLoop:
         )
 
         try:
-            vllm = getattr(rt, "vllm_client", None)
-            if vllm is None:
+            _vllm, _adapter = rt.inference_pipeline()
+            if _vllm is None:
                 return ("chat", "")
 
-            response = await vllm.generate(
+            from nls.runtime.inference_compat import micro_inference_extra_body
+
+            _upstream = getattr(_vllm, "base_url", "") or ""
+            response = await _vllm.generate(
+                adapter_name=_adapter,
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=20,
                 temperature=0.1,
-                extra_body={
-                    "chat_template_kwargs": {"enable_thinking": False},
-                },
+                extra_body=micro_inference_extra_body(_upstream, thinking=False),
             )
             _text = response.text if hasattr(response, "text") else str(response or "")
             choice = _text.strip().lower().split()[0] if _text else "chat"
@@ -1318,12 +1354,10 @@ class InnerLoop:
             if user_input:
                 try:
                     from nls.engine.micro_inference import micro_respond
-                    _vllm = getattr(rt, "vllm_client", None)
                     _tm = getattr(rt, "_team_manager", None)
-                    if _vllm is not None:
+                    if rt.inference_available():
                         await micro_respond(
                             runtime=rt,
-                            vllm_client=_vllm,
                             user_input=user_input,
                             team_manager=_tm,
                             history=history,
@@ -1509,11 +1543,9 @@ class InnerLoop:
                     try:
                         from nls.engine.micro_inference import micro_respond
                         _tm = getattr(rt, "_team_manager", None)
-                        _vllm = getattr(rt, "vllm_client", None)
-                        if _vllm is not None:
+                        if rt.inference_available():
                             await micro_respond(
                                 runtime=rt,
-                                vllm_client=_vllm,
                                 user_input=_text,
                                 team_manager=_tm,
                                 reply_channel=event.reply_channel,
@@ -1610,7 +1642,13 @@ class InnerLoop:
         ).get("use_v2", False)
         if not use_v2 or not rt.is_agentic_enabled():
             return False
-        if self._vllm_client is None and not self._use_model_a:
+        if not (
+            self._use_model_a
+            or (
+                hasattr(rt, "inference_available")
+                and rt.inference_available()
+            )
+        ):
             return False
         return True
 
@@ -1693,6 +1731,29 @@ class InnerLoop:
                 f"Do NOT create files at the workspace root."
             )
 
+        # Live plan progress (avoid stale WM step counts)
+        for _tool in _tools:
+            _ps = getattr(_tool, "_store", None)
+            if _ps is not None and hasattr(_ps, "find_active"):
+                try:
+                    _ap = _ps.find_active()
+                    if _ap is not None:
+                        _done = sum(
+                            1 for s in _ap.steps
+                            if s.status in ("done", "skipped")
+                        )
+                        _total = len(_ap.steps)
+                        parts.append(
+                            f"\n[PLAN POSITION — {_done}/{_total} steps done]"
+                        )
+                        parts.append(
+                            f"Active plan: {_ap.title} [{_ap.id}] "
+                            f"(status={_ap.status})"
+                        )
+                except Exception:
+                    pass
+                break
+
         # Active teams summary
         _has_teams = False
         _tm = getattr(rt, "_team_manager", None)
@@ -1702,6 +1763,30 @@ class InnerLoop:
                 if team_summary:
                     parts.append(f"\n{team_summary}")
                     _has_teams = True
+                _active_teams = [
+                    t for t in _tm._teams.values()
+                    if t.status == "active"
+                ]
+                if _active_teams:
+                    _focus = max(_active_teams, key=lambda t: t.wave_index)
+                    parts.append(
+                        f"\n[ORCHESTRATION FOCUS] Primary active team: "
+                        f"{_focus.id} ({_focus.name}). "
+                        f"Use team(action='inspect', team_id='{_focus.id}') "
+                        f"then team(action='advance') when all members are done. "
+                        f"Do NOT advance terminal or older wave teams."
+                    )
+                _created = [
+                    t for t in _tm._teams.values()
+                    if t.status == "created"
+                ]
+                if _created:
+                    _c = _created[0]
+                    parts.append(
+                        f"\n[PENDING LAUNCH] Team {_c.id} ({_c.name}) is created "
+                        f"but not launched — call team(action='launch', "
+                        f"team_id='{_c.id}') when no other wave is running."
+                    )
             except Exception:
                 pass
 
@@ -1777,7 +1862,7 @@ class InnerLoop:
                     await _cm.broadcast(agent_id, {
                         "type": "agentic_iteration",
                         "step": data.get("iteration", 0),
-                        "max_steps": data.get("max_iterations", 15),
+                        "max_steps": data.get("max_iterations", 25),
                         "tool_calls": data.get("tool_calls", []),
                         "tool_results": data.get("tool_results", []),
                         "duration_ms": round(data.get("duration_ms", 0), 1),
@@ -1787,16 +1872,21 @@ class InnerLoop:
                     })
                     _resp_text = data.get("response_text", "").strip()
                     if _resp_text:
-                        _sig = _resp_text[:200]
-                        if _sig not in _communicated_texts:
-                            _communicated_texts.add(_sig)
-                            await _cm.broadcast(agent_id, {
-                                "type": "communicate",
-                                "message": _resp_text,
-                                "iteration": data.get("iteration", 0),
-                                "autonomous": True,
-                                "mid_loop": True,
-                            })
+                        from nls.runtime.dispatch_sources import (
+                            is_orchestration_dispatch_source,
+                        )
+                        if not is_orchestration_dispatch_source(source):
+                            _sig = _resp_text[:200]
+                            if _sig not in _communicated_texts:
+                                _communicated_texts.add(_sig)
+                                await _cm.broadcast(agent_id, {
+                                    "type": "communicate",
+                                    "message": _resp_text,
+                                    "iteration": data.get("iteration", 0),
+                                    "autonomous": True,
+                                    "mid_loop": True,
+                                    "source": source,
+                                })
                 elif etype == "communicate":
                     _comm_msg = data.get("message", "").strip()
                     _comm_sig = _comm_msg[:200]
@@ -1807,6 +1897,8 @@ class InnerLoop:
                             "message": _comm_msg,
                             "iteration": data.get("iteration", 0),
                             "autonomous": True,
+                            "user_facing": True,
+                            "source": source,
                         })
                 elif etype in _FORWARDED:
                     await _cm.broadcast(agent_id, {
@@ -1844,7 +1936,7 @@ class InnerLoop:
             if _cm is not None:
                 await _cm.broadcast(agent_id, {
                     "type": "agentic_start",
-                    "max_steps": 15,
+                    "max_steps": 25,
                     "autonomous": True,
                     "source": source,
                     "task_preview": prompt[:200],
@@ -1931,7 +2023,19 @@ class InnerLoop:
                 agent_id, source, len(final), _iters,
             )
 
-            if _cm is not None:
+            _noop_abort = (
+                _aborted and _iters <= 2 and _tc == 0 and len(final.strip()) < 20
+            )
+            if _cm is not None and not _noop_abort:
+                _abort_reason = getattr(result, "abort_reason", "") or ""
+                if _aborted and not _abort_reason:
+                    from nls.runtime.dispatch_sources import (
+                        is_orchestration_dispatch_source,
+                    )
+                    if is_orchestration_dispatch_source(source):
+                        _abort_reason = "orchestration_preempted"
+                    else:
+                        _abort_reason = "user_abort"
                 await _cm.broadcast(agent_id, {
                     "type": "agentic_complete",
                     "autonomous": True,
@@ -1939,66 +2043,11 @@ class InnerLoop:
                     "total_steps": _iters,
                     "total_tool_calls": _tc,
                     "aborted": _aborted,
-                    "abort_reason": getattr(result, "abort_reason", ""),
+                    "abort_reason": _abort_reason,
+                    "exit_reason": getattr(result, "exit_reason", "") or "",
                     "duration_ms": _dur,
                     "final_response": final[:500] if final else "",
                 })
-
-            # Surface the final response to the user's chat for intentional
-            # dispatches (scheduler check-backs, delegate completions).  Pure
-            # DMN daydreams are intentionally silent — they're background
-            # reflection, not user-facing updates.
-            _SURFACE_SOURCES = frozenset({"scheduler", "check_back", "delegate"})
-            _should_surface = (
-                _cm is not None
-                and final
-                and len(final.strip()) > 30
-                and not _aborted
-                and (source in _SURFACE_SOURCES or source.startswith("scheduler") or source.startswith("delegate"))
-            )
-            _final_sig = final.strip()[:200] if final else ""
-            if _should_surface and _final_sig not in _communicated_texts:
-                try:
-                    await _cm.broadcast(agent_id, {
-                        "type": "communicate",
-                        "message": final,
-                        "mid_loop": True,
-                        "autonomous": True,
-                        "source": source,
-                    })
-                    logger.info(
-                        "Agent %s: surfaced autonomous response to chat "
-                        "(source=%s, %d chars)",
-                        agent_id, source, len(final),
-                    )
-                    # §1.3 — Also persist to conversation history so the next
-                    # user turn has continuity with what the agent said.
-                    try:
-                        _conv_load = getattr(rt, "load_conversation_history", None)
-                        _conv_save = getattr(rt, "save_conversation_history", None)
-                        if _conv_load and _conv_save:
-                            _conv = _conv_load(max_turns=40)
-                            _conv.append({
-                                "role": "assistant",
-                                "content": final,
-                                "metadata": {
-                                    "autonomous": True,
-                                    "source": source,
-                                    "communicated": True,
-                                },
-                            })
-                            _conv_save(_conv)
-                    except Exception as _ch_err:
-                        logger.debug(
-                            "Agent %s: failed to persist communicate to "
-                            "conversation history: %s",
-                            agent_id, _ch_err,
-                        )
-                except Exception as _surf_err:
-                    logger.debug(
-                        "Agent %s: failed to surface autonomous response: %s",
-                        agent_id, _surf_err,
-                    )
 
             # Persist autonomous task result in AUTONOMOUS history
             # (separate from user conversation to prevent context pollution)
@@ -2140,9 +2189,29 @@ class InnerLoop:
         if not self._can_dispatch_v2(rt):
             return False
 
-        prompt = self._drive_goal_to_prompt(goal, rt)
         drive_name = getattr(goal, "drive_name", "unknown")
         action_type = getattr(goal, "action_type", "reflect")
+        if drive_name == "homeostasis" and action_type == "reflect":
+            _user_busy = getattr(rt, "is_user_busy", getattr(rt, "is_busy", False))
+            _wm = getattr(rt, "working_memory", None)
+            _pending_build = False
+            if _wm is not None:
+                try:
+                    _pending_build = any(
+                        getattr(g, "level", "") == "tactical"
+                        and getattr(g, "source", "") in ("task_extract", "todo-list", "user")
+                        for g in _wm.get_goals()
+                    )
+                except Exception:
+                    pass
+            if _user_busy or _pending_build:
+                logger.info(
+                    "Agent %s: skip homeostasis reflect — user/build task active",
+                    rt.agent_id,
+                )
+                return True
+
+        prompt = self._drive_goal_to_prompt(goal, rt)
 
         logger.info(
             "Agent %s: drive %s/%s → agentic dispatch",
@@ -2190,6 +2259,9 @@ class InnerLoop:
         run.  Dispatching them separately would lose conversation
         context and lead to destructive overwrites.
         """
+        if getattr(rt, "is_user_busy", getattr(rt, "is_busy", False)):
+            return False
+
         wm = getattr(rt, "working_memory", None)
         if wm is None:
             return False
@@ -2812,18 +2884,27 @@ class InnerLoop:
     ) -> str:
         """Generate text for a dream phase (WONDER or REFLECT).
 
-        Uses vLLM client if available, otherwise falls back to
-        Model A with the priority lock.
+        Uses the agent's orchestrator inference pipeline (session model).
         """
         agent_id = self.runtime.agent_id
+        rt = self.runtime
 
-        if self._vllm_client is not None:
+        try:
+            _vllm, _adapter = rt.inference_pipeline()
+        except Exception:
+            _vllm, _adapter = None, None
+
+        if _vllm is not None:
             try:
-                result = await self._vllm_client.generate(
+                from nls.runtime.inference_compat import micro_inference_extra_body
+
+                _upstream = getattr(_vllm, "base_url", "") or ""
+                result = await _vllm.generate(
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=1024,
                     temperature=0.7,
-                    extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+                    adapter_name=_adapter if use_adapter else None,
+                    extra_body=micro_inference_extra_body(_upstream, thinking=False),
                 )
                 return result.text if result else ""
             except Exception as exc:
@@ -2847,20 +2928,30 @@ class InnerLoop:
         Adapts GenerateResult from vLLM client into the dict format the
         mini agentic loop expects.
         """
-        if self._vllm_client is None:
+        rt = self.runtime
+        try:
+            _vllm, _adapter = rt.inference_pipeline()
+        except Exception:
+            _vllm, _adapter = None, None
+
+        if _vllm is None:
             logger.warning(
                 "Agent %s: no vLLM client for active dream ACT phase",
-                self.runtime.agent_id,
+                rt.agent_id,
             )
             return None
 
         try:
-            result = await self._vllm_client.generate(
+            from nls.runtime.inference_compat import micro_inference_extra_body
+
+            _upstream = getattr(_vllm, "base_url", "") or ""
+            result = await _vllm.generate(
                 messages=messages,
                 tools=tools,
                 max_tokens=2048,
                 temperature=0.3,
-                extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+                adapter_name=_adapter if use_adapter else None,
+                extra_body=micro_inference_extra_body(_upstream, thinking=False),
             )
             # GenerateResult has .text and .tool_calls attributes
             return {
@@ -2870,7 +2961,7 @@ class InnerLoop:
         except Exception as exc:
             logger.warning(
                 "Agent %s: dream vLLM generate failed: %s",
-                self.runtime.agent_id, exc,
+                rt.agent_id, exc,
             )
             return None
 
@@ -2947,7 +3038,12 @@ class InnerLoop:
         # Use is_user_busy when available (distinguishes user turns from DMN).
         # Fall back to is_busy for backwards compatibility with older runtimes.
         user_busy = getattr(rt, "is_user_busy", getattr(rt, "is_busy", False))
-        if user_busy:
+        _critical_wake = (
+            source.startswith("team_completion_review:")
+            or source.startswith("team_wave_complete:")
+            or source.startswith("team_member_escalation:")
+        )
+        if user_busy and not _critical_wake:
             logger.info(
                 "Agent %s: autonomous dispatch skipped — user/channel "
                 "foreground turn active (source=%s). Orchestrator will "
@@ -2971,9 +3067,16 @@ class InnerLoop:
 
         # Dedup: if there's already a pending dispatch with the same
         # source (e.g. "team_checkback:team_abc"), don't enqueue another.
-        # This prevents the scheduler from flooding the queue with
-        # identical check-backs for the same team.
-        for _existing_prompt, _existing_source in self._pending_dispatches:
+        # Completion reviews coalesce per team (batched source).
+        from nls.agentic.wake_coordination import (
+            completion_review_source,
+            is_completion_review_source,
+            parse_completion_review_team_id,
+        )
+        _cr_team = parse_completion_review_team_id(source) if is_completion_review_source(source) else ""
+        for _i, (_existing_prompt, _existing_source) in enumerate(
+            list(self._pending_dispatches),
+        ):
             if _existing_source == source:
                 logger.info(
                     "Agent %s: autonomous dispatch DEDUPED — "
@@ -2982,6 +3085,18 @@ class InnerLoop:
                     len(self._pending_dispatches),
                 )
                 return
+            if _cr_team and is_completion_review_source(_existing_source):
+                if parse_completion_review_team_id(_existing_source) == _cr_team:
+                    _batched = completion_review_source(_cr_team)
+                    self._pending_dispatches[_i] = (prompt, _batched)
+                    logger.info(
+                        "Agent %s: completion-review wake COALESCED for %s",
+                        getattr(rt, "agent_id", "?"), _cr_team,
+                    )
+                    return
+
+        if source == "delegate_batch_complete":
+            self.drain_pending_dispatches(source_prefix="team_checkback:")
 
         self._pending_dispatches.append((prompt, source))
         logger.info(
@@ -2993,6 +3108,36 @@ class InnerLoop:
 
         # Phase 0: mirror into the typed event queue for future use
         self._mirror_dispatch_to_event_queue(prompt, source)
+
+    def drain_pending_dispatches(
+        self,
+        *,
+        source_exact: str = "",
+        source_prefix: str = "",
+    ) -> int:
+        """Remove queued autonomous dispatches matching source filter."""
+        if not source_exact and not source_prefix:
+            return 0
+        before = len(self._pending_dispatches)
+        if source_exact:
+            self._pending_dispatches = [
+                (p, s) for p, s in self._pending_dispatches
+                if s != source_exact
+            ]
+        else:
+            self._pending_dispatches = [
+                (p, s) for p, s in self._pending_dispatches
+                if not s.startswith(source_prefix)
+            ]
+        removed = before - len(self._pending_dispatches)
+        if removed:
+            logger.info(
+                "Agent %s: drained %d pending dispatch(es) "
+                "(exact=%r prefix=%r)",
+                getattr(self.runtime, "agent_id", "?"),
+                removed, source_exact, source_prefix,
+            )
+        return removed
 
     # ───────────────────────────────────────────────────────────────
     # Event queue helpers (Phase 0 — additive, no behavior change)

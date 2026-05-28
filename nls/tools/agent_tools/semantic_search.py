@@ -106,7 +106,12 @@ async def _proxy_embed(
     """Forward embedding requests to the GPU Worker at {runtime_url}/embed."""
     import httpx
 
-    url = f"{runtime_url.rstrip('/')}/embed"
+    base = (
+        os.environ.get("NLS_EMBED_WORKER_URL", "").strip()
+        or os.environ.get("NLS_GPU_WORKER_URL", "").strip()
+        or runtime_url.rstrip("/")
+    )
+    url = f"{base.rstrip('/')}/embed"
     headers: dict[str, str] = {}
     if secret:
         headers["X-GPU-Worker-Secret"] = secret

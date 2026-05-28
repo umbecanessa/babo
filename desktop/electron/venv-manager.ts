@@ -879,8 +879,10 @@ export class VenvManager {
       }
     }
 
-    // Copy genesis templates from NLS source if not present
-    const srcGenesis = path.join(this.nlsRoot, 'data', 'genesis');
+    // Bundled genesis templates (extraResources) — server also seeds on startup.
+    const srcGenesis = app.isPackaged
+      ? path.join(process.resourcesPath, 'genesis_templates')
+      : path.join(this.nlsRoot, 'genesis_templates');
     const destGenesis = path.join(dataDir, 'genesis');
     if (fs.existsSync(srcGenesis)) {
       this.copyDirSync(srcGenesis, destGenesis);

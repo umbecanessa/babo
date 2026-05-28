@@ -71,6 +71,8 @@ async def _classify_intent(
     vllm_client: Any,
     message: str,
     history: list[dict] | None = None,
+    *,
+    adapter_name: str | None = None,
 ) -> str:
     try:
         msgs: list[dict] = [{"role": "system", "content": _CLASSIFY_PROMPT}]
@@ -82,6 +84,7 @@ async def _classify_intent(
                     msgs.append({"role": role, "content": content[:300]})
         msgs.append({"role": "user", "content": message})
         result = await vllm_client.generate(
+            adapter_name=adapter_name,
             messages=msgs,
             max_tokens=5,
             temperature=0.0,

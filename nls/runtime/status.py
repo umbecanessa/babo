@@ -14,23 +14,38 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_WAKE_PROMPT = (
-    "You have just been initialized. Greet the user warmly and concisely. "
-    "If you do not have a name yet, ask what they would like to call you. "
-    "Then ask what they would like to work on. Do NOT mention internal architecture "
-    "or technical details. Do NOT introduce yourself with an ID or UUID."
+_DEFAULT_WAKE_PROMPT_UNNAMED = (
+    "You have just been initialized. This is your first message to the user. "
+    "Greet them warmly and briefly. You do not have a name yet — ask what they "
+    "would like you to be called (for example: \"What would you like to name me?\"). "
+    "Keep it to a few sentences. Do NOT mention internal architecture, IDs, or UUIDs."
+)
+
+_DEFAULT_WAKE_PROMPT_NAMED = (
+    "You have just been initialized. This is your first message to the user. "
+    "Greet them warmly and introduce yourself with the name {name} — for example: "
+    "\"Hey! My name is {name}. How can I help you today?\" "
+    "They already chose this name during setup; do NOT ask what they would like "
+    "to call you. Keep it to a few sentences. "
+    "Do NOT mention internal architecture, IDs, or UUIDs."
 )
 
 
-def get_wake_prompt(config: dict) -> str | None:
+def get_wake_prompt(config: dict, agent_name: str | None = None) -> str | None:
     """Return the first-message wake prompt, or None if disabled."""
     fm_cfg = config.get("first_message", {})
     if not fm_cfg.get("enabled", True):
         return None
     custom = fm_cfg.get("prompt")
     if custom:
+        name = (agent_name or "").strip()
+        if name:
+            return custom.replace("{agent_name}", name).replace("{name}", name)
         return custom
-    return _DEFAULT_WAKE_PROMPT
+    name = (agent_name or "").strip()
+    if name:
+        return _DEFAULT_WAKE_PROMPT_NAMED.format(name=name)
+    return _DEFAULT_WAKE_PROMPT_UNNAMED
 
 
 def is_agentic_enabled(config: dict) -> bool:
@@ -103,12 +118,20 @@ def get_status(
 
     if _want("ans") and ans is not None:
         try:
+            summary = ans.get_buffer_summary()
             status["ans"] = {
-                "is_sleeping": ans.is_sleeping,
-                "signal_count": getattr(ans, "learnable_signal_count", 0),
+                "state": summary.get("state", "unknown"),
+                "total_signals": summary.get("total_signals", 0),
+                "learnable_signals": summary.get("learnable_signals", 0),
+                "is_sleeping": getattr(ans, "is_sleeping", False),
+                "sleep_cycles_completed": summary.get(
+                    "sleep_cycles_completed", 0,
+                ),
                 "circadian_phase": getattr(
                     getattr(ans, "circadian", None), "current_phase", "unknown"
                 ),
+                "by_type": summary.get("by_type", {}),
+                "error_rate": summary.get("error_rate", ""),
             }
         except Exception:
             pass
@@ -166,13 +189,17 @@ def get_status(
 
     if _want("knowledge") and domain_db is not None:
         try:
-            status["fact_count"] = domain_db.fact_count()
+            _fc = domain_db.fact_count()
+            status["facts_in_memory"] = _fc
+            status["fact_count"] = _fc
         except Exception:
             pass
 
     if _want("narrative_self") and narrative_self is not None:
         try:
-            status["narrative_self"] = narrative_self.get_summary()
+            _narr = narrative_self.get_summary()
+            status["narrative"] = _narr
+            status["narrative_self"] = _narr
         except Exception:
             pass
 
@@ -184,7 +211,9 @@ def get_status(
 
     if _want("predictive") and predictive is not None:
         try:
-            status["predictive"] = predictive.get_summary()
+            _pred = predictive.get_summary()
+            status["predictive_processing"] = _pred
+            status["predictive"] = _pred
         except Exception:
             pass
 
@@ -194,4 +223,23 @@ def get_status(
         except Exception:
             pass
 
+    _apply_frontend_aliases(status)
     return status
+
+
+def _apply_frontend_aliases(status: dict[str, Any]) -> None:
+    """Ensure legacy/internal keys match WebSocket and Angular field names."""
+    if "fact_count" in status and "facts_in_memory" not in status:
+        status["facts_in_memory"] = status["fact_count"]
+    if "facts_in_memory" in status and "fact_count" not in status:
+        status["fact_count"] = status["facts_in_memory"]
+    if "narrative_self" in status and "narrative" not in status:
+        status["narrative"] = status["narrative_self"]
+    if "predictive" in status and "predictive_processing" not in status:
+        status["predictive_processing"] = status["predictive"]
+    _ans = status.get("ans")
+    if isinstance(_ans, dict) and "state" not in _ans:
+        if _ans.get("is_sleeping"):
+            _ans["state"] = "sleeping"
+        elif "signal_count" in _ans:
+            _ans.setdefault("learnable_signals", _ans.get("signal_count", 0))

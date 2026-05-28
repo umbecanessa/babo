@@ -1,129 +1,284 @@
 <div class="projects-page" [class.chat-open]="chatOpen()">
+
   <div class="projects-main">
+
     <!-- Header: tab nav + command bar -->
+
     <div class="projects-header">
+
       <div class="header-left">
+
         <h2 class="page-title">Projects</h2>
+
         <div class="view-tabs">
+
           <button class="view-tab" [class.active]="activeTab() === 'overview'" (click)="setTab('overview')">Overview</button>
+
           <button class="view-tab" [class.active]="activeTab() === 'board'" (click)="setTab('board')">Board</button>
-          <button class="view-tab" [class.active]="activeTab() === 'timeline'" (click)="setTab('timeline')">Timeline</button>
+
           <button class="view-tab" [class.active]="activeTab() === 'files'" (click)="setTab('files')">Files</button>
+
         </div>
+
       </div>
+
       <app-command-bar
+
         class="header-command"
+
         [agentId]="agentId"
+
         (command)="onCommand($event)"
+
       />
+
       <button class="chat-toggle" (click)="toggleChat()" [class.active]="chatOpen()" title="Toggle chat sidebar">
+
         <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18">
+
           <path d="M2 5a2 2 0 012-2h12a2 2 0 012 2v7a2 2 0 01-2 2H6l-4 3V5z"/>
+
         </svg>
+
       </button>
+
     </div>
 
+
+
     <!-- Orchestration status ribbon -->
+
     @if (hasOrchData()) {
+
       <div class="orch-ribbon">
+
         <div class="orch-ribbon-item">
+
           <span class="orch-ribbon-val">{{ orchActiveCount() }}</span>
+
           <span class="orch-ribbon-label">{{ orchActiveCount() === 1 ? 'Team Active' : 'Teams Active' }}</span>
+
         </div>
+
         @if (orchTotalMembers() > 0) {
+
           <div class="orch-ribbon-divider"></div>
+
           <div class="orch-ribbon-item">
+
             <span class="orch-ribbon-val">{{ orchDoneMembers() }}/{{ orchTotalMembers() }}</span>
+
             <span class="orch-ribbon-label">Members Done</span>
+
           </div>
+
         }
+
         @if (orchFailedMembers() > 0) {
+
           <div class="orch-ribbon-divider"></div>
+
           <div class="orch-ribbon-item orch-ribbon-item--warn">
+
             <span class="orch-ribbon-val">{{ orchFailedMembers() }}</span>
+
             <span class="orch-ribbon-label">Failed</span>
+
           </div>
+
         }
-        @if (orchPlanProgress() > 0) {
+
+        @if (orchUnlaunchedCount() > 0) {
+
           <div class="orch-ribbon-divider"></div>
-          <div class="orch-ribbon-item">
-            <span class="orch-ribbon-val">{{ orchPlanProgress() }}%</span>
-            <span class="orch-ribbon-label">Plan Progress</span>
+
+          <div class="orch-ribbon-item orch-ribbon-item--warn" title="Wave team exists but delegates were never launched">
+
+            <span class="orch-ribbon-val">{{ orchUnlaunchedCount() }}</span>
+
+            <span class="orch-ribbon-label">Awaiting Launch</span>
+
           </div>
+
         }
+
+        @if (orchPlanStats().total > 0) {
+
+          <div class="orch-ribbon-divider"></div>
+
+          <div class="orch-ribbon-item" [title]="orchPlanStats().skipped ? (orchPlanStats().done + ' done, ' + orchPlanStats().skipped + ' skipped') : ''">
+
+            <span class="orch-ribbon-val">{{ orchPlanProgress() }}%</span>
+
+            <span class="orch-ribbon-label">Plan Done</span>
+
+            @if (orchPlanStats().skipped > 0) {
+
+              <span class="orch-ribbon-sub">· {{ orchPlanStats().skipped }} skipped</span>
+
+            }
+
+          </div>
+
+        }
+
       </div>
+
     }
+
+
 
     <!-- Content area -->
+
     @if (svc.loading()) {
+
       <div class="loading-state">Loading project data...</div>
+
     } @else if (svc.error()) {
+
       <div class="error-state">
+
         <p>{{ svc.error() }}</p>
+
         <button class="retry-btn" (click)="svc.loadData()">Retry</button>
+
       </div>
+
     } @else {
-      <!-- Overview: Teams + Activity -->
+
       @if (activeTab() === 'overview') {
+
         <div class="overview-layout">
+
+          <div class="overview-mission-row" [class.run-hidden]="!runView.visible()">
+
+            @if (runView.visible()) {
+
+              <app-run-panel
+
+                class="overview-run"
+
+                mode="projects"
+
+                [agentId]="agentId"
+
+              />
+
+            }
+
+            <app-activity-panel
+
+              class="overview-activity"
+
+              [teams]="svc.teams()"
+
+              [items]="svc.items()"
+
+              [plansByTodoId]="svc.plansByTodoId()"
+
+              [compact]="true"
+
+              [maxEntries]="14"
+
+            />
+
+          </div>
+
+
+
           <app-teams-panel
+
             class="panel teams-section"
+
             [teams]="svc.teams()"
+
             [timeline]="svc.timeline()"
+
             [agentId]="agentId"
+
           />
-          <app-activity-panel
-            class="panel activity-section"
-            [teams]="svc.teams()"
+
+
+
+          <app-overview-board-strip
+
+            class="overview-queue"
+
             [items]="svc.items()"
+
             [plansByTodoId]="svc.plansByTodoId()"
+
+            (openBoard)="openBoardTab()"
+
           />
+
         </div>
+
       }
 
-      <!-- Board view: full Kanban -->
+
+
       @if (activeTab() === 'board') {
+
         <div class="board-layout">
+
           <app-board-panel
+
             class="panel full-board"
+
             [items]="svc.items()"
+
             [lists]="svc.lists()"
+
             [plansByTodoId]="svc.plansByTodoId()"
+
             [agentId]="agentId"
+
           />
+
         </div>
+
       }
 
-      <!-- Files view -->
+
+
       @if (activeTab() === 'files') {
+
         <div class="files-layout">
-          <app-files-panel
+
+          <app-workspace
+
             class="panel full-files"
+
             [agentId]="agentId"
+
+            [initialFilePath]="pendingFilePath()"
+
           />
+
         </div>
+
       }
 
-      <!-- Timeline view -->
-      @if (activeTab() === 'timeline') {
-        <div class="timeline-layout">
-          <app-timeline-panel
-            class="panel full-timeline"
-            [teams]="svc.teams()"
-            [timeline]="svc.timeline()"
-            [agentId]="agentId"
-          />
-        </div>
-      }
     }
+
   </div>
 
-  <!-- Chat sidebar -->
+
+
   @if (chatOpen()) {
+
     <app-chat-sidebar
+
       class="sidebar"
+
       [agentId]="agentId"
+
       (close)="toggleChat()"
+
     />
+
   }
+
 </div>
+

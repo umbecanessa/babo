@@ -22,7 +22,7 @@
     [class.workbench-sidebar-hidden]="!workbench.panelOpen()"
     [attr.aria-hidden]="workbench.panelOpen() ? 'false' : 'true'"
   >
-    <app-chat-workbench />
+    <app-chat-workbench [agentId]="agentId" />
   </div>
 
   <!-- Chat area -->
@@ -30,7 +30,7 @@
     <!-- Agent header -->
     <div class="chat-header">
       @if (agent()) {
-        <div class="agent-info">
+        <div class="agent-info" data-day1-coach="agent-header">
           <div class="agent-dot" [class.agentic-pulse]="agenticActive()"></div>
           <span class="agent-name">{{ agent()!.name || agent()!.runtimeAgentId.substring(0, 8) }}</span>
           <span class="agent-id desktop-only">{{ agent()!.runtimeAgentId.substring(0, 12) }}...</span>
@@ -91,11 +91,6 @@
             <line x1="8" y1="8" x2="16" y2="8"/>
           </svg>
         </button>
-        <button class="info-btn" (click)="onboardingModal?.show()" title="About this page">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
-          </svg>
-        </button>
         <button (click)="toggleSidebar()" class="brain-toggle desktop-only">
           <span class="brain-dot" [class.active]="sidebarOpen()"></span>
           {{ sidebarOpen() ? 'Hide' : 'Show' }} Brain
@@ -109,13 +104,13 @@
         <div class="strip-items">
           @if (condensedFacts > 0) {
             <span class="strip-chip">
-              <span class="strip-dot" style="background:#38bdf8"></span>
+              <span class="strip-dot" style="background:var(--accent-primary)"></span>
               {{ condensedFacts }} facts
             </span>
           }
           @if (condensedAns) {
             <span class="strip-chip">
-              <span class="strip-dot" style="background:#34d399"></span>
+              <span class="strip-dot" style="background:var(--accent-success)"></span>
               {{ condensedAns }}
             </span>
           }
@@ -287,57 +282,11 @@
       />
     </div>
 
-    <!-- Floating plan checklist -->
-    @if (planSteps().length > 0) {
-      <div class="plan-panel">
-        <div class="plan-panel-inner" [class.expanded]="planExpanded()">
-          <button class="plan-panel-bar" (click)="togglePlanExpanded()">
-            <span class="plan-panel-icon">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M9 11l3 3L22 4"></path>
-                <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
-              </svg>
-            </span>
-            <span class="plan-panel-summary">{{ planDoneCount }}/{{ planTotalCount }} steps done</span>
-            @if (agenticActive() && planDoneCount < planTotalCount) {
-              <span class="plan-panel-spinner"></span>
-            }
-            <span class="plan-panel-chevron">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                @if (planExpanded()) {
-                  <polyline points="6 15 12 9 18 15"></polyline>
-                } @else {
-                  <polyline points="6 9 12 15 18 9"></polyline>
-                }
-              </svg>
-            </span>
-          </button>
-          @if (planExpanded()) {
-            <div class="plan-panel-body">
-              @for (step of planSteps(); track $index) {
-                <div class="plan-step" [class.pending]="step.status === 'pending'"
-                     [class.active]="step.status === 'active'"
-                     [class.done]="step.status === 'done'"
-                     [class.error]="step.status === 'error'">
-                  <span class="plan-step-icon">
-                    @if (step.status === 'pending') {
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" opacity="0.3"><circle cx="12" cy="12" r="10"></circle></svg>
-                    } @else if (step.status === 'active') {
-                      <span class="plan-spinner"></span>
-                    } @else if (step.status === 'done') {
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#34d399" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="16 9 10.5 15 8 12.5"></polyline></svg>
-                    } @else {
-                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#f87171" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
-                    }
-                  </span>
-                  <span class="plan-step-label">{{ step.label }}</span>
-                </div>
-              }
-            </div>
-          }
-        </div>
-      </div>
-    }
+    <app-run-panel
+      mode="chat"
+      [agentId]="agentId"
+      [agenticActive]="agenticActive()"
+    />
 
     <!-- Input area (hidden when desktop is offline in remote mode) -->
     <div class="chat-input-area"
@@ -429,7 +378,12 @@
             <span>Transcribing...</span>
           </div>
         </div>
-      } @else if (agenticActive()) {
+      } @else {
+        <div class="composer-focus" data-day1-coach="chat-composer">
+        <div class="composer-toolbar">
+          <app-chat-model-picker />
+        </div>
+      @if (agenticActive()) {
         <!-- Agentic mode: show cancel button -->
         <div class="input-wrapper agentic-active">
           <button (click)="fileInput.click()" class="attach-btn" title="Attach files">
@@ -498,6 +452,8 @@
           }
         </div>
       }
+        </div>
+      }
     </div>
   </div>
 
@@ -527,5 +483,4 @@
     (closed)="onGoogleModalClosed()"
     (connected)="onGoogleConnected($event)" />
 
-  <app-onboarding-modal #onboardingModal [config]="onboardingConfig" />
 </div>

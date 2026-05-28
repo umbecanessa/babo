@@ -29,10 +29,12 @@ class TaskCompleteTool:
     @property
     def description(self) -> str:
         return (
-            "Call this tool ONLY when you have fully completed the user's "
-            "request and have nothing left to do. This ends your turn. "
-            "Do NOT call this if there are pending plan steps, queued waves, "
-            "or running teams — finish those first. "
+            "Call ONLY when the user's entire request is finished — all plan "
+            "steps done, no running teams/delegates, nothing queued. "
+            "This ends your turn permanently for this task.\n"
+            "Do NOT use this while a wave or delegates are still running — "
+            "use await_delegates(summary='...') to exit monitoring and let "
+            "background work continue. "
             "Pass a short summary of what was accomplished."
         )
 

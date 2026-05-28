@@ -11,13 +11,16 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import re
 from collections.abc import AsyncIterator
+from urllib.parse import urlparse
 from datetime import datetime
 from pathlib import Path
 from typing import Any, NamedTuple
 
 from nls.brain.autonomic import AutonomicNervousSystem, NerveSignal
+from nls.brain.identity_renderer import apply_name_prompt_placeholders
 
 logger = logging.getLogger(__name__)
 
@@ -48,18 +51,17 @@ _TOOL_CALL_STRIP_RE = re.compile(
 )
 
 # ---------------------------------------------------------------------------
-# nls_signal tool description — embedded in the system prompt as text,
-# matching the TOOLS_C1_PP pattern from the stress tests.
 # ---------------------------------------------------------------------------
-# Full signal tool text removed — the ANS async safety net now handles
-# signal extraction via LLM-based post-processing.  We keep only a
-# short behavioural guardrail so the model produces a direct reply.
+# Chat guardrail — ANS safety net handles learning after each turn.
+# Do not instruct the model to emit nls_signal or [LEARN:...] tags.
+# ---------------------------------------------------------------------------
 # IMPORTANT: Do NOT mention <think> tags here — Qwen3.5 metacognates
 # about any instruction that references its own reasoning mechanism,
 # producing thousands of chars of visible self-commentary.
 NLS_SIGNAL_TOOL_TEXT = (
-    "\n\nAlways reply directly to the user. Keep responses concise "
-    "and relevant."
+    "\n\nAlways reply directly to the user in natural language. "
+    "Do not append metadata, bracket tags, or function-call syntax. "
+    "Keep responses concise and relevant."
 )
 
 # ---------------------------------------------------------------------------
@@ -167,6 +169,34 @@ class AgentTurnResult(NamedTuple):
     completion_tokens: int = 0
 
 
+def _inference_host_is_local(base_url: str) -> bool:
+    from nls.runtime.inference_compat import inference_host_is_local
+
+    return inference_host_is_local(base_url)
+
+
+def _is_openai_api_model_id(model_id: str) -> bool:
+    from server.services.dual_model_manager import DualModelManager
+
+    return DualModelManager._is_api_model_id(model_id)
+
+
+def _babo_cloud_inference_url_from_env() -> str:
+    url = os.environ.get("NLS_BABO_CLOUD_INFERENCE_URL", "").strip()
+    if url:
+        return url.rstrip("/")
+    nest = (
+        os.environ.get("NESTJS_API_URL", "").strip()
+        or os.environ.get("NESTJS_URL", "").strip()
+    )
+    if not nest:
+        return ""
+    base = nest.rstrip("/")
+    if not base.endswith("/api"):
+        base = f"{base}/api"
+    return f"{base}/inference/v1"
+
+
 class AgentRuntime:
     """Production agent runtime — chat, tools, memory, agentic loop."""
 
@@ -252,12 +282,23 @@ class AgentRuntime:
         self._recent_files: list = []
         self.delegate_manager: Any | None = None
         self._team_manager: Any | None = None
+        self._outbound_gate: Any | None = None
 
         # Multi-orchestrator registry (Phase 5)
         from nls.engine.orchestration_context import OrchestrationRegistry
         self._orch_registry = OrchestrationRegistry()
         self._recent_errors: list = []
         self.adapter_name: str | None = None
+        import os as _os
+        _del = (
+            _os.environ.get("NLS_DELEGATE_HF_MODEL", "").strip()
+            or (config.get("inference") or {}).get("delegate_hf_model", "")
+        )
+        self.delegate_model: str | None = _del or None
+        self.session_orchestrator_model: str | None = None
+        self.session_delegate_model: str | None = None
+        self.session_delegate_lock_orchestrator: bool = True
+        self._babo_cloud_vllm_client: Any | None = None
         self._channel_type: str | None = None
 
         self._fact_store: Any | None = None
@@ -386,6 +427,8 @@ class AgentRuntime:
         self,
         user_input: str,
         history: list[dict] | None = None,
+        *,
+        model_override: str | None = None,
     ) -> bool:
         """Micro-inference: should this turn use deep thinking (System 2)?
 
@@ -399,10 +442,13 @@ class AgentRuntime:
 
         Falls back to ``True`` (always think) on any error.
         """
-        if self.vllm_client is None:
+        _vllm, _adapter = self.inference_pipeline(model_override)
+        if _vllm is None:
             return True
 
         try:
+            from nls.runtime.inference_compat import micro_inference_extra_body
+
             msgs: list[dict] = [
                 {"role": "system", "content": _THINKING_CLASSIFY_PROMPT},
             ]
@@ -414,12 +460,13 @@ class AgentRuntime:
                         msgs.append({"role": role, "content": content[:300]})
             msgs.append({"role": "user", "content": user_input})
 
-            result = await self.vllm_client.generate(
-                adapter_name=None,
+            _upstream = getattr(_vllm, "base_url", "") or ""
+            result = await _vllm.generate(
+                adapter_name=_adapter,
                 messages=msgs,
-                max_tokens=5,
+                max_tokens=64,
                 temperature=0.0,
-                extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+                extra_body=micro_inference_extra_body(_upstream, thinking=False),
             )
             raw = (
                 result.text if hasattr(result, "text") else str(result or "")
@@ -437,6 +484,29 @@ class AgentRuntime:
             if "TASK" in raw:
                 logger.info("[Agent] agent=%s thinking gate: fallback TASK -> True", self.agent_id)
                 return True
+
+            if not raw.strip():
+                low = user_input.lower()
+                taskish = (
+                    "[the user attached" in low
+                    or (
+                        len(user_input.strip()) > 80
+                        and any(
+                            m in low
+                            for m in (
+                                "build", "create", "deploy", "implement",
+                                "install", "analyze", "fix", "run ",
+                                "repo", "github", "set up",
+                            )
+                        )
+                    )
+                )
+                logger.info(
+                    "[Agent] agent=%s thinking gate: empty classifier -> taskish=%s",
+                    self.agent_id,
+                    taskish,
+                )
+                return taskish
 
             logger.info("[Agent] agent=%s thinking gate: fallback CHAT -> False", self.agent_id)
             return False
@@ -506,7 +576,9 @@ class AgentRuntime:
                 content = msg.get("content") or ""
                 if role not in ("user", "assistant") or not content.strip():
                     continue
-                content = self._SIGNAL_TAG_RE.sub("", content).strip()
+                from nls.runtime.response_cleanup import strip_nls_artifacts
+
+                content = strip_nls_artifacts(content)
                 if content:
                     msgs.append({"role": role, "content": content})
 
@@ -682,7 +754,9 @@ class AgentRuntime:
                 content = msg.get("content") or ""
                 if role not in ("user", "assistant") or not content.strip():
                     continue
-                content = self._SIGNAL_TAG_RE.sub("", content).strip()
+                from nls.runtime.response_cleanup import strip_nls_artifacts
+
+                content = strip_nls_artifacts(content)
                 if content:
                     msgs.append({"role": role, "content": content})
 
@@ -840,18 +914,7 @@ class AgentRuntime:
             inference.get("system_prompt", "You are a helpful AI assistant."),
         )
 
-        if self.agent_name:
-            prompt = prompt.replace("{agent_name}", self.agent_name)
-            prompt = prompt.replace(
-                "{unnamed_block}",
-                f"Your name is {self.agent_name}.",
-            )
-        else:
-            prompt = prompt.replace("{agent_name}", "an unnamed agent")
-            prompt = prompt.replace(
-                "{unnamed_block}",
-                "You do NOT have a name yet. The human will give you one.",
-            )
+        prompt = apply_name_prompt_placeholders(prompt, self.agent_name or "")
 
         today = datetime.now().strftime("%A, %B %d, %Y")
         prompt = prompt.replace("{today_date}", today)
@@ -919,7 +982,12 @@ class AgentRuntime:
           6. Date
         """
         if self.agent_name:
-            prompt = f"You are {self.agent_name}, a personal AI assistant with an integrated neural memory cortex.\n\n"
+            prompt = (
+                f"You are {self.agent_name}, a personal AI assistant with an "
+                "integrated neural memory cortex.\n"
+                "The human chose this name when creating you. Do not ask what "
+                "they would like to call you.\n\n"
+            )
         else:
             prompt = (
                 "You are a personal AI assistant with an integrated neural memory cortex.\n"
@@ -980,18 +1048,7 @@ class AgentRuntime:
             "system_prompt_v5",
             inference.get("system_prompt", "You are a helpful AI assistant."),
         )
-        if self.agent_name:
-            prompt = prompt.replace("{agent_name}", self.agent_name)
-            prompt = prompt.replace(
-                "{unnamed_block}",
-                f"Your name is {self.agent_name}.",
-            )
-        else:
-            prompt = prompt.replace("{agent_name}", "an unnamed agent")
-            prompt = prompt.replace(
-                "{unnamed_block}",
-                "You do NOT have a name yet. The human will give you one.",
-            )
+        prompt = apply_name_prompt_placeholders(prompt, self.agent_name or "")
         today = datetime.now().strftime("%A, %B %d, %Y")
         prompt = prompt.replace("{today_date}", today)
         if today not in prompt:
@@ -1045,10 +1102,11 @@ class AgentRuntime:
         try:
             self._agent_tools, self._openai_tools, self._scheduler_manager, self._team_manager = (
                 setup_tools(
-                    self.agent_id, self.agent_dir, self.vllm_client,
+                    self.agent_id, self.agent_dir, self,
                     self.config, skill_loader=skill_loader,
                     ans=self.ans, calibrator=self.calibrator,
                     working_memory=self.working_memory,
+                    dual_wm=self.dual_wm,
                     enabled_skills=enabled_skills,
                 )
             )
@@ -1153,6 +1211,42 @@ class AgentRuntime:
             self.agent_id, len(skill_tuples), ring.position_ids,
         )
 
+    def _channel_is_connected(self, channel: str) -> bool:
+        """True when an outbound channel skill is paired (not just installed)."""
+        import json
+        from pathlib import Path
+
+        skill_dirs = {
+            "whatsapp": "whatsapp-channel",
+            "telegram": "telegram-channel",
+            "email": "email-channel",
+        }
+        skill_dir = skill_dirs.get(channel)
+        if not skill_dir or not getattr(self, "agent_dir", None):
+            return True
+        data_root = Path(self.agent_dir).parent.parent
+        for rel in (
+            Path("skills") / skill_dir / "config.json",
+            Path("skills") / skill_dir / "agents" / f"{self.agent_id}.json",
+        ):
+            path = data_root / rel
+            if not path.is_file():
+                continue
+            try:
+                cfg = json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                continue
+            if channel == "whatsapp":
+                return bool(str(cfg.get("linked_phone", "")).strip())
+            if channel == "telegram":
+                return bool(
+                    str(cfg.get("bot_token", "")).strip()
+                    or str(cfg.get("linked_id", "")).strip()
+                )
+            if channel == "email":
+                return bool(str(cfg.get("connected_email", "")).strip())
+        return False
+
     def _populate_channels_ring(self) -> None:
         """Populate the Cryptex Channels ring from registered channel adapters."""
         try:
@@ -1175,18 +1269,34 @@ class AgentRuntime:
                 pass
 
         tool_names = {getattr(t, "name", "") for t in (self._agent_tools or [])}
-        has_whatsapp = "whatsapp_send" in tool_names
-        has_telegram = "telegram_send" in tool_names
-        has_email = "email_send" in tool_names
+        has_whatsapp_tool = "whatsapp_send" in tool_names
+        has_whatsapp = has_whatsapp_tool and self._channel_is_connected("whatsapp")
+        has_telegram_tool = "telegram_send" in tool_names
+        has_telegram = has_telegram_tool and self._channel_is_connected("telegram")
+        has_email_tool = "email_send" in tool_names
+        has_email = has_email_tool and self._channel_is_connected("email")
         has_calendar = any(t in tool_names for t in (
             "calendar_list", "calendar_create", "calendar_update",
         ))
 
-        if has_whatsapp:
+        if has_whatsapp_tool and not has_whatsapp:
             ring.upsert_slot(
                 domain="channel.whatsapp",
                 content=(
-                    "WhatsApp: ACTIVE. Use whatsapp_send(phone=\"+...\", text=\"...\") "
+                    "WhatsApp: NOT CONNECTED (skill enabled but not paired). "
+                    "Do NOT mention WhatsApp in status updates and do NOT tell the "
+                    "user you sent WhatsApp messages. Use communicate() in chat."
+                ),
+                slot_type="fact",
+                salience=0.5,
+                source="channel_registration",
+                position="communication",
+            )
+        elif has_whatsapp:
+            ring.upsert_slot(
+                domain="channel.whatsapp",
+                content=(
+                    "WhatsApp: CONNECTED. Use whatsapp_send(phone=\"+...\", text=\"...\") "
                     "to send messages. Parameter names: phone (E.164), text (message body). "
                     "Look up contacts first with contacts tool."
                 ),
@@ -1195,19 +1305,51 @@ class AgentRuntime:
                 source="channel_registration",
                 position="communication",
             )
-        if has_telegram:
+        if has_telegram_tool and not has_telegram:
             ring.upsert_slot(
                 domain="channel.telegram",
-                content="Telegram: ACTIVE. Use telegram_send to send messages.",
+                content=(
+                    "Telegram: NOT CONNECTED (skill enabled but not configured). "
+                    "Do NOT mention Telegram in status updates and do NOT claim "
+                    "you sent Telegram messages. Use communicate() in chat."
+                ),
+                slot_type="fact",
+                salience=0.5,
+                source="channel_registration",
+                position="communication",
+            )
+        elif has_telegram:
+            ring.upsert_slot(
+                domain="channel.telegram",
+                content=(
+                    "Telegram: CONNECTED. Use telegram_send to send messages. "
+                    "Look up contacts first when needed."
+                ),
                 slot_type="fact",
                 salience=0.9,
                 source="channel_registration",
                 position="communication",
             )
-        if has_email:
+        if has_email_tool and not has_email:
             ring.upsert_slot(
                 domain="channel.email",
-                content="Email: ACTIVE. Use email_send to send emails.",
+                content=(
+                    "Email: NOT CONNECTED (skill enabled but no mailbox linked). "
+                    "Do NOT mention email delivery in status updates and do NOT "
+                    "claim you sent email. Use communicate() in chat."
+                ),
+                slot_type="fact",
+                salience=0.5,
+                source="channel_registration",
+                position="communication",
+            )
+        elif has_email:
+            ring.upsert_slot(
+                domain="channel.email",
+                content=(
+                    "Email: CONNECTED. Use email_send to send emails when the "
+                    "user requested email delivery."
+                ),
                 slot_type="fact",
                 salience=0.9,
                 source="channel_registration",
@@ -1303,11 +1445,12 @@ class AgentRuntime:
             return cached[cache_key]
 
         vllm_count = 0
-        if self.vllm_client is not None:
+        _vllm, _adapter = self.inference_pipeline()
+        if _vllm is not None:
             try:
                 import httpx as _httpx
-                base = self.vllm_client.base_url
-                model = self.vllm_client.default_model
+                base = _vllm.base_url
+                model = _adapter or _vllm.default_model
                 tok_msgs = list(msgs)
                 if extra_text:
                     tok_msgs.append({"role": "user", "content": extra_text})
@@ -1488,6 +1631,118 @@ class AgentRuntime:
                 break
         return msgs
 
+    def _get_babo_cloud_vllm_client(self) -> Any | None:
+        if self._babo_cloud_vllm_client is not None:
+            return self._babo_cloud_vllm_client
+        url = _babo_cloud_inference_url_from_env()
+        if not url:
+            return None
+        from server.services.vllm_client import VLLMInferenceClient
+
+        api_key = os.environ.get("NLS_INFERENCE_API_KEY", "").strip() or None
+        hf = os.environ.get("NLS_HF_MODEL", "gpt-4o-mini")
+        self._babo_cloud_vllm_client = VLLMInferenceClient(
+            base_url=url,
+            default_model=hf,
+            api_key=api_key,
+        )
+        logger.info(
+            "[Agent] agent=%s Babo Cloud inference relay at %s",
+            self.agent_id,
+            url,
+        )
+        return self._babo_cloud_vllm_client
+
+    def _vllm_for_message(
+        self, model_override: str | None
+    ) -> tuple[Any, str | None]:
+        """Pick LAN install-default vs Babo Cloud relay for this agent's model."""
+        adapter = (model_override or "").strip() or None
+        if adapter and _is_openai_api_model_id(adapter):
+            cloud = self._get_babo_cloud_vllm_client()
+            if cloud is not None:
+                return cloud, adapter
+            logger.warning(
+                "[Agent] agent=%s cloud model %r requested but "
+                "Babo Cloud inference relay is not configured",
+                self.agent_id,
+                adapter,
+            )
+            return None, adapter
+        if self.vllm_client is None:
+            return None, adapter
+        return self.vllm_client, adapter
+
+    def inference_pipeline(
+        self, model_override: str | None = None,
+    ) -> tuple[Any, str | None]:
+        """Resolve vLLM client + adapter for any turn on this agent."""
+        model = self.resolve_orchestrator_model(model_override)
+        return self._vllm_for_message(model)
+
+    def inference_available(
+        self, model_override: str | None = None,
+    ) -> bool:
+        """True when a routed inference client exists for this agent."""
+        client, _ = self.inference_pipeline(model_override)
+        return client is not None
+
+    def resolve_orchestrator_model(
+        self, request_override: str | None
+    ) -> str | None:
+        """Per-request override, then agent session default, else None (install default)."""
+        override = (request_override or "").strip() or None
+        if override:
+            return override
+        session = (self.session_orchestrator_model or "").strip()
+        return session or None
+
+    def resolve_delegate_adapter(
+        self, orchestrator_adapter: str | None
+    ) -> str | None:
+        """Sub-agent model: lock to orchestrator, global delegate, or session delegate."""
+        if self.session_delegate_lock_orchestrator:
+            return orchestrator_adapter
+        if self.delegate_model:
+            return self.delegate_model
+        session = (self.session_delegate_model or "").strip()
+        return session or orchestrator_adapter
+
+    def update_session_inference(
+        self,
+        *,
+        orchestrator_model: str | None = None,
+        delegate_model: str | None = None,
+        delegate_lock_orchestrator: bool | None = None,
+        clear_orchestrator: bool = False,
+        clear_delegate: bool = False,
+    ) -> dict[str, Any]:
+        """Persist per-agent inference defaults in session_meta.json."""
+        if clear_orchestrator:
+            self.session_orchestrator_model = None
+        elif orchestrator_model is not None:
+            val = orchestrator_model.strip()
+            self.session_orchestrator_model = val or None
+
+        if clear_delegate:
+            self.session_delegate_model = None
+        elif delegate_model is not None:
+            val = delegate_model.strip()
+            self.session_delegate_model = val or None
+
+        if delegate_lock_orchestrator is not None:
+            self.session_delegate_lock_orchestrator = delegate_lock_orchestrator
+
+        self.save_state()
+        return self.session_inference_snapshot()
+
+    def session_inference_snapshot(self) -> dict[str, Any]:
+        return {
+            "orchestrator_model": self.session_orchestrator_model,
+            "delegate_model": self.session_delegate_model,
+            "delegate_lock_orchestrator": self.session_delegate_lock_orchestrator,
+        }
+
     async def generate(
         self,
         messages: list[dict[str, str]],
@@ -1495,6 +1750,7 @@ class AgentRuntime:
         scaffold_positions: list[int] | None = None,
         *,
         thinking_mode: bool = True,
+        model_override: str | None = None,
     ) -> tuple[str, str]:
         """Call vLLM and return (full_text, thinking_text).
 
@@ -1552,12 +1808,18 @@ class AgentRuntime:
             len(messages),
         )
 
-        result = await self.vllm_client.generate(
+        _vllm, _adapter = self.inference_pipeline(model_override)
+        if _vllm is None:
+            raise RuntimeError(
+                f"Agent {self.agent_id}: no inference client for generate()"
+            )
+        result = await _vllm.generate(
             messages=messages,
             max_tokens=_max_tokens,
             temperature=temperature,
             top_p=top_p,
             extra_body=extra_body,
+            adapter_name=_adapter,
         )
 
         raw_text = result.text if hasattr(result, "text") else str(result)
@@ -1607,6 +1869,7 @@ class AgentRuntime:
         *,
         thinking_mode: bool = True,
         tools: list[dict] | None = None,
+        model_override: str | None = None,
     ) -> AsyncIterator[str | tuple[str, str]]:
         """Stream tokens from vLLM.
 
@@ -1639,8 +1902,12 @@ class AgentRuntime:
             temperature = 0.3 if _recall_mode else 0.7
             top_p = 0.8
 
+        from nls.runtime.inference_compat import (
+            cloud_safe_extra_body,
+            resolve_tool_choice,
+        )
+
         extra_body: dict[str, Any] = {
-            "chat_template_kwargs": {"enable_thinking": thinking_mode},
             "top_k": 20,
             "min_p": 0.0,
             "repetition_penalty": 1.0,
@@ -1648,26 +1915,45 @@ class AgentRuntime:
         if xargs:
             extra_body["vllm_xargs"] = xargs
 
-        logger.info(
-            "[Agent] agent=%s generate_stream: thinking=%s temp=%.2f top_p=%.2f "
-            "max_tokens=%d xargs_keys=%s msgs=%d tools=%d",
-            self.agent_id, thinking_mode, temperature, top_p, _max_tokens,
-            list(xargs.keys()), len(messages), len(tools or []),
-        )
-
         accumulated_text = ""
         thinking_text = ""
         in_thinking = False
         past_thinking = False
 
-        async for token in self.vllm_client.generate_stream(
+        _vllm, _adapter = self.inference_pipeline(model_override)
+        if _vllm is None:
+            raise RuntimeError(
+                f"Agent {self.agent_id}: no inference client for generate_stream()"
+            )
+        _upstream = getattr(_vllm, "base_url", "") or ""
+        _model = model_override or _adapter or getattr(_vllm, "default_model", "") or ""
+        extra_body = cloud_safe_extra_body(
+            _upstream,
+            extra_body,
+            thinking=thinking_mode,
+            is_continuation=False,
+        )
+        _tool_choice = resolve_tool_choice(
+            _upstream, has_tools=bool(tools), model=_model,
+        )
+
+        logger.info(
+            "[Agent] agent=%s generate_stream: thinking=%s temp=%.2f top_p=%.2f "
+            "max_tokens=%d xargs_keys=%s msgs=%d tools=%d tool_choice=%s",
+            self.agent_id, thinking_mode, temperature, top_p, _max_tokens,
+            list(xargs.keys()), len(messages), len(tools or []),
+            _tool_choice,
+        )
+
+        async for token in _vllm.generate_stream(
             messages=messages,
             max_tokens=_max_tokens,
             temperature=temperature,
             top_p=top_p,
             tools=tools or None,
-            tool_choice="auto" if tools else None,
+            tool_choice=_tool_choice,
             extra_body=extra_body,
+            adapter_name=_adapter,
         ):
             if isinstance(token, dict):
                 continue
@@ -1748,7 +2034,7 @@ class AgentRuntime:
         self._last_stream_accumulated = accumulated_text
         self._last_stream_thinking = thinking_text
 
-        _su = getattr(self.vllm_client, "last_stream_usage", {}) or {}
+        _su = getattr(_vllm, "last_stream_usage", {}) or {}
         self._last_stream_prompt_tokens = _su.get("prompt_tokens", 0)
         self._last_stream_completion_tokens = _su.get("completion_tokens", 0)
 
@@ -1783,6 +2069,8 @@ class AgentRuntime:
         thinking: str,
         user_input: str,
         history: list[dict] | None = None,
+        *,
+        model_override: str | None = None,
     ) -> tuple[str, list[NerveSignal]]:
         """Extract signals and clean the response for the user.
 
@@ -1790,44 +2078,29 @@ class AgentRuntime:
         """
         response = full_text
 
-        # Extract inline tool_call blocks
-        inline_signals = self._extract_inline_tool_calls(response)
-
-        # Strip tool_call blocks from user-visible text
+        # Strip inline tool_call debris and legacy signal syntax from visible text.
         response = _TOOL_CALL_STRIP_RE.sub("", response).strip()
+        from nls.runtime.response_cleanup import strip_nls_artifacts
 
-        # Parse nls_signal tool calls into NerveSignal objects
-        signals = self._parse_nls_signals(inline_signals)
+        response = strip_nls_artifacts(response)
 
-        # Append [TYPE:domain] text tags for frontend signal pill rendering.
-        # The frontend's parseTags() looks for [LEARN:User.Name] etc. in the
-        # message text.  Signals may come from tool_call blocks (now
-        # stripped), so we re-inject them as text markers.
-        if signals:
-            tag_parts = []
-            for sig in signals:
-                stype = getattr(sig, "signal_type", "")
-                domain = getattr(sig, "domain_path", "") or ""
-                if stype:
-                    tag_parts.append(
-                        f"[{stype}:{domain}]" if domain else f"[{stype}]"
-                    )
-            if tag_parts:
-                response = response + "\n" + " ".join(tag_parts)
-
-        # Store LEARN signals in DomainDB
-        if signals and self.domain_db is not None:
-            self._store_learn_signals(signals, user_input)
+        # Learning is handled by the ANS safety net (async), not inline nls_signal
+        # tool calls or [LEARN:...] tags in the visible reply.  The UI receives
+        # learnings via the safety_net_learned WebSocket event.
+        signals: list[NerveSignal] = []
 
         # Extract reasoning schemas from thinking chain (M-023)
         if self.reasoning_distiller is not None and thinking:
             try:
+                _distill_vllm, _distill_adapter = self.inference_pipeline(
+                    model_override,
+                )
                 self.reasoning_distiller.distill_async(
                     thinking_chain=thinking,
                     user_input=user_input,
                     response=response,
                     domain_db=self.domain_db,
-                    vllm_client=self.vllm_client,
+                    vllm_client=_distill_vllm,
                 )
             except Exception:
                 pass
@@ -1836,7 +2109,9 @@ class AgentRuntime:
         if self.ans is not None:
             self.ans.on_response(user_input, response, self.hypothalamus)
 
-        self._schedule_safety_net(user_input, response, history)
+        self._schedule_safety_net(
+            user_input, response, history, model_override=model_override,
+        )
 
         # Update NarrativeSelf episode tracking
         if self.narrative_self is not None:
@@ -2007,6 +2282,8 @@ class AgentRuntime:
         user_input: str,
         response: str,
         history: list[dict] | None = None,
+        *,
+        model_override: str | None = None,
     ) -> None:
         """Schedule the ANS safety net + frontal lobe verification.
 
@@ -2015,14 +2292,16 @@ class AgentRuntime:
         same message type the old ServerRuntime uses, so the frontend
         renders signal pills without changes.
         """
-        if self.ans is None or self.vllm_client is None:
+        if self.ans is None:
             return
         if getattr(self, "_safety_net_disabled", False):
             logger.info("[Agent] ANS safety net: SKIPPED (disabled for testing)")
             return
 
         _ans = self.ans
-        _vllm = self.vllm_client
+        _vllm, _adapter = self.inference_pipeline(model_override)
+        if _vllm is None:
+            return
         _hypo = self.hypothalamus
         _domain_db = self.domain_db
         _agent_id = self.agent_id
@@ -2045,6 +2324,7 @@ class AgentRuntime:
                     history=_sn_history,
                     domain_db=_domain_db,
                     project_id=_sn_project_id,
+                    adapter_name=_adapter,
                 )
                 if sn_signals and _domain_db is not None:
                     _store(sn_signals, _user_input)
@@ -2061,6 +2341,34 @@ class AgentRuntime:
                     for s in (sn_signals or [])
                     if s.signal_type == "LEARN"
                 ]
+                if facts:
+                    from nls.runtime.learn_dedup import (
+                        collect_known_keys_from_ans,
+                        filter_new_learn_facts,
+                        learning_dedup_key,
+                        merge_known_from_broadcast_cache,
+                        remember_broadcast_keys,
+                    )
+
+                    _known = collect_known_keys_from_ans(_ans)
+                    _known.update(
+                        merge_known_from_broadcast_cache(
+                            _ans._ui_broadcast_learn_keys,
+                        ),
+                    )
+                    _before = len(facts)
+                    facts = filter_new_learn_facts(facts, _known)
+                    if facts:
+                        remember_broadcast_keys(
+                            _ans._ui_broadcast_learn_keys,
+                            [learning_dedup_key(f) for f in facts],
+                        )
+                    if _before != len(facts):
+                        logger.info(
+                            "[Agent] ANS safety net: deduped broadcast "
+                            "(%d -> %d facts)",
+                            _before, len(facts),
+                        )
                 if facts or emotions:
                     try:
                         from server.main import app
@@ -2075,8 +2383,11 @@ class AgentRuntime:
                             if emotions:
                                 payload["emotions"] = emotions
                             await cm.broadcast(_agent_id, payload)
-                    except Exception:
-                        pass
+                    except Exception as broadcast_exc:
+                        logger.warning(
+                            "[Agent] ANS safety net: UI broadcast failed: %s",
+                            broadcast_exc,
+                        )
             except Exception as e:
                 logger.warning("[Agent] ANS safety net failed: %s", e)
 
@@ -2322,6 +2633,22 @@ class AgentRuntime:
         sleep_type = kwargs.get("sleep_type", "sleep")
         self._sleep_count += 1
 
+        try:
+            from nls.ledger.chain_sleep import record_consolidation_epoch
+
+            record_consolidation_epoch(
+                Path(self.agent_dir),
+                sleep_index=self._sleep_count,
+                aku_count=int(kwargs.get("signals_processed", 0) or 0),
+                summary=str(kwargs.get("consolidation_summary", "") or ""),
+                sleep_type=sleep_type,
+            )
+        except Exception as exc:
+            logger.warning(
+                "[Agent] agent=%s: chain epoch block failed: %s",
+                self.agent_id, exc,
+            )
+
         # 1. ANS: transition back to AWAKE
         if self.ans is not None:
             try:
@@ -2364,6 +2691,8 @@ class AgentRuntime:
                     restore * 100,
                     self.temporal_self.energy * 100,
                 )
+                if self.self_state is not None:
+                    self.self_state.energy = self.temporal_self.energy
             except Exception as exc:
                 logger.debug(
                     "[Agent] agent=%s: energy restore failed: %s",
@@ -2483,9 +2812,6 @@ class AgentRuntime:
 
     async def synthesize_day_narrative(self) -> str | None:
         """Generate a day narrative via vLLM and persist to Cryptex consolidation."""
-        if self.vllm_client is None:
-            return None
-
         wm = getattr(self, "dual_wm", None) or getattr(self, "working_memory", None)
         if wm is None:
             return None
@@ -2530,18 +2856,22 @@ class AgentRuntime:
 
         try:
             import re as _re
+            from nls.runtime.inference_compat import micro_inference_extra_body
+
             system_msg = self._DAY_NARRATIVE_PROMPT.format(target=target)
-            result = await self.vllm_client.generate(
-                adapter_name=None,
+            _vllm, _adapter = self.inference_pipeline()
+            if _vllm is None:
+                return None
+            _upstream = getattr(_vllm, "base_url", "") or ""
+            result = await _vllm.generate(
+                adapter_name=_adapter,
                 messages=[
                     {"role": "system", "content": system_msg},
                     {"role": "user", "content": context_text},
                 ],
                 max_tokens=500,
                 temperature=0.4,
-                extra_body={
-                    "chat_template_kwargs": {"enable_thinking": False},
-                },
+                extra_body=micro_inference_extra_body(_upstream, thinking=False),
             )
             narrative = (
                 result.text if hasattr(result, "text") else str(result or "")
@@ -2610,6 +2940,14 @@ class AgentRuntime:
             saved = meta.get("last_interaction")
             if saved is not None:
                 self._last_interaction = float(saved)
+            _orch = (meta.get("orchestrator_model") or "").strip()
+            self.session_orchestrator_model = _orch or None
+            _del = (meta.get("delegate_model") or "").strip()
+            self.session_delegate_model = _del or None
+            if "delegate_lock_orchestrator" in meta:
+                self.session_delegate_lock_orchestrator = bool(
+                    meta.get("delegate_lock_orchestrator")
+                )
             logger.info(
                 "[Agent] agent=%s: restored meta (turns=%d, sleeps=%d)",
                 self.agent_id, self._turn_count, self._sleep_count,
@@ -2676,6 +3014,11 @@ class AgentRuntime:
             "last_interaction": self._last_interaction,
             "last_session": datetime.utcnow().isoformat(),
         }
+        if self.session_orchestrator_model:
+            meta["orchestrator_model"] = self.session_orchestrator_model
+        if self.session_delegate_model:
+            meta["delegate_model"] = self.session_delegate_model
+        meta["delegate_lock_orchestrator"] = self.session_delegate_lock_orchestrator
         meta_path = self.agent_dir / "session_meta.json"
         try:
             with open(meta_path, "w", encoding="utf-8") as f:
@@ -2692,6 +3035,7 @@ class AgentRuntime:
         user_input: str,
         history: list[dict] | None = None,
         *,
+        model_override: str | None = None,
         memory_test_mode: bool = False,
         no_deltanet: bool = False,
     ) -> AgentTurnResult:
@@ -2759,7 +3103,9 @@ class AgentRuntime:
             if memory_test_mode:
                 thinking_mode = True
             else:
-                thinking_mode = await self.classify_thinking_need(user_input, history)
+                thinking_mode = await self.classify_thinking_need(
+                    user_input, history, model_override=model_override,
+                )
 
             # 2. Format prompt — build messages with scaffold
             messages, scaffold_positions = self.format_prompt(
@@ -2770,12 +3116,14 @@ class AgentRuntime:
             full_text, thinking, _prompt_tok, _compl_tok = await self.generate(
                 messages, xargs, scaffold_positions,
                 thinking_mode=thinking_mode,
+                model_override=model_override,
             )
             self._last_thinking = thinking
 
             # 4. Post-process — extract signals, clean response, schedule ANS
             response, signals = self.post_process(
                 full_text, thinking, user_input, history,
+                model_override=model_override,
             )
 
             # 5. Hormonal feedback from signals
@@ -2845,9 +3193,11 @@ class AgentRuntime:
         user_input: str,
         history: list[dict] | None = None,
         *,
+        model_override: str | None = None,
         force_thinking: bool | None = None,
         memory_test_mode: bool = False,
         no_deltanet: bool = False,
+        include_tools: bool = True,
     ) -> AsyncIterator[str | tuple[str, str]]:
         """Streaming variant — yields tokens (str or thinking tuples), then does post-process.
 
@@ -2867,6 +3217,8 @@ class AgentRuntime:
         no_deltanet
             When True, strip all DeltaNet injection xargs before
             sending to vLLM.  Used to isolate expert-only recall.
+        include_tools
+            When False, omit tools (e.g. birth greeting — not an agentic turn).
         """
         self._foreground_processing += 1
         self._foreground_source = "user"
@@ -2915,7 +3267,9 @@ class AgentRuntime:
             elif force_thinking is not None:
                 thinking_mode = force_thinking
             else:
-                thinking_mode = await self.classify_thinking_need(user_input, history)
+                thinking_mode = await self.classify_thinking_need(
+                    user_input, history, model_override=model_override,
+                )
 
             messages, scaffold_positions = self.format_prompt(
                 user_input, history, memory_test_mode=memory_test_mode,
@@ -2924,7 +3278,8 @@ class AgentRuntime:
             async for token in self.generate_stream_async(
                 messages, xargs, scaffold_positions,
                 thinking_mode=thinking_mode,
-                tools=self._openai_tools,
+                tools=self._openai_tools if (include_tools and not memory_test_mode) else None,
+                model_override=model_override,
             ):
                 yield token
 
@@ -2933,6 +3288,7 @@ class AgentRuntime:
 
             response, signals = self.post_process(
                 full_text, thinking, user_input, history,
+                model_override=model_override,
             )
 
             if self.hypothalamus is not None and signals:
@@ -3042,6 +3398,62 @@ class AgentRuntime:
             return True, False
         return False, True
 
+    def _wire_orchestration_notify_gate(self) -> None:
+        """Outbound ledger gate + inner-loop check-back drain for teams."""
+        if self._team_manager is None:
+            return
+        _plan_store = None
+        for _t in self._agent_tools or []:
+            if getattr(_t, "name", "") == "plan":
+                _plan_store = getattr(_t, "_store", None)
+                break
+        if self._outbound_gate is None:
+            from nls.agentic.outbound_notify import OutboundNotifyGate
+
+            self._outbound_gate = OutboundNotifyGate(
+                self.agent_dir,
+                team_manager=self._team_manager,
+                plan_store=_plan_store,
+                delegate_manager=self.delegate_manager,
+            )
+
+        def _drain_dispatch(source_exact: str) -> int:
+            try:
+                from server.main import app as _app
+
+                cs = getattr(_app.state, "consciousness_scheduler", None)
+                if cs is None:
+                    return 0
+                il = cs.get_inner_loop(self.agent_id)
+                if il is None:
+                    return 0
+                return il.drain_pending_dispatches(source_exact=source_exact)
+            except Exception:
+                return 0
+
+        self._team_manager.set_dispatch_drain(_drain_dispatch)
+
+        def _schedule_orchestration_wake(prompt: str, source: str) -> None:
+            try:
+                from server.main import app as _app
+
+                cs = getattr(_app.state, "consciousness_scheduler", None)
+                if cs is None:
+                    return
+                il = cs.get_inner_loop(self.agent_id)
+                if il is None:
+                    return
+                il.enqueue_autonomous_dispatch(prompt, source)
+            except Exception:
+                logger.debug(
+                    "Agent %s: enqueue orchestration wake failed (source=%s)",
+                    self.agent_id, source, exc_info=True,
+                )
+
+        self._team_manager.set_schedule_orchestration_wake(
+            _schedule_orchestration_wake,
+        )
+
     # ------------------------------------------------------------------
     # 5c. Agentic Loop — tool-use with cognitive hooks (M-016)
     # ------------------------------------------------------------------
@@ -3051,6 +3463,7 @@ class AgentRuntime:
         user_input: str,
         history: list[dict] | None = None,
         *,
+        model_override: str | None = None,
         on_event: Any | None = None,
         abort_signal: Any | None = None,
         source: str = "user",
@@ -3088,6 +3501,7 @@ class AgentRuntime:
         async with _deep_ctx:
             return await self._run_agentic_locked(
                 user_input, history,
+                model_override=model_override,
                 on_event=on_event, abort_signal=abort_signal,
                 source=source, on_bash_output=on_bash_output,
                 on_browser_navigation=on_browser_navigation,
@@ -3108,6 +3522,7 @@ class AgentRuntime:
         user_input: str,
         history: list[dict] | None = None,
         *,
+        model_override: str | None = None,
         on_event: Any | None = None,
         abort_signal: Any | None = None,
         source: str = "user",
@@ -3247,6 +3662,8 @@ class AgentRuntime:
                 self.dual_wm.activate("user")
                 _active_wm = self.dual_wm.active
 
+            _orch_vllm, _orch_adapter = self.inference_pipeline(model_override)
+
             hooks = build_hooks(
                 agent_id=self.agent_id,
                 agent_dir=self.agent_dir,
@@ -3256,7 +3673,8 @@ class AgentRuntime:
                 domain_db=self.domain_db,
                 ans=self.ans,
                 temporal_self=self.temporal_self,
-                vllm_client=self.vllm_client,
+                vllm_client=_orch_vllm,
+                inference_adapter=_orch_adapter,
                 store_learn_signals=self._store_learn_signals,
                 config=self.config,
                 predictive=self.predictive,
@@ -3408,6 +3826,41 @@ class AgentRuntime:
                             pass
                     if self._team_manager._scheduler_manager is None and self._scheduler_manager is not None:
                         self._team_manager._scheduler_manager = self._scheduler_manager
+                    if self.delegate_manager is not None:
+                        _reconciled = self._team_manager.reconcile_with_delegates()
+                        logger.info(
+                            "Agent %s: delegate reconcile on loop start (%d team(s) updated)",
+                            self.agent_id, _reconciled,
+                        )
+                    self._wire_orchestration_notify_gate()
+                    if self._team_manager is not None:
+                        _unreported = (
+                            self._team_manager.reconcile_unreported_terminal_teams()
+                        )
+                        if _unreported:
+                            logger.info(
+                                "Agent %s: queued EM review for %d terminal "
+                                "team(s) missing team(advance)",
+                                self.agent_id, _unreported,
+                            )
+                        _unlaunched = (
+                            self._team_manager.enqueue_unlaunched_for_auto_launch()
+                        )
+                        if _unlaunched:
+                            logger.info(
+                                "Agent %s: queued auto-launch for %d "
+                                "unlaunched wave team(s)",
+                                self.agent_id, _unlaunched,
+                            )
+                        _pending_reviews = (
+                            self._team_manager.reconcile_pending_completion_reviews()
+                        )
+                        if _pending_reviews:
+                            logger.info(
+                                "Agent %s: re-queued completion-review wake "
+                                "for %d delegate(s)",
+                                self.agent_id, _pending_reviews,
+                            )
 
                 # Register primary orchestration context (Phase 5)
                 if not self._orch_registry.get("primary"):
@@ -3432,7 +3885,8 @@ class AgentRuntime:
                     hypothalamus=self.hypothalamus,
                     domain_db=self.domain_db,
                     ans=self.ans,
-                    vllm_client=self.vllm_client,
+                    vllm_client=_orch_vllm,
+                    inference_adapter=_orch_adapter,
                     store_learn_signals=self._store_learn_signals,
                     config=self.config,
                     event_logger=self._event_logger,
@@ -3443,6 +3897,7 @@ class AgentRuntime:
                     source=source,
                     self_state=self.self_state,
                     network_dynamics=self.network_dynamics,
+                    outbound_gate=self._outbound_gate,
                 )
     
                 # Expose the accumulator on the runtime so the inner loop
@@ -3557,9 +4012,18 @@ class AgentRuntime:
                 # in the Qwen chat template.  Mid-conversation system messages
                 # are undefined behaviour in most chat templates and may be
                 # silently dropped or folded.  One frame per turn — not per tool.
-                if self.visual_cortex is not None:
+                _skip_ambient_vc = "team" in tool_dict
+                if self.visual_cortex is not None and not _skip_ambient_vc:
                     try:
                         _vc_snap = self.visual_cortex.get_visual_context(channel="user")
+                        if _vc_snap:
+                            _vc_lower = _vc_snap.lower()
+                            if (
+                                "windrose" in _vc_lower
+                                and len(user_input) > 80
+                                and "windrose" not in user_input.lower()
+                            ):
+                                _vc_snap = ""
                         if _vc_snap:
                             context.append({
                                 "role": "user",
@@ -3594,15 +4058,20 @@ class AgentRuntime:
                         _ci, _cm.get("role"), len(_cm.get("content") or ""),
                     )
     
+                _vllm, _adapter = _orch_vllm, _orch_adapter
+                v4_config.delegate_adapter_name = self.resolve_delegate_adapter(
+                    _adapter
+                )
                 result = await run_loop_v4(
                     context=context,
                     tools=tool_dict,
                     config=v4_config,
                     hooks=v4_hooks,
-                    vllm_client=self.vllm_client,
+                    vllm_client=_vllm,
                     abort_signal=abort_signal,
                     on_event=on_event,
                     user_input=user_input,
+                    adapter_name=_adapter,
                     copilot_queue=copilot_queue,
                     first_response=first_response,
                     first_tool_calls=first_tool_calls,
@@ -3612,6 +4081,7 @@ class AgentRuntime:
                     visual_cortex=self.visual_cortex,
                     delegate_manager=self.delegate_manager,
                     active_tool_names=_active_tool_names,
+                    dispatch_source=source,
                 )
     
             # Schedule safety net on the final agentic exchange.
@@ -3635,7 +4105,10 @@ class AgentRuntime:
                         + "\n".join(_action_lines[-8:])
                     )
                 _enriched_resp = _final_resp + _action_digest
-                self._schedule_safety_net(user_input, _enriched_resp, history)
+                self._schedule_safety_net(
+                    user_input, _enriched_resp, history,
+                    model_override=model_override,
+                )
 
             # Counteract accumulated errors so the agent doesn't immediately
             # fall asleep after productive (or even aborted) work.
@@ -3719,7 +4192,7 @@ class AgentRuntime:
             self._initialize_tools()
         logger.info("[Agent] agent=%s: initialized", self.agent_id)
 
-    def shutdown(self) -> None:
+    async def shutdown_async(self) -> None:
         """Graceful cleanup — save state, close resources, kill child processes."""
         self.save_state()
 
@@ -3731,12 +4204,17 @@ class AgentRuntime:
                 except Exception:
                     pass
 
-        if self.visual_cortex is not None and getattr(self.visual_cortex, "_running", False):
+        vc = self.visual_cortex
+        if vc is not None and getattr(vc, "_running", False):
             try:
-                loop = asyncio.get_running_loop()
-                loop.create_task(self.visual_cortex.stop())
+                await vc.stop()
             except Exception:
-                pass
+                logger.warning(
+                    "[Agent] agent=%s: Visual Cortex stop failed",
+                    self.agent_id,
+                    exc_info=True,
+                )
+
         if self.domain_db is not None:
             try:
                 self.domain_db.close()
@@ -3753,6 +4231,25 @@ class AgentRuntime:
                 pass
         logger.info("[Agent] agent=%s: shutdown complete", self.agent_id)
 
+    def shutdown(self) -> None:
+        """Sync wrapper for :meth:`shutdown_async` (blocks until VC is released)."""
+        try:
+            asyncio.get_running_loop()
+            in_loop = True
+        except RuntimeError:
+            in_loop = False
+
+        if not in_loop:
+            asyncio.run(self.shutdown_async())
+            return
+
+        # Called from an async context without ``await shutdown_async()`` —
+        # run teardown on a side thread so we can block without deadlocking.
+        import concurrent.futures
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            pool.submit(asyncio.run, self.shutdown_async()).result(timeout=45.0)
+
     @property
     def is_busy(self) -> bool:
         """True while a chat or agentic turn is actively running.
@@ -3766,23 +4263,20 @@ class AgentRuntime:
     def is_user_busy(self) -> bool:
         """True only when a USER or CHANNEL initiated turn is running.
 
-        Autonomous/DMN/drive loops are NOT considered user-busy — they can
-        be preempted by high-priority scheduler dispatches (e.g. delegate
-        check-backs).  This prevents the DMN from blocking its own check-ins.
+        Orchestration dispatches (scheduler, delegate_batch_complete,
+        team_checkback, DMN, drives) are NOT user-busy — they must not
+        abort themselves via ``_watch_interrupt``.  Real user/channel turns
+        still preempt background work.
         """
         if self._foreground_processing <= 0:
             return False
-        src = self._foreground_source
-        autonomous_sources = ("autonomous", "dmn", "idle", "")
-        return (
-            src not in autonomous_sources
-            and not src.startswith("drive:")
-            and not src.startswith("scheduler")
-        )
+        from nls.runtime.dispatch_sources import is_orchestration_dispatch_source
+
+        return not is_orchestration_dispatch_source(self._foreground_source)
 
     def get_status(self, sections: set[str] | None = None) -> dict[str, Any]:
         from nls.runtime.status import get_status
-        return get_status(
+        status = get_status(
             agent_id=self.agent_id,
             agent_name=self.agent_name,
             config=self.config,
@@ -3801,10 +4295,24 @@ class AgentRuntime:
             last_interaction=self._last_interaction,
             sections=sections,
         )
+        if sections is None or "activity" in sections:
+            snap = self.session_inference_snapshot()
+            status["activity"] = {
+                "busy": self.is_busy,
+                "user_busy": self.is_user_busy,
+                "foreground_source": self._foreground_source,
+                "orchestrator_model": snap.get("orchestrator_model"),
+                "delegate_model": snap.get("delegate_model"),
+            }
+            if snap.get("orchestrator_model"):
+                status["orchestrator_model"] = snap["orchestrator_model"]
+            if snap.get("delegate_model"):
+                status["delegate_model"] = snap["delegate_model"]
+        return status
 
     def get_wake_prompt(self) -> str | None:
         from nls.runtime.status import get_wake_prompt
-        return get_wake_prompt(self.config)
+        return get_wake_prompt(self.config, self.agent_name)
 
     def is_agentic_enabled(self) -> bool:
         from nls.runtime.status import is_agentic_enabled
@@ -3860,6 +4368,8 @@ class AgentRuntime:
 
     async def extract_task_goals(
         self, user_input: str,
+        *,
+        model_override: str | None = None,
     ) -> tuple[list[str], list[str]]:
         """Pre-extract task goals and hints from user message via LLM.
 
@@ -3867,12 +4377,15 @@ class AgentRuntime:
         generation so goals+hints can be injected alongside the user
         message and passed to the agentic loop.
         """
-        if not self.vllm_client or not user_input.strip():
+        if not user_input.strip():
             return [], []
         from nls.agentic.goals import extract_goals
+        _vllm, _adapter = self.inference_pipeline(model_override)
+        if _vllm is None:
+            return [], []
         try:
             goals, hints, _deferred = await extract_goals(
-                self.vllm_client, user_input,
+                _vllm, user_input, adapter_name=_adapter,
             )
         except Exception:
             logger.warning("Agent %s: task goal pre-extraction failed",
@@ -4183,14 +4696,15 @@ class AgentRuntime:
         self, prompt: str,
         worker_model: Any = None, worker_tokenizer: Any = None,
     ) -> str:
-        """Generate a daydream via vLLM."""
+        """Generate a daydream via the agent's orchestrator inference pipeline."""
         from nls.brain.thinking import strip_thinking
 
         gen_cfg = self.config.get("inference", {}).get("generation", {})
 
-        if self.vllm_client is None:
+        _vllm, _adapter = self.inference_pipeline()
+        if _vllm is None:
             raise RuntimeError(
-                "dream_generate requires vllm_client in AgentRuntime",
+                "dream_generate requires an inference client on AgentRuntime",
             )
 
         temperature = gen_cfg.get("temperature", 0.7)
@@ -4201,12 +4715,16 @@ class AgentRuntime:
             {"role": "system", "content": self._build_passive_dream_system_prompt()},
             {"role": "user", "content": prompt},
         ]
+        from nls.runtime.inference_compat import micro_inference_extra_body
+
+        _upstream = getattr(_vllm, "base_url", "") or ""
         gen_kwargs: dict[str, Any] = {
-            "adapter_name": self.adapter_name,
+            "adapter_name": _adapter,
             "max_tokens": gen_cfg.get("max_new_tokens", 1024),
             "temperature": temperature,
             "top_p": gen_cfg.get("top_p", 0.9),
             "messages": messages,
+            "extra_body": micro_inference_extra_body(_upstream, thinking=False),
         }
 
         try:
@@ -4216,12 +4734,12 @@ class AgentRuntime:
 
         if loop is not None and loop.is_running():
             future = asyncio.run_coroutine_threadsafe(
-                self.vllm_client.generate(**gen_kwargs), loop,
+                _vllm.generate(**gen_kwargs), loop,
             )
             result = future.result(timeout=300.0)
         else:
             result = asyncio.run(
-                self.vllm_client.generate(**gen_kwargs),
+                _vllm.generate(**gen_kwargs),
             )
 
         raw = result.text.strip()
@@ -4484,13 +5002,25 @@ class AgentRuntime:
             return getattr(goal, "query", "") or domain
 
         try:
-            if self.vllm_client is None:
+            _vllm, _adapter = self.inference_pipeline()
+            if _vllm is None:
                 return getattr(goal, "query", "") or domain
+
+            from nls.runtime.inference_compat import micro_inference_extra_body
 
             messages = [
                 {"role": "system", "content": self._build_system_prompt()},
                 {"role": "user", "content": prompt},
             ]
+            _upstream = getattr(_vllm, "base_url", "") or ""
+            _gen_kwargs = {
+                "messages": messages,
+                "adapter_name": _adapter,
+                "max_tokens": 64,
+                "temperature": 0.7,
+                "top_p": 0.9,
+                "extra_body": micro_inference_extra_body(_upstream, thinking=False),
+            }
 
             try:
                 loop = asyncio.get_running_loop()
@@ -4499,24 +5029,11 @@ class AgentRuntime:
 
             if loop is not None and loop.is_running():
                 future = asyncio.run_coroutine_threadsafe(
-                    self.vllm_client.generate(
-                        messages=messages,
-                        adapter_name=self.adapter_name,
-                        max_tokens=64,
-                        temperature=0.7,
-                        top_p=0.9,
-                    ),
-                    loop,
+                    _vllm.generate(**_gen_kwargs), loop,
                 )
                 result = future.result(timeout=30.0)
             else:
-                result = asyncio.run(self.vllm_client.generate(
-                    messages=messages,
-                    adapter_name=self.adapter_name,
-                    max_tokens=64,
-                    temperature=0.7,
-                    top_p=0.9,
-                ))
+                result = asyncio.run(_vllm.generate(**_gen_kwargs))
 
             raw = result.text.strip()
             raw, _ = strip_thinking(raw)

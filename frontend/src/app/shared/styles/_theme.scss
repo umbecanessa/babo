@@ -1,0 +1,48 @@
+// SCSS helpers — always resolve through CSS variables (light/dark/system).
+$bg-primary: var(--bg-primary);
+$bg-secondary: var(--bg-secondary);
+$bg-surface: var(--bg-surface);
+$bg-card: var(--glass-bg);
+$surface-inset: var(--surface-inset);
+$surface-inset-strong: var(--surface-inset-strong);
+$backdrop-scrim: var(--backdrop-scrim);
+$bg-elevated: var(--bg-elevated);
+
+$glass-bg: var(--glass-bg);
+$glass-bg-hover: var(--glass-bg-hover);
+$glass-border: var(--glass-border);
+$glass-border-strong: var(--glass-border-strong);
+$glass-blur: blur(var(--glass-blur));
+
+$text: var(--text-primary);
+$text-dim: var(--text-secondary);
+$text-muted: var(--text-muted);
+
+$border: var(--glass-border);
+$overlay-1: var(--overlay-1);
+$overlay-2: var(--overlay-2);
+$overlay-3: var(--overlay-3);
+$overlay-4: var(--overlay-4);
+$overlay-5: var(--overlay-5);
+
+$accent: var(--accent-primary);
+$accent-glow: var(--accent-primary-glow);
+$accent-tint-bg: var(--accent-tint-bg);
+$accent-tint-border: var(--accent-tint-border);
+$on-accent-tint: var(--on-accent-tint);
+$on-accent-tint-muted: var(--on-accent-tint-muted);
+$accent-hover: var(--accent-primary);
+$accent-secondary: var(--accent-secondary);
+$accent-secondary-glow: var(--accent-secondary-glow);
+$green: var(--accent-success);
+$amber: var(--accent-warn);
+$red: var(--accent-danger);
+$purple: var(--accent-primary);
+
+$radius-sm: var(--radius-sm);
+$radius-md: var(--radius-md);
+$radius-lg: var(--radius-lg);
+$radius-xl: var(--radius-xl);
+
+$shadow-glass: var(--shadow-glass);
+$shadow-glow: var(--shadow-glow);

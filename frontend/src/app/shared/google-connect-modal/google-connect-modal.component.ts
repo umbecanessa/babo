@@ -115,13 +115,13 @@ type ConnectState = 'idle' | 'connecting' | 'waiting' | 'connected' | 'error';
     }
   `,
   styles: [`
-    $bg-panel: #0d0d12;
-    $border: rgba(255, 255, 255, 0.08);
-    $accent: #38bdf8;
+    $bg-panel: var(--bg-surface);
+    $border: var(--glass-border);
+    $accent: var(--accent-primary);
     $green: #4ade80;
-    $red: #f87171;
-    $text-heading: #e5e5e5;
-    $text-muted: #787890;
+    $red: var(--accent-danger);
+    $text-heading: var(--text-primary);
+    $text-muted: var(--text-muted);
 
     .modal-backdrop {
       position: fixed;
@@ -130,7 +130,7 @@ type ConnectState = 'idle' | 'connecting' | 'waiting' | 'connected' | 'error';
       display: flex;
       align-items: center;
       justify-content: center;
-      background: rgba(0, 0, 0, 0.65);
+      background: var(--overlay-5);
       backdrop-filter: blur(6px);
       animation: fadeIn 0.18s ease-out;
 
@@ -187,8 +187,8 @@ type ConnectState = 'idle' | 'connecting' | 'waiting' | 'connected' | 'error';
 
       &:hover {
         color: $text-heading;
-        border-color: rgba(255, 255, 255, 0.15);
-        background: rgba(255, 255, 255, 0.04);
+        border-color: var(--overlay-5);
+        background: var(--overlay-2);
       }
     }
 
@@ -236,7 +236,7 @@ type ConnectState = 'idle' | 'connecting' | 'waiting' | 'connected' | 'error';
       cursor: pointer;
       transition: all 0.15s;
 
-      &:hover { color: $text-heading; border-color: rgba(255, 255, 255, 0.15); }
+      &:hover { color: $text-heading; border-color: var(--overlay-5); }
     }
 
     .btn-done {

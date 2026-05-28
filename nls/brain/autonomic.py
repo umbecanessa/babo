@@ -42,6 +42,13 @@ from .circadian import CircadianClock, CircadianConfig, load_circadian_config
 logger = logging.getLogger(__name__)
 
 
+def _micro_extra_body(vllm_client: Any) -> dict[str, Any]:
+    from nls.runtime.inference_compat import micro_inference_extra_body
+
+    base = getattr(vllm_client, "base_url", "") or ""
+    return micro_inference_extra_body(base, thinking=False)
+
+
 # ---------------------------------------------------------------------------
 # Configuration models (loaded from autonomic.json)
 # ---------------------------------------------------------------------------
@@ -545,6 +552,9 @@ class AutonomicNervousSystem:
         # ── Streak tracking (modulates hormonal confidence) ──
         self._success_streak: int = 0
         self._failure_streak: int = 0
+
+        # Keys of LEARN facts already sent to UI (safety_net_learned dedup).
+        self._ui_broadcast_learn_keys: dict[str, None] = {}
 
         # ── Safety net state (set by on_response, consumed by runtime) ──
         self._last_turn_needs_safety_net: bool = False
@@ -1726,7 +1736,7 @@ class AutonomicNervousSystem:
             max_tokens=250,
             temperature=0.0,
             adapter_name=adapter_name,
-            extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+            extra_body=_micro_extra_body(vllm_client),
         )
 
         text = (raw.text if hasattr(raw, "text") else str(raw)).strip()
@@ -2907,7 +2917,7 @@ class AutonomicNervousSystem:
             max_tokens=900,
             temperature=0.0,
             adapter_name=adapter_name,
-            extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+            extra_body=_micro_extra_body(vllm_client),
         )
 
         text = (raw.text if hasattr(raw, "text") else str(raw)).strip()
@@ -3085,7 +3095,7 @@ class AutonomicNervousSystem:
                 max_tokens=120,
                 temperature=0.0,
                 adapter_name=adapter_name,
-                extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+                extra_body=_micro_extra_body(vllm_client),
             )
         except Exception as e:
             logger.warning("Emotional sensing LLM call failed: %s", e)

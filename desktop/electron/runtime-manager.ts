@@ -471,8 +471,8 @@ export class RuntimeManager {
 
   private async sendLeaseHeartbeats(): Promise<void> {
     const cfg = this.config.get();
-    const nestjsUrl = cfg.nestjsUrl;
-    if (!nestjsUrl) return;
+    const apiBase = ConfigManager.nestjsApiBase(cfg.nestjsUrl);
+    if (!apiBase) return;
 
     const deviceId = this.getDeviceId();
     const port = cfg.runtimePort;
@@ -487,7 +487,7 @@ export class RuntimeManager {
         if (!agentId) continue;
 
         try {
-          await fetch(`${nestjsUrl}/agents/${agentId}/lease/heartbeat`, {
+          await fetch(`${apiBase}/agents/${agentId}/lease/heartbeat`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ deviceId }),
@@ -496,7 +496,7 @@ export class RuntimeManager {
 
           if (!this.activeLeaseAgents.includes(agentId)) {
             // First heartbeat -- try to acquire lease
-            const acqRes = await fetch(`${nestjsUrl}/agents/${agentId}/lease/acquire`, {
+            const acqRes = await fetch(`${apiBase}/agents/${agentId}/lease/acquire`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -520,12 +520,12 @@ export class RuntimeManager {
 
   private async releaseAllLeases(): Promise<void> {
     const cfg = this.config.get();
-    const nestjsUrl = cfg.nestjsUrl;
-    if (!nestjsUrl || this.activeLeaseAgents.length === 0) return;
+    const apiBase = ConfigManager.nestjsApiBase(cfg.nestjsUrl);
+    if (!apiBase || this.activeLeaseAgents.length === 0) return;
 
     for (const agentId of this.activeLeaseAgents) {
       try {
-        await fetch(`${nestjsUrl}/agents/${agentId}/lease/release`, {
+        await fetch(`${apiBase}/agents/${agentId}/lease/release`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({}),

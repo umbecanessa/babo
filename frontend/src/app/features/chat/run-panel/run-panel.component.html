@@ -1,0 +1,190 @@
+@if (run.visible()) {
+  <div class="run-panel" [class.run-panel--projects]="mode === 'projects'" [class.run-panel--archived]="run.archived()">
+    <div class="run-panel-inner"
+         [class.expanded]="run.expanded()"
+         [class.run-panel-inner--live]="!run.expanded() && run.isLive()">
+      <button type="button" class="run-panel-bar" (click)="run.toggleExpanded()">
+        <span class="run-panel-icon" aria-hidden="true">
+          @if (!run.expanded() && run.isLive()) {
+            <span class="run-panel-live-icon">
+              <span class="run-panel-live-ring"></span>
+              <span class="run-panel-live-core"></span>
+            </span>
+          } @else {
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M9 11l3 3L22 4"></path>
+              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+            </svg>
+          }
+        </span>
+        <span class="run-panel-titles">
+          <span class="run-panel-title">{{ run.title() || 'Current run' }}</span>
+          <span class="run-panel-summary">{{ run.headerSummary() }}</span>
+        </span>
+        @if (run.background()) {
+          <span class="run-panel-badge">background</span>
+        }
+        @if (run.archived()) {
+          <span class="run-panel-badge run-panel-badge--archived">archived</span>
+        }
+        @if (!run.expanded() && run.isLive()) {
+          <span class="run-panel-spinner" aria-hidden="true"></span>
+        }
+        @if (mode === 'chat' && agentId) {
+          <a class="run-panel-link" [routerLink]="projectsLink()" (click)="$event.stopPropagation()">Projects</a>
+        }
+        <span class="run-panel-chevron" [class.expanded]="run.expanded()" aria-hidden="true">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="6 9 12 15 18 9"></polyline>
+          </svg>
+        </span>
+      </button>
+
+      @if (!run.expanded() && run.collapsedActivity().length > 0) {
+        <div class="run-panel-collapsed-track" aria-live="polite">
+          @for (item of run.collapsedActivity(); track item.key) {
+            <span class="run-activity-chip"
+                  [class.running]="item.status === 'running'"
+                  [class.queued]="item.status === 'queued'">
+              @if (item.status === 'running') {
+                <span class="run-activity-spinner" aria-hidden="true"></span>
+              } @else {
+                <span class="run-activity-wait" aria-hidden="true"></span>
+              }
+              <span class="run-activity-label">{{ item.label }}</span>
+            </span>
+          }
+        </div>
+      }
+
+      @if (run.expanded()) {
+        <div class="run-panel-body">
+          @if (run.waves().length > 0) {
+            <div class="run-waves">
+              @for (wave of run.waves(); track wave.teamId) {
+                <span class="run-wave-chip"
+                      [class.active]="wave.status === 'active' || wave.runningCount > 0"
+                      [class.done]="wave.status === 'completed'"
+                      [class.warn]="wave.status === 'partial' || wave.status === 'failed'">
+                  {{ wave.name }}
+                  @if (wave.waveAttempt > 1) { <span class="run-wave-try">×{{ wave.waveAttempt }}</span> }
+                  <span class="run-wave-progress">{{ wave.doneCount }}/{{ wave.totalCount }}</span>
+                </span>
+              }
+            </div>
+          }
+
+          @for (step of run.steps(); track step.id) {
+            <div class="run-step"
+                 [class.pending]="step.status === 'pending'"
+                 [class.active]="step.status === 'active'"
+                 [class.done]="step.status === 'done'"
+                 [class.skipped]="step.status === 'skipped'"
+                 [class.error]="step.status === 'error'">
+              <button type="button" class="run-step-header" (click)="onStepHeaderClick(step)">
+                <span class="run-step-icon" aria-hidden="true">
+                  @if (step.status === 'pending') {
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" opacity="0.35"><circle cx="12" cy="12" r="10"></circle></svg>
+                  } @else if (step.status === 'active') {
+                    <span class="run-step-spinner"></span>
+                  } @else if (step.status === 'skipped') {
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+                  } @else if (step.status === 'done') {
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent-success)" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="16 9 10.5 15 8 12.5"></polyline></svg>
+                  } @else {
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent-danger)" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
+                  }
+                </span>
+                <span class="run-step-label">{{ step.label }}</span>
+                @if (stepDelegates(step).length > 0) {
+                  <span class="run-step-meta">{{ stepDelegates(step).length }} agent{{ stepDelegates(step).length === 1 ? '' : 's' }}</span>
+                }
+              </button>
+
+              @if (isStepExpanded(step) && stepDelegates(step).length > 0) {
+                <div class="run-step-delegates">
+                  @for (d of stepDelegates(step); track delegateTrackKey(d)) {
+                    <ng-container *ngTemplateOutlet="delegateBlock; context: { $implicit: d }"></ng-container>
+                  }
+                </div>
+              }
+            </div>
+          }
+
+          @if (run.unassignedDelegates().length > 0) {
+            <div class="run-unassigned">
+              <span class="run-unassigned-label">Other agents</span>
+              @for (d of run.unassignedDelegates(); track delegateTrackKey(d)) {
+                <ng-container *ngTemplateOutlet="delegateBlock; context: { $implicit: d }"></ng-container>
+              }
+            </div>
+          }
+        </div>
+      }
+    </div>
+  </div>
+}
+
+<ng-template #delegateBlock let-d>
+  <div class="run-delegate"
+       [class.queued]="d.status === 'queued'"
+       [class.running]="d.status === 'running'"
+       [class.done]="d.status === 'done'"
+       [class.error]="d.status === 'error'">
+    <button type="button" class="run-delegate-header" (click)="run.toggleDelegateExpanded(delegateTrackKey(d))">
+      <span class="run-delegate-num">{{ delegateLabel(d) }}</span>
+      <span class="run-delegate-title">{{ delegateTitle(d) }}</span>
+      <span class="run-delegate-meta">
+        @if (d.status === 'queued') {
+          queued
+        } @else if (d.status === 'running') {
+          @if (d.iterations && d.maxIterations) {
+            {{ d.iterations }}/{{ d.maxIterations }} iters
+          } @else {
+            working…
+          }
+        } @else {
+          {{ d.totalToolCalls ?? d.toolCalls.length }} tools
+        }
+      </span>
+      <span class="run-delegate-chevron" [class.expanded]="d.expanded" aria-hidden="true">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+      </span>
+    </button>
+    @if (d.expanded) {
+      <div class="run-delegate-body">
+        @if (d.status === 'queued') {
+          <div class="run-delegate-empty">Waiting for a delegate slot…</div>
+        }
+        @if (!d.toolCalls.length && d.status === 'running') {
+          <div class="run-delegate-empty">Starting…</div>
+        }
+        @for (tc of visibleTools(d); track $index) {
+          <div class="run-tool-row" [class.error]="tc.isError">
+            <span class="run-tool-icon" aria-hidden="true">
+              @if (tc.result === 'done') {
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--accent-success)" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              } @else if (tc.isError) {
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--accent-danger)" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"></line></svg>
+              } @else {
+                <span class="run-tool-spinner"></span>
+              }
+            </span>
+            <span class="run-tool-name">{{ tc.name }}</span>
+            @if (toolPath(tc)) {
+              <span class="run-tool-detail">{{ toolPath(tc) }}</span>
+            } @else if (toolCommand(tc)) {
+              <span class="run-tool-detail">$ {{ toolCommand(tc) }}</span>
+            }
+          </div>
+        }
+        @if (hiddenToolCount(d) > 0 && mode === 'chat') {
+          <a class="run-tool-more" [routerLink]="projectsLink()">+ {{ hiddenToolCount(d) }} more in Projects</a>
+        }
+        @if (d.summary && d.status !== 'running') {
+          <div class="run-delegate-summary">{{ d.summary.split('\n\n[DELEGATE')[0] }}</div>
+        }
+      </div>
+    }
+  </div>
+</ng-template>

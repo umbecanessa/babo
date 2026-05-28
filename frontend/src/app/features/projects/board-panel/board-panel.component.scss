@@ -2,9 +2,9 @@
 // Board Panel — Glassmorphic Restyle
 // ═══════════════════════════════════════════════════════════════
 
-$glass-bg: rgba(14, 14, 18, 0.5);
-$glass-border: rgba(255, 255, 255, 0.05);
-$glass-blur: blur(24px);
+$glass-bg: var(--glass-bg);
+$glass-border: var(--glass-border);
+$glass-blur: blur(var(--glass-blur));
 
 .board {
   display: flex;
@@ -15,7 +15,7 @@ $glass-blur: blur(24px);
 
   &::-webkit-scrollbar { height: 5px; }
   &::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--overlay-3);
     border-radius: 3px;
   }
 }
@@ -34,7 +34,7 @@ $glass-blur: blur(24px);
   transition: border-color 0.2s;
 
   &:hover {
-    border-color: rgba(255, 255, 255, 0.08);
+    border-color: var(--overlay-3);
   }
 
   &.collapsed { max-height: 44px; }
@@ -45,9 +45,9 @@ $glass-blur: blur(24px);
   align-items: center;
   gap: 8px;
   padding: 12px 14px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid var(--overlay-2);
   flex-shrink: 0;
-  background: rgba(255, 255, 255, 0.015);
+  background: var(--overlay-1);
 }
 
 .column-dot {
@@ -55,13 +55,13 @@ $glass-blur: blur(24px);
   height: 7px;
   border-radius: 50%;
   flex-shrink: 0;
-  box-shadow: 0 0 6px rgba(255, 255, 255, 0.1);
+  box-shadow: 0 0 6px var(--overlay-4);
 }
 
 .column-label {
   font-size: 11px;
   font-weight: 600;
-  color: #9ca3af;
+  color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -69,8 +69,8 @@ $glass-blur: blur(24px);
 .column-count {
   font-size: 10px;
   font-weight: 500;
-  color: #6b7280;
-  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-muted);
+  background: var(--overlay-2);
   padding: 2px 8px;
   border-radius: 8px;
   margin-left: auto;
@@ -79,12 +79,12 @@ $glass-blur: blur(24px);
 .collapse-btn {
   background: none;
   border: none;
-  color: #4b5563;
+  color: var(--text-muted);
   font-size: 10px;
   cursor: pointer;
   padding: 2px 4px;
   transition: color 0.15s;
-  &:hover { color: #c0c0d0; }
+  &:hover { color: var(--text-secondary); }
 }
 
 .column-items {
@@ -98,14 +98,14 @@ $glass-blur: blur(24px);
 
   &::-webkit-scrollbar { width: 4px; }
   &::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--overlay-3);
     border-radius: 2px;
   }
 }
 
 .column-empty {
   font-size: 11px;
-  color: #374151;
+  color: var(--text-muted);
   font-style: italic;
   text-align: center;
   padding: 20px 0;
@@ -146,7 +146,7 @@ $glass-blur: blur(24px);
   border-radius: 6px;
   border: 1px dashed rgba(251, 191, 36, 0.25);
   background: rgba(251, 191, 36, 0.04);
-  color: #fbbf24;
+  color: var(--accent-warn);
   font-size: 11px;
   cursor: pointer;
   transition: all 0.15s;

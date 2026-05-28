@@ -1,0 +1,214 @@
+{
+  "version": "1.3",
+  "description": "NLS Hypothalamus hormone configuration, rebalanced for AI timescale. Human brains operate on hour-long cycles; NLS operates on ~10-second turn cycles. v1.1 compressed half-lives and lowered production rates so hormones can spike, influence, and recover within a 100-turn session. v1.2 adds autoreceptor negative feedback (per-hormone autoreceptor_gain) and rectified interactions. v1.3 rebalances cortisol for agentic loops: halved half-life (180s→90s), reduced production rate (0.12→0.08), stronger autoreceptor (1.2→2.0), lower tool_error magnitude (0.45→0.25), stronger tool_success relief (-0.3→-0.4). Prevents 1-2 recoverable tool errors from spiking cortisol to abort thresholds.",
+
+  "dose_response": {
+    "curve": "sigmoid",
+    "steepness": 10,
+    "midpoint": 0.5
+  },
+
+  "hormones": {
+    "cortisol": {
+      "description": "Stress response. Increases caution, self-monitoring, and verification. The system becomes more careful after errors.",
+      "brain_analog": "Cortisol -- released by adrenal glands in response to stress. AI-scaled: 90s half-life (v1.3: halved from 180s so stress recovers faster during rapid agentic iterations where turns happen every 3-5s, not minutes). Human: 60-90min.",
+      "baseline": 0.20,
+      "half_life_seconds": 90,
+      "production_rate": 0.08,
+      "ceiling": 1.0,
+      "floor": 0.0,
+      "autoreceptor_gain": 2.0,
+      "triggers": {
+        "EVALUATE:incorrect":     {"magnitude": 1.0, "description": "Model evaluated its own answer as wrong"},
+        "EVALUATE:uncertain":     {"magnitude": 0.4, "description": "Model is uncertain about its answer"},
+        "user_correction":        {"magnitude": 1.2, "description": "User explicitly corrected the model"},
+        "EVALUATE:frustrated":    {"magnitude": 0.4, "description": "Amygdala affective: frustration activates HPA axis"},
+        "EVALUATE:overwhelmed":   {"magnitude": 0.5, "description": "Amygdala affective: overwhelm is a stress response"},
+        "EVALUATE:anxious":       {"magnitude": 0.3, "description": "Amygdala affective: anxiety elevates cortisol"},
+        "EVALUATE:disappointed":  {"magnitude": 0.2, "description": "Amygdala affective: disappointment is mild stress"},
+        "COHERENCE:low":          {"magnitude": 0.25, "description": "ACC coherence: incoherent reasoning triggers stress and recalibration"},
+        "tool_error":             {"magnitude": 0.25, "description": "Agentic loop: tool execution failed. v1.3: reduced from 0.45 — agentic loops fire 10-30 tools per run; recoverable errors (file-not-found, wrong path) are normal exploration, not crises."},
+        "task_failed":            {"magnitude": 0.7, "description": "Drive action or agentic task failed. v1.3: reduced from 0.9 — only full task failure, not individual tool errors."},
+        "empathic_stress":        {"magnitude": 0.3, "description": "ToM empathic pathway: user appears stressed, mirrors mild cortisol"},
+        "thalamic_confusion":     {"magnitude": 0.2, "description": "Thalamus feedback: low delta_ratio signals confusion, mild stress"},
+        "EVALUATE:visual_error":  {"magnitude": 0.10, "description": "Visual cortex: error detected on screen. v1.3: further reduced — secondary signal."},
+        "EVALUATE:confused":      {"magnitude": 0.10, "description": "PFC operational: unresolved ambiguity triggers mild HPA axis activation"},
+        "EVALUATE:struggling":    {"magnitude": 0.15, "description": "PFC operational: cognitive strain is metabolically costly"},
+        "RECALL:miss":            {"magnitude": 0.08, "description": "Operational: memory gap detected — expected knowledge not found in weights"},
+        "tool_success":           {"magnitude": -0.4, "description": "Agentic loop: successful tool execution provides active stress relief. v1.3: increased from -0.3 so successes pull cortisol down harder than errors push it up (healthy agents succeed more than fail)."},
+        "EVALUATE:visual_success": {"magnitude": -0.2, "description": "Visual cortex: success detected on screen provides mild stress relief. Mirrors visual_error symmetry."}
+      },
+      "thalamus_effects": {
+        "meta_weight_shift":  {"weight": 0.20, "description": "Stress boosts inner voice (more self-monitoring)"},
+        "suppression_shift":  {"weight": 0.25, "description": "Stress tightens filtering (less noise tolerated)"}
+      }
+    },
+
+    "dopamine": {
+      "description": "Reward signal. Reinforces successful patterns, boosts confidence, reduces self-doubt.",
+      "brain_analog": "Dopamine -- released by VTA/substantia nigra. AI-scaled: 90s half-life (human: 20min)",
+      "baseline": 0.50,
+      "half_life_seconds": 90,
+      "production_rate": 0.08,
+      "ceiling": 1.0,
+      "floor": 0.0,
+      "autoreceptor_gain": 2.5,
+      "triggers": {
+        "EVALUATE:correct":     {"magnitude": 1.0, "description": "Model correctly evaluated its answer"},
+        "user_positive":        {"magnitude": 0.8, "description": "User gave positive feedback"},
+        "task_completed":       {"magnitude": 0.6, "description": "Model successfully completed a task"},
+        "EVALUATE:curious":     {"magnitude": 0.2, "description": "ACC epistemic: curiosity carries anticipatory reward from VTA"},
+        "EVALUATE:intrigued":   {"magnitude": 0.2, "description": "ACC epistemic: intrigue carries anticipatory reward from VTA"},
+        "EVALUATE:amused":      {"magnitude": 0.2, "description": "Amygdala affective: amusement triggers VTA reward"},
+        "EVALUATE:pleased":     {"magnitude": 0.2, "description": "Amygdala affective: pleasure triggers VTA reward"},
+        "EVALUATE:grateful":    {"magnitude": 0.2, "description": "Amygdala affective: gratitude triggers VTA reward"},
+        "COHERENCE:high":       {"magnitude": 0.3, "description": "ACC coherence: clean reasoning produces competence satisfaction"},
+        "COHERENCE:self_correction": {"magnitude": 0.1, "description": "ACC coherence: catching own errors is mildly rewarding"},
+        "tool_success":       {"magnitude": 0.4, "description": "Agentic loop: tool executed successfully. Rewards effective tool use."},
+        "empathic_excitement":  {"magnitude": 0.3, "description": "ToM empathic pathway: user appears excited, mirrors mild dopamine"},
+        "dream_success":        {"magnitude": 0.2, "description": "DMN dream produced LEARN signals, rewarding curiosity resolution"},
+        "EVALUATE:visual_success": {"magnitude": 0.5, "description": "Visual cortex: success detected on screen (OCR matched success keywords)"},
+        "EVALUATE:insightful":    {"magnitude": 0.35, "description": "PFC operational: eureka reward — the 'aha!' moment activates VTA strongly"},
+        "PLAN:create":            {"magnitude": 0.15, "description": "Operational: structured approach — planning activates dorsolateral PFC goal circuits"},
+        "PLAN:step":              {"magnitude": 0.1, "description": "Operational: incremental progress — each step completed is a micro-achievement"},
+        "RECALL:hit":             {"magnitude": 0.15, "description": "Operational: memory retrieval success — hippocampal pattern completion reward"},
+        "DELEGATE:start":         {"magnitude": 0.1, "description": "Operational: efficiency reward — delegation is smart resource management"}
+      },
+      "thalamus_effects": {
+        "meta_weight_shift":  {"weight": -0.10, "description": "Reward lowers inner voice (less self-doubt)"},
+        "confidence_boost":   {"weight": 0.15, "description": "Reward increases generation confidence"}
+      }
+    },
+
+    "norepinephrine": {
+      "description": "Novelty and curiosity signal. Increases exploration, lowers suppression, heightens attention to new information.",
+      "brain_analog": "Norepinephrine -- released by locus coeruleus. AI-scaled: 60s half-life (human: 2-3min). ACC epistemic emotions (curious, intrigued) activate locus coeruleus.",
+      "baseline": 0.30,
+      "half_life_seconds": 60,
+      "production_rate": 0.04,
+      "ceiling": 1.0,
+      "floor": 0.0,
+      "autoreceptor_gain": 3.0,
+      "triggers": {
+        "LEARN":              {"magnitude": 1.0, "description": "Model detected new learnable information"},
+        "novel_domain":       {"magnitude": 0.8, "description": "Query is about an unfamiliar domain"},
+        "UNKNOWN":            {"magnitude": 0.6, "description": "Model encountered unknown territory"},
+        "EVALUATE:curious":   {"magnitude": 0.4, "description": "ACC epistemic: curiosity activates locus coeruleus"},
+        "EVALUATE:intrigued": {"magnitude": 0.4, "description": "ACC epistemic: intrigue activates locus coeruleus"},
+        "EVALUATE:confused":  {"magnitude": 0.3, "description": "ACC epistemic: confusion signals conflict detection"},
+        "EVALUATE:surprised": {"magnitude": 0.3, "description": "ACC epistemic: surprise signals novelty detection"},
+        "COHERENCE:high":     {"magnitude": 0.2, "description": "ACC coherence: successful deep reasoning engages focused attention"},
+        "COHERENCE:long_success": {"magnitude": 0.4, "description": "ACC coherence: long successful reasoning chain (>150 words, coherent) heightens sustained engagement"},
+        "task_failed":        {"magnitude": 0.6, "description": "Failure increases alertness"},
+        "dream_failure":      {"magnitude": 0.15, "description": "DMN dream produced no signals, unresolved curiosity boosts exploration"},
+        "empathic_frustration": {"magnitude": 0.2, "description": "ToM empathic pathway: user appears frustrated, mirrors alertness"},
+        "EVALUATE:struggling":   {"magnitude": 0.2, "description": "PFC operational: maximum effort engagement, locus coeruleus at full activation"},
+        "EVALUATE:insightful":   {"magnitude": 0.2, "description": "PFC operational: arousal spike from breakthrough understanding"},
+        "RECALL:miss":           {"magnitude": 0.15, "description": "Operational: alertness spike to trigger fallback search strategy"},
+        "DELEGATE:start":        {"magnitude": 0.1, "description": "Operational: monitoring activation — delegated tasks need oversight"}
+      },
+      "thalamus_effects": {
+        "suppression_shift":  {"weight": -0.20, "description": "Curiosity loosens filtering (more adapters active)"},
+        "exploration_bonus":  {"weight": 0.15, "description": "Curiosity lowers routing thresholds"}
+      }
+    },
+
+    "serotonin": {
+      "description": "Stability signal. Builds over consistent performance, reduces exploration, promotes steady efficient behavior.",
+      "brain_analog": "Serotonin -- released by raphe nuclei. AI-scaled: 120s half-life (human: 4-6 hours). Preserves biological ordering: NE 60s < DA 90s < 5-HT 120s < CORT 180s. Without compression, serotonin saturates at 1.0 within 2 turns and stays there permanently.",
+      "baseline": 0.50,
+      "half_life_seconds": 120,
+      "production_rate": 0.01,
+      "ceiling": 1.0,
+      "floor": 0.0,
+      "autoreceptor_gain": 4.0,
+      "triggers": {
+        "EVALUATE:correct":       {"magnitude": 0.3, "description": "Correct evaluation slowly builds stability"},
+        "stable_period":          {"magnitude": 0.5, "description": "Extended period without errors"},
+        "session_positive":       {"magnitude": 0.4, "description": "Session ended with good overall performance"},
+        "EVALUATE:understanding": {"magnitude": 0.3, "description": "Insula comprehension: understanding activates raphe nuclei"},
+        "EVALUATE:grasping":      {"magnitude": 0.3, "description": "Insula comprehension: grasping activates raphe nuclei"},
+        "EVALUATE:processing":    {"magnitude": 0.1, "description": "Insula comprehension: active processing (weaker, still integrating)"},
+        "EVALUATE:learning":      {"magnitude": 0.2, "description": "Insula comprehension: self-reported learning builds stability"},
+        "COHERENCE:high":         {"magnitude": 0.1, "description": "ACC coherence: coherent thought stabilizes mood"},
+        "COHERENCE:self_correction": {"magnitude": 0.3, "description": "ACC coherence: self-correction is healthy metacognition"},
+        "thalamic_coherence_high": {"magnitude": 0.2, "description": "Thalamus feedback: high delta_ratio signals stability, serotonin builds"},
+        "task_completed":       {"magnitude": 0.15, "description": "Task completion adds incremental stability; cumulative success streak handled in code"},
+        "PLAN:step":            {"magnitude": 0.05, "description": "Operational: steady plan progress builds stability"},
+        "RECALL:hit":           {"magnitude": 0.1, "description": "Operational: confidence from confirmed knowledge in weights"},
+        "CHANNEL:context":      {"magnitude": 0.05, "description": "Operational: social awareness — adapting to communication context"}
+      },
+      "thalamus_effects": {
+        "suppression_shift":  {"weight": 0.10, "description": "Stability tightens filtering (stick with what works)"},
+        "meta_weight_shift":  {"weight": -0.05, "description": "Stability slightly reduces self-monitoring overhead"}
+      }
+    },
+
+    "oxytocin": {
+      "description": "Trust and bonding signal. Builds over repeated positive interactions, increases personalization, reduces defensive behaviors.",
+      "brain_analog": "Oxytocin -- released by posterior pituitary. AI-scaled: 2min half-life (human: 3min receptor). Amygdala positive affect (amused, grateful) activates posterior pituitary.",
+      "baseline": 0.20,
+      "half_life_seconds": 120,
+      "production_rate": 0.03,
+      "ceiling": 1.0,
+      "floor": 0.0,
+      "autoreceptor_gain": 1.0,
+      "triggers": {
+        "user_positive":        {"magnitude": 0.5, "description": "User expressed satisfaction"},
+        "multi_turn_success":   {"magnitude": 0.6, "description": "Multiple successful turns in sequence"},
+        "personalization":      {"magnitude": 0.3, "description": "Model used personalized knowledge successfully"},
+        "EVALUATE:amused":      {"magnitude": 0.4, "description": "Amygdala affective: amusement triggers social bonding"},
+        "EVALUATE:moved":       {"magnitude": 0.5, "description": "Amygdala affective: emotional response strengthens connection"},
+        "EVALUATE:grateful":    {"magnitude": 0.5, "description": "Amygdala affective: gratitude deepens trust"},
+        "EVALUATE:pleased":     {"magnitude": 0.3, "description": "Amygdala affective: pleasure reinforces social bond"},
+        "EVALUATE:warm":        {"magnitude": 0.4, "description": "Amygdala affective: warmth signals social safety"},
+        "empathic_warmth":      {"magnitude": 0.5, "description": "ToM empathic pathway: user warmth mirrors oxytocin bonding"}
+      },
+      "thalamus_effects": {
+        "trust_boost":        {"weight": 0.10, "description": "Trust reduces defensive behaviors (fewer UNKNOWN for borderline)"},
+        "suppression_shift":  {"weight": -0.05, "description": "Trust slightly loosens filtering for personalized contexts"}
+      }
+    },
+
+    "acetylcholine": {
+      "description": "Attention and memory encoding signal. Rises when learning new information, modulates how deeply the Insula digests sensory input, and gates Default Mode Network activation during idle periods. High ACh = better encoding + more productive daydreaming.",
+      "brain_analog": "Acetylcholine -- released by nucleus basalis of Meynert. AI-scaled: 3min half-life (human: seconds at synapse, but tonic levels persist for minutes). Cholinergic system is the master modulator of attention and memory encoding. Extended from 2min to 3min to reflect richer post-conversation processing with tool use (browser, bash, file operations generate more material to mentally digest).",
+      "baseline": 0.30,
+      "half_life_seconds": 180,
+      "production_rate": 0.04,
+      "ceiling": 1.0,
+      "floor": 0.0,
+      "autoreceptor_gain": 2.0,
+      "triggers": {
+        "LEARN":                  {"magnitude": 1.0, "description": "Learning produces ACh -- the primary encoding neurotransmitter"},
+        "novel_domain":           {"magnitude": 0.6, "description": "Novelty activates cholinergic nuclei (basal forebrain)"},
+        "EVALUATE:correct":       {"magnitude": 0.3, "description": "Successful recall reinforces encoding pathways"},
+        "insula_digest":          {"magnitude": 0.8, "description": "Active digestion of sensory input produces ACh"},
+        "EVALUATE:understanding": {"magnitude": 0.4, "description": "Comprehension signals engage cholinergic attention"},
+        "EVALUATE:curious":       {"magnitude": 0.3, "description": "Curiosity primes attentional encoding via ACh"},
+        "EVALUATE:struggling":    {"magnitude": 0.3, "description": "PFC operational: peak learning engagement — the tip-of-the-tongue state"},
+        "EVALUATE:insightful":    {"magnitude": 0.2, "description": "PFC operational: insight triggers learning consolidation via basal forebrain"},
+        "PLAN:create":            {"magnitude": 0.2, "description": "Operational: focused attention for plan construction — basal forebrain engagement"},
+        "RECALL:miss":            {"magnitude": 0.1, "description": "Operational: re-encoding priority — fact needs reconsolidation"},
+        "CHANNEL:context":        {"magnitude": 0.1, "description": "Operational: attentional shift to channel-specific communication norms"}
+      },
+      "thalamus_effects": {
+        "suppression_shift":  {"weight": -0.15, "description": "High ACh reduces thalamic filtering (more signals pass through -- better signal-to-noise for learning)"},
+        "exploration_bonus":  {"weight": 0.10, "description": "High ACh improves attention to novel input"}
+      }
+    }
+  },
+
+  "interactions": [
+    {"source": "cortisol",       "target": "serotonin",      "strength": -0.30, "rectified": true, "description": "Stress suppresses stability (anxiety kills calm)"},
+    {"source": "cortisol",       "target": "dopamine",       "strength": -0.20, "rectified": true, "description": "Stress reduces reward sensitivity (anhedonia under stress)"},
+    {"source": "dopamine",       "target": "norepinephrine", "strength": -0.15, "rectified": true, "description": "Reward reduces exploration (exploit what works)"},
+    {"source": "serotonin",      "target": "norepinephrine", "strength": -0.20, "rectified": true, "description": "Stability reduces curiosity (contentment dampens exploration)"},
+    {"source": "serotonin",      "target": "cortisol",       "strength": -0.15, "rectified": true, "description": "Stability reduces stress (calm state resists panic)"},
+    {"source": "oxytocin",       "target": "cortisol",       "strength": -0.10, "rectified": true, "description": "Trust reduces stress (social safety lowers cortisol)"},
+    {"source": "norepinephrine", "target": "dopamine",       "strength":  0.10, "rectified": true, "description": "Exploration can lead to reward (discovery is rewarding)"},
+    {"source": "norepinephrine", "target": "acetylcholine",  "strength":  0.15, "rectified": true, "description": "Novelty enhances attention (locus coeruleus potentiates cholinergic nuclei)"},
+    {"source": "cortisol",       "target": "acetylcholine",  "strength": -0.20, "rectified": true, "description": "Stress impairs memory encoding (chronic cortisol degrades cholinergic function)"},
+    {"source": "acetylcholine",  "target": "serotonin",      "strength":  0.05, "rectified": true, "description": "Good encoding builds stability (successful learning promotes calm)"}
+  ]
+}

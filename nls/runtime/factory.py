@@ -284,10 +284,47 @@ def build_subsystems(
     # -- U. Visual Cortex --------------------------------------------------
     visual_cortex = None
     try:
+        import os
+
         from nls.tools.visual_cortex import VisualCortex, VisualCortexConfig
-        vc_cfg = _load_agent_config(agent_dir, "visual_cortex.json")
+
+        vc_cfg = _load_agent_config(agent_dir, "visual_cortex.json") or {}
+
+        env_enabled = os.environ.get("NLS_VISUAL_CORTEX_ENABLED", "").strip().lower()
+        if env_enabled in ("0", "false", "no", "off"):
+            vc_cfg["enabled"] = False
+        elif env_enabled in ("1", "true", "yes", "on"):
+            vc_cfg["enabled"] = True
+
+        env_strategy = os.environ.get("NLS_VISUAL_CORTEX_STRATEGY", "").strip()
+        if env_strategy == "off":
+            vc_cfg["enabled"] = False
+
+        env_pref = os.environ.get("NLS_VISUAL_CORTEX_MODEL_PREFERENCE", "").strip()
+        if env_pref:
+            vc_cfg["model_preference"] = env_pref
+
+        vision_worker = (
+            os.environ.get("NLS_VISION_WORKER_URL", "").strip()
+            or os.environ.get("NLS_GPU_WORKER_URL", "").strip()
+        )
+        vision_secret = (
+            os.environ.get("NLS_VISION_WORKER_SECRET", "").strip()
+            or os.environ.get("NLS_GPU_WORKER_SECRET", "").strip()
+        )
+        if env_strategy == "dedicated_vlm_local":
+            # Local Moondream subprocess — ignore stale cloud GPU URLs from nls-config.
+            if vision_worker and (
+                "api.babo.agency" in vision_worker
+                or "openrouter.ai" in vision_worker
+            ):
+                vision_worker = ""
+                vision_secret = ""
+
         visual_cortex = VisualCortex(
             VisualCortexConfig.from_dict(vc_cfg) if vc_cfg else None,
+            gpu_worker_url=vision_worker,
+            gpu_worker_secret=vision_secret,
         )
     except Exception:
         pass
@@ -308,7 +345,7 @@ def build_subsystems(
         meta_path = agent_dir / "agent_meta.json"
         if meta_path.exists():
             _meta = json.loads(meta_path.read_text(encoding="utf-8"))
-            raw_name = _meta.get("agent_name") or ""
+            raw_name = (_meta.get("agent_name") or _meta.get("name") or "").strip()
             if raw_name and raw_name != agent_id[:8]:
                 agent_name = raw_name
     except Exception:

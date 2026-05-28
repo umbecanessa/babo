@@ -1,10 +1,15 @@
-<div class="card" [class.card-alive]="status === 'alive'" [class.card-sleeping]="status === 'sleeping'" [class.card-paused]="isPaused">
+<div class="card"
+     [class.card-alive]="status === 'alive'"
+     [class.card-working]="status === 'working' || status === 'chatting'"
+     [class.card-dreaming]="status === 'dreaming'"
+     [class.card-sleeping]="status === 'sleeping'"
+     [class.card-paused]="isPaused">
   <div class="card-glow"></div>
 
   <div class="card-header">
     <div class="status-indicator">
       <div class="status-dot" [style.background]="statusColor"
-           [class.pulse]="status === 'alive' || status === 'chatting'"></div>
+           [class.pulse]="status === 'alive' || status === 'chatting' || status === 'working'"></div>
       <span class="status-text">{{ statusLabel }}</span>
     </div>
     <div class="header-actions">
@@ -32,9 +37,51 @@
     <p class="agent-id">{{ agent.runtimeAgentId }}</p>
   </div>
 
+  @if (snapshot.showActivityPanel) {
+    <div class="activity-snapshot" [class.activity-busy]="snapshot.isWorking">
+      <div class="activity-top">
+        <span class="activity-kind" [attr.data-kind]="snapshot.activityKind">{{ snapshot.activityKindLabel }}</span>
+      </div>
+      <p class="activity-headline"
+         [title]="snapshot.activityHeadlineFull !== snapshot.activityHeadline ? snapshot.activityHeadlineFull : ''">
+        {{ snapshot.activityHeadline }}
+      </p>
+      @if (snapshot.activityDetail) {
+        <p class="activity-detail"
+           [title]="snapshot.activityDetailFull && snapshot.activityDetailFull !== snapshot.activityDetail ? snapshot.activityDetailFull : ''">
+          {{ snapshot.activityDetail }}
+        </p>
+      }
+
+      @if (snapshot.vitals.length) {
+        <div class="vitals-grid">
+          @for (vital of snapshot.vitals; track vital.key) {
+            <div class="vital"
+                 [class]="'vital-' + (vital.tone || 'neutral')"
+                 [class.vital-energy-block]="vital.key === 'energy'"
+                 [title]="vitalHint(vital)">
+              @if (vital.key === 'energy' && snapshot.energyPercent !== null) {
+                <div class="vital-energy-header">
+                  <span class="vital-label">{{ vital.label }}</span>
+                  <span class="vital-value vital-energy-pct">{{ vital.value }}</span>
+                </div>
+                <span class="energy-bar" [style.--energy]="snapshot.energyPercent + '%'"></span>
+              } @else {
+                <span class="vital-label">{{ vital.label }}</span>
+                <span class="vital-value">{{ vital.value }}</span>
+              }
+            </div>
+          }
+        </div>
+      }
+    </div>
+  }
+
   <div class="card-meta">
-    <span class="meta-item">{{ agent.genesisVersion }}</span>
-    <span class="meta-item">{{ factsCount }} facts</span>
+    <span class="meta-item">{{ snapshot.statsLine }}</span>
+    @if (agent.genesisVersion) {
+      <span class="meta-item meta-muted">{{ agent.genesisVersion }}</span>
+    }
   </div>
 
   <a [routerLink]="['/chat', agent.id]" class="chat-btn">

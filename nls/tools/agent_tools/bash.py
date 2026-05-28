@@ -14,6 +14,8 @@ Output handling:
     - Tail-truncated to last 500 lines / 30KB (whichever hits first)
     - When truncated, full output saved to a temp file
     - Non-zero exit codes reported as errors
+    - curl commands get ``-f -sS`` by default (HTTP errors fail; no progress
+      meter). Pass ``-v``, ``-#``, or ``--progress-bar`` for verbose output.
 
 Ported from pi-mono's bash tool with cross-platform adaptations for NLS
 (supports both Linux/macOS and Windows via subprocess).
@@ -112,8 +114,23 @@ _GH_REPO_CREATE_SOURCE_DOT_RE = re.compile(
     r"\bgh\s+repo\s+create\b.+--source\s*=\s*\.",
     re.IGNORECASE,
 )
-# Detect `pip install` / `pip3 install` — redirected to server_install.
+# Detect `pip install` / `pip3 install` — redirected to project_install.
 _PIP_INSTALL_RE = re.compile(r"\bpip3?\s+install\b", re.IGNORECASE)
+
+# curl: inject -f (fail on HTTP 4xx/5xx) and -sS (silent + show errors) unless
+# the agent explicitly requests verbose/progress output.
+_CURL_BIN_RE = re.compile(r"(?<![\w.-])(curl(?:\.exe)?)(?=\s|$)", re.IGNORECASE)
+_GH_BIN_RE = re.compile(r"(?<![\w.-])(gh(?:\.exe)?)(?=\s|$)", re.IGNORECASE)
+_CURL_VERBOSE_RE = re.compile(
+    r"(?:^|\s)(?:-[#v]|--(?:verbose|progress-bar|trace(?:-ascii|-time)?))(?:\s|$|=)",
+    re.IGNORECASE,
+)
+# Windows curl progress meter lines (fallback strip when -s was not applied).
+_CURL_PROGRESS_HEADER_RE = re.compile(r"^\s*% Total\b", re.MULTILINE)
+_CURL_PROGRESS_STATS_RE = re.compile(
+    r"^\s*\d+\s+\d+\s+\d+\s+\d+\s+\d+\s+\d+\s+\d+.*$",
+    re.MULTILINE,
+)
 
 _WORKSPACE_NUKE_RE: list[re.Pattern[str]] = [
     re.compile(p, re.IGNORECASE)
@@ -194,6 +211,37 @@ def _ensure_gh_credential_helper(gitconfig_path: Path) -> None:
         logger.debug("Failed to configure gh credential helper: %s", exc)
 
 
+def _guard_bash_cwd_change(old_cwd: str, new_cwd: str) -> str:
+    """Prevent ``cd project-dir`` from nesting when already inside it."""
+    try:
+        old_p = Path(old_cwd).resolve()
+        new_p = Path(new_cwd).resolve()
+    except Exception:
+        return new_cwd
+
+    # cd into a child directory with the same name as the current folder
+    if new_p.parent == old_p and new_p.name == old_p.name:
+        return str(old_p)
+
+    # cd that prepends the project folder again (coach-sight/coach-sight)
+    if len(new_p.parts) >= len(old_p.parts) + 1:
+        tail = new_p.parts[len(old_p.parts):]
+        if tail and tail[0] == old_p.name:
+            return str(old_p)
+
+    # cd into a child that repeats an ancestor folder (e.g. backend/ →
+    # backend/icf-coaching-session-evaluation-platform when already under that project)
+    try:
+        if new_p.is_relative_to(old_p):
+            added = new_p.relative_to(old_p)
+            if added.parts and any(part in old_p.parts for part in added.parts):
+                return str(old_p)
+    except ValueError:
+        pass
+
+    return new_cwd
+
+
 class BashTool:
     """Execute shell commands in the agent's working directory.
 
@@ -263,29 +311,9 @@ class BashTool:
         self._detached_procs.clear()
 
     def _resolve_project_root(self) -> str | None:
-        """Walk up from ``_cwd`` to find the project root directory.
+        from .project_runtime import resolve_project_root
 
-        Looks for common project markers (``.git``, ``package.json``,
-        ``requirements.txt``, etc.).  Stops at ``_workspace_root`` to
-        avoid escaping the agent sandbox.  Falls back to ``_cwd`` if
-        it differs from ``_workspace_root`` (delegates always have
-        ``_cwd`` set to the project directory by the executor).
-        """
-        cwd = Path(self._cwd).resolve()
-        workspace = Path(self._workspace_root).resolve()
-
-        current = cwd
-        while True:
-            for marker in self._PROJECT_MARKERS:
-                if (current / marker).exists():
-                    return str(current)
-            if current == workspace or current.parent == current:
-                break
-            current = current.parent
-
-        if cwd != workspace:
-            return str(cwd)
-        return None
+        return resolve_project_root(self._cwd, self._workspace_root)
 
     def _ensure_project_venv(self) -> str | None:
         """Lazily create a ``.venv`` in the project directory.
@@ -302,46 +330,16 @@ class BashTool:
             self._project_venv_bin = ""
             return None
 
-        venv_dir = Path(project_root) / ".venv"
-        bin_dir = venv_dir / ("Scripts" if _IS_WINDOWS else "bin")
-        python_exe = bin_dir / ("python.exe" if _IS_WINDOWS else "python")
+        from .project_runtime import ensure_project_venv
 
-        if python_exe.exists():
-            self._project_venv_bin = str(bin_dir)
-            return self._project_venv_bin
+        bin_dir, _python_exe = ensure_project_venv(project_root)
+        if bin_dir:
+            self._project_venv_bin = bin_dir
+            logger.info("[BASH] Project venv ready: %s", bin_dir)
+            return bin_dir
 
-        try:
-            import venv as _venv_mod
-            logger.info(
-                "[BASH] Creating project venv: %s", venv_dir,
-            )
-            _venv_mod.create(
-                str(venv_dir), with_pip=True, system_site_packages=False,
-            )
-            self._ensure_gitignore(project_root)
-            self._project_venv_bin = str(bin_dir)
-            logger.info(
-                "[BASH] Project venv created: %s", self._project_venv_bin,
-            )
-            return self._project_venv_bin
-        except Exception as exc:
-            logger.warning("[BASH] Failed to create project venv: %s", exc)
-            self._project_venv_bin = ""
-            return None
-
-    @staticmethod
-    def _ensure_gitignore(project_root: str) -> None:
-        """Append ``.venv/`` to ``.gitignore`` if not already present."""
-        gi = Path(project_root) / ".gitignore"
-        try:
-            if gi.exists():
-                content = gi.read_text(encoding="utf-8", errors="replace")
-                if ".venv" in content:
-                    return
-            with gi.open("a", encoding="utf-8") as f:
-                f.write("\n.venv/\n")
-        except Exception:
-            pass
+        self._project_venv_bin = ""
+        return None
 
     def _build_isolated_env(self, cwd: str) -> dict[str, str]:
         """Build an environment that isolates the agent from the host user.
@@ -465,8 +463,10 @@ class BashTool:
             f"{self._max_lines} lines or {format_size(self._max_bytes)}. "
             f"If truncated, full output is saved to a temp file. "
             f"Use for git, API calls, package management, builds, and "
-            f"running scripts. For reading file contents, prefer the read "
-            f"tool instead.{shell_note}"
+            f"running scripts. curl calls automatically get -f -sS "
+            f"(HTTP 4xx/5xx fail; no progress bar) unless you pass -v, "
+            f"-#, or --progress-bar for verbose output. For reading file "
+            f"contents, prefer the read tool instead.{shell_note}"
         )
 
     @property
@@ -497,6 +497,124 @@ class BashTool:
             cmd.replace("\u201c", '"').replace("\u201d", '"')
                .replace("\u2018", "'").replace("\u2019", "'")
         )
+
+    @staticmethod
+    def _curl_invocation_end(cmd: str, curl_start: int) -> int:
+        """Return the index after the curl invocation starting at *curl_start*."""
+        i = curl_start
+        while i < len(cmd) and not cmd[i].isspace():
+            i += 1
+        in_quote = False
+        quote: str | None = None
+        while i < len(cmd):
+            c = cmd[i]
+            if in_quote:
+                if c == quote:
+                    in_quote = False
+                i += 1
+                continue
+            if c in ('"', "'"):
+                in_quote = True
+                quote = c
+                i += 1
+                continue
+            if c in (";", "|"):
+                return i
+            if c == "&" and i + 1 < len(cmd) and cmd[i + 1] == "&":
+                return i
+            i += 1
+        return i
+
+    @staticmethod
+    def _curl_has_short_flag(rest: str, letter: str) -> bool:
+        """True if *letter* appears in a combined curl short-flag cluster (e.g. ``-sS``)."""
+        for m in re.finditer(r"(?:^|\s)-([A-Za-z]+)(?=\s|$|=|\d|/)", rest):
+            if letter in m.group(1):
+                return True
+        return False
+
+    @staticmethod
+    def _curl_has_long_flag(rest: str, name: str) -> bool:
+        return bool(
+            re.search(rf"(?:^|\s)--{re.escape(name)}(?:\s|$|=)", rest, re.IGNORECASE)
+        )
+
+    @staticmethod
+    def _inject_curl_defaults(invocation: str) -> str:
+        """Add ``-f`` / ``-sS`` to a single curl invocation when missing."""
+        m = re.match(r"(\S+)(\s*)(.*)", invocation, re.DOTALL)
+        if not m:
+            return invocation
+        binary, ws, rest = m.group(1), m.group(2), m.group(3)
+        flags: list[str] = []
+        has_fail = (
+            BashTool._curl_has_short_flag(rest, "f")
+            or BashTool._curl_has_long_flag(rest, "fail")
+            or BashTool._curl_has_long_flag(rest, "fail-with-body")
+        )
+        if not has_fail:
+            flags.append("-f")
+        verbose = bool(_CURL_VERBOSE_RE.search(rest))
+        has_silent = (
+            BashTool._curl_has_short_flag(rest, "s")
+            or BashTool._curl_has_long_flag(rest, "silent")
+        )
+        has_show_error = (
+            BashTool._curl_has_short_flag(rest, "S")
+            or BashTool._curl_has_long_flag(rest, "show-error")
+        )
+        if not verbose and not has_silent:
+            flags.append("-s")
+        if not has_show_error and not verbose:
+            flags.append("-S")
+        if not flags:
+            return invocation
+        return f"{binary}{ws}{' '.join(flags)}{ws}{rest}"
+
+    @staticmethod
+    def _normalize_curl(cmd: str) -> str:
+        """Inject curl defaults so HTTP errors fail and progress meters are off."""
+        matches = list(_CURL_BIN_RE.finditer(cmd))
+        if not matches:
+            return cmd
+        result = cmd
+        for m in reversed(matches):
+            start = m.start()
+            end = BashTool._curl_invocation_end(result, start)
+            invocation = result[start:end]
+            result = (
+                result[:start]
+                + BashTool._inject_curl_defaults(invocation)
+                + result[end:]
+            )
+        return result
+
+    @staticmethod
+    def _strip_curl_progress(text: str) -> str:
+        """Remove curl progress-meter lines (mainly Windows) from output."""
+        if "% Total" not in text or "Xferd" not in text:
+            return text
+        kept: list[str] = []
+        for line in text.splitlines():
+            stripped = line.strip("\r")
+            if _CURL_PROGRESS_HEADER_RE.match(stripped):
+                continue
+            if (
+                "Dload" in stripped
+                and "Upload" in stripped
+                and "Spent" in stripped
+                and "Speed" in stripped
+            ):
+                continue
+            if _CURL_PROGRESS_STATS_RE.match(stripped):
+                continue
+            kept.append(line)
+        if not kept:
+            return text
+        out = "\n".join(kept)
+        if text.endswith("\n"):
+            out += "\n"
+        return out
 
     @staticmethod
     def _fix_powershell(cmd: str) -> str:
@@ -858,6 +976,7 @@ class BashTool:
     ) -> ToolResult:
         command = self._fix_quotes(params.get("command", "").strip())
         command = self._fix_powershell(command)
+        command = self._normalize_curl(command)
         self._refresh_env()
         timeout = params.get("timeout", self._default_timeout)
         if timeout is not None:
@@ -912,20 +1031,28 @@ class BashTool:
                 is_error=True,
             )
 
-        # Redirect pip install to server_install.
-        # pip / pip3 are not available in the Babo bundled Python environment.
-        # The correct tool is server_install, which installs into the runtime.
+        # Redirect pip install to project_install (project .venv) or server_install.
         if _PIP_INSTALL_RE.search(command):
-            # Extract the package spec(s) for a helpful redirect message.
             _pip_pkg = command.strip().split(None, 2)[2] if len(command.strip().split(None, 2)) > 2 else ""
             _pip_pkg = re.sub(r"\s*(--quiet|--user|-q)\s*", " ", _pip_pkg).strip()
+            _proj = self._resolve_project_root()
+            if _proj:
+                return ToolResult(
+                    content=(
+                        "pip is not available in bash. For PROJECT dependencies "
+                        "use project_install (installs into project/.venv — "
+                        "the same python bash uses here):\n\n"
+                        f"  project_install(package={repr(_pip_pkg)})\n\n"
+                        "Use server_install ONLY when YOU need a package in "
+                        "Babo's agent runtime (not the app being built)."
+                    ),
+                    is_error=True,
+                )
             return ToolResult(
                 content=(
-                    "pip is not available in this environment. "
-                    "Use the server_install tool to install Python packages:\n\n"
-                    f"  server_install(packages=[{repr(_pip_pkg)}])\n\n"
-                    "server_install installs directly into the runtime Python "
-                    "and persists across restarts."
+                    "pip is not available in bash. Use server_install for "
+                    "agent-runtime Python packages:\n\n"
+                    f"  server_install(package={repr(_pip_pkg)})"
                 ),
                 is_error=True,
             )
@@ -1242,15 +1369,24 @@ class BashTool:
             new_cwd = _cwd_m.group(1).strip()
             if new_cwd and Path(new_cwd).is_dir():
                 old_cwd = self._cwd
-                self._cwd = new_cwd
+                guarded_cwd = _guard_bash_cwd_change(old_cwd, new_cwd)
+                self._cwd = guarded_cwd
                 if self._shared_cwd is not None:
-                    self._shared_cwd.path = new_cwd
-                if new_cwd != old_cwd:
+                    self._shared_cwd.path = guarded_cwd
+                if guarded_cwd != old_cwd:
                     self._project_venv_bin = None
                     logger.info(
-                        "Bash CWD changed: %s -> %s", old_cwd, new_cwd,
+                        "Bash CWD changed: %s -> %s", old_cwd, guarded_cwd,
+                    )
+                elif new_cwd != old_cwd:
+                    logger.warning(
+                        "Bash CWD change blocked (double-nest): %s -> %s",
+                        old_cwd, new_cwd,
                     )
             text = _sentinel_re.sub("", text).rstrip("\n")
+
+        if _CURL_BIN_RE.search(command):
+            text = self._strip_curl_progress(text)
 
         truncated_text, was_truncated, trunc_details = truncate_tail(
             text, self._max_lines, self._max_bytes,
@@ -1322,9 +1458,38 @@ class BashTool:
         is_error = exit_code is not None and exit_code != 0
         if is_error:
             result_text += f"\n\nCommand exited with code {exit_code}."
+            if exit_code == 22 and _CURL_BIN_RE.search(command):
+                result_text += (
+                    "\n(curl: HTTP 4xx/5xx response — fix auth, URL, or "
+                    "payload before retrying the same request.)"
+                )
             _path_hint = self._suggest_path_fix(truncated_text, command)
             if _path_hint:
                 result_text += f"\n{_path_hint}"
+
+        # gh often exits 0 while printing "run gh auth login" — treat as failure.
+        if not is_error and truncated_text and _GH_BIN_RE.search(command):
+            _gh_lower = truncated_text.lower()
+            if any(p in _gh_lower for p in (
+                "gh auth login",
+                "to get started with github cli",
+                "not logged in",
+                "authentication failed",
+            )):
+                is_error = True
+                result_text += (
+                    "\n\n[GITHUB AUTH REQUIRED]\n"
+                    "gh is not authenticated for this agent workspace.\n"
+                    "Fix (in order):\n"
+                    "1. Token from task/user: "
+                    "bash('echo TOKEN | gh auth login --with-token')\n"
+                    "2. WM credential: wm(action='borrow', "
+                    "domain='Project.Credential.GitHub')\n"
+                    "3. Search skills: clawhub(action='search', "
+                    "query='github') or discover_tools(query='github')\n"
+                    "Do NOT repeat gh repo create until auth succeeds "
+                    "(verify with bash('gh auth status'))."
+                )
 
         # Annotate successful commands that produce deprecation/warning
         # output — prevents the agent from misinterpreting noisy-but-ok

@@ -41,6 +41,7 @@ const electron_1 = require("electron");
 const fs = __importStar(require("fs"));
 const http = __importStar(require("http"));
 const path = __importStar(require("path"));
+const config_manager_1 = require("./config-manager");
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
@@ -281,7 +282,7 @@ class RuntimeManager {
             await this.sleep(2_000);
         }
         throw new Error(`Agent runtime failed to start within ${STARTUP_TIMEOUT / 1000}s. ` +
-            'Check that Python dependencies are installed and GX10 is reachable.');
+            'Check that Python dependencies are installed and the runtime is reachable.');
     }
     checkHealth(port) {
         return new Promise((resolve) => {
@@ -423,8 +424,8 @@ class RuntimeManager {
     }
     async sendLeaseHeartbeats() {
         const cfg = this.config.get();
-        const nestjsUrl = cfg.nestjsUrl;
-        if (!nestjsUrl)
+        const apiBase = config_manager_1.ConfigManager.nestjsApiBase(cfg.nestjsUrl);
+        if (!apiBase)
             return;
         const deviceId = this.getDeviceId();
         const port = cfg.runtimePort;
@@ -438,7 +439,7 @@ class RuntimeManager {
                 if (!agentId)
                     continue;
                 try {
-                    await fetch(`${nestjsUrl}/agents/${agentId}/lease/heartbeat`, {
+                    await fetch(`${apiBase}/agents/${agentId}/lease/heartbeat`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ deviceId }),
@@ -446,7 +447,7 @@ class RuntimeManager {
                     });
                     if (!this.activeLeaseAgents.includes(agentId)) {
                         // First heartbeat -- try to acquire lease
-                        const acqRes = await fetch(`${nestjsUrl}/agents/${agentId}/lease/acquire`, {
+                        const acqRes = await fetch(`${apiBase}/agents/${agentId}/lease/acquire`, {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             body: JSON.stringify({
@@ -471,12 +472,12 @@ class RuntimeManager {
     }
     async releaseAllLeases() {
         const cfg = this.config.get();
-        const nestjsUrl = cfg.nestjsUrl;
-        if (!nestjsUrl || this.activeLeaseAgents.length === 0)
+        const apiBase = config_manager_1.ConfigManager.nestjsApiBase(cfg.nestjsUrl);
+        if (!apiBase || this.activeLeaseAgents.length === 0)
             return;
         for (const agentId of this.activeLeaseAgents) {
             try {
-                await fetch(`${nestjsUrl}/agents/${agentId}/lease/release`, {
+                await fetch(`${apiBase}/agents/${agentId}/lease/release`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({}),

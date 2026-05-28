@@ -2,18 +2,27 @@
 // Activity Panel — Glassmorphic Redesign
 // ═══════════════════════════════════════════════════════════════
 
-$glass-bg: rgba(14, 14, 18, 0.45);
-$glass-border: rgba(255, 255, 255, 0.05);
-$blue: #60a5fa;
-$purple: #a78bfa;
-$green: #34d399;
-$amber: #fbbf24;
+$glass-bg: var(--glass-bg);
+$glass-border: var(--glass-border);
+$blue: var(--accent-primary);
+$purple: var(--accent-primary);
+$green: var(--accent-success);
+$amber: var(--accent-warn);
+
+:host {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
 
 .activity-panel {
   padding: 0;
   height: 100%;
+  min-height: 100%;
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
 }
 
 // ── Header ────────────────────────────────────────
@@ -43,7 +52,7 @@ $amber: #fbbf24;
 .panel-title {
   font-size: 11px;
   font-weight: 600;
-  color: #7a7a8e;
+  color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.8px;
 }
@@ -63,7 +72,7 @@ $amber: #fbbf24;
   align-items: center;
   justify-content: center;
   gap: 10px;
-  color: #374151;
+  color: var(--text-muted);
   font-size: 12px;
   padding: 40px 0;
   flex: 1;
@@ -80,7 +89,7 @@ $amber: #fbbf24;
 
   &::-webkit-scrollbar { width: 4px; }
   &::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--overlay-3);
     border-radius: 2px;
   }
 }
@@ -98,11 +107,11 @@ $amber: #fbbf24;
   &.has-detail { cursor: pointer; }
 
   &.has-detail:hover {
-    background: rgba(255, 255, 255, 0.02);
+    background: var(--overlay-1);
   }
 
   &.expanded {
-    background: rgba(255, 255, 255, 0.015);
+    background: var(--overlay-1);
   }
 }
 
@@ -122,13 +131,13 @@ $amber: #fbbf24;
   height: 7px;
   border-radius: 50%;
   flex-shrink: 0;
-  box-shadow: 0 0 6px rgba(255, 255, 255, 0.1);
+  box-shadow: 0 0 6px var(--overlay-4);
 }
 
 .entry-line {
   flex: 1;
   width: 1px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--overlay-2);
   margin-top: 4px;
 }
 
@@ -155,7 +164,7 @@ $amber: #fbbf24;
 .entry-text {
   flex: 1;
   font-size: 12px;
-  color: #9ca3af;
+  color: var(--text-muted);
   line-height: 1.45;
   min-width: 0;
   overflow: hidden;
@@ -171,13 +180,13 @@ $amber: #fbbf24;
 .entry-time {
   flex-shrink: 0;
   font-size: 10px;
-  color: #4b5563;
+  color: var(--text-muted);
   font-family: 'SF Mono', 'Fira Code', monospace;
 }
 
 .entry-expand-hint {
   font-size: 8px;
-  color: #4b5563;
+  color: var(--text-muted);
   flex-shrink: 0;
   transition: transform 0.15s;
 
@@ -186,10 +195,10 @@ $amber: #fbbf24;
 
 // ── Category text colors ──────────────────────────
 
-.cat-team .entry-text { color: #93bbfc; }
-.cat-member .entry-text { color: #c4b5fd; }
-.cat-todo .entry-text { color: #6ee7b7; }
-.cat-plan .entry-text { color: #fcd34d; }
+.cat-team .entry-text { color: var(--accent-primary); }
+.cat-member .entry-text { color: var(--accent-primary); }
+.cat-todo .entry-text { color: var(--accent-success); }
+.cat-plan .entry-text { color: var(--accent-warn); }
 
 // ── Detail Card ───────────────────────────────────
 
@@ -212,7 +221,7 @@ $amber: #fbbf24;
   display: inline-block;
   font-size: 9px;
   font-weight: 600;
-  color: #9ca3af;
+  color: var(--text-muted);
   padding: 2px 8px;
   border-radius: 8px;
   border: 1px solid;
@@ -221,7 +230,7 @@ $amber: #fbbf24;
 
 .detail-text {
   font-size: 12px;
-  color: #9ca3af;
+  color: var(--text-muted);
   line-height: 1.5;
   margin: 0 0 6px;
   white-space: pre-wrap;
@@ -237,14 +246,14 @@ $amber: #fbbf24;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: #6b7280;
+  color: var(--text-muted);
   display: block;
   margin-bottom: 3px;
 }
 
 .detail-result-text {
   font-size: 12px;
-  color: #b0b0c0;
+  color: var(--text-secondary);
   line-height: 1.5;
   margin: 0;
   white-space: pre-wrap;
@@ -259,13 +268,56 @@ $amber: #fbbf24;
 
 .detail-chip {
   font-size: 10px;
-  color: #6b7280;
-  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-muted);
+  background: var(--overlay-2);
   padding: 2px 8px;
   border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--overlay-2);
 
   &--mono {
     font-family: 'SF Mono', 'Fira Code', monospace;
+  }
+}
+
+// ── Compact (Overview side column) ─────────────
+
+.activity-panel.compact-panel {
+  height: 100%;
+  max-height: 100%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(var(--glass-blur));
+  overflow: hidden;
+
+  .panel-header {
+    margin-bottom: 8px;
+  }
+
+  .panel-title {
+    font-size: 11px;
+  }
+
+  .entry-list {
+    overflow-y: auto;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .entry-row {
+    padding: 6px 0;
+  }
+
+  .entry-text {
+    font-size: 11px;
+    -webkit-line-clamp: 2;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .entry-detail-card {
+    font-size: 11px;
   }
 }

@@ -20,48 +20,48 @@ export interface SignalTag {
 /** Signal-type -> color mapping for the tag pills/dots. */
 export const TAG_COLORS: Record<string, string> = {
   // --- Base signals (from signals.json) ---
-  LEARN:      '#34d399',  // emerald — hippocampal encoding
-  EVALUATE:   '#a78bfa',  // violet — metacognitive evaluation
-  RECALL:     '#38bdf8',  // sky — memory retrieval
-  LOOKUP:     '#38bdf8',  // sky — semantic memory retrieval reflex
-  REFLECT:    '#67e8f9',  // cyan — Default Mode Network
-  CONNECT:    '#2dd4bf',  // teal — hippocampal relational binding
-  DOUBT:      '#fb923c',  // orange — anterior insula conflict
-  UNKNOWN:    '#9a9aaa',  // grey — ACC gap detection
+  LEARN:      'var(--accent-success)',  // emerald — hippocampal encoding
+  EVALUATE:   'var(--accent-primary)',  // violet — metacognitive evaluation
+  RECALL:     'var(--accent-primary)',  // sky — memory retrieval
+  LOOKUP:     'var(--accent-primary)',  // sky — semantic memory retrieval reflex
+  REFLECT:    'var(--accent-secondary)',  // teal — Default Mode Network
+  CONNECT:    'var(--accent-secondary)',  // teal — hippocampal relational binding
+  DOUBT:      'var(--accent-warn)',  // orange — anterior insula conflict
+  UNKNOWN:    'var(--text-muted)',  // grey — ACC gap detection
 
   // --- Emotional / social signals ---
-  ACC:        '#facc15',  // yellow — anterior cingulate cortex
-  BONDING:    '#f472b6',  // pink — social bonding
-  CLOSER:     '#fb923c',  // orange — relational closeness
-  FEELING:    '#a78bfa',  // violet — affective state
+  ACC:        'var(--accent-warn)',  // yellow — anterior cingulate cortex
+  BONDING:    'var(--accent-primary)',  // pink — social bonding
+  CLOSER:     'var(--accent-warn)',  // orange — relational closeness
+  FEELING:    'var(--accent-primary)',  // violet — affective state
 
   // --- ANS emotional sensing probes ---
-  CURIOSITY:      '#fbbf24',  // amber — epistemic drive
-  EVAL_POSITIVE:  '#34d399',  // emerald — success/correctness
-  EVAL_NEGATIVE:  '#f87171',  // red — frustration/struggle
-  EVAL_UNCERTAIN: '#fdba74',  // orange-light — confusion/doubt
-  FOCUS:          '#818cf8',  // indigo — deep processing
-  PLAN:           '#60a5fa',  // blue — planning/strategy
+  CURIOSITY:      'var(--accent-warn)',  // amber — epistemic drive
+  EVAL_POSITIVE:  'var(--accent-success)',  // emerald — success/correctness
+  EVAL_NEGATIVE:  'var(--accent-danger)',  // red — frustration/struggle
+  EVAL_UNCERTAIN: 'var(--accent-warn)',  // orange-light — confusion/doubt
+  FOCUS:          'var(--accent-primary)',  // indigo — deep processing
+  PLAN:           'var(--accent-primary)',  // blue — planning/strategy
 
   // --- Brain-component signals ---
-  INSULA:     '#14b8a6',  // teal — insular cortex comprehension
-  AMYGDALA:   '#f472b6',  // pink — limbic affect
-  PFC:        '#818cf8',  // indigo — prefrontal cortex judgment
-  THALAMUS:   '#94a3b8',  // slate — routing gateway
-  HYPOTHALAMUS:'#fb7185', // rose — hormonal regulation
-  HIPPOCAMPUS:'#4ade80',  // green — episodic memory
-  DMN:        '#c084fc',  // purple — default mode network
+  INSULA:     'var(--accent-secondary)',  // teal — insular cortex comprehension
+  AMYGDALA:   'var(--accent-primary)',  // pink — limbic affect
+  PFC:        'var(--accent-primary)',  // indigo — prefrontal cortex judgment
+  THALAMUS:   'var(--text-muted)',  // slate — routing gateway
+  HYPOTHALAMUS:'var(--accent-primary)', // rose — hormonal regulation
+  HIPPOCAMPUS:'var(--accent-success)',  // green — episodic memory
+  DMN:        'var(--accent-primary)',  // purple — default mode network
 
   // --- Higher-order signals ---
-  CONFLICT:   '#f87171',  // red — conflict detection
-  FORGET:     '#fbbf24',  // amber — forgetting
-  DREAM:      '#c084fc',  // purple — dream context
-  VALUES:     '#e879f9',  // fuchsia — values axioms
-  TOOL:       '#60a5fa',  // blue — tool invocation
-  COHERENCE:  '#a3e635',  // lime — reasoning coherence
+  CONFLICT:   'var(--accent-danger)',  // red — conflict detection
+  FORGET:     'var(--accent-warn)',  // amber — forgetting
+  DREAM:      'var(--accent-primary)',  // purple — dream context
+  VALUES:     'var(--accent-primary)',  // fuchsia — values axioms
+  TOOL:       'var(--accent-primary)',  // blue — tool invocation
+  COHERENCE:  'var(--accent-success)',  // lime — reasoning coherence
 };
 
-export const DEFAULT_TAG_COLOR = '#9a9aaa';
+export const DEFAULT_TAG_COLOR = 'var(--text-muted)';
 
 /** Human-readable names for signal types. */
 export const TYPE_LABELS: Record<string, string> = {
@@ -155,6 +155,45 @@ export function extractDomain(sig: { type: string; domain?: string }): string {
   if (sig.domain) return sig.domain;
   const parts = sig.type.split(':');
   return parts.length > 1 ? parts.slice(1).join(':') : '';
+}
+
+/** Plain-text labels for activity sidebar pills (not NLS signal syntax). */
+export function labelTags(labels: string[]): SignalTag[] {
+  return labels
+    .map(s => s.trim())
+    .filter(Boolean)
+    .map(label => ({
+      raw: `[PLAN:${label}]`,
+      type: 'PLAN',
+      rawLabel: label,
+      label: humanizeLabel(label),
+    }));
+}
+
+/** Coerce legacy string tags or partial objects into display-ready SignalTags. */
+export function normalizeActivityTags(
+  tags: SignalTag[] | string[] | undefined | null,
+): SignalTag[] {
+  if (!tags?.length) return [];
+  const out: SignalTag[] = [];
+  for (const t of tags) {
+    if (typeof t === 'string') {
+      const trimmed = t.trim();
+      if (trimmed) out.push(...labelTags([trimmed]));
+      continue;
+    }
+    if (!t || typeof t !== 'object') continue;
+    const st = t as SignalTag;
+    const label = (st.label || humanizeLabel(st.rawLabel || st.raw || '')).trim();
+    if (!label) continue;
+    out.push({
+      raw: st.raw || `[PLAN:${label}]`,
+      type: st.type || 'PLAN',
+      rawLabel: st.rawLabel || label,
+      label,
+    });
+  }
+  return out;
 }
 
 /** Parse signal tags from text, returning cleaned text and deduplicated tags. */
@@ -286,4 +325,71 @@ export function parseStreamingThinking(text: string): {
   // Has completed think block(s) — parse normally
   const parsed = parseThinking(text);
   return { thinking: parsed.thinking, response: parsed.response, isThinking: false };
+}
+
+/** Normalize fact text for near-duplicate detection (matches backend learn_dedup). */
+export function learningDedupKey(text: string): string {
+  return text
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/^["']|["']$/g, '');
+}
+
+const MIN_SUBSTRING_DEDUP_LEN = 18;
+const MIN_TOKEN_OVERLAP = 0.72;
+const MIN_TOKEN_LEN = 4;
+
+function significantTokens(key: string): Set<string> {
+  const tokens = new Set<string>();
+  for (const w of key.match(/[a-z0-9']+/g) || []) {
+    if (w.length >= MIN_TOKEN_LEN) tokens.add(w);
+  }
+  return tokens;
+}
+
+function isNearDuplicateKey(key: string, seen: Set<string>): boolean {
+  if (!key || seen.has(key)) return true;
+  const tokens = significantTokens(key);
+  for (const existing of seen) {
+    if (
+      key.length >= MIN_SUBSTRING_DEDUP_LEN &&
+      existing.length >= MIN_SUBSTRING_DEDUP_LEN &&
+      (key.includes(existing) || existing.includes(key))
+    ) {
+      return true;
+    }
+    if (tokens.size >= 3) {
+      const other = significantTokens(existing);
+      if (other.size >= 3) {
+        let overlap = 0;
+        for (const t of tokens) {
+          if (other.has(t)) overlap++;
+        }
+        const ratio = overlap / Math.max(tokens.size, other.size);
+        if (ratio >= MIN_TOKEN_OVERLAP) return true;
+      }
+    }
+  }
+  return false;
+}
+
+/** Drop LEARN tags already seen this session (and near-duplicates). */
+export function filterNewLearnTags(tags: string[], seen: Set<string>): string[] {
+  const out: string[] = [];
+  for (const tag of tags) {
+    const learnMatch = tag.match(/^\[LEARN:(.*)\]$/i);
+    if (learnMatch) {
+      const key = learningDedupKey(learnMatch[1]);
+      if (isNearDuplicateKey(key, seen)) continue;
+      seen.add(key);
+      out.push(tag);
+      continue;
+    }
+    const key = tag.trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(tag);
+  }
+  return out;
 }

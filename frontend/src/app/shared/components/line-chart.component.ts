@@ -50,9 +50,26 @@ export class LineChartComponent implements AfterViewInit, OnDestroy, OnChanges {
     this.chart?.destroy();
   }
 
+  private themeChartColors() {
+    const style = getComputedStyle(document.documentElement);
+    const pick = (name: string, fallback: string) => style.getPropertyValue(name).trim() || fallback;
+    return {
+      legend: pick('--text-secondary', '#4a4f6a'),
+      tick: pick('--text-muted', '#8b90a8'),
+      axisTitle: pick('--text-muted', '#8b90a8'),
+      grid: pick('--overlay-2', 'rgba(0, 0, 0, 0.04)'),
+      tooltipBg: pick('--bg-secondary', '#e4e7f2'),
+      tooltipTitle: pick('--text-primary', '#1a1d2e'),
+      tooltipBody: pick('--text-secondary', '#4a4f6a'),
+      tooltipBorder: pick('--glass-border', 'rgba(0, 0, 0, 0.08)'),
+    };
+  }
+
   private buildChart(): void {
     if (!this.canvasRef?.nativeElement) return;
     this.chart?.destroy();
+
+    const tc = this.themeChartColors();
 
     const datasets = this.series.map(s => ({
       label: s.label,
@@ -78,13 +95,13 @@ export class LineChartComponent implements AfterViewInit, OnDestroy, OnChanges {
           legend: {
             display: this.showLegend && this.series.length > 1,
             position: 'top',
-            labels: { color: 'rgba(255,255,255,0.6)', boxWidth: 10, font: { size: 10 } },
+            labels: { color: tc.legend, boxWidth: 10, font: { size: 10 } },
           },
           tooltip: {
-            backgroundColor: 'rgba(20,20,30,0.9)',
-            titleColor: '#fff',
-            bodyColor: 'rgba(255,255,255,0.8)',
-            borderColor: 'rgba(255,255,255,0.1)',
+            backgroundColor: tc.tooltipBg,
+            titleColor: tc.tooltipTitle,
+            bodyColor: tc.tooltipBody,
+            borderColor: tc.tooltipBorder,
             borderWidth: 1,
             padding: 8,
             bodyFont: { size: 11 },
@@ -97,16 +114,16 @@ export class LineChartComponent implements AfterViewInit, OnDestroy, OnChanges {
         scales: {
           x: {
             type: 'linear',
-            title: { display: !!this.xLabel, text: this.xLabel, color: 'rgba(255,255,255,0.4)', font: { size: 10 } },
-            ticks: { color: 'rgba(255,255,255,0.35)', font: { size: 9 }, maxTicksLimit: 8 },
-            grid: { color: 'rgba(255,255,255,0.05)' },
+            title: { display: !!this.xLabel, text: this.xLabel, color: tc.axisTitle, font: { size: 10 } },
+            ticks: { color: tc.tick, font: { size: 9 }, maxTicksLimit: 8 },
+            grid: { color: tc.grid },
           },
           y: {
             min: this.yMin,
             max: this.yMax,
-            title: { display: !!this.yLabel, text: this.yLabel, color: 'rgba(255,255,255,0.4)', font: { size: 10 } },
-            ticks: { color: 'rgba(255,255,255,0.35)', font: { size: 9 }, maxTicksLimit: 6 },
-            grid: { color: 'rgba(255,255,255,0.05)' },
+            title: { display: !!this.yLabel, text: this.yLabel, color: tc.axisTitle, font: { size: 10 } },
+            ticks: { color: tc.tick, font: { size: 9 }, maxTicksLimit: 6 },
+            grid: { color: tc.grid },
           },
         },
       },

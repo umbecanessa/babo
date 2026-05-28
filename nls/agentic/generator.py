@@ -337,6 +337,8 @@ async def generate(
     elif tool_schemas:
         logger.debug("[GEN] iter=%d: sending %d tool schemas to vLLM", iteration, len(tool_schemas))
 
+    from nls.runtime.inference_compat import cloud_safe_extra_body
+
     extra_body: dict[str, Any] = {
         "repetition_penalty": config.repetition_penalty,
         "top_k": config.top_k,
@@ -345,11 +347,6 @@ async def generate(
     }
     if config.vllm_xargs:
         extra_body["vllm_xargs"] = config.vllm_xargs
-
-    # Template enable_thinking is ALWAYS True — Qwen3.5 requires it
-    # for structured tool calls (KL §21, §46, vLLM PR #37414).
-    # The /no_think soft-switch (below) controls actual reasoning output.
-    extra_body["chat_template_kwargs"] = {"enable_thinking": True}
 
     # --- DIAGNOSTIC DUMP: capture what we send to vLLM ---
     try:
@@ -415,13 +412,24 @@ async def generate(
     _is_continuation = False
     if prefill_msg is not None and thinking:
         safe_ctx.append(prefill_msg)
-        extra_body["continue_final_message"] = True
-        extra_body["add_generation_prompt"] = False
         _is_continuation = True
         logger.info(
             "[GEN] iter=%d reasoning continuation (prefill len=%d)",
             iteration, len(prefill_msg.get("content", "")),
         )
+
+    _upstream = getattr(vllm_client, "base_url", "") or ""
+    extra_body = cloud_safe_extra_body(
+        _upstream,
+        extra_body,
+        thinking=thinking,
+        is_continuation=_is_continuation,
+    )
+    from nls.runtime.inference_compat import resolve_tool_choice
+
+    _tool_choice = resolve_tool_choice(
+        _upstream, has_tools=bool(tool_schemas), model=adapter_name or "",
+    )
 
     acc_tokens: list[str] = []
     in_think_block = False
@@ -438,7 +446,7 @@ async def generate(
             temperature=config.temperature,
             top_p=config.top_p,
             tools=tool_schemas or None,
-            tool_choice="auto" if tool_schemas else None,
+            tool_choice=_tool_choice,
             yield_tool_deltas=True,
             extra_body=extra_body,
         ):

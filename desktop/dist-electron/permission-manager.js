@@ -103,21 +103,32 @@ class PermissionManager {
     /**
      * Check if a permission is granted. Throws if denied.
      * Called by IPC handlers before executing privileged operations.
+     *
+     * Scoped filesystem grants cover the granted directory and all paths beneath it,
+     * so expanding nested folders does not re-prompt.
      */
     async require(permission, scope) {
-        const key = scope ? `${permission}:${scope}` : permission;
-        const baseKey = permission;
-        // Check specific scope first, then base permission
-        const grant = this.grants.get(key) || this.grants.get(baseKey);
-        if (grant && grant.granted) {
-            return; // Already granted
+        const access = this.resolveAccess(permission, scope);
+        if (access === 'granted') {
+            return;
         }
-        if (grant && !grant.granted) {
+        if (access === 'denied') {
             throw new Error(`Permission denied: ${permission}${scope ? ` (${scope})` : ''}`);
         }
-        // Not yet decided -- prompt the user
+        // Desktop workspace: auto-grant local filesystem access (no interrupting dialogs).
+        if (permission === 'filesystem.read' || permission === 'filesystem.write') {
+            const key = this.grantKey(permission, scope);
+            this.grants.set(key, {
+                permission,
+                granted: true,
+                scope,
+                grantedAt: new Date().toISOString(),
+            });
+            this.save();
+            return;
+        }
         const allowed = await this.promptUser(permission, scope);
-        // Store the decision
+        const key = this.grantKey(permission, scope);
         this.grants.set(key, {
             permission,
             granted: allowed,
@@ -137,6 +148,15 @@ class PermissionManager {
         if (grant) {
             return grant.granted;
         }
+        if (permission === 'filesystem.read' || permission === 'filesystem.write') {
+            this.grants.set(permission, {
+                permission,
+                granted: true,
+                grantedAt: new Date().toISOString(),
+            });
+            this.save();
+            return true;
+        }
         const allowed = await this.promptUser(permission, undefined, reason);
         this.grants.set(permission, {
             permission,
@@ -145,6 +165,18 @@ class PermissionManager {
         });
         this.save();
         return allowed;
+    }
+    /**
+     * Collapse agent workspace paths to a single scope so the file explorer
+     * only prompts once per workspace instead of per folder.
+     */
+    filesystemScope(filePath) {
+        const normalized = path.normalize(filePath);
+        const agentsRoot = normalized.match(/^(.+[\\/]agents[\\/][^\\/]+[\\/]workspace)(?:[\\/]|$)/i);
+        if (agentsRoot) {
+            return agentsRoot[1];
+        }
+        return filePath;
     }
     /**
      * Get all permission states.
@@ -176,7 +208,7 @@ class PermissionManager {
      * Get available profiles.
      */
     getProfiles() {
-        return Object.values(PROFILES);
+        return Object.entries(PROFILES).map(([id, profile]) => ({ id, ...profile }));
     }
     /**
      * Reset all permissions.
@@ -186,6 +218,51 @@ class PermissionManager {
         this.save();
     }
     // ─── User prompt ────────────────────────────────────────────────────
+    /**
+     * Resolve whether a permission is granted, denied, or not yet decided.
+     * Directory scopes inherit to all nested paths.
+     */
+    resolveAccess(permission, scope) {
+        const base = this.grants.get(permission);
+        if (base?.granted === true)
+            return 'granted';
+        if (base?.granted === false)
+            return 'denied';
+        if (!scope) {
+            return base ? (base.granted ? 'granted' : 'denied') : 'unknown';
+        }
+        const target = this.normalizePath(scope);
+        // Exact scope decision (allow or deny) for this path
+        for (const grant of this.grants.values()) {
+            if (grant.permission !== permission || !grant.scope)
+                continue;
+            if (this.normalizePath(grant.scope) !== target)
+                continue;
+            return grant.granted ? 'granted' : 'denied';
+        }
+        // Inherit read/write from any granted parent directory
+        for (const grant of this.grants.values()) {
+            if (grant.permission !== permission || !grant.scope || !grant.granted) {
+                continue;
+            }
+            const grantedDir = this.normalizePath(grant.scope);
+            if (target === grantedDir || target.startsWith(`${grantedDir}/`)) {
+                return 'granted';
+            }
+        }
+        return 'unknown';
+    }
+    grantKey(permission, scope) {
+        return scope ? `${permission}:${scope}` : permission;
+    }
+    /** Normalize paths for stable comparisons (Windows-safe, case-insensitive). */
+    normalizePath(filePath) {
+        return path
+            .normalize(filePath)
+            .replace(/\\/g, '/')
+            .replace(/\/+$/, '')
+            .toLowerCase();
+    }
     async promptUser(permission, scope, reason) {
         const win = electron_1.BrowserWindow.getFocusedWindow();
         const permissionLabels = {

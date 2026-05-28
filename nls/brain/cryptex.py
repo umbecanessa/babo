@@ -84,6 +84,7 @@ RING_TOOLS_MCP = "tools_mcp"
 RING_CHANNELS = "channels"
 RING_BEHAVIORAL = "behavioral"
 RING_ENVIRONMENT = "environment"
+RING_WAKE_ATTENTION = "wake_attention"
 
 
 @dataclass
@@ -140,6 +141,9 @@ RING_REGISTRY: tuple[RingSpec, ...] = (
     RingSpec(RING_ENVIRONMENT, RING_FIXED, "Environment + Runtime",
              allow_cross_read=False, max_slots_per_position=6,
              clear_on_sleep=False),
+    RingSpec(RING_WAKE_ATTENTION, RING_PROJECT, "Wake Attention Board",
+             allow_cross_read=False, max_slots_per_position=6,
+             clear_on_sleep=True),
 )
 
 RING_SPECS_BY_ID: dict[str, RingSpec] = {r.ring_id: r for r in RING_REGISTRY}
@@ -890,6 +894,64 @@ class CryptexMemory:
                 return s.content
         return ""
 
+    def set_plan_requirements(self, requirements: str) -> None:
+        """Pin authoritative plan requirements in the instructions ring."""
+        text = (requirements or "").strip()
+        if not text:
+            return
+        if self._active_name == "personal":
+            return
+        ring = self._rings[RING_INSTRUCTIONS]
+        ring.upsert_slot(
+            domain="plan_requirements",
+            content=text[:6000],
+            slot_type="instruction",
+            salience=1.0,
+            source="plan",
+        )
+
+    def get_plan_requirements(self) -> str:
+        if self._active_name == "personal":
+            return ""
+        ring = self._rings[RING_INSTRUCTIONS]
+        for s in ring.get_active_slots():
+            if s.domain == "plan_requirements":
+                return s.content
+        return ""
+
+    def set_plan_tech_stack(self, tech_stack_block: str) -> None:
+        """Pin mandatory tech stack context in the instructions ring."""
+        text = (tech_stack_block or "").strip()
+        if not text:
+            return
+        if self._active_name == "personal":
+            return
+        ring = self._rings[RING_INSTRUCTIONS]
+        ring.upsert_slot(
+            domain="tech_stack",
+            content=text[:4000],
+            slot_type="instruction",
+            salience=1.0,
+            source="plan",
+        )
+
+    def get_plan_tech_stack(self) -> str:
+        if self._active_name == "personal":
+            return ""
+        ring = self._rings[RING_INSTRUCTIONS]
+        for s in ring.get_active_slots():
+            if s.domain == "tech_stack":
+                return s.content
+        return ""
+
+    def clear_plan_context(self) -> None:
+        """Drop plan requirements and tech stack instruction slots."""
+        if self._active_name == "personal":
+            return
+        ring = self._rings[RING_INSTRUCTIONS]
+        ring.remove_by_domain("plan_requirements")
+        ring.remove_by_domain("tech_stack")
+
     # --- Orchestration ---
 
     def orch_update_team(
@@ -947,6 +1009,59 @@ class CryptexMemory:
             return self.personal.orch_get_pending_escalations()
         return self.active.orch_get_pending_escalations()
 
+    def orch_set_coordinator_phase(self, phase: str, detail: str = "") -> None:
+        if self._active_name == "personal":
+            self.personal.orch_set_coordinator_phase(phase, detail)
+        else:
+            self.active.orch_set_coordinator_phase(phase, detail)
+        ring = self._rings.get(RING_ORCHESTRATION)
+        if ring is None:
+            return
+        salience = 1.0 if phase in (
+            "awaiting_delegates", "launched_pending_exit", "evaluating_wave",
+        ) else 0.85
+        content = phase
+        if detail:
+            content = f"{phase}: {detail[:120]}"
+        ring.upsert_slot(
+            domain="orch.coordinator_phase",
+            content=content,
+            slot_type="fact",
+            salience=salience,
+            source="orchestration",
+        )
+
+    def get_orchestration_wake_lines(self) -> list[str]:
+        if self._active_name == "personal":
+            return self.personal.get_orchestration_wake_lines()
+        return self.active.get_orchestration_wake_lines()
+
+    def get_orchestration_wake_hash(self) -> str:
+        import hashlib
+        payload = "|".join(self.get_orchestration_wake_lines())
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+    def get_last_checkback_hash(self) -> str:
+        ring = self._rings.get(RING_ORCHESTRATION)
+        if ring is None:
+            return ""
+        for slot in ring.get_active_slots():
+            if slot.domain == "orch.checkback_hash":
+                return slot.content.strip()
+        return ""
+
+    def set_last_checkback_hash(self, value: str) -> None:
+        ring = self._rings.get(RING_ORCHESTRATION)
+        if ring is None:
+            return
+        ring.upsert_slot(
+            domain="orch.checkback_hash",
+            content=value[:32],
+            slot_type="fact",
+            salience=0.5,
+            source="orchestration",
+        )
+
     def orch_clear(self) -> None:
         if self._active_name == "personal":
             self.personal.orch_clear()
@@ -983,6 +1098,35 @@ class CryptexMemory:
             salience=0.9,
             source="orchestration",
         )
+
+    def set_wake_attention_board(self, content: str) -> None:
+        """Compact EM attention surface — pending reviews, active wave, next action."""
+        ring = self._rings.get(RING_WAKE_ATTENTION)
+        if ring is None or not (content or "").strip():
+            return
+        ring.upsert_slot(
+            domain="wake.attention_board",
+            content=content.strip()[:2400],
+            slot_type="fact",
+            salience=1.0,
+            source="wake_coordination",
+        )
+
+    def clear_wake_attention_board(self) -> None:
+        ring = self._rings.get(RING_WAKE_ATTENTION)
+        if ring is None:
+            return
+        ring.remove_by_domain("wake.attention_board")
+
+    def prune_stale_orchestration_team_slots(self, terminal_team_ids: set[str]) -> int:
+        """Drop orch.team.* snapshots for finalized teams (reduces stale WM noise)."""
+        ring = self._rings.get(RING_ORCHESTRATION)
+        if ring is None or not terminal_team_ids:
+            return 0
+        removed = 0
+        for tid in terminal_team_ids:
+            removed += ring.remove_by_domain(f"orch.team.{tid}")
+        return removed
 
     # --- Goals ---
 
@@ -1317,6 +1461,7 @@ class CryptexMemory:
         },
         "delegating": {
             RING_ORCHESTRATION: 1.0,
+            RING_WAKE_ATTENTION: 0.92,
             RING_BEHAVIORAL: 0.95,
             RING_INSTRUCTIONS: 0.9,
             RING_TACTICAL_GOALS: 0.85,
@@ -1325,7 +1470,8 @@ class CryptexMemory:
             RING_USER_MODEL: 0.4,
         },
         "monitoring": {
-            RING_ORCHESTRATION: 1.0,
+            RING_WAKE_ATTENTION: 1.0,
+            RING_ORCHESTRATION: 0.98,
             RING_CHANNELS: 0.9,
             RING_USER_MODEL: 0.85,
             RING_BEHAVIORAL: 0.7,
@@ -1333,7 +1479,8 @@ class CryptexMemory:
             RING_PROJECT_FACTS: 0.5,
         },
         "evaluating": {
-            RING_INSTRUCTIONS: 1.0,
+            RING_WAKE_ATTENTION: 1.0,
+            RING_INSTRUCTIONS: 0.98,
             RING_PROJECT_FACTS: 0.95,
             RING_ORCHESTRATION: 0.9,
             RING_TACTICAL_GOALS: 0.85,
@@ -1383,6 +1530,8 @@ class CryptexMemory:
             RING_EMOTIONAL: 0.6,
         },
         "recovering": {
+            RING_SKILLS: 0.98,
+            RING_TOOLS_MCP: 0.95,
             RING_BEHAVIORAL: 1.0,
             RING_INSTRUCTIONS: 0.95,
             RING_ORCHESTRATION: 0.9,
@@ -1391,6 +1540,16 @@ class CryptexMemory:
             RING_CONSOLIDATION: 0.7,
             RING_CHANNELS: 0.6,
             RING_USER_MODEL: 0.5,
+        },
+        # Stuck / error-recovery: surface skills + tools before plan noise.
+        "stuck": {
+            RING_SKILLS: 1.0,
+            RING_TOOLS_MCP: 0.97,
+            RING_BEHAVIORAL: 0.93,
+            RING_CREDENTIALS: 0.9,
+            RING_INSTRUCTIONS: 0.85,
+            RING_PROJECT_FACTS: 0.75,
+            RING_TACTICAL_GOALS: 0.7,
         },
     }
 
@@ -1587,8 +1746,59 @@ class CryptexMemory:
                     )
                     break
 
+        if state is not None:
+            _coord_phase = state.get("coordinator_phase", "")
+            if _coord_phase in (
+                "awaiting_delegates",
+                "launched_pending_exit",
+                "evaluating_wave",
+            ):
+                priorities[RING_ORCHESTRATION] = max(
+                    priorities.get(RING_ORCHESTRATION, 0), 1.0,
+                )
+                priorities[RING_WAKE_ATTENTION] = max(
+                    priorities.get(RING_WAKE_ATTENTION, 0), 1.0,
+                )
+                priorities[RING_INSTRUCTIONS] = min(
+                    priorities.get(RING_INSTRUCTIONS, 0.5), 0.45,
+                )
+            if int(state.get("pending_completion_reviews", 0) or 0) > 0:
+                priorities[RING_WAKE_ATTENTION] = 1.0
+                priorities[RING_ORCHESTRATION] = max(
+                    priorities.get(RING_ORCHESTRATION, 0), 0.95,
+                )
+
+            if state.get("skill_discovery_boost"):
+                for ring_id, priority in self._PHASE_PRIORITIES.get(
+                    "stuck", {},
+                ).items():
+                    priorities[ring_id] = max(
+                        priorities.get(ring_id, 0), priority,
+                    )
+
         self._ring_priorities = priorities
         return phase
+
+    def activate_skill_discovery_boost(self, reason: str = "") -> None:
+        """Upsert a high-salience skills-ring slot for stall/hint recovery."""
+        from nls.agentic.skill_discovery_boost import (
+            SKILL_DISCOVERY_PROMPT,
+            SKILL_DISCOVERY_SLOT_DOMAIN,
+        )
+
+        skills_ring = self._rings.get(RING_SKILLS)
+        if skills_ring is None:
+            return
+        body = SKILL_DISCOVERY_PROMPT
+        if reason:
+            body = f"{body}\n\nTrigger: {reason[:200]}"
+        skills_ring.upsert_slot(
+            domain=SKILL_DISCOVERY_SLOT_DOMAIN,
+            content=body,
+            slot_type="skill",
+            salience=1.0,
+            source="stall_boost",
+        )
 
     def get_ring_priority(self, ring_id: str) -> float:
         """Get the current priority for a ring (0.0-1.0)."""
@@ -1828,6 +2038,23 @@ class CryptexMemory:
             if task_parts:
                 _append(msg1_parts, "\n".join(task_parts))
 
+        def _render_wake_attention() -> None:
+            """Render batched wake attention — highest signal for EM turns."""
+            if render_mode not in self._AGENTIC_MODES:
+                return
+            wake_ring = self._rings.get(RING_WAKE_ATTENTION)
+            if not wake_ring or _budget_remaining() < 80:
+                return
+            for s in wake_ring.get_active_slots():
+                if s.domain == "wake.attention_board" and s.content.strip():
+                    _append(
+                        msg1_parts,
+                        "[WAKE ATTENTION — act on this, ignore stale chat history]\n"
+                        + s.content.strip(),
+                        force=True,
+                    )
+                    break
+
         def _render_orchestration() -> None:
             """Render orchestration state (team/delegate status)."""
             if render_mode not in self._AGENTIC_MODES:
@@ -1899,11 +2126,41 @@ class CryptexMemory:
             if not skills_ring or _budget_remaining() < 200:
                 return
             skill_slots = skills_ring.get_active_slots()
-            if skill_slots:
-                skill_lines: list[str] = ["Available Skills:"]
-                for s in skill_slots[:6]:
-                    skill_lines.append(f"  \u2699 {s.content}")
-                _append(msg1_parts, "\n".join(skill_lines))
+            if not skill_slots:
+                return
+
+            _boost = bool(state.get("skill_discovery_boost"))
+            _target = msg0_parts if _boost else msg1_parts
+            _cap = 10 if _boost else 6
+            _header = (
+                "⚠ SKILLS & TOOL DISCOVERY — read first (stuck recovery):"
+                if _boost
+                else "Available Skills:"
+            )
+            skill_lines: list[str] = [_header]
+            sorted_slots = sorted(
+                skill_slots,
+                key=lambda s: (
+                    0 if s.domain == "skill.discovery_boost" else 1,
+                    -s.salience,
+                ),
+            )
+            for s in sorted_slots[:_cap]:
+                line = f"  ⚙ {s.content}"
+                if _boost:
+                    full = (s.metadata or {}).get("full_instructions", "")
+                    if full:
+                        excerpt = full[:500].strip()
+                        if len(full) > 500:
+                            excerpt += "…"
+                        line += f"\n    Instructions: {excerpt}"
+                skill_lines.append(line)
+            if _boost:
+                skill_lines.append(
+                    "  → clawhub(action='search', query='...') · "
+                    "discover_tools(query='...')"
+                )
+            _append(_target, "\n".join(skill_lines), force=_boost)
 
         def _render_tools_mcp() -> None:
             # MCP tool descriptions are only relevant for agentic/task modes.
@@ -1913,8 +2170,18 @@ class CryptexMemory:
             if not tools_ring or _budget_remaining() < 200:
                 return
             tool_slots = tools_ring.get_active_slots()
-            if tool_slots:
-                tool_lines = [s.content for s in tool_slots]
+            if not tool_slots:
+                return
+            _boost = bool(state.get("skill_discovery_boost"))
+            tool_lines = [s.content for s in tool_slots]
+            if _boost:
+                _append(
+                    msg0_parts,
+                    "Available tools (search with discover_tools if missing):\n"
+                    + "\n".join(tool_lines[:12]),
+                    force=True,
+                )
+            else:
                 _append(msg0_parts, "\n".join(tool_lines))
 
         def _render_channels() -> None:
@@ -1985,6 +2252,7 @@ class CryptexMemory:
         _ring_renderers: dict[str, Any] = {
             RING_BEHAVIORAL: _render_behavioral,
             RING_INSTRUCTIONS: _render_instructions,
+            RING_WAKE_ATTENTION: _render_wake_attention,
             RING_ORCHESTRATION: _render_orchestration,
             RING_TACTICAL_GOALS: _render_goals,
             RING_STRATEGIC_GOALS: _render_goals,
@@ -2470,6 +2738,119 @@ class CryptexMemory:
                 source="delegate_digest",
             )
 
+    def absorb_compaction(self, anchor: Any) -> None:
+        """Merge CompactionAnchor data from loop compaction into Cryptex rings."""
+        if anchor is None:
+            return
+
+        if self._active_name == "personal":
+            summary_parts: list[str] = []
+            goal = getattr(anchor, "goal", "")
+            if goal:
+                summary_parts.append(f"[Progress] Goal: {goal}")
+            done = getattr(anchor, "progress_done", [])
+            if done:
+                summary_parts.append(
+                    "[Progress] Done: " + " | ".join(str(d) for d in done[-10:])
+                )
+            pending = getattr(anchor, "progress_pending", [])
+            if pending:
+                summary_parts.append(
+                    "[Progress] Pending: " + " | ".join(str(p) for p in pending[-5:])
+                )
+            decisions = getattr(anchor, "decisions", [])
+            if decisions:
+                summary_parts.append(
+                    "[Knowledge] Decisions: "
+                    + " | ".join(str(d) for d in decisions[-5:])
+                )
+            if summary_parts:
+                self.consolidate_session("\n".join(summary_parts))
+            return
+
+        consol_ring = self._rings.get(RING_CONSOLIDATION)
+        facts_ring = self._rings.get(RING_PROJECT_FACTS)
+        goals_ring = self._rings.get(RING_TACTICAL_GOALS)
+
+        goal = getattr(anchor, "goal", "")
+        done = getattr(anchor, "progress_done", [])
+        pending = getattr(anchor, "progress_pending", [])
+        decisions = getattr(anchor, "decisions", [])
+        files_mod = getattr(anchor, "files_modified", [])
+        files_rd = getattr(anchor, "files_read", [])
+        next_steps = getattr(anchor, "next_steps", [])
+        comms = getattr(anchor, "communications_sent", [])
+
+        if goal and consol_ring:
+            consol_ring.upsert_slot(
+                domain="CompactionGoal",
+                content=str(goal)[:400],
+                salience=0.85,
+                source="compaction",
+            )
+        if done and consol_ring:
+            consol_ring.upsert_slot(
+                domain="CompactionDone",
+                content="Completed: " + " | ".join(str(d) for d in done[-12:]),
+                salience=0.85,
+                source="compaction",
+            )
+        if pending and goals_ring:
+            goals_ring.upsert_slot(
+                domain="CompactionPending",
+                content="Pending: " + " | ".join(str(p) for p in pending[-8:]),
+                slot_type="goal",
+                salience=0.8,
+                source="compaction",
+                level="tactical",
+            )
+        if decisions and consol_ring:
+            consol_ring.upsert_slot(
+                domain="CompactionDecisions",
+                content="Decisions: " + " | ".join(str(d) for d in decisions[-8:]),
+                salience=0.8,
+                source="compaction",
+            )
+        if next_steps and goals_ring:
+            goals_ring.upsert_slot(
+                domain="CompactionNextSteps",
+                content="Next: " + " | ".join(str(s) for s in next_steps[-5:]),
+                slot_type="goal",
+                salience=0.75,
+                source="compaction",
+                level="tactical",
+            )
+        if comms and consol_ring:
+            consol_ring.upsert_slot(
+                domain="CompactionComms",
+                content="Sent: " + " | ".join(str(c) for c in comms[-8:]),
+                salience=0.9,
+                source="compaction",
+            )
+        if files_rd and facts_ring:
+            facts_ring.upsert_slot(
+                domain="CompactionFilesRead",
+                content="Read: " + ", ".join(str(f) for f in files_rd[-20:]),
+                salience=0.7,
+                source="compaction",
+            )
+        if files_mod and facts_ring:
+            facts_ring.upsert_slot(
+                domain="CompactionFilesModified",
+                content="Modified: " + ", ".join(str(f) for f in files_mod[-20:]),
+                salience=0.75,
+                source="compaction",
+            )
+
+    def make_compaction_hook(self) -> Callable[[Any], None]:
+        """Return an ``on_compaction`` hook for orchestrator agentic loops."""
+        cryptex = self
+
+        def _on_compaction(anchor: Any) -> None:
+            cryptex.absorb_compaction(anchor)
+
+        return _on_compaction
+
     def replace_consolidation(self, compounded: str) -> None:
         """Replace consolidation ring content with a compounded narrative.
 
@@ -2674,7 +3055,11 @@ class CryptexMemory:
         immutable, so re-calling is safe).  Returns count of new slots
         written.
         """
-        from .identity_renderer import get_identity_slot_definitions
+        from .identity_renderer import (
+            DOMAIN_SIGNALS,
+            DOMAIN_UNNAMED_BLOCK,
+            get_identity_slot_definitions,
+        )
 
         ring = self._rings.get(RING_IDENTITY)
         if ring is None:
@@ -2683,8 +3068,15 @@ class CryptexMemory:
         existing_domains = {s.domain for s in ring.get_active_slots()}
         count = 0
 
+        # Legacy: remove obsolete nls_signal instructions from existing agents.
+        if DOMAIN_SIGNALS in existing_domains:
+            ring.remove_by_domain(DOMAIN_SIGNALS)
+            existing_domains.discard(DOMAIN_SIGNALS)
+
         for defn in get_identity_slot_definitions():
             domain = defn["domain"]
+            if agent_name and domain == DOMAIN_UNNAMED_BLOCK:
+                continue
             if domain in existing_domains:
                 continue
             content = defn["content"]
@@ -2714,6 +3106,7 @@ class CryptexMemory:
                 source="genesis",
                 access=ACCESS_MALLEABLE,
             )
+            ring.remove_by_domain(DOMAIN_UNNAMED_BLOCK)
 
         # Date goes to environment ring
         if today_date:
@@ -3041,10 +3434,12 @@ class CryptexMemory:
                     "- read: Preferred for viewing files. Call for multiple files in parallel.\n"
                     "- write/edit: Create or modify files. edit does surgical find-and-replace.\n"
                     "- bash: CLI operations, git, curl, builds, scripts. "
-                    "NEVER use bash for Python package installation — use server_install.\n"
-                    "- server_install: Install Python packages into the runtime (NOT pip/pip3). "
-                    "Use this whenever you need a library like python-docx, pandas, etc. "
-                    "pip is not available in this environment.\n"
+                    "NEVER use bash for pip install — use project_install for app "
+                    "libraries or server_install for agent-runtime libraries.\n"
+                    "- project_install: Install into the project (.venv / npm) — "
+                    "for code you are building (assemblyai, fastapi, express, etc.).\n"
+                    "- server_install: Install into Babo's agent runtime only — "
+                    "when YOU need a new agent capability (NOT pip/pip3).\n"
                     "- offer_download: After writing a file the user requested (doc, report, "
                     "spreadsheet), ALWAYS call offer_download so they can access it.\n"
                     "- todo: Master task tracker (Kanban).\n"
@@ -3103,7 +3498,13 @@ class CryptexMemory:
                     "Always use the communicate tool for any message the user needs "
                     "to see.\n"
                     "- Send the user exactly ONE completion notification per plan "
-                    "(via WhatsApp/email/chat). Never repeat the same status.\n"
+                    "(in-app chat via communicate, or a channel the user requested "
+                    "and that is CONNECTED in your tools). Never repeat the same status.\n"
+                    "- Do NOT name WhatsApp, Telegram, email, or other channels in "
+                    "status text unless the user asked for that channel AND your "
+                    "Channels ring shows CONNECTED (you can call the send tool).\n"
+                    "- If a channel is NOT CONNECTED, never label updates "
+                    "'Status Update (WhatsApp)' etc. — use communicate() in chat.\n"
                     "- After plan(action='complete') succeeds and the user is notified, "
                     "you are DONE. Stop immediately \u2014 do not re-inspect teams, "
                     "re-read files, or re-verify work. Exit the loop.\n"
@@ -3121,12 +3522,12 @@ class CryptexMemory:
                 "render_mode": "agentic",
                 "consolidation_status": "permanent",
                 "content": (
-                    "ESCALATE TO USER: If you hit an infrastructure wall you cannot "
-                    "solve (e.g. deployment requires auth you don't have, a service "
-                    "needs manual setup, external access is blocked), use ask_user to "
-                    "request help. Do NOT silently skip the step or declare it 'done' "
-                    "when it isn't. Tell the user exactly what's needed and what you've "
-                    "already prepared for them."
+                    "ESCALATE TO ORCHESTRATOR: If you are stuck, blocked, running "
+                    "low on iteration budget, or hit an infrastructure wall you "
+                    "cannot solve, call escalate() with a clear reason and message. "
+                    "Do NOT silently skip the step or declare it 'done' when it "
+                    "isn't. The orchestrator can grant more iterations, send a "
+                    "targeted hint, or redirect you."
                 ),
             },
             {
@@ -3277,14 +3678,17 @@ class CryptexMemory:
                         "Use PowerShell syntax (e.g. $env:VAR='val', Get-ChildItem). "
                         "Do NOT use bash-isms (ls -la, head, tail, cat, >, ||, ~/). "
                         "You have git, gh CLI, python, node, npm, and internet access. "
-                        "To install Python packages use server_install (NOT pip — pip is unavailable). "
+                        "To install app Python/Node deps use project_install; "
+                        "for agent-runtime Python only use server_install "
+                        "(NOT pip — pip is unavailable in bash). "
                         "Your working directory is the current folder (use relative paths). "
                         "To persist environment variables, write a .env file."
                     ) if _sys.platform == "win32" else (
                         "You have bash with internet access, git, gh CLI, curl, "
                         "python, node, npm. "
-                        "To install Python packages use server_install (NOT pip — "
-                        "pip is not in PATH in this environment). "
+                        "To install app deps use project_install; "
+                        "for agent-runtime Python use server_install (NOT pip — "
+                        "pip is not in PATH in bash). "
                         "To persist environment variables, write a .env file."
                     ),
                 },

@@ -92,21 +92,19 @@ def _build_micro_context(
 
 async def micro_respond(
     runtime: Any,
-    vllm_client: Any,
     user_input: str,
     *,
     team_manager: Any | None = None,
     history: list[dict] | None = None,
     reply_channel: Any | None = None,
+    vllm_client: Any | None = None,
 ) -> str:
     """Generate a micro-inference response (single LLM call, no tools).
 
     Parameters
     ----------
     runtime : AgentRuntime
-        For accessing working memory and agent identity.
-    vllm_client : vLLM HTTP client
-        For the generate call.
+        For accessing working memory, agent identity, and inference routing.
     user_input : str
         The user's message.
     team_manager : TeamManager or None
@@ -115,6 +113,8 @@ async def micro_respond(
         Recent conversation history.
     reply_channel : callable or None
         ``async def reply(text) -> None`` to send the response.
+    vllm_client : deprecated
+        Ignored — routing uses ``runtime.inference_pipeline()``.
 
     Returns
     -------
@@ -131,14 +131,19 @@ async def micro_respond(
     )
 
     try:
-        result = await vllm_client.generate(
-            adapter_name=None,
+        _vllm, _adapter = runtime.inference_pipeline()
+        if _vllm is None:
+            raise RuntimeError("no inference client for micro_respond")
+
+        from nls.runtime.inference_compat import micro_inference_extra_body
+
+        _upstream = getattr(_vllm, "base_url", "") or ""
+        result = await _vllm.generate(
+            adapter_name=_adapter,
             messages=msgs,
             max_tokens=200,
             temperature=0.6,
-            extra_body={
-                "chat_template_kwargs": {"enable_thinking": False},
-            },
+            extra_body=micro_inference_extra_body(_upstream, thinking=False),
         )
         text = (
             result.text if hasattr(result, "text") else str(result or "")

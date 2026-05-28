@@ -271,6 +271,108 @@ async def update_agent_name(
     return {"agent_id": agent_id, "name": body.name}
 
 
+class AgentInferenceSettings(BaseModel):
+    orchestrator_model: str | None = Field(
+        default=None,
+        description="Default orchestrator model for this agent (OpenRouter-style id).",
+    )
+    delegate_model: str | None = Field(
+        default=None,
+        description="Default sub-agent/delegate model when not locked to orchestrator.",
+    )
+    delegate_lock_orchestrator: bool | None = Field(
+        default=None,
+        description="When true, delegates use the same model as the orchestrator turn.",
+    )
+    clear_orchestrator: bool = Field(
+        default=False,
+        description="Clear agent session orchestrator default (use install default).",
+    )
+    clear_delegate: bool = Field(
+        default=False,
+        description="Clear agent session delegate default.",
+    )
+
+
+@router.get("/{agent_id}/inference")
+async def get_agent_inference(agent_id: str, request: Request):
+    """Return per-agent session inference defaults."""
+    agent_dir = request.app.state.settings.agents_dir / agent_id
+    if not agent_dir.exists():
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    runtime = request.app.state.agent_manager.get_runtime(agent_id)
+    if runtime is not None:
+        return runtime.session_inference_snapshot()
+
+    import json as _json
+    meta_path = agent_dir / "session_meta.json"
+    if not meta_path.exists():
+        return {
+            "orchestrator_model": None,
+            "delegate_model": None,
+            "delegate_lock_orchestrator": True,
+        }
+    try:
+        meta = _json.loads(meta_path.read_text(encoding="utf-8"))
+    except Exception:
+        meta = {}
+    return {
+        "orchestrator_model": meta.get("orchestrator_model"),
+        "delegate_model": meta.get("delegate_model"),
+        "delegate_lock_orchestrator": meta.get(
+            "delegate_lock_orchestrator", True,
+        ),
+    }
+
+
+@router.patch("/{agent_id}/inference")
+async def update_agent_inference(
+    agent_id: str,
+    body: AgentInferenceSettings,
+    request: Request,
+):
+    """Set per-agent session orchestrator/delegate model defaults."""
+    agent_dir = request.app.state.settings.agents_dir / agent_id
+    if not agent_dir.exists():
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    agent_manager = request.app.state.agent_manager
+    runtime = agent_manager.get_runtime(agent_id)
+    if runtime is None:
+        try:
+            await agent_manager.load_agent(agent_id)
+            runtime = agent_manager.get_runtime(agent_id)
+        except Exception as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    if runtime is None:
+        raise HTTPException(status_code=404, detail="Agent runtime not available")
+
+    fields = body.model_dump(exclude_unset=True)
+    kwargs: dict = {}
+    if "orchestrator_model" in fields:
+        if fields["orchestrator_model"] is None:
+            kwargs["clear_orchestrator"] = True
+        else:
+            kwargs["orchestrator_model"] = fields["orchestrator_model"]
+    if "delegate_model" in fields:
+        if fields["delegate_model"] is None:
+            kwargs["clear_delegate"] = True
+        else:
+            kwargs["delegate_model"] = fields["delegate_model"]
+    if "delegate_lock_orchestrator" in fields:
+        kwargs["delegate_lock_orchestrator"] = fields[
+            "delegate_lock_orchestrator"
+        ]
+    if fields.get("clear_orchestrator"):
+        kwargs["clear_orchestrator"] = True
+    if fields.get("clear_delegate"):
+        kwargs["clear_delegate"] = True
+    snapshot = runtime.update_session_inference(**kwargs)
+    return {"agent_id": agent_id, **snapshot}
+
+
 @router.post("/{agent_id}/pause")
 async def pause_agent(agent_id: str, request: Request):
     """Pause an agent: stop its inner loop and prevent auto-wake.
@@ -299,7 +401,7 @@ async def pause_agent(agent_id: str, request: Request):
     if runtime is not None:
         try:
             runtime.save_state()
-            runtime.shutdown()
+            await runtime.shutdown_async()
         except Exception:
             pass
         agent_manager._runtimes.pop(agent_id, None)

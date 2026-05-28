@@ -43,6 +43,11 @@ export interface SearchResult {
   };
 }
 
+export interface FileStatResult {
+  isFile: boolean;
+  isDirectory: boolean;
+}
+
 /** Helper to access the Electron IPC bridge. */
 function nls(): any {
   return (window as any).nls;
@@ -88,6 +93,32 @@ export class FilesystemService {
     return this.http.get<ReadDirResponse>(`${this.API}/fs/readdir`, {
       params: { path: dirPath },
     });
+  }
+
+  /** File vs directory (Electron IPC; HTTP fallback via readdir parent). */
+  stat(filePath: string): Observable<FileStatResult> {
+    if (this.platform.isElectron && nls()?.stat) {
+      return from(
+        nls().stat(filePath) as Promise<FileStatResult>,
+      );
+    }
+
+    const name = filePath.split(/[/\\]/).pop() || '';
+    const parent = filePath.replace(/[/\\][^/\\]+$/, '');
+    if (!parent || parent === filePath) {
+      return of({ isFile: false, isDirectory: true });
+    }
+    return this.readDir(parent).pipe(
+      map((res) => {
+        const entry = res.entries.find(
+          (e) => e.path === filePath || e.name === name,
+        );
+        return {
+          isFile: !!entry && !entry.isDirectory,
+          isDirectory: !!entry?.isDirectory,
+        };
+      }),
+    );
   }
 
   /** Read a file. */

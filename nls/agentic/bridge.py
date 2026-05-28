@@ -53,6 +53,9 @@ class LoopHooks:
     # --- Control hooks (loop DOES depend on these) ---
     get_steering_messages: Callable[[], Awaitable[list[dict]]] | None = None
     has_active_plan: Callable[[], bool] | None = None
+    plan_has_pending_steps: Callable[[], bool] | None = None
+    plan_requires_team_delegation: Callable[[], bool] | None = None
+    plan_suppresses_raw_delegate: Callable[[], bool] | None = None
 
     # --- Context hooks (affects LLM input) ---
     transform_context: Callable[[list[dict]], list[dict]] | None = None
@@ -99,6 +102,10 @@ class LoopHooks:
     # --- Communication ---
     copilot_queue: Any | None = None
     ans_extract_user_answer: Callable[..., None] | None = None
+    outbound_check: Callable[[str, dict], str | None] | None = None
+    outbound_record: Callable[[str, dict], None] | None = None
+    wm_get_tactical_goals: Callable[[], list[str]] | None = None
+    orchestrator_pre_delegate_check: Callable[[str, dict], str | None] | None = None
 
     # --- Mid-wait Cryptex refresh ---
     mid_wait_hook: Callable[[], None] | None = None
@@ -110,8 +117,11 @@ class LoopHooks:
     # --- Orchestration WM hooks ---
     wm_orch_update_team: Callable[..., None] | None = None
     wm_orch_record_decision: Callable[..., None] | None = None
+    wm_orch_set_coordinator_phase: Callable[..., None] | None = None
     wm_orch_add_escalation: Callable[..., None] | None = None
     wm_orch_resolve_escalation: Callable[..., None] | None = None
+    wm_sync_wake_attention_board: Callable[[Any], None] | None = None
+    wm_prune_stale_tactical_goals: Callable[[Any, str], None] | None = None
     wm_get_credentials: Callable[[], list[tuple[str, str]]] | None = None
 
     # --- Event logging ---
@@ -148,6 +158,7 @@ def build_hooks(
     ans: Any | None = None,
     temporal_self: Any | None = None,
     vllm_client: Any | None = None,
+    inference_adapter: str | None = None,
     store_learn_signals: Any | None = None,
     config: dict[str, Any] | None = None,
     # Phase 4 subsystems (for interoceptive snapshot, etc.)
@@ -359,7 +370,13 @@ def build_hooks(
                     kw_lines.append(f"- {fact.domain_path}: {val}")
         except Exception:
             pass
-        if not ops_lines and not kw_lines:
+        _recipe = None
+        try:
+            from nls.agentic.recipe_hints import match_recipe_hints
+            _recipe = match_recipe_hints(user_message)
+        except Exception:
+            pass
+        if not ops_lines and not kw_lines and not _recipe:
             return None
         parts = ["--- RECALLED KNOWLEDGE (relevant to this task) ---"]
         if ops_lines:
@@ -368,6 +385,8 @@ def build_hooks(
         if kw_lines:
             parts.append("Related knowledge:")
             parts.extend(kw_lines[:10])
+        if _recipe:
+            parts.append(_recipe)
         parts.append("--- END RECALLED KNOWLEDGE ---")
         return "\n".join(parts)
 
@@ -483,6 +502,7 @@ def build_hooks(
                         tool_name=tool_name, args=args,
                         result=result_text, user_message=user_message,
                         hypothalamus=_hypo, vllm_client=vllm_client,
+                        adapter_name=inference_adapter,
                     )
                     if llm_signals and _ddb is not None and _store:
                         _store(llm_signals, user_message)
@@ -840,7 +860,7 @@ def build_hooks(
                     prompt_override=prompt_for_sn,
                     response_override=response_for_sn,
                     domain_db=_ddb,
-                    adapter_name=None,
+                    adapter_name=inference_adapter,
                 )
                 if sn_signals and _ddb is not None and _store:
                     _store(sn_signals, user_message)
@@ -938,7 +958,7 @@ def build_hooks(
                     response_override="",
                     history=_history,
                     domain_db=_ddb,
-                    adapter_name=None,
+                    adapter_name=inference_adapter,
                 )
                 if sn and _ddb is not None and _store:
                     _store(sn, answer)
@@ -949,6 +969,27 @@ def build_hooks(
                         s.pipe_fact or s.content
                         for s in sn if s.signal_type == "LEARN"
                     ]
+                    if facts:
+                        from nls.runtime.learn_dedup import (
+                            collect_known_keys_from_ans,
+                            filter_new_learn_facts,
+                            learning_dedup_key,
+                            merge_known_from_broadcast_cache,
+                            remember_broadcast_keys,
+                        )
+
+                        _known = collect_known_keys_from_ans(_ans)
+                        _known.update(
+                            merge_known_from_broadcast_cache(
+                                _ans._ui_broadcast_learn_keys,
+                            ),
+                        )
+                        facts = filter_new_learn_facts(facts, _known)
+                        if facts:
+                            remember_broadcast_keys(
+                                _ans._ui_broadcast_learn_keys,
+                                [learning_dedup_key(f) for f in facts],
+                            )
                     if facts:
                         try:
                             from server.main import app
@@ -1048,6 +1089,8 @@ def build_config_v4(agent_config: dict[str, Any]) -> Any:
         keep_recent_tokens=cfg.get("keep_recent_tokens", 40_000),
         digest_threshold=cfg.get("digest_threshold", 2_000),
         result_max_chars=cfg.get("result_max_chars", 20_000),
+        anchor_tool_result_min_chars=cfg.get("anchor_tool_result_min_chars", 4_000),
+        relay_compact_message_chars=cfg.get("relay_compact_message_chars", 32_000),
         max_new_tokens=cfg.get("max_new_tokens", 4_096),
         compaction_timeout=cfg.get("compaction_timeout", 45.0),
         temperature=cfg.get("temperature", 1.0),
@@ -1072,6 +1115,7 @@ def build_hooks_v4(
     domain_db: Any | None = None,
     ans: Any | None = None,
     vllm_client: Any | None = None,
+    inference_adapter: str | None = None,
     store_learn_signals: Any | None = None,
     config: dict[str, Any] | None = None,
     event_logger: Any | None = None,
@@ -1082,6 +1126,7 @@ def build_hooks_v4(
     source: str = "",
     self_state: Any | None = None,
     network_dynamics: Any | None = None,
+    outbound_gate: Any | None = None,
 ) -> LoopHooks:
     """Build v4 LoopHooks wiring NLS cognitive layer to the v4 loop.
 
@@ -1188,6 +1233,13 @@ def build_hooks_v4(
         _detected_phase = ""
         if hasattr(_compositor, "update_ring_priorities"):
             try:
+                from nls.agentic.skill_discovery_boost import (
+                    sync_skill_discovery_boost_flag,
+                )
+                sync_skill_discovery_boost_flag(
+                    _loop_state_ref,
+                    int(_loop_state_ref.get("iteration", 0) or 0),
+                )
                 _compositor.update_ring_priorities(_loop_state_ref)
                 _detected_phase = getattr(_compositor, "_cognitive_phase", "")
             except Exception:
@@ -1694,6 +1746,7 @@ def build_hooks_v4(
                     tool_name=tool_name, args=args,
                     result=result_text, user_message=user_msg,
                     hypothalamus=_hypo, vllm_client=vllm_client,
+                    adapter_name=inference_adapter,
                 )
                 if llm_signals and _ddb is not None and _store:
                     _store(llm_signals, user_msg)
@@ -1752,6 +1805,7 @@ def build_hooks_v4(
                     prompt_override=f"Q: {question}\nA: {answer}"[:1000],
                     response_override="",
                     domain_db=_ddb,
+                    adapter_name=inference_adapter,
                 )
                 if sn and _ddb is not None and _store:
                     _store(sn, answer)
@@ -1769,10 +1823,10 @@ def build_hooks_v4(
     _is_channel_loop = bool(_source and _source.startswith("user:channel"))
 
     def _has_active_plan() -> bool:
-        """Return True if the agent has an active plan OR in-progress todos.
+        """Return True if the agent has open plan work or in-progress todos.
 
-        This broadened check ensures iteration/timeout extensions fire
-        when the agent is working on todos even without a formal plan.
+        Includes blocked/recovery plans (partial waves, false done) so background
+        scheduling and iteration extensions stay engaged until truly finished.
 
         For channel-originated loops, only plans/todos created *during* this
         loop count — pre-existing orchestrator plans are ignored so the loop
@@ -1781,19 +1835,31 @@ def build_hooks_v4(
         """
         if not agent_tools:
             return False
+        from nls.agentic.plan_work import plan_needs_recovery, work_plan_has_open_steps
+
+        _team_manager = None
         for tool in agent_tools:
-            # Check PlanStore for active plans
+            if getattr(tool, "name", "") == "plan":
+                _team_manager = getattr(tool, "_team_manager", None)
+                break
+
+        for tool in agent_tools:
             if hasattr(tool, "get_store") and getattr(tool, "name", "") == "plan":
                 try:
                     store = tool.get_store()
-                    active = store.find_active()
-                    if active and not active.all_steps_done():
-                        if _is_channel_loop and active.id in _pre_existing_plan_ids:
-                            continue
+                    work = store.resolve_work_plan(
+                        "", _team_manager, reopen=False,
+                    )
+                    if work is None:
+                        continue
+                    if _is_channel_loop and work.id in _pre_existing_plan_ids:
+                        continue
+                    if work_plan_has_open_steps(work):
+                        return True
+                    if plan_needs_recovery(work, _team_manager):
                         return True
                 except Exception:
                     pass
-            # Check TodoStore for in-progress items
             if getattr(tool, "name", "") == "todo":
                 try:
                     todo_store = tool._store
@@ -1805,6 +1871,75 @@ def build_hooks_v4(
                         ]
                     if in_progress:
                         return True
+                except Exception:
+                    pass
+        return False
+
+    def _plan_requires_team_delegation() -> bool:
+        """True when the active plan has 2+ pending delegatable steps."""
+        if not agent_tools:
+            return False
+        from .coordinator_guard import plan_requires_team_delegation as _needs_team
+        for tool in agent_tools:
+            if hasattr(tool, "get_store") and getattr(tool, "name", "") == "plan":
+                try:
+                    store = tool.get_store()
+                    active = store.find_active()
+                    if active and not active.all_steps_done():
+                        if _is_channel_loop and active.id in _pre_existing_plan_ids:
+                            continue
+                        return _needs_team(active)
+                except Exception:
+                    pass
+        return False
+
+    def _plan_suppresses_raw_delegate() -> bool:
+        """True when delegate() must be removed from the tool schema."""
+        if not agent_tools:
+            return False
+        from .coordinator_guard import plan_suppresses_raw_delegate as _suppress
+        for tool in agent_tools:
+            if hasattr(tool, "get_store") and getattr(tool, "name", "") == "plan":
+                try:
+                    store = tool.get_store()
+                    active = store.find_active()
+                    if active and not active.all_steps_done():
+                        if _is_channel_loop and active.id in _pre_existing_plan_ids:
+                            continue
+                        return _suppress(active)
+                except Exception:
+                    pass
+        return False
+
+    def _plan_has_pending_steps() -> bool:
+        """True when work plan still has pending, failed, or recovery steps."""
+        if not agent_tools:
+            return False
+        from nls.agentic.plan_work import work_plan_has_open_steps
+
+        _team_manager = None
+        for tool in agent_tools:
+            if getattr(tool, "name", "") == "plan":
+                _team_manager = getattr(tool, "_team_manager", None)
+                break
+
+        for tool in agent_tools:
+            if hasattr(tool, "get_store") and getattr(tool, "name", "") == "plan":
+                try:
+                    store = tool.get_store()
+                    active = store.resolve_work_plan(
+                        "", _team_manager, reopen=False,
+                    )
+                    if active is None:
+                        return False
+                    if _is_channel_loop and active.id in _pre_existing_plan_ids:
+                        return False
+                    if work_plan_has_open_steps(active):
+                        return True
+                    return any(
+                        s.status in ("pending", "in_progress", "failed")
+                        for s in active.steps
+                    )
                 except Exception:
                     pass
         return False
@@ -1846,7 +1981,13 @@ def build_hooks_v4(
                     kw_lines.append(f"- {fact.domain_path}: {val}")
         except Exception:
             pass
-        if not ops_lines and not kw_lines:
+        _recipe = None
+        try:
+            from nls.agentic.recipe_hints import match_recipe_hints
+            _recipe = match_recipe_hints(user_message)
+        except Exception:
+            pass
+        if not ops_lines and not kw_lines and not _recipe:
             return None
         parts = ["--- RECALLED KNOWLEDGE (relevant to this task) ---"]
         if ops_lines:
@@ -1855,6 +1996,8 @@ def build_hooks_v4(
         if kw_lines:
             parts.append("Related knowledge:")
             parts.extend(kw_lines[:10])
+        if _recipe:
+            parts.append(_recipe)
         parts.append("--- END RECALLED KNOWLEDGE ---")
         return "\n".join(parts)
 
@@ -1933,7 +2076,8 @@ def build_hooks_v4(
 
         # Signal task outcome to hypothalamus (mirrors v3 on_agent_end)
         _aborted = getattr(state, "exit_reason", "") not in (
-            "task_complete", "tool_requested_stop", "",
+            "task_complete", "tool_requested_stop",
+            "awaiting_delegates", "idle_monitor_yield", "",
         )
         if hypothalamus is not None:
             if getattr(state, "total_tool_calls", 0) > 0 and not _aborted:
@@ -2101,6 +2245,13 @@ def build_hooks_v4(
             except Exception:
                 logger.debug("wm_orch_record_decision failed", exc_info=True)
 
+    def _wm_orch_set_coordinator_phase(phase: str, detail: str = "") -> None:
+        if _orch_wm is not None:
+            try:
+                _orch_wm.orch_set_coordinator_phase(phase, detail)
+            except Exception:
+                logger.debug("wm_orch_set_coordinator_phase failed", exc_info=True)
+
     def _wm_orch_add_escalation(
         team_id: str, member_idx: int, context: str,
     ):
@@ -2118,6 +2269,51 @@ def build_hooks_v4(
                 _orch_wm.orch_resolve_escalation(team_id, member_idx, outcome)
             except Exception:
                 logger.debug("wm_orch_resolve_escalation failed", exc_info=True)
+
+    def _wm_sync_wake_attention_board(team_manager: Any) -> None:
+        compositor = dual_wm if (
+            dual_wm is not None and hasattr(dual_wm, "set_wake_attention_board")
+        ) else working_memory
+        if compositor is None or not hasattr(compositor, "set_wake_attention_board"):
+            return
+        try:
+            from nls.agentic.wake_coordination import build_batched_completion_review_message
+
+            parts: list[str] = []
+            pending = getattr(team_manager, "_pending_completion_reviews", {}) or {}
+            team_ids = {
+                info.get("team_id", "")
+                for info in pending.values()
+                if info.get("team_id")
+            }
+            for tid in sorted(team_ids):
+                parts.append(build_batched_completion_review_message(team_manager, tid))
+            active = team_manager.get_active_summary()
+            if active:
+                parts.append(active)
+            board = "\n\n".join(p for p in parts if p.strip()).strip()
+            if board:
+                compositor.set_wake_attention_board(board)
+            else:
+                compositor.clear_wake_attention_board()
+            terminal = {
+                t.id for t in team_manager._teams.values()
+                if getattr(t, "completion_reported", False)
+            }
+            if hasattr(compositor, "prune_stale_orchestration_team_slots"):
+                compositor.prune_stale_orchestration_team_slots(terminal)
+        except Exception:
+            logger.debug("wm_sync_wake_attention_board failed", exc_info=True)
+
+    def _wm_prune_stale_tactical_goals(plan_store: Any, plan_id: str) -> None:
+        compositor = dual_wm if dual_wm is not None else working_memory
+        if compositor is None or not plan_id:
+            return
+        try:
+            from nls.agentic.coordinator_guard import prune_stale_tactical_goals_for_plan
+            prune_stale_tactical_goals_for_plan(compositor, plan_store, plan_id)
+        except Exception:
+            logger.debug("wm_prune_stale_tactical_goals failed", exc_info=True)
 
     # ----- Event logging -----
 
@@ -2137,7 +2333,10 @@ def build_hooks_v4(
 
     # ----- Learning Accumulator (live consolidation) -----
     from nls.brain.learning_accumulator import LearningAccumulator
-    _accumulator = LearningAccumulator(vllm_client=vllm_client)
+    _accumulator = LearningAccumulator(
+        vllm_client=vllm_client,
+        adapter_name=inference_adapter,
+    )
     _brain_bus.subscribe(BrainSignalType.TOOL_RESULT, _accumulator.on_tool_result)
     _brain_bus.subscribe(BrainSignalType.TURN_END, _accumulator.on_turn_end)
     # LOOP_END is NOT subscribed here: the loop handles loop-end ingestion
@@ -2150,6 +2349,20 @@ def build_hooks_v4(
             ans.absorb_signals_to_rings(working_memory)
         if self_state is not None:
             self_state.beat(hypothalamus=hypothalamus)
+
+    def _wm_get_tactical_goals() -> list[str]:
+        if working_memory is None:
+            return []
+        try:
+            return [
+                str(g.content).strip()
+                for g in working_memory.get_goals()
+                if getattr(g, "level", "") == "tactical"
+                and isinstance(getattr(g, "content", None), str)
+                and str(g.content).strip()
+            ]
+        except Exception:
+            return []
 
     def _wm_get_credentials() -> list[tuple[str, str]]:
         """Return (domain_hint, content) pairs from the Cryptex credentials ring."""
@@ -2169,12 +2382,33 @@ def build_hooks_v4(
         except Exception:
             return []
 
+    from .outbound_notify import make_outbound_hooks
+
+    _outbound_check, _outbound_record = make_outbound_hooks(outbound_gate)
+
+    _on_compaction = None
+    _cryptex = (
+        dual_wm
+        if dual_wm is not None and hasattr(dual_wm, "make_compaction_hook")
+        else working_memory
+    )
+    if _cryptex is not None and hasattr(_cryptex, "make_compaction_hook"):
+        _on_compaction = _cryptex.make_compaction_hook()
+    elif _cryptex is not None and hasattr(_cryptex, "absorb_compaction"):
+        def _on_compaction(anchor: Any) -> None:
+            _cryptex.absorb_compaction(anchor)
+
     _hooks = LoopHooks(
         get_steering_messages=_get_steering_messages,
         has_active_plan=_has_active_plan,
+        plan_has_pending_steps=_plan_has_pending_steps,
+        plan_requires_team_delegation=_plan_requires_team_delegation,
+        plan_suppresses_raw_delegate=_plan_suppresses_raw_delegate,
         transform_context=_transform_context_v4,
         get_preflight_knowledge=_get_preflight_knowledge,
         on_before_tool=None,
+        outbound_check=_outbound_check,
+        outbound_record=_outbound_record,
         on_after_tool=_on_after_tool,
         on_tool_success=_on_tool_success,
         on_tool_error=_on_tool_error,
@@ -2192,6 +2426,7 @@ def build_hooks_v4(
         wm_set_plan_position=_wm_set_plan_position,
         wm_push_instructions=_wm_push_instructions,
         wm_refresh_todo_board=_wm_refresh_todo_board,
+        on_compaction=_on_compaction,
         ans_tool_learning=_ans_tool_learning,
         ans_on_response=_ans_on_response,
         ans_record_task_complete=_ans_record_task_complete,
@@ -2202,15 +2437,24 @@ def build_hooks_v4(
         classify_expert_needs=None,
         wm_orch_update_team=_wm_orch_update_team,
         wm_orch_record_decision=_wm_orch_record_decision,
+        wm_orch_set_coordinator_phase=_wm_orch_set_coordinator_phase,
         wm_orch_add_escalation=_wm_orch_add_escalation,
         wm_orch_resolve_escalation=_wm_orch_resolve_escalation,
+        wm_sync_wake_attention_board=_wm_sync_wake_attention_board,
+        wm_prune_stale_tactical_goals=_wm_prune_stale_tactical_goals,
         wm_get_credentials=_wm_get_credentials,
+        wm_get_tactical_goals=_wm_get_tactical_goals,
         log_event=_log_event_fn,
         mid_wait_hook=_mid_wait_absorb,
     )
     _hooks.brain_event_bus = _brain_bus  # type: ignore[attr-defined]
     _hooks._render_mode_ref = _render_mode_ref  # type: ignore[attr-defined]
     _hooks._loop_state_ref = _loop_state_ref  # type: ignore[attr-defined]
+    _hooks._cryptex_compositor = (  # type: ignore[attr-defined]
+        dual_wm if (dual_wm is not None and hasattr(dual_wm, "compose_context"))
+        else working_memory if hasattr(working_memory, "compose_context")
+        else None
+    )
     _hooks._accumulator = _accumulator  # type: ignore[attr-defined]
     _hooks._accumulator_wm_target = dual_wm  # type: ignore[attr-defined]
     hooks_ref[0] = _hooks

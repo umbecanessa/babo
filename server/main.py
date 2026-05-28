@@ -150,8 +150,8 @@ async def lifespan(app: FastAPI):
 
     nestjs_url = os.environ.get("NESTJS_URL", "")
     relay_secret = (
-        os.environ.get("RUNTIME_SHARED_SECRET")
-        or os.environ.get("RUNTIME_SHARED_SECRET", "")
+        os.environ.get("RUNTIME_SHARED_SECRET", "").strip()
+        or os.environ.get("NLS_SHARED_SECRET", "").strip()
     )
     if nestjs_url:
         from nls.runtime.channels import ChannelRelayClient
@@ -230,7 +230,7 @@ async def lifespan(app: FastAPI):
 
     for agent_id, runtime in agent_manager._runtimes.items():
         try:
-            runtime.shutdown()
+            await runtime.shutdown_async()
             logger.info("Shut down agent %s", agent_id)
         except Exception as exc:
             logger.warning("Failed to shut down agent %s: %s", agent_id, exc)

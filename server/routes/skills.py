@@ -498,7 +498,10 @@ async def _repair_stream(loader, sk, runtime, name: str):
         except Exception:
             logger.warning("Could not build ANS hooks for repair", exc_info=True)
 
-    vllm_client = runtime.vllm_client
+    vllm_client, adapter_name = runtime.inference_pipeline()
+    if vllm_client is None:
+        yield _sse({"type": "error", "message": "No inference client configured for this agent"})
+        return
     tool_dict = {t.name: t for t in tools}
 
     current_error = sk.error or "Unknown error"
@@ -552,6 +555,7 @@ async def _repair_stream(loader, sk, runtime, name: str):
                             on_event=_on_event,
                             user_input=user_input,
                             enable_thinking=False,
+                            adapter_name=adapter_name,
                         ),
                         timeout=_REPAIR_TIMEOUT_S,
                     )

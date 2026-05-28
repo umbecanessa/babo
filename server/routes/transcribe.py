@@ -122,8 +122,14 @@ async def _proxy_to_gpu_worker(
     """Forward transcription to the remote GPU Worker."""
     import httpx
 
-    gpu_url = os.environ.get("NLS_GPU_WORKER_URL", "")
-    gpu_secret = os.environ.get("NLS_GPU_WORKER_SECRET", "")
+    gpu_url = (
+        os.environ.get("NLS_TRANSCRIBE_WORKER_URL", "")
+        or os.environ.get("NLS_GPU_WORKER_URL", "")
+    )
+    gpu_secret = (
+        os.environ.get("NLS_TRANSCRIBE_WORKER_SECRET", "")
+        or os.environ.get("NLS_GPU_WORKER_SECRET", "")
+    )
 
     if not gpu_url:
         try:

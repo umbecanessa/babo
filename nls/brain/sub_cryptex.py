@@ -58,9 +58,13 @@ logger = logging.getLogger(__name__)
 SUB_RING_TASK = "task"
 SUB_RING_PROGRESS = "progress"
 SUB_RING_KNOWLEDGE = "knowledge"
+SUB_RING_ORCHESTRATOR = "orchestrator"
 
 # Position names for structured rings
 _POS_INSTRUCTIONS = "instructions"
+_POS_TECH_STACK = "tech_stack"
+_POS_FILE_OWNERSHIP = "file_ownership"
+_POS_FILE_CONTEXT = "file_context"
 _POS_MANIFEST = "manifest"
 _POS_BRIEFING = "briefing"
 _POS_ACTIVE = "active"
@@ -76,6 +80,8 @@ _SUB_RING_REGISTRY: tuple[RingSpec, ...] = (
              allow_cross_read=True, max_slots_per_position=8),
     RingSpec(SUB_RING_KNOWLEDGE, RING_FIXED, "Learned Knowledge",
              allow_cross_read=True, max_slots_per_position=6),
+    RingSpec(SUB_RING_ORCHESTRATOR, RING_FIXED, "Orchestrator Directives",
+             allow_cross_read=True, max_slots_per_position=8),
     RingSpec(RING_PROJECT_FACTS, RING_FIXED, "Project Facts",
              allow_cross_read=True, max_slots_per_position=12),
     RingSpec(RING_CREDENTIALS, RING_FIXED, "Credentials",
@@ -90,6 +96,7 @@ _SUB_SPECS_BY_ID: dict[str, RingSpec] = {s.ring_id: s for s in _SUB_RING_REGISTR
 
 _DEFAULT_PRIORITIES: dict[str, float] = {
     SUB_RING_TASK: 1.0,
+    SUB_RING_ORCHESTRATOR: 0.97,
     SUB_RING_PROGRESS: 0.9,
     SUB_RING_KNOWLEDGE: 0.8,
     RING_PROJECT_FACTS: 0.65,
@@ -104,6 +111,7 @@ _EXEC_TOOLS = frozenset({"bash"})
 
 # Ring-section headers used by compose_context
 _RING_HEADERS: dict[str, str] = {
+    SUB_RING_ORCHESTRATOR: "[ORCHESTRATOR — follow these directives]",
     SUB_RING_PROGRESS: "[PROGRESS — what you have already done]",
     SUB_RING_KNOWLEDGE: "[KNOWLEDGE — what you have learned]",
     RING_PROJECT_FACTS: "[PROJECT FACTS]",
@@ -111,6 +119,8 @@ _RING_HEADERS: dict[str, str] = {
     RING_TACTICAL_GOALS: "[GOALS]",
     RING_SKILLS: "[RELEVANT SKILLS]",
 }
+
+_SKILL_BOOST_HEADER = "[⚠ RELEVANT SKILLS — use now (stuck recovery)]"
 
 _MAX_CROSS_READ_LINES = 8
 
@@ -185,6 +195,8 @@ class SubCryptex:
         self._files_read: list[str] = []
         self._errors_seen: list[str] = []
         self._tools_used: dict[str, int] = {}
+        self._file_ledger: Any | None = None
+        self._skill_boost_remaining: int = 0
 
         # Set initial active positions for multi-position rings
         self._rings[SUB_RING_TASK].rotate(_POS_INSTRUCTIONS)
@@ -199,6 +211,8 @@ class SubCryptex:
     def tick(self) -> None:
         """Advance iteration counter and periodically decay salience."""
         self._iteration += 1
+        if self._skill_boost_remaining > 0:
+            self._skill_boost_remaining -= 1
         if self._iteration % self._DECAY_INTERVAL == 0:
             for ring in self._rings.values():
                 ring.decay_salience(dt=1.0)
@@ -219,6 +233,9 @@ class SubCryptex:
         context_window_tokens: int = 0,
         file_manifest: list[str] | None = None,
         team_briefing: str = "",
+        tech_stack_block: str = "",
+        file_ownership_block: str = "",
+        file_ledger: Any | None = None,
     ) -> "SubCryptex":
         """Create a pre-populated SubCryptex from the parent's Cryptex.
 
@@ -250,6 +267,30 @@ class SubCryptex:
             position=_POS_INSTRUCTIONS,
         )
 
+        if tech_stack_block:
+            sc._rings[SUB_RING_TASK].upsert_slot(
+                domain="tech_stack",
+                content=tech_stack_block[:3000],
+                slot_type="instruction",
+                salience=1.0,
+                source="genesis",
+                access="genesis",
+                position=_POS_TECH_STACK,
+            )
+
+        if file_ownership_block:
+            sc._rings[SUB_RING_TASK].upsert_slot(
+                domain="file_ownership",
+                content=file_ownership_block[:2000],
+                slot_type="instruction",
+                salience=0.98,
+                source="genesis",
+                access="genesis",
+                position=_POS_FILE_OWNERSHIP,
+            )
+
+        sc._file_ledger = file_ledger
+
         # --- Task ring: manifest position (compact directory summary) ---
         if file_manifest:
             tree_summary = _summarize_tree(file_manifest)
@@ -262,11 +303,14 @@ class SubCryptex:
                 position=_POS_MANIFEST,
             )
 
-        # --- Task ring: briefing position (team context, decays) ---
+        # --- Task ring: briefing position (peer awareness only, decays) ---
         if team_briefing:
             sc._rings[SUB_RING_TASK].upsert_slot(
                 domain="team_briefing",
-                content=team_briefing[:2000],
+                content=(
+                    "Teammate scopes (awareness only — do NOT implement these):\n"
+                    + team_briefing[:1800]
+                ),
                 slot_type="fact",
                 salience=0.6,
                 source="genesis",
@@ -384,19 +428,32 @@ class SubCryptex:
         used = 0
         parts: list[str] = []
 
-        # --- Task: always render instructions position (forced) ---
+        # --- Task: always render locked positions (instructions + stack + ownership) ---
         task_ring = self._rings.get(SUB_RING_TASK)
         if task_ring:
             old_pos = task_ring.active_position
-            task_ring.rotate(_POS_INSTRUCTIONS)
-            for slot in task_ring.get_active_slots():
-                parts.append(slot.content)
-                used += _estimate_tokens(slot.content)
+            for locked_pos in (
+                _POS_INSTRUCTIONS,
+                _POS_TECH_STACK,
+                _POS_FILE_OWNERSHIP,
+                _POS_FILE_CONTEXT,
+            ):
+                slots = task_ring.positions.get(locked_pos) or []
+                for slot in sorted(slots, key=lambda s: s.salience, reverse=True):
+                    parts.append(slot.content)
+                    used += _estimate_tokens(slot.content)
             # Cross-read manifest + briefing as compact summaries
             cross = task_ring.cross_read(max_per_position=1)
             if cross:
                 xr_lines: list[str] = []
                 for pos_id, slot in cross:
+                    if pos_id in (
+                        _POS_INSTRUCTIONS,
+                        _POS_TECH_STACK,
+                        _POS_FILE_OWNERSHIP,
+                        _POS_FILE_CONTEXT,
+                    ):
+                        continue
                     xr_lines.append(f"  [{pos_id}] {slot.content[:120]}")
                 if xr_lines:
                     xr_text = "\n".join(xr_lines)
@@ -460,7 +517,14 @@ class SubCryptex:
         self, ring_id: str, ring: WMRing, budget: int,
     ) -> str:
         """Render a ring using rotation: active position full, others as cross-read."""
-        header = _RING_HEADERS.get(ring_id, f"[{ring_id.upper()}]")
+        _boost_skills = (
+            ring_id == RING_SKILLS and self._skill_boost_remaining > 0
+        )
+        header = (
+            _SKILL_BOOST_HEADER
+            if _boost_skills
+            else _RING_HEADERS.get(ring_id, f"[{ring_id.upper()}]")
+        )
         lines: list[str] = [header]
 
         active_budget = int(budget * 0.7)
@@ -472,6 +536,8 @@ class SubCryptex:
             sorted_slots = sorted(active_slots, key=lambda s: s.salience, reverse=True)
             for slot in sorted_slots:
                 max_content = self._slot_render_limit(ring_id)
+                if _boost_skills:
+                    max_content = max(max_content, 800)
                 content = slot.content[:max_content]
                 if len(slot.content) > max_content:
                     content += "..."
@@ -546,8 +612,29 @@ class SubCryptex:
         """Update rings from a tool outcome, rotating by file/area."""
         self._tools_used[tool_name] = self._tools_used.get(tool_name, 0) + 1
 
+        path = args.get("path", args.get("file_path", args.get("pattern", "")))
+        ledger = getattr(self, "_file_ledger", None)
+        if ledger is not None and path and tool_name in _WRITE_TOOLS | _READ_TOOLS:
+            try:
+                from nls.tools.agent_tools.file_ledger import normalize_ledger_path
+                norm = normalize_ledger_path(str(path))
+                if norm:
+                    ctx = ledger.format_path_context(norm, {})
+                    task_ring = self._rings.get(SUB_RING_TASK)
+                    if task_ring:
+                        task_ring.upsert_slot(
+                            domain=f"file_ctx:{norm[-40:]}",
+                            content=ctx[:1200],
+                            slot_type="fact",
+                            salience=0.95,
+                            source="ledger",
+                            position=_POS_FILE_CONTEXT,
+                        )
+                        task_ring.rotate(_POS_FILE_CONTEXT)
+            except Exception:
+                pass
+
         if tool_name in _WRITE_TOOLS and not is_error:
-            path = args.get("path", args.get("file_path", ""))
             if path:
                 if tool_name == "delete_file":
                     self._files_modified = [f for f in self._files_modified if f != path]
@@ -900,6 +987,36 @@ class SubCryptex:
         lines.append(f"  Errors: {len(self._errors_seen)}")
         return "\n".join(lines)
 
+    _MAX_ORCHESTRATOR_DIRECTIVES = 8
+
+    def upsert_orchestrator_directive(
+        self,
+        content: str,
+        *,
+        domain: str = "hint",
+        salience: float = 0.95,
+        replace_domain: bool = True,
+    ) -> bool:
+        """Store an orchestrator hint in the high-priority orchestrator ring.
+
+        When ``replace_domain`` is True, a new directive with the same
+        ``domain`` replaces the previous one (e.g. ``finalize`` overwrites
+        an older finalize mandate).
+        """
+        if not content.strip():
+            return False
+        ring = self._rings.get(SUB_RING_ORCHESTRATOR)
+        if ring is None:
+            return False
+        ring.upsert_slot(
+            domain=domain,
+            content=content.strip(),
+            salience=min(1.0, max(0.5, salience)),
+            source="orchestrator",
+            slot_type="instruction",
+        )
+        return True
+
     def upsert(
         self,
         ring_id: str,
@@ -908,6 +1025,10 @@ class SubCryptex:
         salience: float = 0.9,
     ) -> bool:
         """Orchestrator pushes content into a sub-agent ring."""
+        if ring_id == SUB_RING_ORCHESTRATOR:
+            return self.upsert_orchestrator_directive(
+                content, domain=domain, salience=salience,
+            )
         ring = self._rings.get(ring_id)
         if ring is None:
             return False
@@ -931,6 +1052,29 @@ class SubCryptex:
             1.0, self._priorities[ring_id] + boost,
         )
         return True
+
+    def activate_skill_discovery_boost(self, reason: str = "", ttl_iters: int = 8) -> None:
+        """Promote skills ring when delegate is stuck or receives a hint."""
+        from nls.agentic.skill_discovery_boost import (
+            SKILL_DISCOVERY_PROMPT,
+            SKILL_DISCOVERY_SLOT_DOMAIN,
+        )
+
+        self._skill_boost_remaining = max(self._skill_boost_remaining, ttl_iters)
+        self.boost_priority(RING_SKILLS, 0.42)
+        ring = self._rings.get(RING_SKILLS)
+        if ring is None:
+            return
+        body = SKILL_DISCOVERY_PROMPT
+        if reason:
+            body = f"{body}\n\nTrigger: {reason[:200]}"
+        ring.upsert_slot(
+            domain=SKILL_DISCOVERY_SLOT_DOMAIN,
+            content=body,
+            slot_type="skill",
+            salience=1.0,
+            source="stall_boost",
+        )
 
     # ------------------------------------------------------------------
     # Hook factories (for wiring into LoopHooks)

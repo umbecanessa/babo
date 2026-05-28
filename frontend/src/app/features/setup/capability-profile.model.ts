@@ -58,12 +58,22 @@ export interface CapabilityScan {
   lan: LanServiceProbe[];
 }
 
+/** Optional sub-agent (delegate) chat model; uses `inference` when unset. */
+export interface DelegateInferenceSettings {
+  /** OpenRouter-style model id for delegate loops */
+  model?: string;
+  /** When true, delegates always use `inference.model` */
+  usePrimaryModel?: boolean;
+}
+
 export interface CapabilityProfile {
   version: 1;
   profileId?: string;
   scan?: CapabilityScan;
   inferenceCapabilities?: InferenceCapabilities;
   inference: WorkloadPlacement;
+  /** Sub-agents / delegates; defaults to primary inference model */
+  delegateInference?: DelegateInferenceSettings;
   visualCortex: WorkloadPlacement;
   transcribe: WorkloadPlacement;
   embeddings: WorkloadPlacement;

@@ -680,17 +680,46 @@ export class ApiService {
   private normalizeAgent(raw: any): Agent {
     const runtimeAgentId =
       raw.runtimeAgentId || raw.agent_id || '';
-    const runtimeStatus = raw.runtime || undefined;
+    const runtime = this.extractRuntimeStatus(raw);
+    const agentStatus =
+      raw.status || runtime?.status || 'offline';
+    if (runtime && !runtime.status) {
+      runtime.status = agentStatus;
+    }
     return {
       id: raw.id || raw.agent_id || '',
       userId: raw.userId || raw.user_id || '',
       runtimeAgentId,
       name: raw.name || null,
       genesisVersion: raw.genesisVersion || raw.genesis_version || '',
-      status: raw.status || 'offline',
+      status: agentStatus,
       createdAt: raw.createdAt || raw.created_at || '',
-      runtime: runtimeStatus,
+      runtime,
       userPaused: raw.userPaused ?? raw.user_paused ?? false,
     };
+  }
+
+  /** Merge nested or flat Python runtime fields into AgentRuntimeStatus. */
+  private extractRuntimeStatus(raw: any): AgentRuntimeStatus | undefined {
+    const nested = raw.runtime;
+    const runtime: AgentRuntimeStatus =
+      nested && typeof nested === 'object' ? { ...nested } : {};
+
+    const flatKeys = [
+      'agent_id', 'agent_name', 'status', 'initialized', 'turn_count', 'sleep_count',
+      'facts_in_memory', 'fact_count', 'hormones', 'ans', 'thalamus', 'thalamus_bands',
+      'in_vram', 'heartbeat', 'working_memory', 'narrative', 'narrative_self',
+      'theory_of_mind', 'predictive', 'predictive_processing', 'network_dynamics',
+      'last_interaction', 'orchestrator_model', 'delegate_model', 'activity',
+      'consciousness',
+    ] as const;
+
+    for (const key of flatKeys) {
+      if (raw[key] !== undefined && runtime[key] === undefined) {
+        runtime[key] = raw[key];
+      }
+    }
+
+    return Object.keys(runtime).length > 0 ? runtime : undefined;
   }
 }

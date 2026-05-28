@@ -24,11 +24,6 @@
     <div class="selection-stage animate-fade-in">
       <div class="selection-header">
         <h1 class="selection-title">Choose a Mind</h1>
-        <button class="info-btn" (click)="onboardingModal?.show()" title="About this page">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
-          </svg>
-        </button>
       </div>
       <p class="selection-subtitle">Each path shapes how your agent thinks</p>
 
@@ -178,6 +173,25 @@
         <button class="confirm-btn" (click)="confirmSoulWish()">Continue</button>
       </div>
     </div>
+
+    <div class="creation-model-corner" aria-label="Inference model">
+      @if (modelService.showPicker()) {
+        <app-chat-model-picker
+          mode="creation"
+          variant="chip"
+          align="right"
+          menuPlacement="up"
+        />
+      } @else {
+        <div class="model-chip-placeholder" [class.loading]="modelService.loadingModels()">
+          @if (modelService.defaultModelLabel()) {
+            {{ modelService.defaultModelLabel() }}
+          } @else {
+            Loading models…
+          }
+        </div>
+      }
+    </div>
   }
 
   <!-- ═══ Phase: Waiting / Creating / Done (Orb) ═══ -->
@@ -224,5 +238,4 @@
     </div>
   }
 
-  <app-onboarding-modal #onboardingModal [config]="onboardingConfig" />
 </div>

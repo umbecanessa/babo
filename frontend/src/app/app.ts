@@ -9,11 +9,22 @@ import { UpdateService } from './core/services/update.service';
 import { ToastComponent } from './shared/toast/toast.component';
 import { UpdateBannerComponent } from './shared/update-banner/update-banner.component';
 import { UpdateModalComponent } from './shared/update-banner/update-modal.component';
+import { ThemeService } from './core/services/theme.service';
+import { Day1CoachComponent } from './shared/onboarding/day1-coach.component';
 
 @Component({
   selector: 'app-root',
   standalone: true,
-  imports: [CommonModule, RouterOutlet, RouterLink, RouterLinkActive, ToastComponent, UpdateBannerComponent, UpdateModalComponent],
+  imports: [
+    CommonModule,
+    RouterOutlet,
+    RouterLink,
+    RouterLinkActive,
+    ToastComponent,
+    UpdateBannerComponent,
+    UpdateModalComponent,
+    Day1CoachComponent,
+  ],
   templateUrl: './app.html',
   styleUrl: './app.scss',
 })
@@ -30,6 +41,7 @@ export class App implements OnInit, OnDestroy {
     public auth: AuthService,
     public platform: PlatformService,
     public updateService: UpdateService,
+    public theme: ThemeService,
     private router: Router,
     private translate: TranslateService,
   ) {

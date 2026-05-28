@@ -314,6 +314,10 @@ class AgentManager:
 
         await self.load_agent(created_id)
 
+        runtime = self._runtimes.get(created_id)
+        if runtime and name and not (runtime.agent_name or "").strip():
+            runtime._save_agent_name(name.strip())
+
         logger.info(
             "Agent %s created from genesis %s (name=%s)",
             created_id, genesis_version, name,
@@ -366,7 +370,10 @@ class AgentManager:
         # Cache metadata from agent_meta.json
         self._load_agent_meta(agent_id, agent_dir)
 
-        # Start Visual Cortex capture loop if enabled (mirrors legacy ServerRuntime behavior)
+        # Start Visual Cortex capture loop if enabled.  Each agent gets its
+        # own capture loop/buffer; the local VLM subprocess is shared process-
+        # wide via SharedVLMRegistry (one SmolVLM worker + bounded request
+        # queue for all agents).
         vc = getattr(runtime, "visual_cortex", None)
         if vc is not None and getattr(getattr(vc, "config", None), "enabled", False):
             try:
@@ -474,7 +481,7 @@ class AgentManager:
         runtime = self._runtimes.pop(agent_id, None)
         if runtime is not None:
             runtime.save_state()
-            runtime.shutdown()
+            await runtime.shutdown_async()
 
         self.sleep_scheduler.unregister_runtime(agent_id)
 
@@ -564,6 +571,13 @@ class AgentManager:
         cs = getattr(self, "consciousness_scheduler", None)
         if cs is not None:
             result["user_paused"] = cs.is_agent_paused(agent_id)
+            try:
+                cs_agents = cs.get_status().get("agents", {})
+                agent_cs = cs_agents.get(agent_id)
+                if agent_cs:
+                    result["consciousness"] = agent_cs
+            except Exception:
+                pass
 
         return result
 

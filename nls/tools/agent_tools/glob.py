@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
@@ -29,11 +30,24 @@ _SKIP_DIRS = frozenset({
 })
 
 
-from .write import _resolve_path  # shared dedup-aware resolver
+from .write import _resolve_path, format_path_for_agent  # shared path helpers
 
 
 def _should_skip(path: Path) -> bool:
     return any(part in _SKIP_DIRS for part in path.parts)
+
+
+def _expand_brace_globs(pattern: str) -> list[str]:
+    """Expand ``*.{jsx,js}`` into patterns pathlib accepts on all platforms."""
+    m = re.search(r"\{([^{}]+)\}", pattern)
+    if not m:
+        return [pattern]
+    prefix = pattern[: m.start()]
+    suffix = pattern[m.end() :]
+    alts = [a.strip() for a in m.group(1).split(",") if a.strip()]
+    if not alts:
+        return [pattern]
+    return [f"{prefix}{alt}{suffix}" for alt in alts]
 
 
 class GlobTool:
@@ -66,7 +80,8 @@ class GlobTool:
     def description(self) -> str:
         return (
             "Find files matching a glob pattern. "
-            "Supports ** for recursive matching (e.g. '**/*.py', 'src/**/*.ts'). "
+            "Supports ** for recursive matching (e.g. '**/*.py', 'src/**/*.ts') "
+            "and brace alternates (e.g. '**/*.{jsx,js}'). "
             "Results are sorted by modification time (newest first). "
             "Use `path` to limit search to a subdirectory. "
             "Skips .git, node_modules, __pycache__, and other noise dirs automatically."
@@ -137,7 +152,14 @@ class GlobTool:
             glob_pattern = f"**/{pattern}"
 
         try:
-            matches_raw = list(base.glob(glob_pattern))
+            patterns = _expand_brace_globs(glob_pattern)
+            matches_raw: list[Path] = []
+            seen: set[Path] = set()
+            for pat in patterns:
+                for p in base.glob(pat):
+                    if p not in seen:
+                        seen.add(p)
+                        matches_raw.append(p)
         except Exception as e:
             return ToolResult(content=f"Error: Invalid glob pattern: {e}", is_error=True)
 
@@ -156,14 +178,13 @@ class GlobTool:
         except Exception:
             matches.sort()
 
-        ws_root = Path(self._workspace_root).resolve()
         lines: list[str] = []
         for p in matches[:max_results]:
-            try:
-                rel = p.relative_to(ws_root)
-                path_display = str(rel).replace("\\", "/")
-            except ValueError:
-                path_display = str(p)
+            path_display = format_path_for_agent(
+                p,
+                workspace_root=self._workspace_root,
+                effective_cwd=self._effective_cwd,
+            )
 
             if p.is_file():
                 try:

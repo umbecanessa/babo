@@ -59,11 +59,6 @@
                 "input": "src/assets",
                 "output": "/assets"
               },
-              {
-                "glob": "*.js",
-                "input": "node_modules/monaco-editor/min/vs/assets",
-                "output": "/monaco-workers"
-              },
               "src/manifest.webmanifest"
             ],
             "styles": [
@@ -83,8 +78,8 @@
                 },
                 {
                   "type": "anyComponentStyle",
-                  "maximumWarning": "32kB",
-                  "maximumError": "48kB"
+                  "maximumWarning": "48kB",
+                  "maximumError": "56kB"
                 }
               ],
               "outputHashing": "all",

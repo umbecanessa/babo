@@ -1,8 +1,8 @@
-$bg-panel: #0d0d12;
-$border: rgba(255, 255, 255, 0.08);
-$accent: #38bdf8;
-$text-heading: #e5e5e5;
-$text-muted: #787890;
+$bg-panel: var(--glass-bg);
+$border: var(--glass-border);
+$accent: var(--accent-primary);
+$text-heading: var(--text-primary);
+$text-muted: var(--text-muted);
 $radius-lg: 14px;
 
 .modal-backdrop {
@@ -12,7 +12,7 @@ $radius-lg: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.65);
+  background: var(--overlay-5);
   backdrop-filter: blur(6px);
   animation: fadeIn 0.18s ease-out;
 
@@ -28,9 +28,11 @@ $radius-lg: 14px;
   display: flex;
   flex-direction: column;
   background: $bg-panel;
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
   border: 1px solid $border;
   border-radius: $radius-lg;
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--shadow-glass), 0 24px 80px var(--overlay-5);
   animation: slideUp 0.22s ease-out;
 
   .closing & {
@@ -69,8 +71,8 @@ $radius-lg: 14px;
 
   &:hover {
     color: $text-heading;
-    border-color: rgba(255, 255, 255, 0.15);
-    background: rgba(255, 255, 255, 0.04);
+    border-color: var(--overlay-5);
+    background: var(--overlay-2);
   }
 }
 
