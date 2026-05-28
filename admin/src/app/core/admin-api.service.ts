@@ -3,6 +3,14 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { environment } from '../../environments/environment';
 
+export interface SetupStatus {
+  needsSetup: boolean;
+  hasAdmin: boolean;
+  userCount: number;
+  canClaimExisting: boolean;
+  setupMode: 'create' | 'claim' | 'ready';
+}
+
 @Injectable({ providedIn: 'root' })
 export class AdminApiService {
   private base = `${environment.apiUrl}/admin`;
@@ -11,9 +19,7 @@ export class AdminApiService {
 
   setupStatus() {
     return firstValueFrom(
-      this.http.get<{ needsSetup: boolean; hasAdmin: boolean; userCount: number }>(
-        `${this.base}/setup/status`,
-      ),
+      this.http.get<SetupStatus>(`${this.base}/setup/status`),
     );
   }
 
@@ -53,5 +59,15 @@ export class AdminApiService {
     return firstValueFrom(
       this.http.get<any>(`${this.base}/users/${userId}/usage`, { params }),
     );
+  }
+
+  static errorMessage(err: unknown): string {
+    const e = err as { error?: { message?: string | string[] }; message?: string; status?: number };
+    const msg = e?.error?.message;
+    if (Array.isArray(msg)) return msg.join(', ');
+    if (typeof msg === 'string') return msg;
+    if (e?.status === 403) return 'Administrator access required.';
+    if (e?.status === 401) return 'Session expired or invalid credentials.';
+    return e?.message || 'Request failed';
   }
 }

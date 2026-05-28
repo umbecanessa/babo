@@ -105,7 +105,9 @@ Example: browser `GET /api/rt/agents/{runtimeId}/status` → relay `http_proxy` 
 
 ## Admin (`/api/admin`)
 
-**Setup (public, first run only):** `GET /admin/setup/status`, `POST /admin/setup` — bootstrap first admin when none exists.
+**Setup (public, first run only):** `GET /admin/setup/status`, `POST /admin/setup` — bootstrap or claim first admin when none exists.
+
+**Operator login:** `POST /auth/admin/login` — rejects non-admin accounts (use main app `POST /auth/login` for users).
 
 **Authenticated (`AdminAuthGuard`, admin role):** runtime introspection by **`runtimeAgentId`** (not DB UUID): status, chain, facts, sleep, evict.
 

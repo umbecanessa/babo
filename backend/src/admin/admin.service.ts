@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, UnauthorizedException } from '@nestjs/common';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { RuntimeService } from '../runtime/runtime.service';
@@ -271,10 +271,18 @@ export class AdminService {
       this.prisma.user.count({ where: { role: 'admin' } }),
       this.prisma.user.count(),
     ]);
+    const needsSetup = adminCount === 0;
     return {
-      needsSetup: adminCount === 0,
+      needsSetup,
       hasAdmin: adminCount > 0,
       userCount,
+      /** No admin yet but regular users already registered (e.g. cloud app). */
+      canClaimExisting: needsSetup && userCount > 0,
+      setupMode: needsSetup
+        ? userCount > 0
+          ? 'claim'
+          : 'create'
+        : 'ready',
     };
   }
 
@@ -290,9 +298,19 @@ export class AdminService {
 
     const existing = await this.prisma.user.findUnique({ where: { email } });
     if (existing) {
-      throw new ConflictException(
-        'Email already registered — log in and promote via another admin, or use a different email',
-      );
+      const valid = await bcrypt.compare(password, existing.passwordHash);
+      if (!valid) {
+        throw new UnauthorizedException('Invalid password for this email');
+      }
+      const user = await this.prisma.user.update({
+        where: { id: existing.id },
+        data: {
+          role: 'admin',
+          ...(displayName ? { displayName } : {}),
+        },
+      });
+      await this.entitlements.ensureSubscriptionForUser(user.id);
+      return user;
     }
 
     const passwordHash = await bcrypt.hash(password, 12);

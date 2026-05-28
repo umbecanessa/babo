@@ -27,12 +27,14 @@ Or edit `src/environments/environment.ts`.
 
 ## First-run setup
 
-1. Start backend with empty `users` table (or no admin role).
-2. Open `http://localhost:4201` — you are redirected to **Setup**.
-3. Create the first admin account (`POST /api/admin/setup`).
-4. Sign in and use Dashboard / Users / Agents / Token usage.
+1. Open the admin URL. If **no administrator** exists, you are sent to **Setup**.
+2. **Fresh database:** create a new admin email and password.
+3. **Existing users (e.g. cloud already live):** use **Claim admin** — sign in with your existing Babo email/password; that account is promoted to `admin` (only while no admin exists).
+4. Sign in at **Login** — only accounts with `role: admin` are accepted (`POST /api/auth/admin/login`).
 
-If an admin already exists, use **Login** with an admin account (or promote via SQL: `UPDATE users SET role = 'admin' WHERE email = '...'`).
+Regular Babo user accounts cannot access this console. Promote additional admins from **Users** after the first operator is configured.
+
+If an admin already exists, use **Login** or promote via **Users → Promote** (requires an existing admin session).
 
 ## Production / Railway
 
@@ -60,7 +62,7 @@ Static output in `admin/dist/admin/browser/`. Serve behind nginx or nest static 
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/admin/setup/status` | Public — `{ needsSetup, hasAdmin, userCount }` |
+| GET | `/api/admin/setup/status` | Public — `{ needsSetup, hasAdmin, userCount, canClaimExisting, setupMode }` |
 | POST | `/api/admin/setup` | Public (once) — bootstrap first admin |
 | GET | `/api/admin/stats` | Dashboard counts + runtime health |
 | GET | `/api/admin/users` | All users |

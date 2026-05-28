@@ -165,3 +165,13 @@ table.data th {
 
 a { color: var(--accent-primary); text-decoration: none; }
 a:hover { text-decoration: underline; }
+
+.page-header { margin-bottom: 1rem; }
+.page-title { margin: 0; font-size: 1.5rem; font-weight: 700; }
+.page-desc { margin: 0.35rem 0 0; color: var(--text-muted); font-size: 0.9rem; }
+
+.empty-state {
+  padding: 2rem;
+  text-align: center;
+  color: var(--text-muted);
+}

@@ -16,6 +16,11 @@ export class AuthController {
     return this.auth.login(dto.email, dto.password);
   }
 
+  @Post('admin/login')
+  adminLogin(@Body() dto: LoginDto) {
+    return this.auth.loginAdmin(dto.email, dto.password);
+  }
+
   @Post('refresh')
   refresh(@Body('refreshToken') refreshToken: string) {
     return this.auth.refresh(refreshToken);

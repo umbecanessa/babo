@@ -47,6 +47,27 @@ export class AuthService {
     return this.generateTokens(user.id, user.email, user.role, user.displayName ?? undefined);
   }
 
+  /** Operator console only — rejects non-admin accounts before issuing tokens. */
+  async loginAdmin(email: string, password: string) {
+    const user = await this.prisma.user.findUnique({ where: { email } });
+    if (!user) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    const valid = await bcrypt.compare(password, user.passwordHash);
+    if (!valid) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    if (user.role !== 'admin') {
+      throw new UnauthorizedException(
+        'Administrator access only. Use the main Babo app for user accounts.',
+      );
+    }
+
+    return this.generateTokens(user.id, user.email, user.role, user.displayName ?? undefined);
+  }
+
   async refresh(refreshToken: string) {
     try {
       const payload = this.jwt.verify(refreshToken, {
