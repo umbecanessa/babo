@@ -18,7 +18,8 @@ See [Babo Cloud personas & commercial design](../babo-cloud-personas-and-commerc
 | POST | `/api/gpu/transcribe` | JWT or `nlsk_` (multipart `audio`) |
 | POST | `/api/gpu/vision/describe` | JWT or `nlsk_` |
 | POST | `/api/gpu/embed` | JWT or `nlsk_` |
-| GET | `/api/cloud/subscription` | JWT |
+| GET | `/api/cloud/subscription` | JWT — plan + `usedTokens` / `includedTokens` |
+| GET | `/api/cloud/usage` | JWT — recent `inference_usage` rows + ledger totals |
 | POST | `/api/cloud/subscription/activate` | JWT (stub billing) |
 | PUT | `/api/cloud/providers/inference/:provider` | JWT |
 | PUT | `/api/cloud/providers/resend` | JWT |

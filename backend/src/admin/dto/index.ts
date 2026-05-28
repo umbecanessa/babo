@@ -1,4 +1,17 @@
-import { IsString, IsOptional, IsIn } from 'class-validator';
+import { IsString, IsOptional, IsIn, IsEmail, MinLength } from 'class-validator';
+
+export class AdminBootstrapDto {
+  @IsEmail()
+  email!: string;
+
+  @IsString()
+  @MinLength(8)
+  password!: string;
+
+  @IsOptional()
+  @IsString()
+  displayName?: string;
+}
 
 export class UpdateRoleDto {
   @IsString()

@@ -1,12 +1,15 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { RuntimeService } from '../runtime/runtime.service';
+import { EntitlementsService } from '../babo-cloud/entitlements.service';
 
 @Injectable()
 export class AdminService {
   constructor(
     private prisma: PrismaService,
     private runtime: RuntimeService,
+    private entitlements: EntitlementsService,
   ) {}
 
   // ===================================================================
@@ -237,10 +240,6 @@ export class AdminService {
     return this.fetchRuntimeAdmin(`/admin/analytics/agents/compare?ids=${ids}`);
   }
 
-  // ===================================================================
-  // Stats
-  // ===================================================================
-
   async getStats() {
     const [userCount, agentCount, apiKeyCount] = await Promise.all([
       this.prisma.user.count(),
@@ -260,6 +259,180 @@ export class AdminService {
       agents: agentCount,
       apiKeys: apiKeyCount,
       system: systemHealth,
+    };
+  }
+
+  // ===================================================================
+  // First-run setup
+  // ===================================================================
+
+  async getSetupStatus() {
+    const [adminCount, userCount] = await Promise.all([
+      this.prisma.user.count({ where: { role: 'admin' } }),
+      this.prisma.user.count(),
+    ]);
+    return {
+      needsSetup: adminCount === 0,
+      hasAdmin: adminCount > 0,
+      userCount,
+    };
+  }
+
+  async bootstrapFirstAdmin(
+    email: string,
+    password: string,
+    displayName?: string,
+  ) {
+    const adminCount = await this.prisma.user.count({ where: { role: 'admin' } });
+    if (adminCount > 0) {
+      throw new ForbiddenException('An admin account already exists');
+    }
+
+    const existing = await this.prisma.user.findUnique({ where: { email } });
+    if (existing) {
+      throw new ConflictException(
+        'Email already registered — log in and promote via another admin, or use a different email',
+      );
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    const user = await this.prisma.user.create({
+      data: {
+        email,
+        passwordHash,
+        displayName,
+        role: 'admin',
+      },
+    });
+    await this.entitlements.ensureSubscriptionForUser(user.id);
+    return user;
+  }
+
+  // ===================================================================
+  // Inference usage (Babo Cloud ledger)
+  // ===================================================================
+
+  async getUsageOverview(limit = 50) {
+    const take = Math.min(Math.max(limit, 1), 200);
+    const [recent, totals, byUserRaw] = await Promise.all([
+      this.prisma.inferenceUsage.findMany({
+        orderBy: { createdAt: 'desc' },
+        take,
+        select: {
+          id: true,
+          userId: true,
+          agentId: true,
+          model: true,
+          provider: true,
+          placement: true,
+          route: true,
+          workload: true,
+          promptTokens: true,
+          completionTokens: true,
+          totalTokens: true,
+          upstreamCostCents: true,
+          createdAt: true,
+        },
+      }),
+      this.prisma.inferenceUsage.aggregate({
+        _sum: {
+          promptTokens: true,
+          completionTokens: true,
+          totalTokens: true,
+          upstreamCostCents: true,
+        },
+        _count: true,
+      }),
+      this.prisma.inferenceUsage.groupBy({
+        by: ['userId'],
+        _sum: {
+          promptTokens: true,
+          completionTokens: true,
+          totalTokens: true,
+          upstreamCostCents: true,
+        },
+        _count: { _all: true },
+        orderBy: { _sum: { totalTokens: 'desc' } },
+      }),
+    ]);
+
+    const userIds = [...new Set([
+      ...recent.map((r) => r.userId),
+      ...byUserRaw.map((r) => r.userId),
+    ])];
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: userIds } },
+      select: { id: true, email: true, displayName: true },
+    });
+    const userMap = new Map(users.map((u) => [u.id, u]));
+
+    return {
+      totals: {
+        requestCount: totals._count,
+        promptTokens: totals._sum.promptTokens ?? 0,
+        completionTokens: totals._sum.completionTokens ?? 0,
+        totalTokens: totals._sum.totalTokens ?? 0,
+        upstreamCostCents: totals._sum.upstreamCostCents ?? 0,
+      },
+      byUser: byUserRaw.map((row) => ({
+        userId: row.userId,
+        email: userMap.get(row.userId)?.email ?? null,
+        displayName: userMap.get(row.userId)?.displayName ?? null,
+        requestCount: row._count._all,
+        promptTokens: row._sum.promptTokens ?? 0,
+        completionTokens: row._sum.completionTokens ?? 0,
+        totalTokens: row._sum.totalTokens ?? 0,
+        upstreamCostCents: row._sum.upstreamCostCents ?? 0,
+      })),
+      recent: recent.map((row) => ({
+        ...row,
+        userEmail: userMap.get(row.userId)?.email ?? null,
+      })),
+    };
+  }
+
+  async getUserUsage(userId: string, limit = 50) {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        email: true,
+        displayName: true,
+        role: true,
+        cloudSubscription: true,
+      },
+    });
+    if (!user) throw new NotFoundException('User not found');
+
+    const take = Math.min(Math.max(limit, 1), 200);
+    const [recent, totals] = await Promise.all([
+      this.prisma.inferenceUsage.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        take,
+      }),
+      this.prisma.inferenceUsage.aggregate({
+        where: { userId },
+        _sum: {
+          promptTokens: true,
+          completionTokens: true,
+          totalTokens: true,
+          upstreamCostCents: true,
+        },
+        _count: true,
+      }),
+    ]);
+
+    return {
+      user,
+      ledger: {
+        requestCount: totals._count,
+        promptTokens: totals._sum.promptTokens ?? 0,
+        completionTokens: totals._sum.completionTokens ?? 0,
+        totalTokens: totals._sum.totalTokens ?? 0,
+        upstreamCostCents: totals._sum.upstreamCostCents ?? 0,
+      },
+      recent,
     };
   }
 

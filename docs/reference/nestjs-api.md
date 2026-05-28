@@ -57,7 +57,8 @@ OpenAI-compatible inference relay + GPU workers. Auth: JWT or `nlsk_` API key. R
 | POST | `/gpu/transcribe` | Audio → text |
 | POST | `/gpu/vision/describe` | Image describe |
 | POST | `/gpu/embed` | Embeddings |
-| GET | `/cloud/subscription` | Usage / plan status |
+| GET | `/cloud/subscription` | Plan status (`usedTokens`, trial, quota) |
+| GET | `/cloud/usage` | Per-request inference ledger (tokens per call) |
 
 See [Babo Cloud module](../architecture/nestjs-modules/babo-cloud.md).
 
@@ -104,11 +105,13 @@ Example: browser `GET /api/rt/agents/{runtimeId}/status` → relay `http_proxy` 
 
 ## Admin (`/api/admin`)
 
-`AdminAuthGuard` — admin role users.
+**Setup (public, first run only):** `GET /admin/setup/status`, `POST /admin/setup` — bootstrap first admin when none exists.
 
-Runtime introspection by **`runtimeAgentId`** (not DB UUID): status, chain, facts, sleep, evict.
+**Authenticated (`AdminAuthGuard`, admin role):** runtime introspection by **`runtimeAgentId`** (not DB UUID): status, chain, facts, sleep, evict.
 
-User admin: `GET /admin/stats`, `GET/PATCH/DELETE /admin/users/*`, `GET/DELETE /admin/agents/db/*`, `GET /admin/analytics/overview`, `GET /admin/analytics/compare`.
+User admin: `GET /admin/stats`, `GET/PATCH/DELETE /admin/users/*`, `GET /admin/users/:id/usage`, `GET /admin/usage`, `GET/DELETE /admin/agents/db/*`, `GET /admin/analytics/overview`, `GET /admin/analytics/compare`.
+
+Operator UI: separate Angular app in `admin/` (see `admin/README.md`).
 
 ---
 

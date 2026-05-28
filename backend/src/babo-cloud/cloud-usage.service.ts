@@ -77,6 +77,55 @@ export class CloudUsageService {
     }
   }
 
+  async listForUser(userId: string, limit = 25) {
+    const take = Math.min(Math.max(limit, 1), 100);
+    const [rows, sub] = await Promise.all([
+      this.prisma.inferenceUsage.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        take,
+        select: {
+          id: true,
+          model: true,
+          placement: true,
+          provider: true,
+          route: true,
+          workload: true,
+          promptTokens: true,
+          completionTokens: true,
+          totalTokens: true,
+          agentId: true,
+          apiKeyId: true,
+          requestId: true,
+          createdAt: true,
+        },
+      }),
+      this.entitlements.getSubscription(userId),
+    ]);
+
+    const ledgerTotal = await this.prisma.inferenceUsage.aggregate({
+      where: { userId },
+      _sum: { totalTokens: true },
+      _count: true,
+    });
+
+    return {
+      subscription: sub
+        ? {
+            status: sub.status,
+            includedTokens: sub.includedTokens,
+            usedTokens: sub.usedTokens,
+            trialEndsAt: sub.trialEndsAt,
+          }
+        : null,
+      ledger: {
+        requestCount: ledgerTotal._count,
+        totalTokens: ledgerTotal._sum.totalTokens ?? 0,
+      },
+      recent: rows,
+    };
+  }
+
   normalizeUsage(usage: any): UsageSnapshot {
     const promptTokens = Number(usage.prompt_tokens ?? usage.promptTokens ?? 0);
     const completionTokens = Number(

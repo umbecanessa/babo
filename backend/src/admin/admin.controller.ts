@@ -36,6 +36,12 @@ export class AdminController {
     return this.admin.listUsers();
   }
 
+  @Get('users/:id/usage')
+  getUserUsage(@Param('id') id: string, @Query('limit') limit?: string) {
+    const n = limit ? parseInt(limit, 10) : 50;
+    return this.admin.getUserUsage(id, Number.isFinite(n) ? n : 50);
+  }
+
   @Get('users/:id')
   getUser(@Param('id') id: string) {
     return this.admin.getUser(id);
@@ -155,5 +161,15 @@ export class AdminController {
   @Get('analytics/compare')
   compareAgents(@Query('ids') ids: string) {
     return this.admin.proxyCompareAgents(ids);
+  }
+
+  // ===================================================================
+  // Inference usage (Postgres ledger)
+  // ===================================================================
+
+  @Get('usage')
+  getUsageOverview(@Query('limit') limit?: string) {
+    const n = limit ? parseInt(limit, 10) : 50;
+    return this.admin.getUsageOverview(Number.isFinite(n) ? n : 50);
   }
 }

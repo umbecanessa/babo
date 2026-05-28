@@ -153,7 +153,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @SubscribeMessage('message')
   handleMessage(
     @ConnectedSocket() client: Socket,
-    @MessageBody() data: { type?: string; content?: string; command?: string },
+    @MessageBody() data: { type?: string; content?: string; command?: string; model?: string; sessionKey?: string },
   ) {
     this.logger.log(
       `Message from ${client.id}: type=${data?.type || 'chat'}, content=${(data?.content || '').substring(0, 80)}`,
@@ -209,11 +209,18 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return;
     }
 
-    this.runtime.sendMessage(client.id, {
+    const payload: Record<string, unknown> = {
       type: 'message',
       content: data.content,
       channel_type: 'web',
-    });
+    };
+    if (data.model) {
+      payload.model = data.model;
+    }
+    if (data.sessionKey) {
+      payload.session_key = data.sessionKey;
+    }
+    this.runtime.sendMessage(client.id, payload);
     this.logger.log(`Forwarded to runtime for agent ${runtimeAgentId}`);
   }
 
