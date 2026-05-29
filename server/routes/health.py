@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
-import signal
 from typing import Any
 
 from fastapi import APIRouter, Request
+
+from server.shutdown_trace import record_initiator, request_sigint_exit
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["health"])
@@ -76,11 +76,21 @@ async def hidden_cache_disable(request: Request) -> dict:
 @router.post("/admin/shutdown")
 async def graceful_shutdown(request: Request) -> dict:
     """Trigger a graceful shutdown from the desktop Electron wrapper."""
-    logger.info("Graceful shutdown requested via /admin/shutdown")
+    client_host = request.client.host if request.client else "unknown"
+    user_agent = request.headers.get("user-agent", "")
+    record_initiator(
+        "http:admin_shutdown",
+        client=client_host,
+        user_agent=user_agent[:200] if user_agent else None,
+    )
+    logger.info(
+        "Graceful shutdown requested via /admin/shutdown (client=%s)",
+        client_host,
+    )
 
     async def _exit():
         await asyncio.sleep(0.5)
-        os.kill(os.getpid(), signal.SIGINT)
+        request_sigint_exit()
 
     asyncio.get_running_loop().create_task(_exit())
     return {"ok": True}

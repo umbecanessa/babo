@@ -12,12 +12,20 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
+import { firstValueFrom } from 'rxjs';
 import { ToastService } from '../../shared/toast/toast.service';
 import { Day1CoachService } from '../../shared/onboarding/day1-coach.service';
 import { PlatformService } from '../../core/services/platform.service';
 import { ThemeService, ThemeMode } from '../../core/services/theme.service';
 import { CapabilitySettingsPanelComponent } from '../../shared/capability-settings-panel/capability-settings-panel.component';
 import { AgentModelService } from '../../core/services/agent-model.service';
+import { ApiService } from '../../core/services/api.service';
+import {
+  isLocalNestBackend,
+  localNestWebhookWarning,
+  selfHostedPrerequisiteSteps,
+  usesBaboCloudBackend,
+} from '../../core/services/platform-integrations.util';
 import { environment } from '../../../environments/environment';
 import {
   BACKEND_CHOICES,
@@ -76,7 +84,21 @@ export class SettingsComponent implements OnInit, OnDestroy {
   backendTestResult = signal<{ ok: boolean; message: string; latency: number } | null>(null);
   backendSaving = signal(false);
 
+  /** Self-hosted platform credentials */
+  resendApiKey = signal('');
+  resendInboundDomain = signal('');
+  resendConfigured = signal(false);
+  resendSaving = signal(false);
+  platformCapsLoading = signal(false);
+  emailServerConfigured = signal(false);
+  emailInboundDomain = signal<string | null>(null);
+  nestPublicWebhookBase = signal('');
+
+  platformCaps = signal<import('../../core/models/platform-capabilities.model').PlatformCapabilities | null>(null);
+
   readonly backendChoices = BACKEND_CHOICES;
+  readonly usesBaboCloudBackend = usesBaboCloudBackend;
+  readonly isLocalNestBackend = isLocalNestBackend;
 
   /** Desktop runtime */
   runtimeStatus = signal<RuntimeStatus | null>(null);
@@ -99,6 +121,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       return [
         { id: 'models', label: 'Models & AI' },
         { id: 'account', label: 'Account' },
+        { id: 'integrations', label: 'Integrations' },
         { id: 'system', label: 'System' },
         { id: 'permissions', label: 'Permissions' },
         { id: 'appearance', label: 'Appearance' },
@@ -107,6 +130,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     }
     return [
       { id: 'appearance', label: 'Appearance' },
+      { id: 'integrations', label: 'Integrations' },
       { id: 'keys', label: 'API keys' },
       { id: 'general', label: 'General' },
     ];
@@ -117,10 +141,23 @@ export class SettingsComponent implements OnInit, OnDestroy {
     return id ? ['/tools', id] : ['/dashboard'];
   });
 
+  localWebhookWarning = computed(() =>
+    localNestWebhookWarning(this.backendChoice(), this.nestjsUrl()),
+  );
+
+  integrationPrereqSteps = computed(() =>
+    selfHostedPrerequisiteSteps(
+      this.backendChoice(),
+      this.nestjsUrl(),
+      this.platformCaps(),
+    ),
+  );
+
   private runtimePollTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     private http: HttpClient,
+    private api: ApiService,
     private toast: ToastService,
     private day1Coach: Day1CoachService,
     private router: Router,
@@ -142,7 +179,13 @@ export class SettingsComponent implements OnInit, OnDestroy {
       void this.loadDesktopSettings();
       this.startRuntimePolling();
     } else {
+      this.initWebBackendContext();
       this.loadWebSettings();
+      void this.loadPlatformIntegrations();
+    }
+
+    if (first === 'integrations') {
+      void this.loadPlatformIntegrations();
     }
 
     void this.loadAppVersion();
@@ -161,6 +204,82 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
   openSetupWizard(): void {
     this.router.navigate(['/setup']);
+  }
+
+  /** Web app: derive backend choice from the configured NestJS API URL. */
+  private initWebBackendContext(): void {
+    const url = normalizeNestjsUrl(this.API.replace(/\/api$/i, ''));
+    this.nestjsUrl.set(url);
+    this.backendChoice.set(matchBackendChoice(url));
+  }
+
+  async loadPlatformIntegrations(): Promise<void> {
+    this.platformCapsLoading.set(true);
+    try {
+      const [caps, resend] = await Promise.all([
+        firstValueFrom(this.api.getPlatformCapabilities()).catch(() => null),
+        firstValueFrom(this.api.getResendProviderStatus()).catch(() => null),
+      ]);
+      this.platformCaps.set(caps);
+      if (caps) {
+        this.emailServerConfigured.set(caps.email.serverConfigured);
+        this.emailInboundDomain.set(caps.email.inboundDomain);
+        const base = caps.publicApiBase || this.nestjsUrl();
+        this.nestPublicWebhookBase.set(base.replace(/\/+$/, ''));
+      } else {
+        this.emailServerConfigured.set(false);
+        this.emailInboundDomain.set(null);
+        this.nestPublicWebhookBase.set(this.nestjsUrl().replace(/\/+$/, ''));
+      }
+      this.resendConfigured.set(!!resend?.configured);
+      this.resendInboundDomain.set(resend?.inboundDomain || '');
+    } finally {
+      this.platformCapsLoading.set(false);
+    }
+  }
+
+  async saveResendCredentials(): Promise<void> {
+    const apiKey = this.resendApiKey().trim();
+    const domain = this.resendInboundDomain().trim();
+    if (!apiKey || !domain) {
+      this.toast.show('Resend API key and inbound domain are required', 'error');
+      return;
+    }
+    this.resendSaving.set(true);
+    try {
+      await firstValueFrom(this.api.saveResendProvider(apiKey, domain));
+      this.resendConfigured.set(true);
+      this.resendApiKey.set('');
+      this.toast.show('Resend credentials saved', 'info', 2500);
+      await this.loadPlatformIntegrations();
+    } catch (err: any) {
+      this.toast.show(err?.error?.message || 'Failed to save Resend credentials', 'error');
+    } finally {
+      this.resendSaving.set(false);
+    }
+  }
+
+  async clearResendCredentials(): Promise<void> {
+    if (!confirm('Remove saved Resend credentials?')) return;
+    this.resendSaving.set(true);
+    try {
+      await firstValueFrom(this.api.clearResendProvider());
+      this.resendConfigured.set(false);
+      this.resendInboundDomain.set('');
+      this.toast.show('Resend credentials removed', 'info', 2500);
+      await this.loadPlatformIntegrations();
+    } catch (err: any) {
+      this.toast.show(err?.error?.message || 'Failed to clear credentials', 'error');
+    } finally {
+      this.resendSaving.set(false);
+    }
+  }
+
+  onSectionChange(sectionId: string): void {
+    this.activeSection.set(sectionId);
+    if (sectionId === 'integrations') {
+      void this.loadPlatformIntegrations();
+    }
   }
 
   onCapabilitiesSaved(): void {
@@ -270,6 +389,8 @@ export class SettingsComponent implements OnInit, OnDestroy {
       const url = normalizeNestjsUrl(this.nestjsUrl());
       await this.nls().config.set({ nestjsUrl: url });
       this.nestjsUrl.set(url);
+      this.backendChoice.set(matchBackendChoice(url));
+      void this.loadPlatformIntegrations();
       this.toast.show('Account server saved', 'info', 2000);
     } catch (err: any) {
       this.toast.show(err?.message || 'Could not save', 'error');
@@ -357,6 +478,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       this.backendChoice.set(matchBackendChoice(url));
       this.runtimePort.set(cfg.runtimePort ?? 9222);
       this.setupComplete.set(!!cfg.setupComplete);
+      void this.loadPlatformIntegrations();
     } catch { /* ignore */ }
 
     try {

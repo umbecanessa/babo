@@ -187,10 +187,24 @@ export class AgentsService {
   }
 
   async getRuntimeAgentId(userId: string, agentId: string): Promise<string> {
-    const agent = await this.prisma.agent.findUnique({ where: { id: agentId } });
+    const agent = await this.resolveOwnedAgent(userId, agentId);
+    return agent.runtimeAgentId;
+  }
+
+  /**
+   * Desktop agents are addressed by runtime UUID in URLs; Nest DB rows use a separate id.
+   * Accept either when resolving ownership.
+   */
+  private async resolveOwnedAgent(userId: string, agentOrRuntimeId: string) {
+    let agent = await this.prisma.agent.findUnique({ where: { id: agentOrRuntimeId } });
+    if (!agent) {
+      agent = await this.prisma.agent.findFirst({
+        where: { runtimeAgentId: agentOrRuntimeId, userId },
+      });
+    }
     if (!agent) throw new NotFoundException('Agent not found');
     if (agent.userId !== userId) throw new ForbiddenException();
-    return agent.runtimeAgentId;
+    return agent;
   }
 
   /**

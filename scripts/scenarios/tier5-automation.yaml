@@ -1,0 +1,58 @@
+scenarios:
+  - id: auto-01
+    name: Cron scheduler job
+    category: automation
+    tags: [tier5, automation]
+    timeout_s: 900
+    prompt: >-
+      Use scheduler to create a one-shot job that runs in 2 minutes and uses communicate
+      to tell me "SCHEDULER_OK". Confirm the job id and when it will fire. Wait is OK —
+      just set it up correctly.
+    pass:
+      tools_any: [scheduler]
+
+  - id: auto-02
+    name: HTTP poller
+    category: automation
+    tags: [tier5, automation]
+    timeout_s: 900
+    prompt: >-
+      Create a poller that checks https://httpbin.org/status/200 every 60 seconds.
+      Report the poller id and expected behavior. One fetch cycle is enough to validate setup.
+    pass:
+      tools_any: [poller]
+
+  - id: auto-03
+    name: Service monitoring recipe
+    category: automation
+    tags: [tier5, automation, slow]
+    timeout_s: 1800
+    disabled: true
+    prompt: >-
+      Follow the service_monitoring recipe: monitor https://httpbin.org/status/200 every
+      5 minutes and alert on failure. Set up scheduler/poller accordingly and document config.
+    pass:
+      tools_any: [scheduler, poller]
+
+  - id: auto-04
+    name: Background scheduled wake
+    category: automation
+    tags: [tier5, automation, manual]
+    manual: true
+    timeout_s: 1800
+    prompt: >-
+      MANUAL QA: Schedule an agent_message while agent is idle. Confirm Background tab /
+      workbench shows activity when it fires (may require waiting 10+ minutes).
+    pass:
+      tools_any: [scheduler]
+
+  - id: auto-05
+    name: Todo idle-eligible task
+    category: automation
+    tags: [tier5, automation]
+    timeout_s: 900
+    prompt: >-
+      Create a todo item "Organize downloads folder" marked idle-eligible if the tool
+      supports it. Explain how it would run during idle vs blocking chat.
+    pass:
+      tools_any: [todo]

@@ -234,6 +234,22 @@
   gap: 4px;
 }
 
+.run-recovery-banner {
+  margin: 4px 4px 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--accent-warn, #d4a017) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-warn, #d4a017) 24%, transparent);
+
+  &--wrapup {
+    background: color-mix(in srgb, var(--accent-primary) 10%, transparent);
+    border-color: color-mix(in srgb, var(--accent-primary) 24%, transparent);
+  }
+}
+
 .run-panel--projects .run-panel-body {
   flex: 1;
   min-height: 0;
@@ -337,6 +353,17 @@
 
 .run-step.done .run-step-label {
   color: var(--text-secondary);
+}
+
+.run-step.partial .run-step-label {
+  color: var(--text-secondary);
+}
+
+.run-step.partial .run-step-label::after {
+  content: ' · partial';
+  font-size: 10px;
+  color: var(--accent-warn, #d4a017);
+  font-style: italic;
 }
 
 .run-step.skipped .run-step-label {

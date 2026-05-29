@@ -17,7 +17,7 @@ Multi-turn **agentic loop** (v4/v5): LLM generation, parallel tool execution, co
 | `types.py` | `AgentMode`, `LoopConfig`, coordinator supplements |
 | `generator.py` | `generate()`, adapter routing, context sanitize |
 | `executor.py` | `execute_tools()`, `run_delegate_detached()`, SubCryptex spawn |
-| `evaluator.py` | `should_complete_v4`, `detect_stall`, directives |
+| `evaluator.py` | `should_complete`, `detect_stall`, directives |
 | `compactor.py` | Anchored compaction, relay char limits |
 | `plan_store.py` | `Plan`, `PlanStep`, dependencies, tech_stack |
 | `team_manager.py` | Waves, completion review, escalation |
@@ -31,6 +31,8 @@ Multi-turn **agentic loop** (v4/v5): LLM generation, parallel tool execution, co
 | `tool_result_semantics.py` | Bash soft-error detection |
 | `wake_coordination.py` | Scheduler wake budget |
 | `orchestrator_hint.py` | Hint message helpers |
+| `orchestration_profile_spec.py` | Profile-aware tools, Cryptex, evaluator shortcuts |
+| `profile_guard_policy.py` | Delegate-only guards, stall skill discovery |
 | `outbound_notify.py` | Milestone channel notifications |
 | `plan_work.py` / `plan_goal_hygiene.py` | Plan/todo reconciliation |
 | `resume_guidance.py` | Post-crash resume |
@@ -76,4 +78,5 @@ Persistence: `hypothalamus_state.json`, `ans_state.json`, WM under `agent_dir`.
 - [Agentic loop](../agentic-loop.md)
 - [Orchestration & delegation](../orchestration-and-delegation.md)
 - [Skill discovery & recovery](../skill-discovery-and-recovery.md)
+- [Agent scenario harness](../../development/agent-scenario-harness.md)
 - [Teams API](../../reference/teams-api.md)

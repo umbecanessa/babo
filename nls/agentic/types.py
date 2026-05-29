@@ -2043,6 +2043,7 @@ class LoopState:
     # Goals & hints
     goals: list[str] = field(default_factory=list)
     hints: list[str] = field(default_factory=list)
+    orchestration_profile: str = "solo_structured"
     goal_block_count: int = 0
     last_pending_indices: list[int] | None = None
     cumulative_actions: list[str] = field(default_factory=list)

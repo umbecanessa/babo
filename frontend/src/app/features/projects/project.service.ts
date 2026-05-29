@@ -263,7 +263,10 @@ export class ProjectService {
         this.handleTodoUpdate(msg);
         break;
       case 'plan_step_update':
-        if (msg.todo_id) this.handlePlanStepUpdate(msg);
+        if (msg.todo_id) {
+          this.handlePlanStepUpdate(msg);
+          this.loadPlanForTodo(String(msg.todo_id));
+        }
         break;
       case 'agentic_plan':
         if (msg.todo_id) this.handleAgenticPlan(msg);

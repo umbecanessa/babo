@@ -44,8 +44,19 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   private async initDashboard(): Promise<void> {
+    const cachedAgents = this.api.getCachedAgents();
+    const hasCachedAgents = cachedAgents.length > 0;
+    if (hasCachedAgents) {
+      this.agents.set(cachedAgents);
+      this.loading.set(false);
+    }
+
     if (this.platform.isElectron) {
       await this.api.whenReady();
+      if (await this.api.isRuntimeReady()) {
+        this.loadAgents(hasCachedAgents);
+        return;
+      }
       this.runtimeStarting.set(true);
       const ready = await this.waitForRuntime();
       this.runtimeStarting.set(false);
@@ -54,8 +65,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.error.set('Agent runtime failed to start. Check your runtime connection.');
         return;
       }
+      this.api.markRuntimeReady();
     }
-    this.loadAgents();
+    this.loadAgents(hasCachedAgents);
   }
 
   private async waitForRuntime(maxWait = 180_000, interval = 2_000): Promise<boolean> {
@@ -84,6 +96,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
       try {
         await firstValueFrom(this.api.getHealth());
+        this.api.markRuntimeReady();
         this.runtimeStatus.set('Runtime ready — loading agents...');
         return true;
       } catch {

@@ -60,22 +60,30 @@ export class ProjectsComponent implements OnInit, OnDestroy {
 
   /** Plan steps: done only for %; skipped shown separately (not counted as complete). */
   orchPlanStats = computed(() => {
-    const entries = Object.values(this.svc.plansByTodoId()) as PlanSummary[];
+    const items = this.svc.items();
+    const plans = this.svc.plansByTodoId();
+    const primary = items.find(
+      i =>
+        !!i.plan_id
+        && i.status !== 'done'
+        && !i.tags?.includes('team')
+        && !i.tags?.includes('team-member'),
+    );
+    let plan = primary ? plans[primary.id] : undefined;
+    if (!plan?.steps?.length) {
+      const candidates = Object.values(plans).filter(p => (p.steps?.length ?? 0) > 0);
+      plan = candidates.sort((a, b) => (b.steps?.length ?? 0) - (a.steps?.length ?? 0))[0];
+    }
     let done = 0;
     let skipped = 0;
     let total = 0;
-    for (const plan of entries) {
-      for (const step of plan.steps ?? []) {
-        total++;
-        if (step.status === 'done') {
-          done++;
-        } else if (step.status === 'skipped') {
-          skipped++;
-        }
-      }
+    for (const step of plan?.steps ?? []) {
+      total++;
+      if (step.status === 'done') done++;
+      else if (step.status === 'skipped') skipped++;
     }
     const pct = total > 0 ? Math.round((done / total) * 100) : 0;
-    return { done, skipped, total, pct };
+    return { done, skipped, total, pct, planStatus: plan?.status ?? '' };
   });
 
   orchPlanProgress = computed(() => this.orchPlanStats().pct);

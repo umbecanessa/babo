@@ -39,11 +39,21 @@ _NODE_MARKERS = (
 )
 
 
-def resolve_project_root(cwd: str, workspace_root: str) -> str | None:
+def resolve_project_root(
+    cwd: str,
+    workspace_root: str,
+    *,
+    plan_project_dir: str | None = None,
+) -> str | None:
     """Walk up from *cwd* to find a project root (marker file present).
 
     Stops at *workspace_root*. Falls back to *cwd* when it differs from
     *workspace_root* (typical for plan-locked delegate CWD).
+
+    When still unresolved at the workspace root, *plan_project_dir* (from the
+    agent's active or most recent plan) is the authoritative project folder
+    for that agent — each agent has an isolated workspace, so this is preferred
+    over guessing among sibling directories.
     """
     cwd_path = Path(cwd).resolve()
     workspace = Path(workspace_root).resolve()
@@ -59,7 +69,72 @@ def resolve_project_root(cwd: str, workspace_root: str) -> str | None:
 
     if cwd_path != workspace:
         return str(cwd_path)
+
+    plan_dir = (plan_project_dir or "").strip().strip("/\\")
+    if plan_dir:
+        planned = (workspace / plan_dir).resolve()
+        try:
+            planned.relative_to(workspace)
+        except ValueError:
+            pass
+        else:
+            return str(planned)
+
+    candidates: list[Path] = []
+    try:
+        for child in sorted(workspace.iterdir()):
+            if not child.is_dir() or child.name.startswith("."):
+                continue
+            if any((child / marker).exists() for marker in PROJECT_MARKERS):
+                candidates.append(child)
+    except OSError:
+        return None
+
+    if len(candidates) == 1:
+        return str(candidates[0])
     return None
+
+
+def format_project_root_hint(
+    workspace_root: str,
+    candidates: list[Path],
+    *,
+    plan_project_dir: str = "",
+) -> str:
+    """Human hint when project root could not be resolved."""
+    plan_dir = (plan_project_dir or "").strip().strip("/\\")
+    if plan_dir:
+        return (
+            f"Plan project_dir is '{plan_dir}' but that folder is missing or "
+            "unreachable. Create it with plan(action='create') or scaffold "
+            "files there, then retry project_install."
+        )
+    if not candidates:
+        return (
+            "Scaffold the project first (package.json, requirements.txt, or "
+            "pyproject.toml), or set plan project_dir before installing."
+        )
+    names = ", ".join(c.name for c in candidates[:6])
+    extra = f" (+{len(candidates) - 6} more)" if len(candidates) > 6 else ""
+    return (
+        f"Multiple project folders under workspace: {names}{extra}. "
+        "Set plan project_dir or cd into the target folder, then retry."
+    )
+
+
+def list_workspace_project_candidates(workspace_root: str) -> list[Path]:
+    """Immediate child directories that look like app projects."""
+    workspace = Path(workspace_root).resolve()
+    found: list[Path] = []
+    try:
+        for child in sorted(workspace.iterdir()):
+            if not child.is_dir() or child.name.startswith("."):
+                continue
+            if any((child / marker).exists() for marker in PROJECT_MARKERS):
+                found.append(child)
+    except OSError:
+        pass
+    return found
 
 
 def _venv_paths(project_root: str) -> tuple[Path, Path, Path]:

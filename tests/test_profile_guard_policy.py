@@ -1,0 +1,224 @@
+"""Tests for profile-aware guard strictness."""
+
+from __future__ import annotations
+
+from nls.agentic.breadcrumbs import BreadcrumbContext, BreadcrumbEngine
+from nls.agentic.coordinator_guard import (
+    must_delegate_before_impl,
+    pre_delegate_block_message,
+    pre_delegate_reason,
+)
+from nls.agentic.goals import TurnTriage
+from nls.agentic.profile_guard_policy import (
+    apply_structured_hint_caps,
+    em_pre_delegate_blocks_enabled,
+    inject_prompt_structured_hints,
+    normalize_goals_for_profile,
+    normalize_profile,
+    tools_denied_by_hints,
+)
+from nls.agentic.skill_discovery_boost import trigger_skill_discovery_boost
+from nls.agentic.types import AgentMode, LoopConfig, LoopState
+
+
+def test_normalize_profile_defaults_solo():
+    assert normalize_profile(None) == "solo_structured"
+    assert normalize_profile("bogus") == "solo_structured"
+
+
+def test_em_pre_delegate_off_for_solo_structured():
+    assert not em_pre_delegate_blocks_enabled(
+        "solo_structured",
+        plan_requires_team_delegation=False,
+    )
+
+
+def test_em_pre_delegate_on_for_orchestrated_team_plan():
+    assert em_pre_delegate_blocks_enabled(
+        "orchestrated",
+        plan_requires_team_delegation=True,
+    )
+
+
+def test_normalize_goals_merges_for_solo_preserves_language():
+    goals = ["crear repositorio", "inicializar git", "commit"]
+    merged = normalize_goals_for_profile(goals, "solo_structured")
+    assert merged == ["crear repositorio"]
+
+
+def test_normalize_goals_unchanged_for_orchestrated():
+    goals = ["a", "b", "c"]
+    assert normalize_goals_for_profile(goals, "orchestrated") == goals
+
+
+def test_structured_hint_forbid_team_caps_profile():
+    assert apply_structured_hint_caps(
+        "orchestrated", ["forbid:team"],
+    ) == "solo_structured"
+
+
+def test_turn_triage_cap_from_structured_hints():
+    triage = TurnTriage(
+        profile="orchestrated",
+        hints=["forbid:team"],
+    )
+    triage.cap_profile_from_hints()
+    assert triage.profile == "solo_structured"
+
+
+def test_solo_profile_skips_tactical_goals_block():
+    state = LoopState(user_input="git smoke")
+    state.orchestration_profile = "solo_structured"
+    state.goals = ["create repo", "init git", "commit"]
+    reason = pre_delegate_reason(
+        state,
+        LoopConfig(enable_delegation=True),
+        plan_requires_team_delegation=False,
+        has_active_plan=False,
+        has_running_delegates=False,
+        has_non_terminal_team=False,
+        is_delegate_loop=False,
+    )
+    assert reason is None
+
+
+def test_orchestrated_profile_keeps_tactical_goals_block():
+    state = LoopState(user_input="build")
+    state.orchestration_profile = "orchestrated"
+    state.goals = ["a", "b", "c"]
+    reason = pre_delegate_reason(
+        state,
+        LoopConfig(enable_delegation=True),
+        plan_requires_team_delegation=False,
+        has_active_plan=False,
+        has_running_delegates=False,
+        has_non_terminal_team=False,
+        is_delegate_loop=False,
+    )
+    assert reason == "tactical_goals"
+
+
+def test_solo_profile_no_team_plan_fallback_block():
+    msg = pre_delegate_block_message(
+        "bash",
+        {"command": "git init"},
+        active_mode=AgentMode.EXECUTING,
+        block_reason=None,
+        orchestration_profile="solo_structured",
+    )
+    assert msg is None
+
+
+def test_orchestrated_profile_blocks_git_bash():
+    msg = pre_delegate_block_message(
+        "bash",
+        {"command": "gh repo create foo --public"},
+        active_mode=AgentMode.EXECUTING,
+        block_reason="tactical_goals",
+        orchestration_profile="orchestrated",
+    )
+    assert msg is not None
+
+
+def test_must_delegate_false_for_solo_multi_goal():
+    state = LoopState(user_input="git")
+    state.orchestration_profile = "solo_structured"
+    state.goals = ["create repo", "init git", "commit"]
+    assert not must_delegate_before_impl(
+        state,
+        LoopConfig(enable_delegation=True),
+        plan_requires_team_delegation=False,
+        has_active_plan=False,
+        has_running_delegates=False,
+        has_non_terminal_team=False,
+        is_delegate_loop=False,
+    )
+
+
+def test_solo_todo_breadcrumb_without_plan():
+    engine = BreadcrumbEngine()
+    ctx = BreadcrumbContext(
+        tool_name="todo",
+        action="add",
+        unlocked_tools=frozenset({"todo"}),
+        orchestration_profile="solo_structured",
+    )
+    hint = engine.evaluate(ctx)
+    assert hint is not None
+    assert "todo(action='list'" in hint
+
+
+def test_solo_todo_no_breadcrumb_when_plan_unlocked():
+    """Solo profile should not nudge todo→plan even if plan tool exists."""
+    engine = BreadcrumbEngine()
+    ctx = BreadcrumbContext(
+        tool_name="todo",
+        action="add",
+        unlocked_tools=frozenset({"plan", "todo"}),
+        orchestration_profile="solo_structured",
+    )
+    assert engine.evaluate(ctx) is None
+
+
+def test_direct_tool_lookup_breadcrumb():
+    engine = BreadcrumbEngine()
+    ctx = BreadcrumbContext(
+        tool_name="web_search",
+        action="search",
+        orchestration_profile="direct_tool",
+    )
+    hint = engine.evaluate(ctx)
+    assert hint is not None
+    assert "answer in chat" in hint.lower()
+
+
+def test_solo_profile_skips_team_plan_block():
+    state = LoopState(user_input="build platform")
+    state.orchestration_profile = "solo_structured"
+    reason = pre_delegate_reason(
+        state,
+        LoopConfig(enable_delegation=True),
+        plan_requires_team_delegation=True,
+        has_active_plan=True,
+        has_running_delegates=False,
+        has_non_terminal_team=False,
+        is_delegate_loop=False,
+    )
+    assert reason is None
+
+
+def test_detect_stall_uses_solo_nudge_without_clawhub():
+    from nls.agentic.evaluator import detect_stall
+
+    state = LoopState(user_input="todo smoke")
+    state.orchestration_profile = "solo_structured"
+    state.consecutive_errors = 2
+    state.tool_history = [("todo", True), ("todo", True)]
+    state.last_error_preview = "duplicate todo"
+    msg = detect_stall(state, LoopConfig())
+    assert msg is not None
+    assert "clawhub" not in msg.lower()
+    assert "discover_tools" not in msg.lower()
+
+
+def test_skill_discovery_boost_skipped_for_solo():
+    class _Hooks:
+        _loop_state_ref = {}
+
+    trigger_skill_discovery_boost(
+        _Hooks(),
+        iteration=1,
+        orchestration_profile="solo_structured",
+    )
+    assert _Hooks._loop_state_ref == {}
+
+
+def test_forbid_plan_hint_from_delegate_only_prompt():
+    hints: list[str] = []
+    inject_prompt_structured_hints(
+        "Delegate research using delegate. Do NOT implement code yourself — "
+        "only delegate and synthesize.",
+        hints,
+    )
+    assert "forbid:plan" in hints
+    assert tools_denied_by_hints(hints) == frozenset({"plan", "todo"})

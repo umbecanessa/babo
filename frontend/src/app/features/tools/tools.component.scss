@@ -115,6 +115,126 @@ $radius-lg: 12px;
   margin: 0 0 16px 0;
 }
 
+.localhost-webhook-banner {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border-radius: $radius-md;
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  background: rgba(248, 113, 113, 0.06);
+  font-size: 13px;
+  line-height: 1.45;
+
+  strong {
+    display: block;
+    margin-bottom: 6px;
+    color: $text-heading;
+  }
+
+  p {
+    margin: 0;
+    color: $text-muted;
+  }
+}
+
+.integration-prereq-banner {
+  margin-bottom: 20px;
+  padding: 14px 16px;
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  border-radius: $radius-md;
+  background: rgba(251, 191, 36, 0.06);
+  font-size: 13px;
+  line-height: 1.5;
+
+  strong {
+    display: block;
+    margin-bottom: 6px;
+    color: $text-heading;
+  }
+
+  p {
+    margin: 0 0 8px;
+    color: $text-muted;
+  }
+
+  ul {
+    margin: 0;
+    padding-left: 18px;
+    color: $text-primary;
+  }
+
+  li + li {
+    margin-top: 4px;
+  }
+
+  a {
+    color: $accent;
+  }
+}
+
+.relay-status-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border-radius: $radius-md;
+  border: 1px solid $border;
+  background: var(--overlay-2);
+  font-size: 13px;
+  line-height: 1.45;
+
+  .relay-dot {
+    flex-shrink: 0;
+    width: 10px;
+    height: 10px;
+    margin-top: 4px;
+    border-radius: 50%;
+    background: $text-muted;
+  }
+
+  .relay-text {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+
+    strong {
+      color: $text-heading;
+      font-weight: 600;
+    }
+
+    span {
+      color: $text-muted;
+    }
+  }
+
+  &.checking .relay-dot {
+    animation: pulse-relay 1.2s ease-in-out infinite;
+  }
+
+  &.online {
+    border-color: rgba(74, 222, 128, 0.35);
+    background: rgba(74, 222, 128, 0.06);
+
+    .relay-dot {
+      background: #4ade80;
+    }
+  }
+
+  &.offline {
+    border-color: rgba(248, 113, 113, 0.35);
+    background: rgba(248, 113, 113, 0.06);
+
+    .relay-dot {
+      background: #f87171;
+    }
+  }
+}
+
+@keyframes pulse-relay {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
 // ═══ Card Grid ═══
 .card-grid {
   display: grid;
@@ -217,6 +337,45 @@ $radius-lg: 12px;
   color: $text-muted;
   line-height: 1.5;
   margin: 0 0 16px 0;
+}
+
+.modal-steps-list {
+  margin: 0 0 16px;
+  padding-left: 20px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: $text-primary;
+
+  &.compact li + li {
+    margin-top: 4px;
+  }
+
+  li + li {
+    margin-top: 8px;
+  }
+}
+
+.modal-warning {
+  font-size: 13px;
+  color: #fbbf24;
+  margin: 0 0 12px;
+
+  a {
+    color: $accent;
+    margin-left: 4px;
+  }
+}
+
+.modal-action-btn.secondary {
+  margin-top: 8px;
+  background: transparent;
+  border: 1px solid $border;
+  color: $text-muted;
+
+  &:hover:not(:disabled) {
+    color: $text-heading;
+    border-color: var(--overlay-5);
+  }
 }
 
 .modal-steps {

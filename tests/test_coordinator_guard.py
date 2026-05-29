@@ -259,6 +259,8 @@ def test_must_delegate_when_goals_but_no_plan():
 
     state.active_mode = AgentMode.PLANNING
 
+    state.orchestration_profile = "orchestrated"
+
     state.goals = ["read prd", "create repo", "deploy"]
 
     assert _must(state=state, has_active_plan=False)
@@ -271,6 +273,7 @@ def test_must_delegate_false_stale_goals_with_active_plan_absent():
     """After plan archived, stale WM goals must not block solo patch writes."""
     state = LoopState(user_input="fix frontend")
     state.active_mode = AgentMode.EXECUTING
+    state.orchestration_profile = "orchestrated"
     state.goals = filter_stale_tactical_goals([
         "read prd", "create repo", "deploy", "BLOCKER: delegate #3",
     ])
@@ -312,6 +315,8 @@ def test_must_delegate_when_team_plan_pending():
     state = LoopState(user_input="build")
 
     state.active_mode = AgentMode.EXECUTING
+
+    state.orchestration_profile = "orchestrated"
 
     assert _must(state=state, plan_requires_team_delegation=True)
 
@@ -377,6 +382,8 @@ def test_block_executing_escape_team_plan():
 
         is_delegate_loop=False,
 
+        orchestration_profile="orchestrated",
+
     )
 
     assert msg is not None
@@ -402,6 +409,8 @@ def test_block_executing_escape_from_delegating():
         enable_delegation=True,
 
         is_delegate_loop=False,
+
+        orchestration_profile="orchestrated",
 
     )
 
@@ -491,6 +500,8 @@ def test_pre_delegate_blocks_write_in_executing():
 
         block_reason="team_plan",
 
+        orchestration_profile="orchestrated",
+
     )
 
     assert msg is not None
@@ -512,6 +523,8 @@ def test_pre_delegate_build_goals_message():
         active_mode=AgentMode.PLANNING,
 
         block_reason="build_goals",
+
+        orchestration_profile="orchestrated",
 
     )
 
@@ -573,6 +586,8 @@ def test_pre_delegate_blocks_gh_repo_in_executing():
 
         block_reason="tactical_goals",
 
+        orchestration_profile="orchestrated",
+
     )
 
     assert msg is not None
@@ -602,6 +617,8 @@ def test_pre_delegate_allows_plan():
 def test_pre_delegate_reason_tactical_goals():
 
     state = LoopState(user_input="x")
+
+    state.orchestration_profile = "orchestrated"
 
     state.goals = ["a", "b", "c"]
 

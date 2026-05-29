@@ -480,6 +480,7 @@
   <app-google-connect-modal
     [open]="googleModalOpen()"
     [agentId]="agentId"
+    [requiresByo]="googleUsesByoCredentials()"
     (closed)="onGoogleModalClosed()"
     (connected)="onGoogleConnected($event)" />
 

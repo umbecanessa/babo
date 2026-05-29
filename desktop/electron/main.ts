@@ -301,6 +301,7 @@ app.on('before-quit', (event) => {
   // Normal quit: prevent, do async cleanup, then force exit.
   event.preventDefault();
   isQuitting = true;
+  console.warn('[SHUTDOWN_TRACE] app.before-quit calling runtime.stop()');
   updateManager?.dispose();
   runtimeManager.stop().finally(() => {
     app.exit(0);

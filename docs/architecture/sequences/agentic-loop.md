@@ -30,7 +30,7 @@ sequenceDiagram
         Exec->>Tools: bash, read, plan, ...
         Tools-->>Exec: ToolResult
         Exec-->>Loop: tool messages
-        Loop->>Eval: evaluate_turn()
+        Loop->>Eval: should_complete()
         Eval-->>Loop: continue / complete
     end
     Loop->>Brain: hooks persist hormones, WM, LEARN
@@ -84,7 +84,7 @@ sequenceDiagram
 
 ## Compaction & max steps
 
-When context grows, `compactor.py` summarizes older tool results. `LoopConfig.max_steps` (and evaluator `should_complete_v4`) stop the loop.
+When context grows, `compactor.py` summarizes older tool results. `LoopConfig.max_steps` (and evaluator `should_complete`) stop the loop.
 
 **Abort:** WebSocket `command: abort` sets abort flag checked between steps.
 

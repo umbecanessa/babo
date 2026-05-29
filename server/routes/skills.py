@@ -344,6 +344,13 @@ async def approve_review(request: Request, review_id: str) -> dict[str, str]:
         "Skill review %s approved — restarting server", review_id,
     )
 
+    from server.shutdown_trace import record_initiator
+
+    record_initiator(
+        "http:skill_review_approved",
+        review_id=review_id,
+    )
+
     from nls.tools.agent_tools.request_restart import _trigger_shutdown
     import nls.tools.agent_tools.request_restart as _rr
     _rr._restart_requested = True

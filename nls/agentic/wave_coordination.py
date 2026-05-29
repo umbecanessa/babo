@@ -222,9 +222,62 @@ def normalize_plan_step_paths(plan: Any) -> int:
     return changed
 
 
+_WAVE0_SCAFFOLD_ROOT_FILES: tuple[str, ...] = (
+    ".gitignore",
+    "README.md",
+    "package.json",
+    "pyproject.toml",
+    "requirements.txt",
+    "pnpm-workspace.yaml",
+    "railway.json",
+    "docker-compose.yml",
+    "docker-compose.yaml",
+)
+
+_WAVE0_SCAFFOLD_DIRS: tuple[str, ...] = (
+    "backend/",
+    "frontend/",
+    "docs/",
+    ".github/",
+)
+
+
+def expand_wave0_scaffold_paths(patterns: list[str]) -> list[str]:
+    """Grant repo-root scaffold paths for wave-0 monorepo setup.
+
+    When a step owns app subdirs (backend/, frontend/) or has no owned_paths
+    yet (project init), delegates need root integration files too.
+    """
+    out = list(patterns)
+    was_empty = not out
+
+    def _add(p: str) -> None:
+        if p and p not in out:
+            out.append(p)
+
+    subdirs = {p.rstrip("/") for p in out if p.endswith("/") or "/" in p}
+    has_app_subdir = bool(
+        subdirs & {"backend", "frontend", "docs", ".github"}
+        or any(
+            p.rstrip("/") in ("backend", "frontend", "docs")
+            for p in out
+        )
+    )
+    if was_empty or has_app_subdir:
+        for d in _WAVE0_SCAFFOLD_DIRS:
+            _add(d)
+        for f in _WAVE0_SCAFFOLD_ROOT_FILES:
+            _add(f)
+        if was_empty:
+            _add(".")
+    return out
+
+
 def resolve_step_owned_paths(
     step: Any | None,
     project_dir: str = "",
+    *,
+    wave_index: int | None = None,
 ) -> list[str]:
     """Path patterns for a delegate — explicit plan step fields only."""
     patterns: list[str] = []
@@ -239,6 +292,9 @@ def resolve_step_owned_paths(
             _add(p)
         for p in getattr(step, "output_files", None) or []:
             _add(p)
+
+    if wave_index == 0:
+        patterns = expand_wave0_scaffold_paths(patterns)
 
     return patterns
 
@@ -315,6 +371,8 @@ def build_file_ownership_block(
 def build_wave_ownership_registry(
     members: list[Any],
     plan: Any | None = None,
+    *,
+    wave_index: int | None = None,
 ) -> tuple[dict[int, list[str]], list[str]]:
     """Map delegate_number -> path patterns for ledger enforcement."""
     registry: dict[int, list[str]] = {}
@@ -331,6 +389,7 @@ def build_wave_ownership_registry(
         patterns = resolve_step_owned_paths(
             step,
             getattr(plan, "project_dir", "") or "" if plan is not None else "",
+            wave_index=wave_index,
         )
         if num is not None and num >= 0:
             registry[num] = patterns

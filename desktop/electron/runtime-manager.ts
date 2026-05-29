@@ -149,6 +149,7 @@ export class RuntimeManager {
     });
 
     this.process.on('exit', (code) => {
+      this.logShutdownEvent('runtime.child_exit', `exitCode=${code ?? 'null'}`);
       this._running = false;
       this.process = null;
       this.stopHealthCheck();
@@ -192,6 +193,7 @@ export class RuntimeManager {
    * Stop the Python agent runtime gracefully.
    */
   async stop(): Promise<void> {
+    this.logShutdownEvent('runtime.stop', this.captureCallerHint());
     this.stopLeaseHeartbeat();
     await this.releaseAllLeases();
     this.stopHealthCheck();
@@ -226,6 +228,10 @@ export class RuntimeManager {
       }
 
       if (!exited && this.process) {
+        this.logShutdownEvent(
+          'runtime.force_kill',
+          `runtimePid=${this.process.pid ?? 'unknown'}`,
+        );
         console.log('Runtime did not exit gracefully, force killing...');
         if (process.platform === 'win32' && this.process.pid) {
           try {
@@ -262,6 +268,7 @@ export class RuntimeManager {
    * Restart the runtime (e.g., after config change).
    */
   async restart(): Promise<void> {
+    this.logShutdownEvent('runtime.restart', this.captureCallerHint());
     await this.stop();
     await this.start();
   }
@@ -391,6 +398,10 @@ export class RuntimeManager {
         for (const line of out.split('\n')) {
           const pid = line.trim().split(/\s+/).pop();
           if (pid && /^\d+$/.test(pid) && pid !== '0') {
+            this.logShutdownEvent(
+              'runtime.kill_stale',
+              `port=${port} targetPid=${pid} method=taskkill`,
+            );
             console.log(`Killing stale process on port ${port} (PID ${pid})`);
             try { execSync(`taskkill /f /pid ${pid}`, { timeout: 5_000 }); } catch { /* ok */ }
           }
@@ -408,6 +419,10 @@ export class RuntimeManager {
         for (const pidStr of out.split('\n')) {
           const pid = pidStr.trim();
           if (pid && /^\d+$/.test(pid)) {
+            this.logShutdownEvent(
+              'runtime.kill_stale',
+              `port=${port} targetPid=${pid} method=kill-9`,
+            );
             console.log(`Killing stale process on port ${port} (PID ${pid})`);
             try { execSync(`kill -9 ${pid}`, { timeout: 5_000 }); } catch { /* ok */ }
           }
@@ -416,6 +431,31 @@ export class RuntimeManager {
         // No stale process found -- expected on first launch
       }
     }
+  }
+
+  private logShutdownEvent(source: string, detail?: string): void {
+    const runtimePid = this.process?.pid ?? 'none';
+    const line =
+      `${new Date().toISOString()} | WARNING | babo.electron | ` +
+      `SHUTDOWN_TRACE ${source} electronPid=${process.pid} runtimePid=${runtimePid}` +
+      `${detail ? ` ${detail}` : ''}\n`;
+    console.log(line.trim());
+    try {
+      this.logStream?.write(line);
+    } catch {
+      // best-effort
+    }
+  }
+
+  private captureCallerHint(): string {
+    const stack = new Error().stack;
+    if (!stack) return '';
+    const frames = stack
+      .split('\n')
+      .slice(2, 6)
+      .map((line) => line.trim())
+      .join(' <- ');
+    return frames ? `caller=${frames.slice(0, 400)}` : '';
   }
 
   private appendLog(message: string): void {

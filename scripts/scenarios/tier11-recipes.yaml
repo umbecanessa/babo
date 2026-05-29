@@ -1,0 +1,71 @@
+scenarios:
+  - id: rcp-01
+    name: Recipe — Telegram bot
+    category: recipes
+    tags: [tier11, recipes, manual]
+    manual: true
+    prompt: >-
+      MANUAL QA: Follow nls/config/recipes/communication/telegram_bot.json — set up a bot
+      that echoes messages. Requires BotFather token.
+    pass:
+      tools_any: [telegram_setup]
+
+  - id: rcp-02
+    name: Recipe — Slack webhook
+    category: recipes
+    tags: [tier11, recipes, manual]
+    manual: true
+    prompt: >-
+      MANUAL QA: Follow slack_webhook recipe — post build status to Slack incoming webhook.
+    pass:
+      tools_any: [web_fetch, bash]
+
+  - id: rcp-03
+    name: Recipe — GitHub repo
+    category: recipes
+    tags: [tier11, recipes]
+    timeout_s: 1200
+    prompt: >-
+      Follow the github_repo recipe pattern: create a private repo for project scenario-test,
+      initial commit with README, push if gh is available. Report remote URL or blocker.
+    pass:
+      tools_any: [bash, write]
+
+  - id: rcp-04
+    name: Recipe — CI/CD pipeline
+    category: recipes
+    tags: [tier11, recipes, slow]
+    timeout_s: 1800
+    disabled: true
+    prompt: >-
+      Follow ci_cd_pipeline recipe: add GitHub Actions workflow for lint + test on PR.
+      Minimal Python or Node project in workspace.
+    pass:
+      tools_any: [write, plan]
+
+  - id: rcp-05
+    name: Recipe — Cron management
+    category: recipes
+    tags: [tier11, recipes]
+    timeout_s: 900
+    harness_follow_up: >-
+      Yes, please go ahead and set that up now using the scheduler tool (and
+      write the script if needed).
+    prompt: >-
+      Follow cron_management recipe: schedule a weekly disk-space check script using
+      scheduler. Script can be a simple bash df -h logger — no need to wait a week.
+    pass:
+      tools_any: [scheduler, write]
+
+  - id: rcp-06
+    name: Recipe — Service monitoring
+    category: recipes
+    tags: [tier11, recipes]
+    timeout_s: 900
+    harness_follow_up: >-
+      Yes, please proceed and create the poller or scheduler job now.
+    prompt: >-
+      Follow service_monitoring recipe: monitor https://httpbin.org/status/200 every 5 minutes
+      with poller or scheduler. Document job ids.
+    pass:
+      tools_any: [poller, scheduler]

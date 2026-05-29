@@ -23,8 +23,13 @@ def trigger_skill_discovery_boost(
     iteration: int,
     reason: str = "stalled",
     ttl_iters: int = 6,
+    orchestration_profile: str | None = None,
 ) -> None:
     """Raise skills/tools ring priority for the next few iterations."""
+    from nls.agentic.profile_guard_policy import skill_discovery_on_stall_enabled
+
+    if not skill_discovery_on_stall_enabled(orchestration_profile):
+        return
     ref = getattr(hooks, "_loop_state_ref", None)
     if ref is not None:
         ref["skill_discovery_boost_until"] = max(

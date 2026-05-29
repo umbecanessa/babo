@@ -1,6 +1,6 @@
 # Babo Cloud: personas, placements & commercial design
 
-**Status:** Living design document — **pre-implementation decisions locked** (2026-05-26).  
+**Status:** Living design document — **pricing & billing UX locked** (2026-05-29). Routing, personas, and platform decisions locked 2026-05-26.  
 **Purpose:** Single source of truth for who runs what where, what Babo bills vs what users bring themselves, and how platform integrations (email, Google) fit the same model.
 
 **Open source vs Babo Cloud:** The repo is self-hostable (same stack as we run). **Babo Cloud** (`api.babo.agency`) is the hosted control plane + optional hosted/resold models. Using Babo-operated services requires a **paid subscription** (no permanent free tier; trial instead — see [Commercial decisions](#commercial-decisions-resolved)).
@@ -76,6 +76,13 @@
 
 - **Prefer `self_local` for Whisper** when hardware allows (latency, privacy, no marginal cost to Babo).
 - Do **not** hard-require local voice: weak devices and cloud-only personas use `self_lan` or `hosted_babo`.
+
+### Default recommendation: brain (Babo Cloud resold)
+
+- **Default model:** `google/gemini-2.5-flash` — best value for agentic E2E work on Babo Cloud (see [Empirical cost data](#empirical-cost-data-openrouter-may-2026)).
+- **Offer all OpenRouter models** in the picker; **sort and badge** by value (`recommended` → `standard` → `premium`).
+- **Do not block** premium models (Sonnet, GPT-4o); show **$/1M input & output** and **relative burn rate** so users know Sonnet consumes included usage ~9× faster than Flash.
+- **BYOK on Babo Cloud:** user pays provider directly; Babo Cloud **platform subscription still required**; included usage pool applies only to **`babo_resold`** (Babo key).
 
 ---
 
@@ -281,21 +288,32 @@ Rules:
 | Relay chat / webhooks | Control plane; may be included in subscription |
 | Google/telegram/etc. | No per-API micro-billing v1; brain cost dominates |
 
-### Suggested usage record shape (future Prisma)
+### Usage record shape (Prisma `InferenceUsage`)
 
 | Field | Purpose |
 |-------|---------|
 | `userId`, `agentId?`, `apiKeyId?` | Attribution |
 | `workload` | `inference` \| `transcribe` \| `vision` \| `embed` |
-| `placement` | `hosted_babo` \| `babo_resold` \| … |
-| `provider`, `model` | e.g. `openai`, `gpt-4o` |
-| `promptTokens`, `completionTokens`, `totalTokens` | LLM |
-| `upstreamCostCents?` | Internal margin for resold |
+| `placement` | `hosted_babo` \| `babo_resold` \| `byok_cloud` \| … |
+| `provider`, `model` | e.g. `openrouter`, `google/gemini-2.5-flash` |
+| `promptTokens`, `completionTokens`, `totalTokens` | LLM (analytics + user breakdown) |
+| `upstreamCostCents` | **Authoritative debit** for `babo_resold` / `hosted_babo` billing |
 | `route` | e.g. `chat/completions` |
+
+### Subscription ledger (evolve `CloudSubscription`)
+
+| Field | Purpose |
+|-------|---------|
+| `includedCreditCents` | Monthly included usage pool (e.g. `500` = $5.00) |
+| `usedCreditCents` | Consumed upstream cost this period |
+| `monthlySpendCapCents?` | On-demand cap (Cursor-style spend limit); `null` = no cap |
+| `allowOverage` | Continue after included pool when on-demand enabled |
+
+**Billing unit:** **dollar-equivalent upstream cost** (`upstreamCostCents`), **not** raw token count. Token fields remain for transparency and dashboards; mixed models make token quotas misleading.
 
 **Per-agent API keys (v1):** `ApiKey.agentId` + scopes (`inference`, `gpu`, …).  
 **Rate limits:** wire `rateLimitRpm` (and future caps) in proxy on day one; tune values after business modeling.  
-**Collect everything from day one** — including `upstreamCostCents` for resold — even if pricing UI comes later.
+**Inference proxy must populate `upstreamCostCents`** on every usage write (model price table or provider-reported cost).
 
 ---
 
@@ -304,42 +322,64 @@ Rules:
 | Topic | Decision |
 |-------|----------|
 | **Routing: local vs cloud** | **`self_local` / `self_lan` → direct**, no Nest. **All `byok_cloud`** (OpenRouter, OpenAI, Anthropic, …) **+ `hosted_babo` / resold** → **Nest proxy**. Open-source users self-host the same stack on their own infra. |
-| **Resold pricing** | **Subscription credits + overage** (easiest UX). Exact price points later. |
-| **Usage data** | **Collect all fields from day one** (`upstreamCostCents`, tokens, per chunk on streams). Decide how to bill later. |
+| **Resold pricing** | **$6.99/mo subscription + $5 included API usage + on-demand overage** (Cursor 2026 pattern). |
+| **Billing unit** | **`upstreamCostCents`** (dollar pool), not token quota. Tokens tracked for analytics/UI only. |
+| **Overage** | **Pay-as-you-go** at published model rates × **1.25** markup after included pool exhausted. User can disable on-demand (hard stop at 100%). |
+| **Usage data** | **Collect all fields from day one** (`upstreamCostCents`, tokens, per chunk on streams). |
 | **Email BYO Resend** | User brings own Resend account → **their aliases/domains**, not `@inbox.babo.agency`. |
-| **Google / email connection fee** | **No** separate charge for connecting Google Workspace or email. Included in **minimum Babo Cloud subscription** (low monthly fee TBD, e.g. ~$2.99 — not final). |
+| **Google / email connection fee** | **No** separate charge. Included in Babo Cloud subscription. |
 | **Free tier** | **No permanent free tier** — product is open source; users can self-host for $0. Babo Cloud is paid. |
-| **Trial** | **Classic ~1 month trial** preferred over a capped free tier (simpler than ongoing abuse limits). |
-| **Pricing shape** | **Monthly subscription + overage** on hosted/resold usage (credits included in sub, then overage). |
-| **Composable SKUs** | Start simple (one low base sub includes platform + connections); composable add-ons can come later. |
+| **Trial** | **30 days**, same product access, **`$8` included usage cap** (`800` cents) — enough for ~1 Gemini E2E, not a Sonnet binge. |
+| **Pricing shape** | **Monthly subscription + included API usage pool + overage** (aligned with [Cursor 2026](https://cursor.com/help/models-and-usage/usage-limits)). |
+| **Composable SKUs** | **v1: single plan** (`cloud_basic`). Pro tier / add-ons deferred. |
+| **Default resold model** | **`google/gemini-2.5-flash`** — recommended in UI; premium models available with cost visibility. |
 | **GX10** | **Single upstream** for Babo-hosted inference/vision; Nest relays — **no per-customer GX10 URL**. |
 | **Self-hosted Nest** | Supported — user runs Nest on laptop or VPS with their own `INFERENCE_UPSTREAM_*` (same code as Babo Cloud). |
 | **Per-agent API keys** | **Yes, v1** |
 | **API key validation** | **Implement** on Nest proxy + close Python gap |
 | **Stream metering** | Persist/update usage on **every stream chunk** that carries `usage` |
 | **Rate limits** | **Wire in** at launch; adjust RPM/caps with business case |
+| **Stripe** | Checkout + Customer Portal + webhooks; metered overage invoiced in arrears |
 
 ---
 
-## Babo Cloud pricing (structure — amounts TBD)
+## Babo Cloud pricing (locked v1)
 
-### Minimum subscription (monthly)
+### Plan: Babo Cloud Basic — **$6.99/month**
 
-Required to use **Babo Cloud** services (hosted models, Babo Resend inbox, default Google OAuth app, relay, dashboard):
+Required to use **Babo Cloud** (`api.babo.agency`): hosted/resold models, Babo Resend inbox, default Google OAuth app, relay, dashboard.
 
-- Low entry price (team to set; ~$2.99 discussed as order-of-magnitude only)
-- Includes platform access; **not** a separate fee to “connect” Google or email
+| Component | Amount | Notes |
+|-----------|--------|-------|
+| **Subscription** | **$6.99/mo** | Platform + integrations; no separate “connect Google/email” fee |
+| **Included API usage** | **$5.00/mo** | Debited at upstream cost (`includedCreditCents: 500`) |
+| **Overage** | **1.25× upstream** | On-demand; billed in arrears via Stripe |
+| **Default spend cap** | **$15/mo** on-demand | User-adjustable; `null` = no cap (Cursor-style) |
 
-### Usage (hosted + resold)
+**Public copy (pricing page):**
 
-- **Included credits** per billing period (subscription)
-- **Overage** when credits exhausted
-- BYOK frontier: user pays provider directly; Babo still meters through Nest for quota/abuse (platform sub still required for Babo Cloud)
+> Babo Cloud — **$6.99/month**  
+> Includes **$5 of model usage** at standard API rates.  
+> Additional usage billed pay-as-you-go.  
+> *Recommended models go further; premium models use included usage faster.*
+
+**Secondary copy (optional footnote):** ~14M agent tokens equivalent on Gemini 2.5 Flash; ~1.5M on Claude Sonnet. Token equivalents are illustrative — billing is dollar-based.
+
+### What counts against the included pool
+
+| Placement | Debits included pool? |
+|-----------|----------------------|
+| `babo_resold` (Babo OpenRouter key) | **Yes** |
+| `hosted_babo` (GX10) | **Yes** (at internal cost rate TBD) |
+| `byok_cloud` | **No** — user pays provider; Babo meters for abuse only |
+| `self_local` / `self_lan` | **No** — direct inference |
 
 ### Trial
 
-- ~**1 month** full or partial access — exact entitlements TBD
+- **30 days** from first Babo Cloud sign-in (`status: trialing`)
+- **`$8` included usage** during trial (`800` cents) — full product, capped burn
 - No always-free hosted tier
+- Card optional at signup; required before trial ends to continue
 
 ### Enterprise / BYO credentials
 
@@ -350,13 +390,115 @@ Required to use **Babo Cloud** services (hosted models, Babo Resend inbox, defau
 
 ---
 
+## Billing UX (Cursor 2026 pattern)
+
+Reference: [Cursor usage limits](https://cursor.com/help/models-and-usage/usage-limits) — dollar API pool, model choice affects burn rate, dashboard %, on-demand with spend cap.
+
+### What users see
+
+| Surface | Copy / behaviour |
+|---------|------------------|
+| **Pricing page** | “$5 of model usage included” — **dollars**, not token quota |
+| **Settings → Billing** | Usage bar: **“42% of included usage remaining”**; resets on billing date |
+| **Model picker** | Per model: **input/output $/1M**, tier badge (`Recommended` / `Premium`), **~N× included usage** vs Gemini Flash |
+| **Premium model select** | Soft confirm: “Sonnet uses included usage ~9× faster than Gemini Flash” — no hard block |
+| **At 100% included** | In-app notice: enable on-demand or wait for reset; link to spend cap |
+| **Invoices** | Line items by model + tokens; overage as “Additional model usage” |
+
+### Model catalog metadata (frontend + API)
+
+Extend Babo Cloud model list with pricing fields (synced from OpenRouter catalog periodically):
+
+```typescript
+{
+  id: 'google/gemini-2.5-flash',
+  tier: 'recommended',       // sort first
+  inputPerM: 0.30,
+  outputPerM: 2.50,
+  usageMultiplier: 1,        // vs reference model
+}
+{
+  id: 'anthropic/claude-sonnet-4',
+  tier: 'premium',
+  inputPerM: 3.00,
+  outputPerM: 15.00,
+  usageMultiplier: 9,      // from empirical data; refresh quarterly
+}
+```
+
+**Picker groups:** Recommended → Standard → Premium. Default selection: `google/gemini-2.5-flash`.
+
+### Comparison to Cursor Pro (2026)
+
+| | Cursor Pro | Babo Cloud Basic |
+|--|------------|------------------|
+| Price | $20/mo | **$6.99/mo** |
+| Included API usage | $20 | **$5** |
+| Cheap path | Auto + Composer (separate pool) | Gemini Flash (recommended) |
+| Overage | API cost, pay-as-you-go | API cost × 1.25, pay-as-you-go |
+| Spend cap | User-configurable | Default $15/mo on-demand |
+
+---
+
+## Empirical cost data (OpenRouter, May 2026)
+
+Internal reference from Babo agentic E2E platform builds (ICF-style tasks). Use for pricing sanity checks and `usageMultiplier` defaults.
+
+### Completed path — Gemini 2.5 Flash (May 29)
+
+| Metric | Value |
+|--------|-------|
+| Full morning session | **~$6.89** upstream |
+| Single heavy E2E hour | **~$5.74** / ~13.6M tokens |
+| Blended rate | **~$0.36 / 1M tokens** |
+
+### Incomplete path — Claude Sonnet 4 (May 28)
+
+| Metric | Value |
+|--------|-------|
+| All Sonnet attempts (never finished E2E) | **~$43.96** |
+| Supporting Gemini + mini same day | **~$7.80** |
+| **All-in incomplete day** | **~$52.17** |
+| Best single Sonnet hour | **~$22.92** / ~7.0M tokens |
+| Blended Sonnet rate | **~$3.28 / 1M tokens** (~**9×** Flash) |
+
+### Task-level cheat sheet (for support & UI tooltips)
+
+| Task | Gemini Flash | Claude Sonnet 4 |
+|------|--------------|-----------------|
+| Light chat day | $0.50–2 | $5–15 |
+| Full agentic E2E build | **$5–8** | **$8–23/hr** (often incomplete) |
+| Hypothetical Sonnet at Gemini token volume | — | **~$45–55** |
+
+**Product implication:** $5 included usage ≈ **~1 full Gemini E2E** or **~20% of a Sonnet-heavy hour**. Premium models must stay available but clearly labelled.
+
+---
+
+## Stripe integration (Phase D)
+
+| Piece | Spec |
+|-------|------|
+| **Product** | `Babo Cloud Basic` |
+| **Recurring price** | `price_*` → $6.99/mo |
+| **Metered overage** | Stripe Billing Meter → report `overageCents` daily or per aggregated window |
+| **Webhooks** | `checkout.session.completed`, `customer.subscription.updated/deleted`, `invoice.paid`, `invoice.payment_failed` |
+| **Portal** | Customer Portal for card, invoices, cancel |
+| **User fields** | `stripeCustomerId`, `stripeSubscriptionId` on `User` |
+| **Period reset** | On `invoice.paid`: `usedCreditCents = 0`; refresh `includedCreditCents` from plan |
+
+**Grace:** 3 days `past_due` before blocking inference. **Idempotent** webhook handling required.
+
+---
+
 ## Onboarding implications
 
 1. **Scan device + LAN** — recommend a persona, not a single radio button.
 2. **Four workload cards** + optional **platform** section (email, Google) explaining Babo vs BYO.
-3. **Brain card** shows three paths when cloud is relevant: My server · My API key · Babo hosted (and later Babo + OpenAI/Anthropic).
-4. **Test** per workload: inference `/v1/models`, 1 s transcribe, optional vision frame.
-5. **Persist** `capabilityProfile` + platform credential source flags.
+3. **Brain card** shows three paths when cloud is relevant: My server · My API key · Babo hosted (resold OpenRouter models).
+4. **Default Babo Cloud brain** to **Gemini 2.5 Flash**; explain premium models cost more per task.
+5. **Test** per workload: inference `/v1/models`, 1 s transcribe, optional vision frame.
+6. **Persist** `capabilityProfile` + platform credential source flags.
+7. **Trial users** see usage bar from day one (`$8` cap during trial).
 
 See [capability-profiles-and-onboarding.md](capability-profiles-and-onboarding.md) for env mapping and [production-architecture-and-onboarding.md](production-architecture-and-onboarding.md) for wizard steps.
 
@@ -371,7 +513,7 @@ Goal: ship **Phases A → D** as one coherent Babo Cloud release (not a partial 
 | **A** | Nest `inference-proxy` module: `chat/completions`, `models`, JWT + `nlsk_` auth, usage table, rate-limit hooks, GX10 upstream env | Desktop `hosted_babo` points at `api.babo.agency`; stream usage per chunk |
 | **B** | GPU proxy routes: transcribe, vision, embed → same GX10 fleet via Nest | Hosted voice/vision/embed in capability profile |
 | **C** | Resold + BYOK frontier: store user provider keys securely; route OpenAI/Anthropic through proxy; `upstreamCostCents` | Settings/UI can pick provider; credits/overage backend stub |
-| **D** | Per-agent API keys, per-user Resend BYO, trial + subscription (Stripe), entitlements | Email BYO aliases; trial gate; min sub enforced for cloud features |
+| **D** | Per-agent API keys, per-user Resend BYO, trial + subscription (Stripe), entitlements, billing UX | Dollar credits; Stripe webhooks; usage bar; model picker pricing; spend cap |
 
 **Also in v1:** `ApiKeysService.validateKey()` used by proxy; Python `validate_api_key` implemented or delegated to Nest for cloud paths.
 
@@ -382,17 +524,18 @@ Goal: ship **Phases A → D** as one coherent Babo Cloud release (not a partial 
 | Item | Doc / code | Status |
 |------|------------|--------|
 | Capability schema + TS types | `nls/config/capability-profile.schema.json`, `desktop/electron/capability-types.ts` | Shipped |
-| NestJS inference + GPU proxy | `backend/src/babo-cloud/` | **Shipped** on `feature/babo-cloud-inference-proxy` |
-| Per-agent API keys + validation | `api-keys` + `babo-cloud` guards | **Shipped** |
-| Per-user Resend BYO | `provider-keys` + `channels` | **Shipped** |
-| Resold + BYOK frontier routing | `provider-keys` + inference proxy | **Shipped** (OpenAI, OpenRouter) |
-| Subscription trial + token ledger | `cloud_subscriptions` + `inference_usage` | **Shipped** (Stripe webhook TBD) |
-| Usage ledger + stream chunk writes | Prisma `InferenceUsage` (TBD) | Planned |
+| NestJS inference + GPU proxy | `backend/src/babo-cloud/` | Shipped |
+| Per-agent API keys + validation | `api-keys` + `babo-cloud` guards | Shipped |
+| Per-user Resend BYO | `provider-keys` + `channels` | Shipped |
+| Resold + BYOK frontier routing | `provider-keys` + inference proxy | Shipped (OpenRouter) |
+| Usage ledger + stream chunk writes | Prisma `InferenceUsage` | Shipped |
+| Subscription trial stub | `cloud_subscriptions` + `EntitlementsService` | Shipped (token-based — **migrate to cents**) |
+| `upstreamCostCents` on inference proxy | `inference.service.ts` | **Planned** |
+| Dollar credits (`includedCreditCents` / `usedCreditCents`) | Prisma + `EntitlementsService` | **Planned** |
+| Stripe Checkout + webhooks + Portal | `billing/` module | **Planned** |
+| Billing UX: usage bar, spend cap | Settings + `GET /cloud/subscription` | **Planned** |
+| Model picker: $/1M, tier, usage multiplier | `BABO_CLOUD_MODELS` + picker component | **Planned** |
 | `hosted_babo` / cloud brain env | `capabilityProfileToRuntimeEnv`, setup wizard | Planned |
-| Per-agent API keys + validation | `api-keys` module, `auth.py` | Planned |
-| Per-user Resend BYO | Channels / settings | Planned (D) |
-| Resold + BYOK frontier routing | Inference proxy | Planned (C) |
-| Subscription, trial, credits/overage | Stripe + entitlements | Planned (D) |
 | Self-host docs for Nest upstream env | `docs/configuration/` | Planned |
 
 ---
@@ -401,11 +544,11 @@ Goal: ship **Phases A → D** as one coherent Babo Cloud release (not a partial 
 
 Minor — safe to implement without blocking:
 
-1. **Trial entitlements** — full credits vs reduced caps during trial month?
-2. **Exact subscription price** and included credit amounts.
-3. **Composable add-on SKUs** — when to split vision/embed vs all-in-one sub?
+1. **`hosted_babo` (GX10) internal cost rate** — how to map GX10 inference to `upstreamCostCents` for pool debit (flat rate vs pass-through).
+2. **Pro tier timing** — when to add `$19.99/mo` with `$20` included usage (mirror Cursor Pro ratio).
+3. **Annual billing** — 20% discount like Cursor? Defer to post-launch.
 
-Record answers in [Commercial decisions](#commercial-decisions-resolved) when set.
+Record answers here when set.
 
 ---
 
@@ -416,3 +559,4 @@ Record answers in [Commercial decisions](#commercial-decisions-resolved) when se
 | 2026-05-26 | Initial design: personas, workloads, platform services, billing direction |
 | 2026-05-26 | Locked pre-implementation decisions: routing, auth, GX10 relay, pricing shape, roadmap A–D |
 | 2026-05-26 | Clarified BYOK vs LAN; all `byok_cloud` (incl. OpenRouter) via Nest |
+| 2026-05-29 | **Locked v1 pricing:** $6.99/mo + $5 included API usage + 1.25× overage; trial $8 cap; dollar-based ledger; Cursor-aligned UX; empirical OpenRouter cost data (Gemini vs Sonnet) |

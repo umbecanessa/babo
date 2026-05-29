@@ -337,8 +337,14 @@ class FileLedger:
             and self._delegate_owns_path(delegate, scope_norm, wave)
         )
 
+        idx = self.get_index_entry(norm)
+
         if norm in self._shared_paths or scope_norm in self._shared_paths:
             if role == "delegate" and not _in_my_scope:
+                # Shared integration files are locked once they exist on disk.
+                # Creating them during wave-0 scaffold (file missing) is allowed.
+                if not file_exists and idx is None:
+                    return None
                 return (
                     f"FILE LOCKED: {norm} is a shared integration file. "
                     f"Do not edit it unless it is listed in your assigned "
@@ -347,7 +353,6 @@ class FileLedger:
                     f"message='why you need this file')."
                 )
 
-        idx = self.get_index_entry(norm)
         _released = self._released_delegates.get(wave or -1, set())
         if (
             role == "delegate"

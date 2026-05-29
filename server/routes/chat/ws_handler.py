@@ -538,45 +538,59 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                 _chat_no_tools = False
 
                 logger.info(
-                    "Agent %s: [AGENTIC] enabled — extracting goals "
-                    "from user_input (len=%d)",
+                    "Agent %s: [AGENTIC] enabled — triaging user_input (len=%d)",
                     agent_id, len(user_input),
                 )
 
-                # Pre-extract task goals and hints
+                _turn_triage = None
                 _pre_goals: list[str] = []
                 _pre_hints: list[str] = []
                 try:
-                    _pre_goals, _pre_hints = await runtime.extract_task_goals(
+                    _turn_triage = await runtime.triage_user_turn(
                         user_input,
+                        history=history,
                         model_override=_request_model,
                     )
+                    _pre_goals = list(_turn_triage.goals)
+                    _pre_hints = list(_turn_triage.hints)
                     logger.info(
-                        "Agent %s: [AGENTIC] goals=%s hints=%s",
-                        agent_id, _pre_goals, _pre_hints,
+                        "Agent %s: [AGENTIC] triage profile=%s intent=%s "
+                        "goals=%s hints=%s",
+                        agent_id,
+                        _turn_triage.profile,
+                        _turn_triage.intent,
+                        _pre_goals,
+                        _pre_hints,
                     )
                 except Exception:
                     logger.warning(
-                        "Agent %s: pre-goal extraction failed",
+                        "Agent %s: turn triage failed",
                         agent_id, exc_info=True,
                     )
 
                 _conversational_turn = (
-                    not _pre_goals
+                    _turn_triage is not None
+                    and _turn_triage.is_conversational
+                ) or (
+                    _turn_triage is None
+                    and not _pre_goals
                     and not _message_implies_agentic_work(user_input)
                     and "[the user attached" not in user_input.lower()
                 )
-                if _conversational_turn:
+                if _turn_triage is not None:
+                    needs_thinking = _turn_triage.thinking
+                elif _conversational_turn:
                     needs_thinking = await runtime.classify_thinking_need(
                         user_input, history,
                         model_override=_request_model,
                     )
                 else:
-                    # Tool-heavy turns: keep thinking on for planning/tool selection.
                     needs_thinking = True
 
                 _gen_input = user_input
-                if _pre_goals:
+                if _pre_goals and (
+                    _turn_triage is None or _turn_triage.needs_tools
+                ):
                     _goals_block = "\n".join(
                         f"  {i+1}. {g}" for i, g in enumerate(_pre_goals)
                     )
@@ -787,23 +801,45 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                 # the model replied in chat without API tool_calls (common on
                 # remote relays). Local vLLM keeps the battle-tested path:
                 # enter agentic only when the first stream actually has tools.
+                from nls.agentic.goals import substantial_answer
+
                 _cloud_inference = not _runtime_uses_local_vllm(runtime)
+                _visible_answer = (full_response or "").strip()
+                _substantial = substantial_answer(_visible_answer)
+                _profile = (
+                    getattr(_turn_triage, "profile", None) if _turn_triage else None
+                )
+                _needs_agentic_tools = (
+                    _turn_triage.needs_tools
+                    if _turn_triage is not None
+                    else _message_implies_agentic_work(user_input)
+                )
                 _force_agentic = not first_response_has_tools and (
-                    (_pre_goals and not (full_response or "").strip())
+                    (_pre_goals and not _visible_answer)
                     or (
-                        _cloud_inference
-                        and _message_implies_agentic_work(user_input)
+                        _needs_agentic_tools
+                        and not _substantial
+                        and (
+                            _profile in (
+                                "direct_tool", "solo_structured", "orchestrated",
+                            )
+                            or (
+                                _profile is None
+                                and _cloud_inference
+                            )
+                        )
                     )
                 )
                 if _force_agentic:
                     logger.info(
                         "Agent %s: forcing agentic loop — goals=%d "
-                        "cloud=%s task_like=%s visible_len=%d",
+                        "cloud=%s profile=%s substantial=%s visible_len=%d",
                         agent_id,
                         len(_pre_goals),
                         _cloud_inference,
-                        _message_implies_agentic_work(user_input),
-                        len((full_response or "").strip()),
+                        _profile,
+                        _substantial,
+                        len(_visible_answer),
                     )
                     first_response_has_tools = True
                     if _pre_goals and not (full_response or "").strip():
@@ -1172,12 +1208,14 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                             copilot_queue=copilot_queue,
                             on_browser_navigation=_on_browser_nav,
                             on_browser_auth_request=_request_browser_auth,
+                            browser_emit_and_wait=_browser_emit_and_wait,
                             emit_set_cookies=_emit_set_cookies,
                             enable_thinking=needs_thinking,
                             shared_context=_shared_ctx,
                             checkpoint_callback=_checkpoint,
                             pre_extracted_goals=_pre_goals,
                             pre_extracted_hints=_pre_hints,
+                            pre_triage=_turn_triage,
                         )
                         agentic_result = await _run_agentic_with_receive(
                             websocket,

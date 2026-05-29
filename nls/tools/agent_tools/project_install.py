@@ -15,13 +15,15 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .base import ToolResult
 from .project_runtime import (
     detect_ecosystem,
     detect_node_package_manager,
     ensure_project_venv,
+    format_project_root_hint,
+    list_workspace_project_candidates,
     resolve_project_root,
 )
 from .server_install import _BLOCKED_PACKAGES, _CLI_NOT_PYTHON
@@ -29,6 +31,23 @@ from .server_install import _BLOCKED_PACKAGES, _CLI_NOT_PYTHON
 logger = logging.getLogger(__name__)
 
 _IS_WINDOWS = sys.platform == "win32"
+_MAX_INSTALL_DIAG_LINES = 24
+_MAX_INSTALL_DIAG_CHARS = 4000
+
+
+def _format_install_failure_output(stdout: str, stderr: str) -> str:
+    """Include enough pip/npm output for the model to fix the command."""
+    chunks: list[str] = []
+    for label, text in (("stdout", stdout), ("stderr", stderr)):
+        lines = [ln for ln in (text or "").strip().splitlines() if ln.strip()]
+        if not lines:
+            continue
+        tail = lines[-_MAX_INSTALL_DIAG_LINES:]
+        body = "\n".join(tail)
+        if len(body) > _MAX_INSTALL_DIAG_CHARS:
+            body = body[-_MAX_INSTALL_DIAG_CHARS:]
+        chunks.append(f"{label}:\n{body}")
+    return "\n".join(chunks) if chunks else "(no output)"
 
 
 class ProjectInstallTool:
@@ -42,6 +61,19 @@ class ProjectInstallTool:
         self._cwd = cwd
         self._workspace_root = cwd
         self._shared_cwd = shared_cwd
+        self._plan_project_dir_fn: Callable[[], str] | None = None
+
+    def set_plan_project_dir_fn(self, fn: Callable[[], str] | None) -> None:
+        """Wire plan store lookup (active plan → project_dir)."""
+        self._plan_project_dir_fn = fn
+
+    def _plan_project_dir(self) -> str:
+        if self._plan_project_dir_fn is None:
+            return ""
+        try:
+            return (self._plan_project_dir_fn() or "").strip()
+        except Exception:
+            return ""
 
     @property
     def _effective_cwd(self) -> str:
@@ -59,8 +91,8 @@ class ProjectInstallTool:
             "Install a dependency into the PROJECT you are building — not "
             "into Babo's agent runtime.\n"
             "- Python (PyPI): creates/uses project/.venv and runs pip there. "
-            "After install, bash `python -c \"import pkg\"` in the same "
-            "project sees the package.\n"
+            "Pass package= for one library, or omit package when requirements.txt "
+            "exists to run pip install -r requirements.txt.\n"
             "- Node: runs npm/pnpm/yarn in the project root (auto-detected "
             "from lockfiles).\n"
             "Use this for libraries your generated app needs (e.g. "
@@ -79,7 +111,9 @@ class ProjectInstallTool:
                         "Package specifier: pip syntax for Python "
                         "(e.g. 'assemblyai', 'requests>=2.0') or npm package "
                         "name for Node (e.g. 'express'). Omit for Node to run "
-                        "a full install from package.json."
+                        "a full install from package.json. For Python, omit "
+                        "when requirements.txt exists in the project — installs "
+                        "all pins via pip install -r requirements.txt."
                     ),
                 },
                 "ecosystem": {
@@ -109,29 +143,48 @@ class ProjectInstallTool:
         ecosystem = (params.get("ecosystem") or "auto").strip().lower()
         dev = bool(params.get("dev", False))
 
+        plan_dir = self._plan_project_dir()
         project_root = resolve_project_root(
             self._effective_cwd,
             self._workspace_root,
+            plan_project_dir=plan_dir or None,
         )
         if not project_root:
+            candidates = list_workspace_project_candidates(self._workspace_root)
+            hint = format_project_root_hint(
+                self._workspace_root,
+                candidates,
+                plan_project_dir=plan_dir,
+            )
             return ToolResult(
                 content=(
                     "Error: No project root found from current directory.\n"
-                    "Create a project folder with requirements.txt, "
-                    "pyproject.toml, or package.json first."
+                    f"{hint}\n"
+                    "project_install targets the app you are building — not "
+                    "Babo's agent runtime (use server_install for that)."
                 ),
                 is_error=True,
             )
 
+        project_path = Path(project_root)
+        if plan_dir and not project_path.exists():
+            try:
+                project_path.mkdir(parents=True, exist_ok=True)
+            except OSError:
+                pass
+
         if ecosystem == "auto":
             detected = detect_ecosystem(project_root)
             if detected == "unknown":
+                rel = Path(project_root).name
                 return ToolResult(
                     content=(
                         f"Error: Could not detect ecosystem in {project_root}.\n"
                         "Add requirements.txt / pyproject.toml (Python) or "
-                        "package.json (Node), or pass ecosystem='python' or "
-                        "ecosystem='node' explicitly."
+                        "package.json (Node) under the project folder, or pass "
+                        "ecosystem='python' or ecosystem='node' explicitly.\n"
+                        f"If your app lives in a subfolder, run from that "
+                        f"directory (e.g. cd {rel}) before project_install."
                     ),
                     is_error=True,
                 )
@@ -139,8 +192,17 @@ class ProjectInstallTool:
 
         if ecosystem == "python":
             if not package:
+                req_file = project_path / "requirements.txt"
+                if req_file.is_file():
+                    return await self._install_python_requirements(
+                        project_root, str(req_file),
+                    )
                 return ToolResult(
-                    content="Error: 'package' is required for Python installs.",
+                    content=(
+                        "Error: 'package' is required for Python installs, "
+                        "or create requirements.txt in the project root and "
+                        "call project_install() with no package to install from it."
+                    ),
                     is_error=True,
                 )
             return await self._install_python(project_root, package)
@@ -222,18 +284,13 @@ class ProjectInstallTool:
         importlib.invalidate_caches()
 
         if proc.returncode != 0:
-            stderr_tail = proc.stderr.strip().splitlines()[-5:] if proc.stderr else []
-            stdout_tail = proc.stdout.strip().splitlines()[-5:] if proc.stdout else []
-            diag_lines = []
-            if stdout_tail:
-                diag_lines.append("stdout:\n" + "\n".join(stdout_tail))
-            if stderr_tail:
-                diag_lines.append("stderr:\n" + "\n".join(stderr_tail))
-            diag = "\n".join(diag_lines) if diag_lines else "(no output)"
+            diag = _format_install_failure_output(proc.stdout or "", proc.stderr or "")
             return ToolResult(
                 content=(
                     f"Error: pip install failed (exit {proc.returncode}), "
-                    f"python={python_exe}:\n{diag}"
+                    f"python={python_exe}:\n{diag}\n\n"
+                    "Fix the package spec or dependency conflict above, then "
+                    "retry project_install — do not use bash pip."
                 ),
                 is_error=True,
             )
@@ -273,6 +330,87 @@ class ProjectInstallTool:
                 f"Project: {project_root}\n"
                 f"Python: {python_exe}"
                 f"{verify}\n\n"
+                "bash `python` in this project directory uses the same venv."
+            ),
+        )
+
+    async def _install_python_requirements(
+        self,
+        project_root: str,
+        requirements_path: str,
+    ) -> ToolResult:
+        bin_dir, python_exe = ensure_project_venv(project_root)
+        if not python_exe:
+            return ToolResult(
+                content=(
+                    f"Error: Could not create or find project venv under "
+                    f"{project_root}/.venv"
+                ),
+                is_error=True,
+            )
+
+        req = Path(requirements_path)
+        logger.info(
+            "project_install: pip install -r %s via %s",
+            req.name,
+            python_exe,
+        )
+
+        try:
+            proc = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: subprocess.run(
+                    [python_exe, "-m", "pip", "install", "-r", str(req)],
+                    capture_output=True,
+                    text=True,
+                    timeout=300,
+                    cwd=project_root,
+                ),
+            )
+        except subprocess.TimeoutExpired:
+            return ToolResult(
+                content=(
+                    f"Error: pip install -r {req.name} timed out after 300s."
+                ),
+                is_error=True,
+            )
+        except Exception as exc:
+            return ToolResult(
+                content=f"Error installing from {req.name}: {exc}",
+                is_error=True,
+            )
+
+        importlib.invalidate_caches()
+
+        if proc.returncode != 0:
+            diag = _format_install_failure_output(proc.stdout or "", proc.stderr or "")
+            return ToolResult(
+                content=(
+                    f"Error: pip install -r {req.name} failed "
+                    f"(exit {proc.returncode}), python={python_exe}:\n{diag}\n\n"
+                    "Fix requirements.txt, then retry project_install — "
+                    "do not use bash pip."
+                ),
+                is_error=True,
+            )
+
+        installed_lines = [
+            ln for ln in (proc.stdout or "").splitlines()
+            if ln.startswith("Successfully installed")
+            or ln.startswith("Requirement already satisfied")
+            or ln.startswith("Collecting ")
+        ]
+        summary = (
+            installed_lines[0]
+            if installed_lines
+            else f"Installed dependencies from {req.name}"
+        )
+        return ToolResult(
+            content=(
+                f"{summary}\n"
+                f"Project: {project_root}\n"
+                f"Python: {python_exe}\n"
+                f"Requirements: {req.name}\n\n"
                 "bash `python` in this project directory uses the same venv."
             ),
         )
@@ -349,10 +487,14 @@ class ProjectInstallTool:
             )
 
         if proc.returncode != 0:
-            out = (proc.stdout or "") + (proc.stderr or "")
-            tail = "\n".join(out.strip().splitlines()[-8:])
+            diag = _format_install_failure_output(proc.stdout or "", proc.stderr or "")
             return ToolResult(
-                content=f"Error: {' '.join(cmd)} failed (exit {proc.returncode}):\n{tail}",
+                content=(
+                    f"Error: {' '.join(cmd)} failed (exit {proc.returncode}):\n"
+                    f"{diag}\n\n"
+                    "Fix package.json / lockfile issues above, then retry "
+                    "project_install from the project directory."
+                ),
                 is_error=True,
             )
 

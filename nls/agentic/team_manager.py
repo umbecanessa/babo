@@ -767,7 +767,9 @@ class TeamManager:
             f"Team: {team.name} [{team.id}]\n"
             f"Outcome: {_outcome.upper()} ({_ok} done, {_fail} failed)\n"
             f"7) team(advance, team_id='{team.id}') after steps are resolved\n"
-            "8) Update Kanban; ONE stakeholder update if requested"
+            "8) Update Kanban. Stakeholder: communicate() ONLY if something "
+            "noteworthy (blocker, failed delegate, surprise). On routine "
+            "all-success waves stay silent — the UI shows wave progress."
         )
 
     def _notify_wave_review_required(self, team: Team) -> bool:
@@ -1456,6 +1458,7 @@ class TeamManager:
         _wave_registry, _peer_registry_lines = build_wave_ownership_registry(
             team.members,
             plan=_plan_for_wave,
+            wave_index=team.wave_index,
         )
         _shared_paths: list[str] = []
         if _project_dir:
@@ -1511,7 +1514,9 @@ class TeamManager:
                 if _plan_for_wave and member.step_id
                 else None
             )
-            _owned = resolve_step_owned_paths(_step, _project_dir or "")
+            _owned = resolve_step_owned_paths(
+                _step, _project_dir or "", wave_index=team.wave_index,
+            )
             _peer_lines = [
                 ln for ln in _peer_registry_lines
                 if f"#{num}" not in ln
@@ -1594,6 +1599,7 @@ class TeamManager:
         await self._broadcast_stakeholder_milestone(
             self._wave_launched_milestone(team, len(specs)),
             source=f"milestone:wave_launched:{team.id}",
+            chat=self._milestone_surface_chat(team, "launched"),
         )
 
         # Update WM orchestration state
@@ -1854,7 +1860,9 @@ class TeamManager:
                     self._plan_store.save(plan)
                     if self._file_ledger is not None:
                         resolved = resolve_step_owned_paths(
-                            step, project_dir=plan.project_dir,
+                            step,
+                            project_dir=plan.project_dir,
+                            wave_index=team.wave_index,
                         )
                         self._file_ledger.set_delegate_paths(
                             team.wave_index,
@@ -1899,7 +1907,7 @@ class TeamManager:
             return False
         from .wave_coordination import resolve_step_owned_paths
 
-        paths = resolve_step_owned_paths(step, project_dir=plan.project_dir)
+        paths = resolve_step_owned_paths(step, project_dir=plan.project_dir, wave_index=team.wave_index)
         synced = False
         for team in self._teams.values():
             if team.plan_id != plan_id or team.is_terminal:
@@ -2547,6 +2555,7 @@ class TeamManager:
                 await self._broadcast_stakeholder_milestone(
                     self._wave_complete_milestone(team),
                     source=f"milestone:wave_complete:{team.id}",
+                    chat=self._milestone_surface_chat(team, "complete"),
                 )
 
                 # Forward wave-complete to LearningAccumulator
@@ -2670,7 +2679,9 @@ class TeamManager:
             if _pw and next_pending.step_id
             else None
         )
-        _owned = resolve_step_owned_paths(_pending_step, _project_dir or "")
+        _owned = resolve_step_owned_paths(
+            _pending_step, _project_dir or "", wave_index=team.wave_index,
+        )
         _file_ownership_block = build_file_ownership_block(
             delegate_number=next_pending.delegate_number,
             owned_patterns=_owned,
@@ -3011,9 +3022,9 @@ class TeamManager:
             logger.debug("TeamManager broadcast failed: %s", exc)
 
     async def _broadcast_stakeholder_milestone(
-        self, message: str, *, source: str,
+        self, message: str, *, source: str, chat: bool = False,
     ) -> None:
-        """Curated wave/plan update for the main chat thread."""
+        """Wave/plan progress line for workbench; main chat only when ``chat``."""
         text = (message or "").strip()
         if not text or self._connection_manager is None:
             return
@@ -3023,35 +3034,82 @@ class TeamManager:
                 "message": text,
                 "iteration": 0,
                 "autonomous": True,
-                "user_facing": True,
+                "user_facing": chat,
+                "milestone": True,
                 "source": source,
             })
         except Exception as exc:
             logger.debug("TeamManager milestone broadcast failed: %s", exc)
 
-    def _wave_complete_milestone(self, team: Team) -> str:
+    def _plan_wave_count(self, plan_id: str) -> int | None:
+        if not plan_id or self._plan_store is None:
+            return None
+        plan = self._plan_store.load(plan_id)
+        if plan is None:
+            return None
+        waves = get_delegation_waves(plan)
+        return len(waves) if waves else None
+
+    def _milestone_surface_chat(self, team: Team, event: str) -> bool:
+        """Whether a system milestone should appear in the main chat thread."""
+        if event == "launched":
+            return team.wave_index == 0
+        if event == "complete":
+            if team.compute_outcome() != "completed":
+                return True
+            if team.wave_attempt > 1:
+                return True
+            total = self._plan_wave_count(team.plan_id)
+            if total is not None and team.wave_index + 1 >= total:
+                return True
+            return False
+        return False
+
+    def _wave_position_label(self, team: Team) -> str:
         wave_num = team.wave_index + 1
+        total = self._plan_wave_count(team.plan_id)
+        if total and total > 0:
+            return f"Wave {wave_num}/{total}"
+        return f"Wave {wave_num}"
+
+    def _member_task_labels(self, team: Team, *, limit: int = 3) -> str:
+        tasks = [
+            m.task.split("\n")[0].strip()[:40]
+            for m in team.members[:limit]
+            if m.task.strip()
+        ]
+        if not tasks:
+            return ""
+        hint = ", ".join(tasks)
+        extra = len(team.members) - limit
+        if extra > 0:
+            hint += f" (+{extra} more)"
+        return hint
+
+    def _wave_complete_milestone(self, team: Team) -> str:
+        pos = self._wave_position_label(team)
         _ok = sum(1 for m in team.members if m.status == "done")
         _total = len(team.members)
-        name = team.name or f"Wave {wave_num}"
+        outcome = team.compute_outcome()
+        tasks = self._member_task_labels(team)
+        if outcome == "completed":
+            detail = f"{_ok}/{_total} done"
+            if tasks:
+                detail += f" · {tasks}"
+            return f"{pos} complete — {detail}"
+        failed = [
+            m.task.split("\n")[0].strip()[:32]
+            for m in team.members
+            if m.status in ("failed", "cancelled")
+        ]
+        fail_hint = f" · issues: {', '.join(failed[:2])}" if failed else ""
         return (
-            f"Wave {wave_num} complete — {name}. "
-            f"{_ok}/{_total} task(s) finished; reviewing before the next wave."
+            f"{pos} finished ({outcome}) — {_ok}/{_total} succeeded{fail_hint}"
         )
 
     def _wave_launched_milestone(self, team: Team, launched_count: int) -> str:
-        wave_num = team.wave_index + 1
-        name = team.name or f"Wave {wave_num}"
-        tasks = [
-            m.task.split("\n")[0].strip()[:48]
-            for m in team.members[:3]
-            if m.status in ("running", "pending", "done")
-        ]
-        task_hint = ", ".join(tasks)
-        if len(team.members) > 3:
-            task_hint += f" (+{len(team.members) - 3} more)"
-        suffix = f": {task_hint}" if task_hint else ""
-        return (
-            f"Wave {wave_num} started — {name}. "
-            f"{launched_count} sub-agent(s) running{suffix}."
-        )
+        pos = self._wave_position_label(team)
+        tasks = self._member_task_labels(team)
+        if tasks:
+            return f"{pos} started — {tasks}"
+        return f"{pos} started — {launched_count} sub-agent(s)"

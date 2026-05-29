@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  Get,
   Param,
   Put,
   Req,
@@ -41,6 +42,15 @@ export class CloudProvidersController {
     return { ok: true };
   }
 
+  @Get('resend')
+  async getResend(@Req() req: any) {
+    const status = await this.providerKeys.getResendStatus(req.user.userId);
+    return {
+      configured: status.configured,
+      inboundDomain: status.inboundDomain,
+    };
+  }
+
   @Put('resend')
   async setResend(
     @Req() req: any,
@@ -51,6 +61,12 @@ export class CloudProvidersController {
       body.apiKey,
       body.inboundDomain,
     );
+    return { ok: true };
+  }
+
+  @Delete('resend')
+  async clearResend(@Req() req: any) {
+    await this.providerKeys.clearResendConfig(req.user.userId);
     return { ok: true };
   }
 }

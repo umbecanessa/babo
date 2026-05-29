@@ -100,6 +100,7 @@ export class RunViewService {
   private readonly _expanded = signal(false);
   private readonly _background = signal(false);
   private readonly _archived = signal(false);
+  private readonly _recoveryPending = signal(false);
   private readonly _unassigned = signal<RunDelegate[]>([]);
   private readonly _activeDelegates = new Set<number>();
   private readonly _delegateEventBuffer = new Map<number, unknown[]>();
@@ -110,6 +111,14 @@ export class RunViewService {
   readonly expanded = this._expanded.asReadonly();
   readonly background = this._background.asReadonly();
   readonly archived = this._archived.asReadonly();
+  readonly recoveryPending = this._recoveryPending.asReadonly();
+
+  readonly needsWrapUp = computed(() => {
+    if (this._archived() || this._steps().length === 0) return false;
+    const total = this.totalCount();
+    const done = this.doneCount();
+    return total > 0 && done === total && !this.isLive();
+  });
 
   readonly visible = computed(() => this._steps().length > 0 || this._unassigned().length > 0);
 
@@ -226,6 +235,7 @@ export class RunViewService {
     this._expanded.set(false);
     this._background.set(false);
     this._archived.set(false);
+    this._recoveryPending.set(false);
     this._activeDelegates.clear();
     this._delegateEventBuffer.clear();
     this._teamsById.clear();
@@ -329,6 +339,7 @@ export class RunViewService {
         label: ps.label || `Step ${idx + 1}`,
         status: mapPlanStatus(ps.status),
         delegatable: ps.delegatable !== false,
+        partialAccept: prev?.partialAccept || (ps.notes || '').includes('[accept_partial]'),
         detail: prev?.detail,
         delegates: prev?.delegates?.length ? [...prev.delegates] : [],
       };
@@ -458,8 +469,19 @@ export class RunViewService {
         if (byId >= 0) idx = byId;
       }
       if (idx < 0 || idx >= copy.length) return steps;
-      copy[idx] = { ...copy[idx], status };
-      return copy;
+      const prev = copy[idx];
+      copy[idx] = {
+        ...prev,
+        status,
+        ...(status === 'done'
+          ? {
+              delegates: prev.delegates.map(d =>
+                d.status === 'error' ? { ...d, status: 'done' as const } : d,
+              ),
+            }
+          : {}),
+      };
+      return this._syncStepStatusFromDelegates(copy);
     });
 
     if (msg['autonomous'] === true) this._background.set(true);
@@ -553,13 +575,44 @@ export class RunViewService {
   private _onPlanToolEnd(msg: Record<string, unknown>): boolean {
     if (msg['sub_agent'] === true) return false;
     if (String(msg['tool_name'] || '') !== 'plan') return false;
+    if (msg['is_error']) return true;
     const details = msg['details'] as Record<string, unknown> | undefined;
     const action = String(details?.['action'] || '');
-    if (action !== 'delete') return false;
-    if (msg['is_error']) return true;
-    const planId = details?.['plan_id'] != null ? String(details['plan_id']) : undefined;
-    this.markPlanArchived(planId);
-    return true;
+    if (action === 'delete') {
+      const planId = details?.['plan_id'] != null ? String(details['plan_id']) : undefined;
+      this.markPlanArchived(planId);
+      return true;
+    }
+    if (action === 'accept_partial') {
+      const stepId = details?.['step_id'] != null ? String(details['step_id']) : '';
+      this._markStepAccepted(stepId, true);
+      this._recoveryPending.set(true);
+      return true;
+    }
+    if (action === 'complete') {
+      this._recoveryPending.set(false);
+      return true;
+    }
+    return false;
+  }
+
+  private _markStepAccepted(stepId: string, partial: boolean): void {
+    if (!stepId) return;
+    this._steps.update(steps => {
+      const copy = steps.map(s => {
+        if (s.id !== stepId) return s;
+        return {
+          ...s,
+          status: 'done' as RunStepStatus,
+          partialAccept: partial || s.partialAccept,
+          detail: partial ? 'Partial work accepted — orchestrator can fix gaps or launch another wave.' : s.detail,
+          delegates: s.delegates.map(d =>
+            d.status === 'error' ? { ...d, status: 'done' as const } : d,
+          ),
+        };
+      });
+      return this._syncStepStatusFromDelegates(copy);
+    });
   }
 
   private _onDelegateToolEnd(msg: Record<string, unknown>): boolean {
@@ -762,6 +815,10 @@ export class RunViewService {
 
   private _syncStepStatusFromDelegates(steps: RunStep[]): RunStep[] {
     return steps.map(s => {
+      if (s.status === 'done' || s.status === 'skipped' || s.partialAccept) {
+        return s.status === 'error' ? { ...s, status: 'done' as RunStepStatus } : s;
+      }
+
       if (!s.delegates.length) {
         if (s.status === 'active') {
           return { ...s, status: 'pending' };
@@ -777,18 +834,18 @@ export class RunViewService {
       );
 
       if (live.length > 0) {
-        if (s.status === 'pending' || s.status === 'done') {
+        if (s.status === 'pending') {
           return { ...s, status: 'active' };
         }
         return s;
       }
 
       if (terminal.length === s.delegates.length) {
-        if (s.status === 'done' || s.status === 'skipped') {
-          return s;
-        }
         const allFailed = s.delegates.every(d => d.status === 'error');
-        return { ...s, status: allFailed ? 'error' : 'done' };
+        if (allFailed) {
+          return { ...s, status: 'error' };
+        }
+        return { ...s, status: 'done' };
       }
 
       if (s.status === 'pending' && terminal.length > 0) {

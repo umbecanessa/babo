@@ -14,8 +14,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
-from typing import Any
+import uuid
+from typing import Any, Awaitable, Callable
 
 from .base import AgentTool, ToolResult
 
@@ -95,6 +97,25 @@ _CDP_SKIP_URLS = (
     "about:devtools",
 )
 
+# Small, unobtrusive window when a standalone Chromium is unavoidable.
+_STANDALONE_WINDOW = {"width": 720, "height": 480}
+_STANDALONE_WINDOW_POS = {"width": 40, "height": 40}
+
+_INAPP_ACTIONS = frozenset({
+    "navigate", "click", "fill", "type", "snapshot", "screenshot",
+    "scroll", "press", "wait_for", "close",
+})
+
+_PRESS_KEY_MAP = {
+    "enter": "{ENTER}",
+    "return": "{ENTER}",
+    "tab": "{TAB}",
+    "escape": "{ESCAPE}",
+    "esc": "{ESCAPE}",
+    "backspace": "{BACKSPACE}",
+    "space": " ",
+}
+
 
 class BrowserAdapterTool:
     """Browser tool powered by browser-use (Playwright + stealth).
@@ -132,6 +153,11 @@ class BrowserAdapterTool:
         self._auth_cookies: list[dict] = []
         self._copilot_queue: Any | None = None
         self._emit_set_cookies: Any | None = None
+        self._emit_and_wait: (
+            Callable[[dict[str, Any]], Awaitable[dict[str, Any]]] | None
+        ) = None
+        self._inapp_timeout = 60.0
+        self._ref_selectors: dict[str, str] = {}
 
     @staticmethod
     def _ensure_browseruse_config_dir() -> None:
@@ -155,8 +181,17 @@ class BrowserAdapterTool:
             os.makedirs(fallback, exist_ok=True)
             os.environ["BROWSER_USE_CONFIG_DIR"] = fallback
 
+    def _prefer_inapp(self) -> bool:
+        """True when the Electron in-app webview is wired via WebSocket."""
+        return self._emit_and_wait is not None
+
     async def _ensure_page(self) -> Any:
         """Lazily start browser-use and return the active Page."""
+        if self._prefer_inapp():
+            raise RuntimeError(
+                "BrowserAdapterTool: in-app webview is active; "
+                "Playwright/CDP path should not be used"
+            )
         if self._page is not None:
             try:
                 await self._page.get_url()
@@ -257,6 +292,11 @@ class BrowserAdapterTool:
             except Exception:
                 url = ""
             if self._is_electron_internal(url):
+                if self._prefer_inapp():
+                    raise RuntimeError(
+                        "BrowserAdapterTool: Electron renderer only; "
+                        "use in-app webview instead of standalone fallback"
+                    )
                 logger.warning(
                     "BrowserAdapterTool: only Electron renderer available "
                     "(%s), falling back to standalone browser",
@@ -287,6 +327,11 @@ class BrowserAdapterTool:
 
     async def _fallback_to_standalone(self) -> Any:
         """Abandon CDP and start a standalone browser instead."""
+        if self._prefer_inapp():
+            raise RuntimeError(
+                "BrowserAdapterTool: in-app webview available; "
+                "refusing standalone Chromium fallback"
+            )
         try:
             from browser_use import Browser as BrowserUse
         except ImportError:
@@ -326,6 +371,9 @@ class BrowserAdapterTool:
             "headless": self._headless,
             "keep_alive": True,
         }
+        if not self._headless:
+            kwargs["window_size"] = _STANDALONE_WINDOW
+            kwargs["window_position"] = _STANDALONE_WINDOW_POS
         if self._user_data_dir:
             kwargs["user_data_dir"] = self._user_data_dir
         self._browser = BrowserUse(**kwargs)
@@ -459,6 +507,229 @@ class BrowserAdapterTool:
 
         return "\n".join(lines)
 
+    async def _send_inapp_command(
+        self, action: str, params: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Route a browser action to the Electron in-app webview."""
+        assert self._emit_and_wait is not None
+        request_id = str(uuid.uuid4())
+        command: dict[str, Any] = {
+            "type": "browser_command",
+            "request_id": request_id,
+            "action": action,
+        }
+        for key in ("url", "selector", "text", "value", "direction", "amount"):
+            if key in params and params[key] is not None:
+                command[key] = params[key]
+        return await asyncio.wait_for(
+            self._emit_and_wait(command),
+            timeout=self._inapp_timeout,
+        )
+
+    def _parse_inapp_elements(self, text: str) -> tuple[str, str, list[str]]:
+        """Parse get_interactive_elements output; update ref→selector map."""
+        self._ref_selectors.clear()
+        page_url = ""
+        lines_out: list[str] = []
+        for line in text.splitlines():
+            if line.startswith("Found ") and " interactive elements on " in line:
+                _, _, rest = line.partition(" interactive elements on ")
+                page_url = rest.strip().rstrip(":")
+                continue
+            m = re.match(
+                r'\[(\d+)\]\s*<([^>]+)>\s*selector="([^"]+)"(.*)$',
+                line.strip(),
+            )
+            if not m:
+                continue
+            ref, tag_desc, selector, tail = m.groups()
+            self._ref_selectors[ref] = selector
+            desc = tag_desc.strip()
+            if tail.strip():
+                desc += " " + tail.strip()
+            lines_out.append(f"  [{ref}] {desc} -> {selector}")
+        return page_url, page_url, lines_out
+
+    def _format_inapp_snapshot(self, elements_text: str) -> str:
+        """Format in-app element list like a Playwright snapshot."""
+        page_url, _, element_lines = self._parse_inapp_elements(elements_text)
+        title = page_url
+        lines = [f"Page: {title or '(in-app browser)'}", f"URL: {page_url}", ""]
+        if element_lines:
+            lines.append(f"{len(element_lines)} interactive elements:")
+            lines.extend(element_lines)
+        else:
+            lines.append("(no interactive elements found)")
+        return "\n".join(lines)
+
+    async def _inapp_snapshot(self) -> str:
+        response = await self._send_inapp_command("get_interactive_elements", {})
+        if response.get("status") == "error":
+            return (
+                "Page: (error reading state)\n"
+                f"Error: {response.get('error', 'unknown')}"
+            )
+        return self._format_inapp_snapshot(response.get("result", ""))
+
+    def _selector_for_ref(self, ref: str) -> str | None:
+        return self._ref_selectors.get(ref)
+
+    async def _execute_inapp(
+        self, action: str, params: dict[str, Any],
+    ) -> ToolResult:
+        """Drive the in-app Electron webview (preferred over external Chromium)."""
+        if action == "navigate":
+            url = params.get("url", "").strip()
+            if not url:
+                return ToolResult(content="Error: 'url' required.", is_error=True)
+            url = self._resolve_url(url)
+            response = await self._send_inapp_command("navigate", {"url": url})
+            status = response.get("status", "error")
+            if status == "error":
+                return ToolResult(
+                    content=f"Browser error: {response.get('error', 'Unknown error')}",
+                    is_error=True,
+                )
+            snap = await self._inapp_snapshot()
+            prefix = response.get("result", "")
+            if prefix and prefix not in snap:
+                return ToolResult(content=f"{prefix}\n\n{snap}", is_error=status == "challenge")
+            return ToolResult(content=snap, is_error=status == "challenge")
+
+        if action == "snapshot":
+            return ToolResult(content=await self._inapp_snapshot())
+
+        if action == "screenshot":
+            response = await self._send_inapp_command("screenshot", {})
+            if response.get("status") == "error":
+                return ToolResult(
+                    content=f"Screenshot failed: {response.get('error', '')}",
+                    is_error=True,
+                )
+            return ToolResult(content=response.get("result", "Screenshot captured."))
+
+        if action == "scroll":
+            response = await self._send_inapp_command("scroll", {
+                "direction": params.get("direction", "down"),
+                "amount": int(params.get("amount", 500)),
+            })
+            if response.get("status") == "error":
+                return ToolResult(
+                    content=f"Scroll failed: {response.get('error', '')}",
+                    is_error=True,
+                )
+            snap = await self._inapp_snapshot()
+            return ToolResult(content=f"{response.get('result', 'Scrolled.')}\n\n{snap}")
+
+        if action == "close":
+            return ToolResult(content="In-app browser session cleared.")
+
+        if action in ("click", "fill"):
+            ref = params.get("ref", "").strip()
+            if not ref:
+                return ToolResult(content="Error: 'ref' required.", is_error=True)
+            selector = self._selector_for_ref(ref)
+            if not selector:
+                snap = await self._inapp_snapshot()
+                return ToolResult(
+                    content=(
+                        f"Element [{ref}] not found. Take a snapshot first.\n\n{snap}"
+                    ),
+                    is_error=True,
+                )
+            if action == "click":
+                response = await self._send_inapp_command("click", {"selector": selector})
+            else:
+                response = await self._send_inapp_command("fill", {
+                    "selector": selector,
+                    "value": params.get("value", ""),
+                })
+            if response.get("status") == "error":
+                return ToolResult(
+                    content=f"Browser error: {response.get('error', 'Unknown error')}",
+                    is_error=True,
+                )
+            snap = await self._inapp_snapshot()
+            label = "Clicked" if action == "click" else "Filled"
+            return ToolResult(
+                content=f"{label} [{ref}].\n\n{snap}",
+                is_error=response.get("status") == "challenge",
+            )
+
+        if action == "type":
+            ref = params.get("ref", "").strip()
+            value = params.get("value", "")
+            if ref:
+                selector = self._selector_for_ref(ref)
+                if not selector:
+                    snap = await self._inapp_snapshot()
+                    return ToolResult(
+                        content=f"Element [{ref}] not found.\n\n{snap}",
+                        is_error=True,
+                    )
+                click_resp = await self._send_inapp_command("click", {"selector": selector})
+                if click_resp.get("status") == "error":
+                    return ToolResult(
+                        content=f"Focus failed: {click_resp.get('error', '')}",
+                        is_error=True,
+                    )
+            response = await self._send_inapp_command("type", {"text": value})
+            if response.get("status") == "error":
+                return ToolResult(
+                    content=f"Type failed: {response.get('error', '')}",
+                    is_error=True,
+                )
+            snap = await self._inapp_snapshot()
+            return ToolResult(content=f"Typed into [{ref or 'focused'}].\n\n{snap}")
+
+        if action == "press":
+            key = params.get("key", "").strip()
+            if not key:
+                return ToolResult(content="Error: 'key' required.", is_error=True)
+            mapped = _PRESS_KEY_MAP.get(key.lower(), key)
+            response = await self._send_inapp_command("type", {"text": mapped})
+            if response.get("status") == "error":
+                return ToolResult(
+                    content=f"Press failed: {response.get('error', '')}",
+                    is_error=True,
+                )
+            snap = await self._inapp_snapshot()
+            return ToolResult(content=f"Pressed {key}.\n\n{snap}")
+
+        if action == "wait_for":
+            text = params.get("value", "").strip()
+            if not text:
+                return ToolResult(
+                    content="Error: 'value' (text to wait for) required.",
+                    is_error=True,
+                )
+            for _ in range(20):
+                response = await self._send_inapp_command("get_text", {})
+                body = response.get("result", "")
+                if text in body:
+                    snap = await self._inapp_snapshot()
+                    return ToolResult(content=f"Text \"{text}\" found.\n\n{snap}")
+                await asyncio.sleep(0.5)
+            snap = await self._inapp_snapshot()
+            return ToolResult(
+                content=f"Text \"{text}\" not found after 10s.\n\n{snap}",
+                is_error=True,
+            )
+
+        if action in ("hover", "select_option", "evaluate"):
+            return ToolResult(
+                content=(
+                    f"Action '{action}' is not supported in the in-app browser. "
+                    "Use snapshot/click/fill/type/scroll instead."
+                ),
+                is_error=True,
+            )
+
+        return ToolResult(
+            content=f"Unknown in-app action '{action}'.",
+            is_error=True,
+        )
+
     def _resolve_url(self, url: str) -> str:
         """Resolve a URL, handling file://, absolute paths, and relative paths."""
         if url.startswith(("http://", "https://", "file://", "chrome", "data:")):
@@ -490,10 +761,11 @@ class BrowserAdapterTool:
     @property
     def description(self) -> str:
         return (
-            "Interactive web browser (Chromium with stealth/anti-detection). "
-            "The runtime may attach to the **in-app** embedded webview "
-            "(user sees pages inside the app) or drive a **standalone** "
-            "browser window — same tool and actions either way. "
+            "Interactive web browser. When the desktop app is connected, "
+            "actions run in the **in-app** embedded webview (background panel) "
+            "instead of opening an external Chromium window. "
+            "A standalone window is only used for sign-in (authenticate) or "
+            "when no UI session is attached.\n\n"
             "Elements are identified by index numbers from the snapshot "
             "returned after each action (e.g. ref=5).\n\n"
             "Actions:\n"
@@ -585,6 +857,21 @@ class BrowserAdapterTool:
         action = params.get("action", "").strip()
         if not action:
             return ToolResult(content="Error: 'action' is required.", is_error=True)
+
+        if self._prefer_inapp() and action in _INAPP_ACTIONS:
+            try:
+                return await self._execute_inapp(action, params)
+            except asyncio.TimeoutError:
+                return ToolResult(
+                    content=f"Browser '{action}' timed out after {self._inapp_timeout}s",
+                    is_error=True,
+                )
+            except Exception as e:
+                logger.error("BrowserAdapterTool.inapp.%s failed: %s", action, e, exc_info=True)
+                return ToolResult(
+                    content=f"Browser '{action}' failed: {e}",
+                    is_error=True,
+                )
 
         try:
             if action == "navigate":
@@ -825,13 +1112,30 @@ class BrowserAdapterTool:
     def set_visual_cortex(self, visual_cortex: Any) -> None:
         """Register a VisualCortex so it gets wired when the browser starts."""
         self._visual_cortex = visual_cortex
+        if self._emit_and_wait is not None:
+            visual_cortex.set_browser_engine(self)
 
     async def _async_capture_frame(self) -> Any | None:
-        """Capture the active page as a PIL Image for the visual cortex.
+        """Capture the active page as a PIL Image for the visual cortex."""
+        if self._emit_and_wait is not None:
+            try:
+                import base64 as _b64
+                import io as _io
 
-        Must be awaited on the same event loop where the page was created
-        (Playwright is loop-bound).  The VisualCortex calls this directly.
-        """
+                response = await asyncio.wait_for(
+                    self._send_inapp_command("screenshot_raw", {}),
+                    timeout=10.0,
+                )
+                b64 = response.get("image_base64", "")
+                if not b64:
+                    return None
+                if "," in b64:
+                    b64 = b64.split(",", 1)[1]
+                data = _b64.b64decode(b64)
+                from PIL import Image
+                return Image.open(_io.BytesIO(data)).convert("RGB")
+            except Exception:
+                return None
         if self._page is None:
             return None
         try:
@@ -878,7 +1182,11 @@ class BrowserAdapterTool:
 
         logger.info("BrowserAdapterTool: opening auth browser for %s", url)
 
-        auth_session = BrowserUse(headless=False)
+        auth_session = BrowserUse(
+            headless=False,
+            window_size=_STANDALONE_WINDOW,
+            window_position=_STANDALONE_WINDOW_POS,
+        )
         try:
             await auth_session.start()
             await auth_session.navigate_to(url)
@@ -1126,10 +1434,13 @@ def create_browser_tool(
     workspace_path: str = "",
     cdp_url: str = "",
     request_auth: Any | None = None,
+    emit_and_wait: (
+        Callable[[dict[str, Any]], Awaitable[dict[str, Any]]] | None
+    ) = None,
     **_kwargs: Any,
 ) -> BrowserAdapterTool:
     """Factory: create a browser-use powered browser tool."""
-    return BrowserAdapterTool(
+    tool = BrowserAdapterTool(
         headless=headless,
         on_navigation=on_navigation,
         user_data_dir=user_data_dir,
@@ -1137,3 +1448,5 @@ def create_browser_tool(
         cdp_url=cdp_url,
         request_auth=request_auth,
     )
+    tool._emit_and_wait = emit_and_wait
+    return tool

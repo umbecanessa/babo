@@ -16,7 +16,7 @@ This page is the **architecture delta** for the largest change set since the ini
 | **Memory** | Cryptex rings (static order) | **Dynamic ring priorities** by cognitive phase; SubCryptex for delegates |
 | **Desktop onboarding** | Basic setup | **Capability profiles** (4 workloads × 5 placements), LAN scan, day-1 coach |
 | **Frontend** | Single chat socket | **Multi-agent WebSocket**, run panel, model picker, theme system, workspace IDE |
-| **Tests** | Core unit tests | +30 orchestration / plan / stall / policy tests |
+| **Tests** | Core unit tests | + orchestration / plan / stall / policy tests; **agent scenario harness (44/45)** |
 
 Approximate diff vs `main`: **455 files**, **+62k / −11k** lines (including frontend theme migration and agentic subsystem).
 
@@ -163,6 +163,7 @@ Cloud agents route through Babo Cloud with the selected OpenRouter or upstream m
 | [Vision worker](vision-worker.md) | Moondream / LAN / hosted ambient eyes |
 | [Orchestration & delegation](orchestration-and-delegation.md) | Teams, waves, policy |
 | [Skill discovery & recovery](skill-discovery-and-recovery.md) | Stall, ClawHub, recipes, gh auth |
+| [Agent scenario harness](../development/agent-scenario-harness.md) | 45-scenario E2E acceptance gate (44/45 pass) |
 | [Babo Cloud module](nestjs-modules/babo-cloud.md) | Nest routes & env |
 | [Railway ↔ GX10](../configuration/babo-cloud-railway-gx10.md) | Deploy wiring |
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from nls.agentic.evaluator import should_complete_v4
+from nls.agentic.evaluator import should_complete
 from nls.agentic.types import AgentMode, LoopConfig, LoopState
 
 
@@ -39,7 +39,7 @@ async def test_monitoring_wrap_up_with_live_delegates_not_loop_count():
   state.cumulative_actions = ["await_delegates(summary='wave 0 launched')"]
 
   dm = _FakeDelegateManager(running=True)
-  done = await should_complete_v4(
+  done = await should_complete(
       state, LoopConfig(), _Hooks(), delegate_manager=dm,
   )
   assert done is True
@@ -58,7 +58,7 @@ async def test_monitoring_wrap_up_at_three_tool_calls():
   )
   state.cumulative_actions = ["await_delegates(summary='delegates running')"]
 
-  done = await should_complete_v4(
+  done = await should_complete(
       state, LoopConfig(), _Hooks(), delegate_manager=_FakeDelegateManager(True),
   )
   assert done is True
@@ -78,7 +78,7 @@ async def test_coordinator_status_yield_without_background_delegates():
       "What would you like me to do first?"
   )
 
-  done = await should_complete_v4(
+  done = await should_complete(
       state, LoopConfig(), _Hooks(plan_active=True),
       delegate_manager=_FakeDelegateManager(False),
   )
@@ -96,7 +96,7 @@ async def test_monitoring_wrap_up_not_plain_status_yield():
   state._last_iter_text = "Wave is executing in the background." * 3
   state.cumulative_actions = ["await_delegates(summary='wave running')"]
 
-  done = await should_complete_v4(
+  done = await should_complete(
       state, LoopConfig(), _Hooks(), delegate_manager=_FakeDelegateManager(True),
   )
   assert done is True

@@ -37,6 +37,8 @@ export interface RunStep {
   status: RunStepStatus;
   delegatable: boolean;
   detail?: string;
+  /** Orchestrator accepted partial work after a failed/cancelled delegate. */
+  partialAccept?: boolean;
   delegates: RunDelegate[];
 }
 

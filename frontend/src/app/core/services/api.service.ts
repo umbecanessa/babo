@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
+import { firstValueFrom } from 'rxjs';
 import { Observable, map, of, catchError, switchMap } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { isDesktopShell, nestjsRootFromApiBase, readBaboBoot } from '../desktop-boot';
@@ -54,6 +55,13 @@ export class ApiService {
   /** Resolves after Electron loads nestjsUrl / runtimePort from nls-config.json */
   private readonly urlsReady: Promise<void>;
 
+  /** Last successful agent list — survives dashboard destroy/recreate on nav back. */
+  private agentsCache: Agent[] = [];
+
+  private runtimeHealthy = false;
+  private runtimeHealthCheckedAt = 0;
+  private static readonly RUNTIME_HEALTH_TTL_MS = 30_000;
+
   /**
    * Base URL for agent CRUD.
    * Electron: local Python runtime (direct).
@@ -100,12 +108,49 @@ export class ApiService {
     const nls = (window as unknown as { nls?: { on?: Function } }).nls;
     nls?.on?.('config:changed', () => {
       this.applyBootConfig();
+      this.invalidateRuntimeHealth();
       void this.initElectronUrls();
     });
   }
 
   whenReady(): Promise<void> {
     return this.urlsReady;
+  }
+
+  getCachedAgents(): Agent[] {
+    return this.agentsCache;
+  }
+
+  /** Fast path when returning to dashboard while runtime is already up. */
+  async isRuntimeReady(force = false): Promise<boolean> {
+    const now = Date.now();
+    if (
+      !force
+      && this.runtimeHealthy
+      && now - this.runtimeHealthCheckedAt < ApiService.RUNTIME_HEALTH_TTL_MS
+    ) {
+      return true;
+    }
+    try {
+      await firstValueFrom(this.getHealth());
+      this.runtimeHealthy = true;
+      this.runtimeHealthCheckedAt = now;
+      return true;
+    } catch {
+      this.runtimeHealthy = false;
+      this.runtimeHealthCheckedAt = now;
+      return false;
+    }
+  }
+
+  markRuntimeReady(): void {
+    this.runtimeHealthy = true;
+    this.runtimeHealthCheckedAt = Date.now();
+  }
+
+  invalidateRuntimeHealth(): void {
+    this.runtimeHealthy = false;
+    this.runtimeHealthCheckedAt = 0;
   }
 
   /** NestJS global prefix is `/api` (see backend main.ts). */
@@ -184,7 +229,11 @@ export class ApiService {
   // ─── Agents (CRUD) ────────────────────────────────────────────
   getAgents(): Observable<Agent[]> {
     return this.http.get<any[]>(`${this.AGENTS}/agents`).pipe(
-      map(list => list.map(a => this.normalizeAgent(a))),
+      map(list => {
+        const agents = list.map(a => this.normalizeAgent(a));
+        this.agentsCache = agents;
+        return agents;
+      }),
     );
   }
 
@@ -669,6 +718,26 @@ export class ApiService {
 
   disconnectGoogleWorkspace(agentId: string): Observable<{ disconnected: boolean }> {
     return this.http.post<any>(`${this.RUNTIME}/skills/google-workspace/disconnect/${agentId}`, {});
+  }
+
+  // ─── Platform integrations (NestJS) ───────────────────────────
+  getPlatformCapabilities(): Observable<import('../models/platform-capabilities.model').PlatformCapabilities> {
+    return this.http.get<any>(`${this.API}/cloud/platform-capabilities`);
+  }
+
+  getResendProviderStatus(): Observable<{ configured: boolean; inboundDomain: string | null }> {
+    return this.http.get<any>(`${this.API}/cloud/providers/resend`);
+  }
+
+  saveResendProvider(apiKey: string, inboundDomain: string): Observable<{ ok: boolean }> {
+    return this.http.put<{ ok: boolean }>(`${this.API}/cloud/providers/resend`, {
+      apiKey,
+      inboundDomain,
+    });
+  }
+
+  clearResendProvider(): Observable<{ ok: boolean }> {
+    return this.http.delete<{ ok: boolean }>(`${this.API}/cloud/providers/resend`);
   }
 
   // ─── Helpers ─────────────────────────────────────────────────

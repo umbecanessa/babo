@@ -9,9 +9,6 @@ import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
-from nls.ledger.genesis import BRAIN_CONFIG_FILES
-from nls.ledger.merkle import compute_genesis_hash
-
 logger = logging.getLogger(__name__)
 
 # Product-mode BYO templates ship without a values adapter; use a stable sentinel.
@@ -19,7 +16,18 @@ _BYO_SOUL_HASH = hashlib.sha256(b"byo-product-mode-no-soul-adapter").hexdigest()
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
-# Extended configs included in standard-v1 beyond the core BRAIN_CONFIG_FILES set.
+# Keep in sync with nls.ledger.genesis.BRAIN_CONFIG_FILES (stdlib-only build path).
+_CORE_BRAIN_CONFIG_FILES: tuple[str, ...] = (
+    "runtime.json",
+    "hormones.json",
+    "autonomic.json",
+    "drives.json",
+    "dmn.json",
+    "signals.json",
+    "visual_cortex.json",
+)
+
+# Extended configs included in standard-v1 beyond the core brain set.
 _EXTENDED_CONFIG_FILES: tuple[str, ...] = (
     "narrative_self.json",
     "theory_of_mind.json",
@@ -31,7 +39,7 @@ _EXTENDED_CONFIG_FILES: tuple[str, ...] = (
 )
 
 STANDARD_V1_CONFIG_FILES: tuple[str, ...] = tuple(
-    dict.fromkeys([*BRAIN_CONFIG_FILES, *_EXTENDED_CONFIG_FILES])
+    dict.fromkeys([*_CORE_BRAIN_CONFIG_FILES, *_EXTENDED_CONFIG_FILES])
 )
 
 STANDARD_V1_VERSION = "standard-v1"
@@ -41,6 +49,18 @@ _FORBIDDEN_PROMPT_MARKERS: tuple[str, ...] = (
     "using the nls_signal",
     "report cognitive signals using the nls_signal",
 )
+
+
+def _compute_genesis_hash(base_model_path: str) -> str:
+    """Fingerprint for BYO genesis manifests (no nls imports — build-safe)."""
+    p = Path(base_model_path)
+    if p.is_file():
+        sha = hashlib.sha256()
+        with open(p, "rb") as f:
+            while chunk := f.read(65536):
+                sha.update(chunk)
+        return sha.hexdigest()
+    return hashlib.sha256(base_model_path.encode("utf-8")).hexdigest()
 
 
 def _config_source_dir() -> Path:
@@ -89,7 +109,7 @@ def repair_byo_manifest(manifest_path: Path) -> bool:
     changed = False
     base_model = data.get("base_model") or "bring-your-own"
     if not data.get("genesis_hash"):
-        data["genesis_hash"] = compute_genesis_hash(base_model)
+        data["genesis_hash"] = _compute_genesis_hash(base_model)
         changed = True
     if not data.get("soul_hash"):
         data["soul_hash"] = _BYO_SOUL_HASH
@@ -169,7 +189,7 @@ def _ensure_standard_v1_manifest(target: Path) -> None:
         "minted_at": datetime.now(timezone.utc).isoformat(),
         "profile": "standard",
         "soul_hash": _BYO_SOUL_HASH,
-        "genesis_hash": compute_genesis_hash(base_model),
+        "genesis_hash": _compute_genesis_hash(base_model),
         "adapters": [],
         "education": None,
         "moe": None,

@@ -5,27 +5,41 @@ Supports two modes:
   - **Content ingestion**: newsletters, forwards, and links
     routed to the ANS study pipeline
 
-Outbound and inbound via Resend API.  Server-level env vars
-``RESEND_API_KEY`` and ``RESEND_INBOUND_DOMAIN`` must be set.
+Resend credentials come from Babo Cloud (server env) or user BYO settings
+on self-hosted NestJS (Settings → Integrations or server env vars).
 """
 
 from nls.skills import ConfigField, SkillMeta, SkillOnboarding, SkillWebhook
 
+_EMAIL_SETUP_PROMPT = (
+    "Guide the user through email channel setup. Be concise and practical.\n\n"
+    "**If Resend is not configured yet** (activation fails or user is self-hosted):\n"
+    "1. Explain they need a Resend account, API key, and verified inbound domain.\n"
+    "2. Self-hosted: save credentials in Babo Settings → Integrations, OR set "
+    "RESEND_API_KEY + RESEND_INBOUND_DOMAIN on their NestJS server.\n"
+    "3. Resend inbound webhook must point to: "
+    "{nestjs}/api/channels/email/webhook (their public NestJS URL).\n"
+    "4. Babo Desktop must stay online so NestJS can relay inbound mail.\n"
+    "5. After credentials are saved, tell them to click Activate Email in Tools "
+    "or retry activation.\n\n"
+    "**After alias is provisioned:**\n"
+    "1. Tell them the agent's new email address.\n"
+    "2. Call skill_configure(skill_name='email-channel') for owner_identity and DM policy.\n"
+    "3. Confirm setup is complete."
+)
+
 meta = SkillMeta(
     name="email-channel",
-    version="2.2",
+    version="2.3",
     description="Email integration via Resend with auto-provisioned aliases, newsletter detection, and content ingestion",
     dependencies=["httpx"],
     onboarding=SkillOnboarding(
-        setup_type="auto",
-        intro_message="Your agent now has a personal email address! Forward newsletters here or share it with contacts.",
-        setup_prompt=(
-            "After the email alias is provisioned, guide the user:\n"
-            "1. Tell them their agent's new email address\n"
-            "2. Call skill_configure(skill_name='email-channel') to check what else "
-            "needs configuring, then ask the user for the missing fields.\n"
-            "3. Confirm everything is set up."
+        setup_type="conversational",
+        intro_message=(
+            "Let's set up your agent's email inbox. I'll help with Resend "
+            "configuration if needed, then activate an address for your agent."
         ),
+        setup_prompt=_EMAIL_SETUP_PROMPT,
         completion_event="channel_connected",
     ),
     webhooks=[

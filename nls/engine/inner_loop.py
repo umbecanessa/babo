@@ -2024,7 +2024,11 @@ class InnerLoop:
             )
 
             _noop_abort = (
-                _aborted and _iters <= 2 and _tc == 0 and len(final.strip()) < 20
+                _aborted and _iters <= 2 and _tc == 0
+                and (
+                    len(final.strip()) < 20
+                    or source.startswith("scheduler")
+                )
             )
             if _cm is not None and not _noop_abort:
                 _abort_reason = getattr(result, "abort_reason", "") or ""

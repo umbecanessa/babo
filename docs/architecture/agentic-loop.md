@@ -32,7 +32,7 @@ flowchart TD
 | Generator | `generator.py` | LLM calls, streaming |
 | Executor | `executor.py` | Parallel/sequential tool runs, delegates |
 | Compactor | `compactor.py` | Context compression with anchors |
-| Evaluator | `evaluator.py` | `should_complete_v4`, acceptance checks |
+| Evaluator | `evaluator.py` | `should_complete`, acceptance checks |
 | Goals | `goals.py` | Extract/update goals from turns |
 | Orchestrator | `orchestrator.py` | Sub-agent teams, waves |
 | Team manager | `team_manager.py` | Delegate lifecycle |

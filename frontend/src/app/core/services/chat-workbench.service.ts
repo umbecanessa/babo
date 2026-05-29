@@ -406,13 +406,14 @@ export class ChatWorkbenchService {
           const bgStep = msg.step || 0;
           const bgMax = msg.max_steps || 15;
           const bgTools = (msg.tool_calls || []).map((tc: any) => tc.name).join(', ');
+          const bgSubtitle = bgTools
+            ? `Step ${bgStep}/${bgMax}: ${bgTools}`
+            : `Step ${bgStep}/${bgMax}`;
           this._upsert(`${corrNs}agentic`, {
             lane: 'background',
             kind: 'agentic',
             title: 'Background task',
-            subtitle: bgTools
-              ? `Step ${bgStep}/${bgMax}: ${bgTools}`
-              : `Step ${bgStep}/${bgMax}`,
+            subtitle: bgSubtitle,
             status: 'running',
             toolLabel: 'Task',
           });
@@ -462,7 +463,7 @@ export class ChatWorkbenchService {
           chips: formatted.chips.length ? formatted.chips : undefined,
           detail: text.length > 200 ? text.slice(0, DETAIL_KEEP) : undefined,
           status: 'ok',
-          toolLabel: 'Comms',
+          toolLabel: msg.milestone ? 'Wave' : 'Comms',
         });
         break;
       }
@@ -475,11 +476,12 @@ export class ChatWorkbenchService {
           if (silent) break;
           const bgSteps = msg.total_steps || 0;
           const bgDur = ((msg.duration_ms || 0) / 1000).toFixed(0);
+          const doneSubtitle = `${bgSteps} steps, ${bgDur}s`;
           this._upsert('bg-agentic-done', {
             lane: 'background',
             kind: 'agentic',
             title: bgAborted ? 'Background task stopped' : 'Background task completed',
-            subtitle: `${bgSteps} steps, ${bgDur}s`,
+            subtitle: doneSubtitle,
             status: bgAborted ? 'error' : 'ok',
             toolLabel: 'Task',
           });
@@ -641,9 +643,7 @@ export class ChatWorkbenchService {
           }
           this._upsert(corr, {
             title: pres.title,
-            subtitle: isError
-              ? preview.slice(0, 280) || pres.subtitle
-              : pres.subtitle,
+            subtitle: isError ? undefined : pres.subtitle,
             chips,
             delegateNumber: dlgNum,
             ...(filePaths.length
@@ -697,7 +697,7 @@ export class ChatWorkbenchService {
             toolName === 'switch_mode'
               ? String(endArgs['reason'] || '').trim().slice(0, 120) || undefined
               : isError
-                ? preview.slice(0, 280) || subtitleBody
+                ? undefined
                 : subtitleBody,
           chips,
           delegateNumber: dlgNum,

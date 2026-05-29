@@ -303,6 +303,39 @@ describe('RunViewService', () => {
     expect(svc.isLive()).toBe(true);
   });
 
+  it('accept_partial marks step done and clears failed delegate overlay', () => {
+    svc.handleMessage({
+      type: 'agentic_plan',
+      plan_id: 'plan_a',
+      title: 'Build',
+      steps: [{ id: 'step-5', label: 'Integrate', status: 'pending' }],
+    });
+    svc.handleMessage({
+      type: 'delegate_start',
+      delegate_number: 4,
+      delegate_task: 'Integrate API',
+      step_id: 'step-5',
+    });
+    svc.handleMessage({
+      type: 'delegate_end',
+      delegate_number: 4,
+      aborted: true,
+      summary: 'PATH NOT IN YOUR ASSIGNMENT',
+    });
+    expect(svc.steps().find(s => s.id === 'step-5')?.status).toBe('error');
+    svc.handleMessage({
+      type: 'tool_execution_end',
+      tool_name: 'plan',
+      is_error: false,
+      details: { action: 'accept_partial', step_id: 'step-5' },
+    });
+    const step = svc.steps().find(s => s.id === 'step-5');
+    expect(step?.status).toBe('done');
+    expect(step?.partialAccept).toBe(true);
+    expect(step?.delegates[0]?.status).toBe('done');
+    expect(svc.recoveryPending()).toBe(true);
+  });
+
   it('marks run archived on plan delete tool', () => {
     svc.handleMessage({
       type: 'agentic_plan',

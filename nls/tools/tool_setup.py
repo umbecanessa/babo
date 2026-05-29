@@ -172,15 +172,35 @@ def setup_tools(
             # inside the completed project's folder (KL #403).
             plan_tool.set_cwd_reset_fn(_switch_cwd)
 
+        def _get_plan_project_dir() -> str:
+            try:
+                store = plan_tool.get_store()
+                active = store.find_active()
+                if active and active.project_dir:
+                    return active.project_dir
+                return store.find_any_project_dir()
+            except Exception:
+                return ""
+
+        for _t in tools:
+            if hasattr(_t, "set_plan_project_dir_fn"):
+                _t.set_plan_project_dir_fn(_get_plan_project_dir)
+
         _ring_wm = dual_wm if dual_wm is not None else working_memory
         if plan_tool is not None and _ring_wm is not None:
             if hasattr(_ring_wm, "set_plan_requirements"):
                 def _sync_plan_context(
-                    requirements: str, tech_block: str, _stack: dict,
+                    requirements: str, tech_block: str, stack: dict,
                 ) -> None:
                     try:
-                        _ring_wm.set_plan_requirements(requirements)
-                        _ring_wm.set_plan_tech_stack(tech_block)
+                        if requirements:
+                            _ring_wm.set_plan_requirements(requirements)
+                        elif hasattr(_ring_wm, "set_plan_requirements"):
+                            _ring_wm.set_plan_requirements("")
+                        if tech_block and stack:
+                            _ring_wm.set_plan_tech_stack(tech_block)
+                        elif hasattr(_ring_wm, "clear_plan_tech_stack"):
+                            _ring_wm.clear_plan_tech_stack()
                     except Exception:
                         pass
 
@@ -218,6 +238,8 @@ def setup_tools(
             for t in tools:
                 if hasattr(t, "_manager"):
                     t._manager = shared_mgr
+                if getattr(t, "name", "") == "scheduler" and hasattr(t, "_agent_id"):
+                    t._agent_id = agent_id
     except Exception:
         pass
 

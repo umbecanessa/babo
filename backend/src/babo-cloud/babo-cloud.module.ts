@@ -17,6 +17,7 @@ import { GpuService } from './gpu.service';
 import { InferenceController } from './inference.controller';
 import { InferenceService } from './inference.service';
 import { ProviderKeysService } from './provider-keys.service';
+import { PlatformCapabilitiesController } from './platform-capabilities.controller';
 import { SubscriptionController } from './subscription.controller';
 
 @Module({
@@ -34,6 +35,7 @@ import { SubscriptionController } from './subscription.controller';
     InferenceController,
     GpuController,
     CloudProvidersController,
+    PlatformCapabilitiesController,
     SubscriptionController,
   ],
   providers: [

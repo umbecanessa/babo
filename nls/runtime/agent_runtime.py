@@ -882,25 +882,29 @@ class AgentRuntime:
 
     def _ensure_cryptex_populated(self) -> None:
         """Populate Cryptex rings with identity + behavioral slots on first call."""
-        if getattr(self, "_genesis_populated", False):
-            return
         wm = self.working_memory
         if wm is None or not hasattr(wm, "populate_genesis_identity"):
             return
         try:
-            today = datetime.now().strftime("%A, %B %d, %Y")
-            tool_dir = self._get_tool_directory()
-            wm.populate_genesis_identity(
-                agent_name=self.agent_name or "",
-                enabled_tools_list=tool_dir,
-                today_date=today,
-            )
+            if not getattr(self, "_genesis_populated", False):
+                today = datetime.now().strftime("%A, %B %d, %Y")
+                tool_dir = self._get_tool_directory()
+                wm.populate_genesis_identity(
+                    agent_name=self.agent_name or "",
+                    enabled_tools_list=tool_dir,
+                    today_date=today,
+                )
+                wm.populate_behavioral_defaults()
+                self._genesis_populated = True
+                logger.info(
+                    "[Agent] agent=%s Cryptex genesis slots populated", self.agent_id,
+                )
+            # Idempotent — picks up new profile slots on existing agents.
             wm.populate_agentic_supplement()
-            wm.populate_behavioral_defaults()
-            self._genesis_populated = True
-            logger.info("[Agent] agent=%s Cryptex genesis slots populated", self.agent_id)
         except Exception as exc:
-            logger.warning("[Agent] agent=%s Cryptex population failed: %s", self.agent_id, exc)
+            logger.warning(
+                "[Agent] agent=%s Cryptex population failed: %s", self.agent_id, exc,
+            )
 
     def _build_base_system_prompt(self) -> str:
         """Standard system prompt (no trained memory experts).
@@ -3470,6 +3474,7 @@ class AgentRuntime:
         on_bash_output: Any | None = None,
         on_browser_navigation: Any | None = None,
         on_browser_auth_request: Any | None = None,
+        browser_emit_and_wait: Any | None = None,
         copilot_queue: Any | None = None,
         emit_set_cookies: Any | None = None,
         first_response: str | None = None,
@@ -3479,6 +3484,7 @@ class AgentRuntime:
         enable_thinking: bool = True,
         pre_extracted_goals: list[str] | None = None,
         pre_extracted_hints: list[str] | None = None,
+        pre_triage: Any | None = None,
         context_id: str | None = None,
     ) -> Any:
         """Run the agentic loop (v2/v3/v5) through AgentRuntime."""
@@ -3506,6 +3512,7 @@ class AgentRuntime:
                 source=source, on_bash_output=on_bash_output,
                 on_browser_navigation=on_browser_navigation,
                 on_browser_auth_request=on_browser_auth_request,
+                browser_emit_and_wait=browser_emit_and_wait,
                 copilot_queue=copilot_queue,
                 emit_set_cookies=emit_set_cookies,
                 first_response=first_response,
@@ -3515,6 +3522,7 @@ class AgentRuntime:
                 enable_thinking=enable_thinking,
                 pre_extracted_goals=pre_extracted_goals,
                 pre_extracted_hints=pre_extracted_hints,
+                pre_triage=pre_triage,
             )
 
     async def _run_agentic_locked(
@@ -3529,6 +3537,7 @@ class AgentRuntime:
         on_bash_output: Any | None = None,
         on_browser_navigation: Any | None = None,
         on_browser_auth_request: Any | None = None,
+        browser_emit_and_wait: Any | None = None,
         copilot_queue: Any | None = None,
         emit_set_cookies: Any | None = None,
         first_response: str | None = None,
@@ -3538,6 +3547,7 @@ class AgentRuntime:
         enable_thinking: bool = True,
         pre_extracted_goals: list[str] | None = None,
         pre_extracted_hints: list[str] | None = None,
+        pre_triage: Any | None = None,
     ) -> Any:
         """Inner agentic loop body, serialized by _agentic_lock."""
         import time as _time
@@ -3574,6 +3584,7 @@ class AgentRuntime:
                         tool._request_auth = on_browser_auth_request
                         tool._copilot_queue = copilot_queue
                         tool._emit_set_cookies = emit_set_cookies
+                        tool._emit_and_wait = browser_emit_and_wait
                         # Wire Visual Cortex so the browser channel sees live screenshots
                         if self.visual_cortex is not None:
                             tool.set_visual_cortex(self.visual_cortex)
@@ -3713,7 +3724,7 @@ class AgentRuntime:
                 loop_version = "v5"
 
             if loop_version in ("v5", "v4"):
-                from nls.agentic.loop import run_loop as run_loop_v4
+                from nls.agentic.loop import run_loop
                 from nls.agentic.bridge import build_config_v4, build_hooks_v4
     
                 v4_config = build_config_v4(self.config)
@@ -4062,7 +4073,7 @@ class AgentRuntime:
                 v4_config.delegate_adapter_name = self.resolve_delegate_adapter(
                     _adapter
                 )
-                result = await run_loop_v4(
+                result = await run_loop(
                     context=context,
                     tools=tool_dict,
                     config=v4_config,
@@ -4078,6 +4089,7 @@ class AgentRuntime:
                     enable_thinking=enable_thinking,
                     pre_extracted_goals=pre_extracted_goals,
                     pre_extracted_hints=pre_extracted_hints,
+                    pre_triage=pre_triage,
                     visual_cortex=self.visual_cortex,
                     delegate_manager=self.delegate_manager,
                     active_tool_names=_active_tool_names,
@@ -4366,73 +4378,102 @@ class AgentRuntime:
         except Exception:
             return ""
 
+    async def triage_user_turn(
+        self,
+        user_input: str,
+        *,
+        history: list[dict] | None = None,
+        model_override: str | None = None,
+    ) -> Any:
+        """Unified turn triage: intent, thinking, profile, goals, hints, deferred."""
+        from nls.agentic.goals import TurnTriage, triage_turn, _heuristic_triage
+
+        if not user_input.strip():
+            return TurnTriage(
+                intent="CHAT_NOTHINK",
+                thinking=False,
+                profile="conversational",
+            )
+        _vllm, _adapter = self.inference_pipeline(model_override)
+        if _vllm is None:
+            return TurnTriage(
+                intent="CHAT_THINK",
+                thinking=True,
+                profile="solo_structured",
+            )
+        try:
+            triage = await triage_turn(
+                _vllm, user_input, history=history, adapter_name=_adapter,
+            )
+        except Exception:
+            logger.warning(
+                "Agent %s: turn triage failed", self.agent_id, exc_info=True,
+            )
+            triage = _heuristic_triage(user_input)
+
+        self._apply_triage_to_working_memory(triage)
+        logger.info(
+            "Agent %s: triage intent=%s profile=%s thinking=%s goals=%s hints=%s",
+            self.agent_id,
+            triage.intent,
+            triage.profile,
+            triage.thinking,
+            triage.goals,
+            triage.hints,
+        )
+        return triage
+
+    def _apply_triage_to_working_memory(self, triage: Any) -> None:
+        goals = getattr(triage, "goals", None) or []
+        hints = getattr(triage, "hints", None) or []
+        if goals and self.working_memory is not None:
+            self.working_memory.clear_goals("tactical")
+            for g in goals:
+                self.working_memory.add_goal(
+                    level="tactical", content=g, source="task_extract",
+                )
+        if hints and self.working_memory is not None:
+            _clean_hints: list[str] = []
+            for _h in hints:
+                if _HINT_CREDENTIAL_RE.search(_h):
+                    _hl = _h.lower()
+                    _dom = "Project.Credential.Detected"
+                    if "ghp_" in _hl or "gho_" in _hl or "github" in _hl:
+                        _dom = "Project.Credential.GitHub"
+                    elif "sk-ant-" in _hl or "anthropic" in _hl:
+                        _dom = "Project.Credential.Anthropic"
+                    elif "sk-" in _hl or "openai" in _hl:
+                        _dom = "Project.Credential.OpenAI"
+                    elif "postgres" in _hl:
+                        _dom = "Project.Credential.Database"
+                    elif "assembly" in _hl:
+                        _dom = "Project.Credential.AssemblyAI"
+                    try:
+                        self.working_memory.upsert_credential(
+                            domain=_dom, content=_h,
+                            source="task_hints", salience=1.0,
+                        )
+                    except Exception:
+                        _clean_hints.append(_h)
+                else:
+                    _clean_hints.append(_h)
+            if _clean_hints:
+                self.working_memory.upsert_fact(
+                    domain="Task.Hints",
+                    content=" | ".join(_clean_hints),
+                )
+
     async def extract_task_goals(
         self, user_input: str,
         *,
+        history: list[dict] | None = None,
         model_override: str | None = None,
     ) -> tuple[list[str], list[str]]:
-        """Pre-extract task goals and hints from user message via LLM.
-
-        Returns (goals, hints).  Called by ws_handler BEFORE initial
-        generation so goals+hints can be injected alongside the user
-        message and passed to the agentic loop.
-        """
-        if not user_input.strip():
-            return [], []
-        from nls.agentic.goals import extract_goals
-        _vllm, _adapter = self.inference_pipeline(model_override)
-        if _vllm is None:
-            return [], []
-        try:
-            goals, hints, _deferred = await extract_goals(
-                _vllm, user_input, adapter_name=_adapter,
-            )
-        except Exception:
-            logger.warning("Agent %s: task goal pre-extraction failed",
-                           self.agent_id, exc_info=True)
-            return [], []
-        if goals:
-            if self.working_memory is not None:
-                self.working_memory.clear_goals("tactical")
-                for g in goals:
-                    self.working_memory.add_goal(
-                        level="tactical", content=g, source="task_extract",
-                    )
-            if hints and self.working_memory is not None:
-                _clean_hints: list[str] = []
-                for _h in hints:
-                    if _HINT_CREDENTIAL_RE.search(_h):
-                        _hl = _h.lower()
-                        _dom = "Project.Credential.Detected"
-                        if "ghp_" in _hl or "gho_" in _hl or "github" in _hl:
-                            _dom = "Project.Credential.GitHub"
-                        elif "sk-ant-" in _hl or "anthropic" in _hl:
-                            _dom = "Project.Credential.Anthropic"
-                        elif "sk-" in _hl or "openai" in _hl:
-                            _dom = "Project.Credential.OpenAI"
-                        elif "postgres" in _hl:
-                            _dom = "Project.Credential.Database"
-                        elif "assembly" in _hl:
-                            _dom = "Project.Credential.AssemblyAI"
-                        try:
-                            self.working_memory.upsert_credential(
-                                domain=_dom, content=_h,
-                                source="task_hints", salience=1.0,
-                            )
-                        except Exception:
-                            _clean_hints.append(_h)
-                    else:
-                        _clean_hints.append(_h)
-                if _clean_hints:
-                    self.working_memory.upsert_fact(
-                        domain="Task.Hints",
-                        content=" | ".join(_clean_hints),
-                    )
-            logger.info(
-                "Agent %s: pre-extracted %d goals: %s (hints: %s)",
-                self.agent_id, len(goals), goals, hints,
-            )
-        return goals, hints
+        """Pre-extract task goals and hints (wrapper over triage_user_turn)."""
+        triage = await self.triage_user_turn(
+            user_input, history=history, model_override=model_override,
+        )
+        return triage.goals, triage.hints
 
     def get_enabled_skills(self) -> list[str]:
         return self._get_enabled_skills()

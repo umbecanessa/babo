@@ -85,17 +85,17 @@ export function isRoutineOrchestrationDispatchSource(source: string | undefined 
   return ROUTINE_ORCHESTRATION_PREFIXES.some((p) => s.startsWith(p) || s === p);
 }
 
-/** Explicit EM communicate() or system milestone — show in main chat. */
+/**
+ * Show autonomous communicate() in the main chat thread.
+ * System wave milestones use user_facing only for meaningful transitions;
+ * routine progress stays in workbench / project timeline.
+ */
 export function isUserFacingOrchestrationMessage(msg: {
   user_facing?: boolean;
   mid_loop?: boolean;
   source?: string;
 }): boolean {
-  if (msg.user_facing) {
-    return true;
-  }
-  const s = (msg.source || '').trim();
-  return s.startsWith('milestone:');
+  return msg.user_facing === true;
 }
 
 /** Hide routine autonomous completions from the main chat thread. */

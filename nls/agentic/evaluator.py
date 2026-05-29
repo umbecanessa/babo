@@ -1,16 +1,14 @@
-"""Post-turn evaluator for the v3 agentic loop.
+"""Agentic loop evaluator — completion, guards, stall detection.
 
-The evaluator consumes an InteroceptiveSnapshot (full biological state)
-and the iteration's tool results to produce a single Directive —
-ONE clear signal per turn, replacing the 22 injection points in v2.
+Used by the v5 loop (``loop.py``):
 
-The decision space is organized as 5 biological axes:
+- ``should_complete`` — exit decision after each iteration
+- ``check_guards`` — iteration / tool-call / timeout limits
+- ``detect_stall`` — repetitive-tool and assessment-loop nudges
+- ``Directive`` / ``get_directive_message`` — error-recovery injection templates
 
-    Stress axis        cortisol + energy        → ABORT / ERROR_RECOVERY
-    Confidence axis    dopamine + streaks       → TASK_COMPLETE
-    Exploration axis   NE + PE + exploration    → EXPLORE
-    Patience axis      serotonin + load         → VERIFY
-    Autonomy axis      oxytocin + trust         → CONTINUE vs ask-user
+``InteroceptiveSnapshot`` is collected by bridge hooks for biological
+state (hormones, ANS, network dynamics) used elsewhere in the runtime.
 """
 
 from __future__ import annotations
@@ -118,41 +116,7 @@ class InteroceptiveSnapshot:
 
 
 # ---------------------------------------------------------------------------
-# Tool outcome — simplified tool result for evaluator consumption
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class ToolOutcome:
-    """Minimal representation of a tool execution result."""
-
-    tool: str
-    success: bool
-    preview: str = ""
-    needs_confirmation: bool = False
-
-
-# ---------------------------------------------------------------------------
-# Plan state — minimal plan info for evaluator
-# ---------------------------------------------------------------------------
-
-
-@dataclass
-class PlanState:
-    """Minimal plan tracking info for the evaluator."""
-
-    has_pending: bool = False
-    same_step_count: int = 0
-    total_steps: int = 0
-    completed_steps: int = 0
-    active_sub_plan: bool = False
-    sub_plan_pending: bool = False
-    just_completed: bool = False
-    """True when a plan was marked DONE this iteration."""
-
-
-# ---------------------------------------------------------------------------
-# Directive — the single output of the evaluator
+# Directive — injected recovery nudges (error-recovery path in loop.py)
 # ---------------------------------------------------------------------------
 
 
@@ -210,251 +174,6 @@ _DIRECTIVE_TEMPLATES: dict[Directive, str] = {
 }
 
 
-# ---------------------------------------------------------------------------
-# Axis computation
-# ---------------------------------------------------------------------------
-
-
-def _stress_axis(snap: InteroceptiveSnapshot) -> float:
-    """Higher = more stressed. Combines cortisol, energy depletion, and failure streak."""
-    return (
-        snap.cortisol
-        + (1.0 - snap.energy) * 0.3
-        + snap.failure_streak * 0.04
-    )
-
-
-def _confidence_axis(snap: InteroceptiveSnapshot) -> float:
-    """Higher = more confident. Combines dopamine, streaks, thalamus boost."""
-    return (
-        snap.dopamine
-        + snap.confidence_boost
-        + snap.success_streak * 0.05
-    )
-
-
-def _exploration_axis(snap: InteroceptiveSnapshot) -> float:
-    """Higher = more inclined to try new approaches."""
-    return (
-        snap.norepinephrine
-        + snap.exploration_bonus
-        + snap.prediction_error * 0.2
-    )
-
-
-def _patience_axis(snap: InteroceptiveSnapshot) -> float:
-    """Higher = more patient/methodical. Low = rushing."""
-    return snap.serotonin - snap.cognitive_load * 0.2
-
-
-def _autonomy_axis(snap: InteroceptiveSnapshot) -> float:
-    """Higher = more autonomous (act without asking user)."""
-    return snap.oxytocin + snap.trust_boost + snap.social_value * 0.1
-
-
-# ---------------------------------------------------------------------------
-# Core evaluator
-# ---------------------------------------------------------------------------
-
-
-def evaluate_turn(
-    *,
-    iteration: int,
-    tool_outcomes: list[ToolOutcome],
-    plan_state: PlanState,
-    snapshot: InteroceptiveSnapshot,
-    model_text: str,
-    cortisol_abort_threshold: float = 0.75,
-    cortisol_redirect_threshold: float = 0.45,
-    consecutive_text_only: int = 0,
-    unresolved_failures: frozenset[str] = frozenset(),
-) -> Directive:
-    """Evaluate the iteration and return a single Directive.
-
-    This is the ONLY decision function for what to inject after a turn.
-    It replaces all 12 check_content variants, the cortisol redirect,
-    the mission-complete heuristic, plan continuation nudges, etc.
-    """
-    stress = _stress_axis(snapshot)
-    confidence = _confidence_axis(snapshot)
-    exploration = _exploration_axis(snapshot)
-    patience = _patience_axis(snapshot)
-    autonomy = _autonomy_axis(snapshot)
-
-    logger.debug(
-        "Evaluator axes: stress=%.3f conf=%.3f expl=%.3f "
-        "patience=%.3f autonomy=%.3f cortisol=%.3f "
-        "tools=%d unresolved=%s",
-        stress, confidence, exploration, patience, autonomy,
-        snapshot.cortisol, len(tool_outcomes),
-        unresolved_failures or "{}",
-    )
-
-    # --- ABORT: extreme stress ---
-    if snapshot.cortisol >= cortisol_abort_threshold:
-        logger.warning(
-            "Evaluator: ABORT — cortisol=%.2f >= %.2f",
-            snapshot.cortisol, cortisol_abort_threshold,
-        )
-        return Directive.ABORT
-
-    had_errors = any(not o.success for o in tool_outcomes)
-    had_actions = any(
-        o.success and o.tool not in LOOKUP_TOOLS
-        for o in tool_outcomes
-    )
-    has_failure_patterns = any(
-        any(fp in o.preview.lower() for fp in _FAILURE_PATTERNS)
-        for o in tool_outcomes
-        if o.success
-    )
-    has_pending_confirmation = any(
-        o.needs_confirmation
-        or any(pp in o.preview.lower() for pp in _PENDING_PATTERNS)
-        for o in tool_outcomes
-        if o.success
-    )
-
-    # --- ERROR_RECOVERY / EXPLORE: stressed + errors ---
-    if had_errors and stress >= cortisol_redirect_threshold:
-        if exploration > 0.5:
-            logger.info(
-                "Evaluator: EXPLORE — stress=%.2f, exploration=%.2f",
-                stress, exploration,
-            )
-            return Directive.EXPLORE
-        logger.info(
-            "Evaluator: ERROR_RECOVERY — stress=%.2f", stress,
-        )
-        return Directive.ERROR_RECOVERY
-
-    # --- STALLED: no progress ---
-    _MAX_TEXT_ONLY_RETRIES = 3
-    if not tool_outcomes and iteration <= 1:
-        logger.info("Evaluator: STALLED — first iteration, no tools called")
-        return Directive.STALLED
-
-    if not tool_outcomes and not model_text.strip():
-        if iteration > 1 and confidence > 0.3:
-            logger.info(
-                "Evaluator: TASK_COMPLETE — empty response after prior "
-                "actions (iter=%d, conf=%.2f), treating as implicit done",
-                iteration, confidence,
-            )
-            return Directive.TASK_COMPLETE
-        logger.info("Evaluator: STALLED — no tools, no text")
-        return Directive.STALLED
-
-    if not tool_outcomes and model_text.strip():
-        from .orchestration_policy import is_conversational_user_turn
-
-        _has_active_plan_hook = False
-        if hooks and hooks.has_active_plan:
-            try:
-                _has_active_plan_hook = bool(hooks.has_active_plan())
-            except Exception:
-                pass
-
-        if (
-            is_conversational_user_turn(user_input)
-            and iteration <= 2
-            and not plan_state.has_pending
-            and not plan_state.sub_plan_pending
-            and not _has_active_plan_hook
-        ):
-            logger.info(
-                "Evaluator: TASK_COMPLETE — conversational turn "
-                "(no tools required)",
-            )
-            return Directive.TASK_COMPLETE
-
-        _plan_done = (
-            plan_state.just_completed
-            or (plan_state.completed_steps > 0 and not plan_state.has_pending)
-        )
-        if _plan_done or consecutive_text_only >= _MAX_TEXT_ONLY_RETRIES:
-            logger.info(
-                "Evaluator: TASK_COMPLETE — text-only response delivery "
-                "(text_only=%d, plan_done=%s)",
-                consecutive_text_only, _plan_done,
-            )
-            return Directive.TASK_COMPLETE
-
-        logger.info(
-            "Evaluator: STALLED — text-only response, no tools "
-            "(attempt %d/%d)",
-            consecutive_text_only + 1, _MAX_TEXT_ONLY_RETRIES,
-        )
-        return Directive.STALLED
-
-    # --- TASK_COMPLETE: plan just marked DONE ---
-    if (
-        plan_state.just_completed
-        and not plan_state.has_pending
-        and not plan_state.sub_plan_pending
-    ):
-        logger.info(
-            "Evaluator: TASK_COMPLETE — plan marked DONE (%d/%d steps)",
-            plan_state.completed_steps, plan_state.total_steps,
-        )
-        return Directive.TASK_COMPLETE
-
-    # --- TASK_COMPLETE: confident success ---
-    if (
-        had_actions
-        and not has_failure_patterns
-        and not has_pending_confirmation
-        and not had_errors
-        and not unresolved_failures
-        and confidence > 0.5
-        and not plan_state.has_pending
-        and not plan_state.sub_plan_pending
-    ):
-        if autonomy < 0.2:
-            logger.info(
-                "Evaluator: VERIFY — low autonomy=%.2f, suggesting user check",
-                autonomy,
-            )
-            return Directive.VERIFY
-        logger.info(
-            "Evaluator: TASK_COMPLETE — confidence=%.2f, autonomy=%.2f",
-            confidence, autonomy,
-        )
-        return Directive.TASK_COMPLETE
-
-    if unresolved_failures and had_actions:
-        logger.info(
-            "Evaluator: CONTINUE — actions succeeded but prior tool "
-            "failures unresolved: %s", unresolved_failures,
-        )
-        return Directive.CONTINUE
-
-    # --- VERIFY: low patience after action (rushing) ---
-    if had_actions and patience < 0.25 and not has_failure_patterns:
-        logger.info(
-            "Evaluator: VERIFY — patience=%.2f (serotonin=%.2f, load=%.2f)",
-            patience, snapshot.serotonin, snapshot.cognitive_load,
-        )
-        return Directive.VERIFY
-
-    # --- PLAN STUCK: escalating response ---
-    if plan_state.same_step_count >= 8:
-        logger.warning(
-            "Evaluator: ERROR_RECOVERY — stuck on same plan step %d iters",
-            plan_state.same_step_count,
-        )
-        return Directive.ERROR_RECOVERY
-
-    if plan_state.same_step_count >= 4 and had_errors:
-        logger.info(
-            "Evaluator: EXPLORE — stuck %d iters with errors",
-            plan_state.same_step_count,
-        )
-        return Directive.EXPLORE
-
-    # --- DEFAULT: no injection ---
-    return Directive.CONTINUE
-
 
 def get_directive_message(directive: Directive) -> str | None:
     """Return the message template for a directive, or None for CONTINUE/ABORT."""
@@ -463,7 +182,7 @@ def get_directive_message(directive: Directive) -> str | None:
 
 
 # ===================================================================
-# v4 evaluator — simple guard-based, no hormonal axes
+# Loop completion evaluator (v5)
 # ===================================================================
 
 
@@ -485,7 +204,7 @@ def _delegates_in_background(
     return False
 
 
-async def should_complete_v4(
+async def should_complete(
     state: "LoopState",
     config: "LoopConfig",
     hooks: Any = None,
@@ -493,9 +212,9 @@ async def should_complete_v4(
     delegate_manager: Any | None = None,
     adapter_name: str | None = None,
 ) -> bool:
-    """Determine if the v4 loop should exit with task_complete.
+    """Determine if the v5 loop should exit (task delivered or force exit).
 
-    Simple decision tree (no hormones, no axes):
+    Simple decision tree:
     1. consecutive_text_only >= limit → True (force exit)
     2. Plan with pending steps → False
     3. Goals exist → evaluate; if pending + blocks < limit → False
@@ -503,11 +222,52 @@ async def should_complete_v4(
     """
     logger.info(
         "[EVAL] should_complete? consec_text=%d/%d goals=%d "
-        "total_tc=%d goal_blocks=%d/%d",
+        "total_tc=%d goal_blocks=%d/%d profile=%s",
         state.consecutive_text_only, config.consecutive_text_only_limit,
         len(state.goals), state.total_tool_calls,
         state.goal_block_count, _MAX_GOAL_BLOCKS,
+        getattr(state, "orchestration_profile", ""),
     )
+
+    _profile = getattr(state, "orchestration_profile", "") or ""
+    _last_text = getattr(state, "_last_iter_text", "") or ""
+    from nls.agentic.orchestration_profile_spec import (
+        evaluate_plan_artifact_complete,
+        evaluate_plan_step_started_complete,
+        get_profile_spec,
+    )
+    _spec = get_profile_spec(_profile)
+
+    if evaluate_plan_artifact_complete(state, hooks):
+        logger.info("[EVAL] -> COMPLETE (plan deliverables verified)")
+        return True
+
+    if evaluate_plan_step_started_complete(state, hooks):
+        logger.info("[EVAL] -> COMPLETE (plan created + step in progress + summary)")
+        return True
+
+    if (
+        _spec.complete_on_prose
+        and state.consecutive_text_only >= 1
+        and len(_last_text) > 80
+        and state.total_tool_calls == 0
+    ):
+        logger.info(
+            "[EVAL] -> COMPLETE (conversational profile, prose delivered)"
+        )
+        return True
+
+    if (
+        _spec.profile == "direct_tool"
+        and _spec.complete_on_prose
+        and state.total_tool_calls > 0
+        and state.consecutive_text_only >= 1
+        and len(_last_text) > 80
+    ):
+        logger.info(
+            "[EVAL] -> COMPLETE (direct_tool profile after lookup tools)"
+        )
+        return True
 
     if state.has_pending_escalation:
         logger.info("[EVAL] -> CONTINUE (pending escalation from sub-agents)")
@@ -662,35 +422,48 @@ async def should_complete_v4(
             )
             return True
 
-    # When the model delivers a substantive text response (>100 chars)
-    # after having successfully used tools, it's delivering the answer.
-    # Trust the model's implicit "I'm done" signal instead of requiring
-    # the goal evaluator LLM to agree (which can be too literal about
-    # HOW goals were achieved vs WHAT was achieved).
-    # BUT: skip this shortcut if any goals mention notification/send actions
-    # (deferred actions injected by goal extraction) since those require
-    # an actual tool call, not just a text response.
+    # When the model delivers a prose answer after successful tool use,
+    # treat it as implicit completion (model saying "I'm done" in text).
+    # task_complete() is the explicit path; evaluate_goals() is the
+    # micro-inference fallback when prose alone is ambiguous.
     _has_deferred_goals = any(
         "send notification" in (g or "").lower()
         for g in state.goals
     )
+    _last_text_len = len(getattr(state, "_last_iter_text", "") or "")
+    _implicit_min_chars = 100
     if (
-        state.consecutive_text_only == 1
+        _spec.profile in ("direct_tool", "solo_structured")
+        and state.total_tool_calls <= 5
+    ):
+        _implicit_min_chars = 25
+    if (
+        state.consecutive_text_only >= 1
         and state.total_tool_calls > 0
         and len(state.final_response or state.user_input) > 0
         and not _has_deferred_goals
         and not state.coordinator_mode
+        and _spec.complete_on_implicit_delivery
+        and _last_text_len >= _implicit_min_chars
     ):
-        _last_text_len = len(getattr(state, "_last_iter_text", "") or "")
-        if _last_text_len > 100:
-            logger.info(
-                "[EVAL] -> COMPLETE (substantive text response after %d "
-                "tool calls, text_len=%d — implicit task delivery)",
-                state.total_tool_calls, _last_text_len,
-            )
-            return True
+        logger.info(
+            "[EVAL] -> COMPLETE (tool + prose delivery, text_len=%d, "
+            "tools=%d — implicit task delivery)",
+            _last_text_len, state.total_tool_calls,
+        )
+        return True
 
     if state.goals:
+        if (
+            state.total_tool_calls == 0
+            and _profile in ("conversational", "direct_tool")
+            and state.consecutive_text_only >= 1
+            and len(_last_text) > 80
+        ):
+            logger.info(
+                "[EVAL] -> COMPLETE (light profile delivered without tools)"
+            )
+            return True
         if state.total_tool_calls == 0:
             logger.info("[EVAL] -> CONTINUE (goals exist, zero tool calls)")
             return False
@@ -908,6 +681,45 @@ _STALL_NUDGE_MESSAGE = (
 )
 
 
+_SOLO_STALL_NUDGE_MESSAGE = (
+    "You appear to be stuck — repeating similar actions without progress.\n"
+    "Try ONE of these now:\n"
+    "1. Read the error message and fix the specific issue.\n"
+    "2. Use a different tool or command — do not retry the same call.\n"
+    "3. On Windows, prefer PowerShell or the write tool over bash-only syntax.\n"
+    "4. If you have enough information, answer in chat or call task_complete.\n"
+    "Do NOT search for skills or create a plan unless the task truly requires it."
+)
+
+
+_SOLO_REPEAT_NUDGE_MESSAGE = (
+    "STOP — you are repeating the exact same tool call with identical "
+    "arguments. The output will not change.\n"
+    "Either use the result you already have, try a different tool/command, "
+    "or finish with your answer now.\n"
+    "Do NOT call the same tool with the same arguments again."
+)
+
+
+def _stall_nudge_for_state(state: "LoopState", em_message: str, solo_message: str) -> str:
+    from nls.agentic.profile_guard_policy import normalize_profile
+
+    profile = normalize_profile(getattr(state, "orchestration_profile", None))
+    if profile == "orchestrated":
+        return em_message
+    return solo_message
+
+
+def _stall_context_suffix(state: "LoopState") -> str:
+    """Optional error context appended to stall nudges."""
+    if state.last_error_preview:
+        return (
+            f"\n\nLast error:\n  {state.last_error_preview}\n"
+            f"Address THIS specific error — do not retry the same approach."
+        )
+    return ""
+
+
 _REPEAT_NUDGE_MESSAGE = (
     "STOP — you are repeating the exact same tool call with identical "
     "arguments. This is wasting iterations. The output will not change.\n"
@@ -1033,6 +845,12 @@ def _detect_assessment_loop(state: "LoopState") -> str | None:
   history, delegates are not running, and the agent keeps posting status text
   without plan/team mutations (typical post-crash resume loop).
     """
+    from nls.agentic.profile_guard_policy import em_assessment_loop_enabled
+
+    if not em_assessment_loop_enabled(
+        getattr(state, "orchestration_profile", None),
+    ):
+        return None
     names = [n for n, _err in state.tool_history]
     if len(names) < 8:
         return None
@@ -1133,7 +951,9 @@ def detect_stall(state: "LoopState", config: "LoopConfig") -> str | None:
                     "[STALL] identical tool call repeated 3x: '%s'",
                     last_3[0][:80],
                 )
-                return _REPEAT_NUDGE_MESSAGE
+                return _stall_nudge_for_state(
+                    state, _REPEAT_NUDGE_MESSAGE, _SOLO_REPEAT_NUDGE_MESSAGE,
+                )
 
     # Pattern 1a: 2+ consecutive errors on the same tool
     if state.consecutive_errors >= 2 and len(state.tool_history) >= 2:
@@ -1151,7 +971,9 @@ def detect_stall(state: "LoopState", config: "LoopConfig") -> str | None:
                     f"  {state.last_error_preview}\n"
                     f"Address THIS specific error — do not retry the same approach."
                 )
-            return _STALL_NUDGE_MESSAGE + _err_ctx
+            return _stall_nudge_for_state(
+                state, _STALL_NUDGE_MESSAGE, _SOLO_STALL_NUDGE_MESSAGE,
+            ) + _err_ctx
 
     # Pattern 1b: 3+ consecutive errors regardless of which tool
     if state.consecutive_errors >= 3 and len(state.tool_history) >= 3:
@@ -1169,7 +991,9 @@ def detect_stall(state: "LoopState", config: "LoopConfig") -> str | None:
                     f"You have {state.consecutive_errors} consecutive failures. "
                     f"Either fix this specific issue or abandon this approach entirely."
                 )
-            return _STALL_NUDGE_MESSAGE + _err_ctx
+            return _stall_nudge_for_state(
+                state, _STALL_NUDGE_MESSAGE, _SOLO_STALL_NUDGE_MESSAGE,
+            ) + _err_ctx
 
     # Pattern 2: high iteration count with low plan progress
     # Only flag if there are also recent errors — a delegate that successfully
@@ -1188,7 +1012,9 @@ def detect_stall(state: "LoopState", config: "LoopConfig") -> str | None:
                 state.iteration, config.max_iterations, unique_tools,
                 state.consecutive_errors,
             )
-            return _STALL_NUDGE_MESSAGE
+            return _stall_nudge_for_state(
+                state, _STALL_NUDGE_MESSAGE, _SOLO_STALL_NUDGE_MESSAGE,
+            )
 
     # Pattern 3: alternating tool-name cycle (e.g. write→bash→write→bash)
     # Cross-check with signatures — if each call targets different args
@@ -1239,6 +1065,30 @@ def detect_stall(state: "LoopState", config: "LoopConfig") -> str | None:
                         cycle_len, " → ".join(chunks[0]),
                     )
                     return _CYCLE_NUDGE_MESSAGE
+
+    # Pattern 4: prose repetition loop — model keeps talking without new tools.
+    if (
+        state.consecutive_text_only >= 6
+        and state.total_tool_calls <= 3
+        and state.iteration >= 10
+    ):
+        logger.info(
+            "[STALL] prose loop: %d consecutive text-only iterations, "
+            "%d tool calls",
+            state.consecutive_text_only, state.total_tool_calls,
+        )
+        return _stall_nudge_for_state(
+            state,
+            (
+                "You are repeating status text without acting. Call the "
+                "required tool now (e.g. delegate(...) or task_complete("
+                "summary='...')) — do not describe what you will do next."
+            ),
+            (
+                "Stop narrating. Use the next tool call now or call "
+                "task_complete(summary='...') if the deliverable is done."
+            ),
+        )
 
     return None
 
@@ -1312,3 +1162,7 @@ def inject_subagent_pacing_nudges(
             "[PACING] read-heavy nudge at iter %d (reads=%d writes=%d)",
             effective, reads, writes,
         )
+
+
+# Deprecated aliases (pre-v5 naming)
+should_complete_v4 = should_complete

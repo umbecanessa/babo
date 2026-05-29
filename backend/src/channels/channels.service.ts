@@ -315,6 +315,11 @@ export class ChannelsService {
     return !!this.resend && !!this.inboundDomain;
   }
 
+  async isEmailAvailableForUser(userId: string): Promise<boolean> {
+    const cfg = await this.resendForUser(userId);
+    return cfg !== null;
+  }
+
   private async resendForUser(
     userId: string,
   ): Promise<{ client: Resend; inboundDomain: string } | null> {
@@ -400,6 +405,21 @@ export class ChannelsService {
     };
   }
 
+  /** Resolve NestJS user from a send-from address (alias or "Name <alias>"). */
+  async resolveUserIdFromEmailFrom(from: string): Promise<string | undefined> {
+    const raw = (from || '').trim();
+    if (!raw) return undefined;
+    const email = raw.includes('<')
+      ? raw.match(/<([^>]+)>/)?.[1]?.trim() || raw
+      : raw;
+    const alias = email.toLowerCase();
+    const record = await this.prisma.channelAlias.findUnique({
+      where: { alias },
+      include: { agent: { select: { userId: true } } },
+    });
+    return record?.agent?.userId;
+  }
+
   // ── Send email ────────────────────────────────────────────────
 
   async sendEmail(
@@ -415,9 +435,10 @@ export class ChannelsService {
     },
     userId?: string,
   ): Promise<{ id: string }> {
+    const ownerId = userId ?? (await this.resolveUserIdFromEmailFrom(params.from));
     let resendClient = this.resend;
-    if (userId) {
-      const cfg = await this.resendForUser(userId);
+    if (ownerId) {
+      const cfg = await this.resendForUser(ownerId);
       if (cfg) resendClient = cfg.client;
     }
     if (!resendClient) {
@@ -448,8 +469,12 @@ export class ChannelsService {
 
   // ── Inbound email processing ──────────────────────────────────
 
-  async fetchInboundEmail(emailId: string): Promise<any> {
-    const apiKey = this.config.get<string>('RESEND_API_KEY');
+  async fetchInboundEmail(emailId: string, userId?: string): Promise<any> {
+    let apiKey = this.config.get<string>('RESEND_API_KEY');
+    if (userId) {
+      const byo = await this.providerKeys.getResendConfig(userId);
+      if (byo?.apiKey) apiKey = byo.apiKey;
+    }
     if (!apiKey) throw new Error('Resend is not configured');
 
     const res = await fetch(`https://api.resend.com/emails/receiving/${emailId}`, {
@@ -457,6 +482,14 @@ export class ChannelsService {
     });
     if (!res.ok) throw new Error(`Resend fetch failed: ${res.status}`);
     return res.json();
+  }
+
+  async fetchInboundEmailForAgent(emailId: string, agentId: string): Promise<any> {
+    const agent = await this.prisma.agent.findUnique({
+      where: { id: agentId },
+      select: { userId: true },
+    });
+    return this.fetchInboundEmail(emailId, agent?.userId);
   }
 
   /**

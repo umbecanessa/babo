@@ -14,6 +14,7 @@ from typing import Any
 # Strip punctuation for comparison; keep word characters and spaces.
 _NON_WORD_RE = re.compile(r"[^\w\s]+", re.UNICODE)
 _WS_RE = re.compile(r"\s+")
+_BLOCKER_GOAL_RE = re.compile(r"^\s*BLOCKER\s*:", re.IGNORECASE)
 
 
 def normalize_plan_text(text: str) -> str:
@@ -75,11 +76,15 @@ def filter_stale_tactical_goals(
     plan: Any | None = None,
 ) -> list[str]:
     """Drop tactical goal strings superseded by done plan steps."""
-    if not plan:
-        return [g for g in goals if g]
-    return [
+    filtered = [
         g for g in goals
-        if g and not goal_is_stale_for_plan(g, plan)
+        if g and not _BLOCKER_GOAL_RE.match(g.strip())
+    ]
+    if not plan:
+        return filtered
+    return [
+        g for g in filtered
+        if not goal_is_stale_for_plan(g, plan)
     ]
 
 

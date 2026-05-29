@@ -78,7 +78,8 @@ export class AgentsController {
   @Get(':id/relay-status')
   async getRelayStatus(@Request() req: any, @Param('id') id: string) {
     const runtimeId = await this.agents.getRuntimeAgentId(req.user.userId, id);
-    return { online: this.channels.hasRelaySocket(runtimeId) };
+    const online = this.channels.hasRelaySocket(runtimeId);
+    return { online, runtimeAgentId: runtimeId };
   }
 
   // =================================================================

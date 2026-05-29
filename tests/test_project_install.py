@@ -32,6 +32,49 @@ def test_resolve_project_root_falls_back_to_cwd_when_not_workspace(tmp_path: Pat
     assert resolve_project_root(str(proj), str(ws)) == str(proj)
 
 
+def test_resolve_project_root_finds_single_child_under_workspace(tmp_path: Path):
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    proj = ws / "icf-app"
+    proj.mkdir()
+    (proj / "package.json").write_text("{}", encoding="utf-8")
+
+    assert resolve_project_root(str(ws), str(ws)) == str(proj)
+
+
+def test_resolve_project_root_ambiguous_when_multiple_children(tmp_path: Path):
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    for name in ("app-a", "app-b"):
+        p = ws / name
+        p.mkdir()
+        (p / "package.json").write_text("{}", encoding="utf-8")
+
+    assert resolve_project_root(str(ws), str(ws)) is None
+
+
+def test_resolve_project_root_uses_plan_project_dir(tmp_path: Path):
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    for name in ("app-a", "app-b"):
+        p = ws / name
+        p.mkdir()
+        (p / "package.json").write_text("{}", encoding="utf-8")
+
+    assert resolve_project_root(
+        str(ws), str(ws), plan_project_dir="app-b",
+    ) == str(ws / "app-b")
+
+
+def test_resolve_project_root_plan_dir_before_scaffold_markers(tmp_path: Path):
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    planned = ws / "icf-gemini-platform"
+    assert resolve_project_root(
+        str(ws), str(ws), plan_project_dir="icf-gemini-platform",
+    ) == str(planned)
+
+
 def test_detect_ecosystem_python(tmp_path: Path):
     root = tmp_path / "pyproj"
     root.mkdir()
@@ -72,3 +115,19 @@ async def test_project_install_python_creates_venv_and_installs(tmp_path: Path):
         "Scripts/python.exe" if __import__("sys").platform == "win32" else "bin/python"
     )
     assert venv_python.exists()
+
+
+@pytest.mark.asyncio
+async def test_project_install_python_from_requirements_txt(tmp_path: Path):
+    pytest.importorskip("pip")
+    root = tmp_path / "app"
+    root.mkdir()
+    (root / "requirements.txt").write_text("six\n", encoding="utf-8")
+
+    from nls.tools.agent_tools.project_install import ProjectInstallTool
+
+    tool = ProjectInstallTool(str(root))
+    result = await tool.execute({"ecosystem": "python"})
+    assert not result.is_error, result.content
+    assert "requirements.txt" in result.content.lower()
+    assert ".venv" in result.content

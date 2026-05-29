@@ -58,8 +58,9 @@ export interface PlanStepSummary {
   id: string;
   label: string;
   status: 'pending' | 'in_progress' | 'done' | 'skipped' | 'failed';
-  depends_on: string[];
-  delegatable: boolean;
+  depends_on?: string[];
+  delegatable?: boolean;
+  notes?: string;
 }
 
 export interface PlanSummary {

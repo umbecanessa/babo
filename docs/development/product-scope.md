@@ -38,4 +38,6 @@ python -m compileall server nls -q
 python -m pytest tests/ -q
 ```
 
+**End-to-end acceptance:** with Babo desktop running on port 9222, run the [agent scenario harness](agent-scenario-harness.md) (45 scenarios; latest **44/45** pass on `google/gemini-2.5-flash`).
+
 See [Local development](local-development.md) and [Contributing](https://github.com/umbecanessa/babo/blob/main/CONTRIBUTING.md).

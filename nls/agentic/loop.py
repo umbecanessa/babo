@@ -27,6 +27,7 @@ from .bridge import LoopHooks
 from .breadcrumbs import BreadcrumbContext, BreadcrumbEngine
 from .compactor import CompactionAnchor, compact, should_compact
 from .orchestration_policy import (
+    build_evaluating_action_breadcrumb,
     build_orchestration_wake_message,
     invalidate_tool_policy_cache,
     is_conversational_user_turn,
@@ -56,7 +57,7 @@ from .coordinator_guard import (
     recovery_mode_system_note,
     sync_goals_from_wm,
 )
-from .evaluator import check_guards, should_complete_v4
+from .evaluator import check_guards, should_complete
 from .events import AgentEvent, EventType, emit
 from .executor import execute_tools, make_tool_message
 from .generator import (
@@ -65,7 +66,6 @@ from .generator import (
     is_transient,
     sanitize_generation_error_for_user,
 )
-from .goals import extract_goals
 from .resume_guidance import (
     build_session_resume_guidance,
     user_requests_session_resume,
@@ -679,6 +679,7 @@ def _build_bc_ctx(
         communications_sent=tuple(anchor.communications_sent),
         is_coordinator=state.coordinator_mode,
         goals=tuple(state.goals),
+        orchestration_profile=getattr(state, "orchestration_profile", "") or "solo_structured",
     )
 
 
@@ -699,6 +700,7 @@ async def run_loop(
     enable_thinking: bool = True,
     pre_extracted_goals: list[str] | None = None,
     pre_extracted_hints: list[str] | None = None,
+    pre_triage: Any | None = None,
     visual_cortex: Any | None = None,
     state_holder: list | None = None,
     wrap_up_signal: asyncio.Event | None = None,
@@ -876,11 +878,20 @@ async def run_loop(
                 except Exception:
                     pass
             _plan_progress = ""
+            _plan_audit_issues: list[str] = []
+            _plan_incomplete_steps: list[str] = []
             if _plan_tool is not None and hasattr(_plan_tool, "_store"):
                 try:
                     _ap = _plan_tool._store.find_active()
                     if _ap is not None:
                         _plan_progress = _ap.progress_summary()
+                        if _ap.audit and _ap.audit.issues:
+                            _plan_audit_issues = list(_ap.audit.issues[:6])
+                        _plan_incomplete_steps = [
+                            f"[{s.id}] {s.label} ({s.status})"
+                            for s in _ap.steps
+                            if s.status not in ("done", "skipped")
+                        ][:6]
                 except Exception:
                     pass
             context.append({
@@ -891,6 +902,8 @@ async def run_loop(
                     plan_progress=_plan_progress,
                     delegate_summary=_delegate_summary,
                     coordinator_phase=getattr(state, "coordinator_phase", ""),
+                    plan_audit_issues=_plan_audit_issues,
+                    plan_incomplete_steps=_plan_incomplete_steps,
                 ),
             })
             state.orch_wake_injected = True
@@ -948,7 +961,33 @@ async def run_loop(
         except Exception:
             pass
 
-    # --- Pre-loop: goal extraction ---
+    # --- Pre-loop: goal extraction / turn triage ---
+    if pre_triage is not None:
+        from .goals import TurnTriage, cap_triage_profile_for_tools
+
+        _pt = (
+            pre_triage
+            if isinstance(pre_triage, TurnTriage)
+            else TurnTriage(
+                profile=getattr(pre_triage, "profile", "solo_structured"),
+                goals=list(getattr(pre_triage, "goals", None) or []),
+                hints=list(getattr(pre_triage, "hints", None) or []),
+                deferred=list(getattr(pre_triage, "deferred", None) or []),
+                intent=getattr(pre_triage, "intent", "CHAT_THINK"),
+                thinking=getattr(pre_triage, "thinking", True),
+            )
+        )
+        if not isinstance(pre_triage, TurnTriage):
+            _pt.cap_profile_from_hints()
+        cap_triage_profile_for_tools(
+            _pt, frozenset(state.unlocked_tools or ()),
+        )
+        state.orchestration_profile = _pt.profile or "solo_structured"
+        if pre_extracted_goals is None:
+            pre_extracted_goals = list(getattr(pre_triage, "goals", None) or [])
+        if pre_extracted_hints is None:
+            pre_extracted_hints = list(getattr(pre_triage, "hints", None) or [])
+        _deferred_actions = list(getattr(pre_triage, "deferred", None) or [])
     if pre_extracted_hints:
         state.hints = list(pre_extracted_hints)
     _active_plan_for_goals = None
@@ -962,46 +1001,52 @@ async def run_loop(
         state.goals = filter_stale_tactical_goals(
             list(pre_extracted_goals), _active_plan_for_goals,
         )
-    elif not (hooks.has_active_plan and hooks.has_active_plan()):
+    elif pre_triage is None and not (hooks.has_active_plan and hooks.has_active_plan()):
         try:
-            goals, hints, deferred = await extract_goals(
+            from .goals import triage_turn
+
+            triage = await triage_turn(
                 vllm_client, user_input, adapter_name=adapter_name,
             )
-            if goals:
-                state.goals = goals
+            from .goals import cap_triage_profile_for_tools
+
+            cap_triage_profile_for_tools(
+                triage, frozenset(state.unlocked_tools or ()),
+            )
+            state.orchestration_profile = triage.profile
+            if triage.goals:
+                state.goals = triage.goals
                 if hooks.on_goals_extracted:
                     try:
-                        hooks.on_goals_extracted(goals)
+                        hooks.on_goals_extracted(triage.goals)
                     except Exception:
                         pass
-            if hints:
-                state.hints = hints
+            if triage.hints:
+                state.hints = triage.hints
                 if hooks.on_hints_extracted:
                     try:
-                        hooks.on_hints_extracted(hints)
+                        hooks.on_hints_extracted(triage.hints)
                     except Exception:
                         pass
-            if deferred:
-                _deferred_actions = deferred
-                for da in deferred:
-                    _ch = da.get("channel", "")
-                    _instr = da.get("instruction", "")
-                    if _ch in ("whatsapp", "telegram", "email"):
-                        state.goals.append(
-                            f"DELIVER full results via {_ch}: {_instr} "
-                            f"(user is AFK — {_ch} is the primary output channel)"
-                        )
-                    else:
-                        state.goals.append(
-                            f"Send results via {_ch}: {_instr}"
-                        )
+            if triage.deferred:
+                _deferred_actions = triage.deferred
                 logger.info(
                     "[LOOP:%s] deferred actions extracted: %s",
                     state.loop_id,
-                    [d.get("channel") for d in deferred],
+                    [d.get("channel") for d in triage.deferred],
                 )
         except Exception:
             logger.debug("Pre-loop goal extraction failed", exc_info=True)
+
+    from nls.agentic.profile_guard_policy import inject_prompt_structured_hints
+    inject_prompt_structured_hints(user_input, state.hints)
+
+    if _deferred_actions:
+        from .goals import deferred_actions_to_goal_strings
+
+        for _dg in deferred_actions_to_goal_strings(_deferred_actions):
+            if _dg not in state.goals:
+                state.goals.append(_dg)
 
     _wm_goals_fn = getattr(hooks, "wm_get_tactical_goals", None)
     sync_goals_from_wm(state, _wm_goals_fn)
@@ -1009,6 +1054,17 @@ async def run_loop(
         state.goals = filter_stale_tactical_goals(
             state.goals, _active_plan_for_goals,
         )
+
+    _profile = state.orchestration_profile or "solo_structured"
+    if state.goals:
+        from nls.agentic.profile_guard_policy import normalize_goals_for_profile
+
+        state.goals = normalize_goals_for_profile(state.goals, _profile)
+    from nls.agentic.orchestration_profile_spec import profile_anchor_message
+
+    _anchor = profile_anchor_message(_profile)
+    if _anchor:
+        context.append({"role": "system", "content": _anchor})
 
     # Inject [CHANNEL ROUTING] system message when deferred external channels
     if _deferred_actions:
@@ -1168,11 +1224,12 @@ async def run_loop(
         except Exception:
             pass
 
-    # Trigger 2: 3+ goals → enter planning mode
+    # Trigger 2: 3+ goals → enter planning mode (orchestrated profile only)
     _AUTO_COORD_GOAL_THRESHOLD = 3
     if (
         config.enable_delegation
         and state.active_mode == AgentMode.EXECUTING
+        and state.orchestration_profile == "orchestrated"
         and len(state.goals) >= _AUTO_COORD_GOAL_THRESHOLD
     ):
         state.active_mode = AgentMode.PLANNING
@@ -1337,12 +1394,20 @@ async def run_loop(
                 )
             except Exception:
                 pass
+        _has_plan_now = False
+        if hooks and hooks.has_active_plan:
+            try:
+                _has_plan_now = bool(hooks.has_active_plan())
+            except Exception:
+                pass
         _lstate_ref.update({
             "coordinator_mode": state.coordinator_mode,
             "active_mode": state.active_mode.value,
             "coordinator_phase": state.coordinator_phase,
             "pending_completion_reviews": _pending_cr,
             "iteration": state.iteration,
+            "orchestration_profile": state.orchestration_profile or "solo_structured",
+            "has_active_plan": _has_plan_now,
             "last_tool": "",
             "last_tool_action": "",
             "recent_tools": [],
@@ -1889,6 +1954,7 @@ async def run_loop(
                 hooks,
                 iteration=state.iteration,
                 reason="stall_detected",
+                orchestration_profile=state.orchestration_profile,
             )
             logger.info(
                 "[LOOP:%s] iter %d: STALL nudge #%d injected",
@@ -1941,6 +2007,7 @@ async def run_loop(
                             hooks,
                             iteration=state.iteration,
                             reason="orchestrator_hint",
+                            orchestration_profile=state.orchestration_profile,
                         )
                     logger.info(
                         "[LOOP:%s] iter %d: STEERING injected %d msgs "
@@ -2015,6 +2082,7 @@ async def run_loop(
             context, anchor = await compact(
                 context, anchor, config, vllm_client,
                 iteration=state.iteration,
+                adapter_name=adapter_name,
             )
             if hooks.on_compaction:
                 try:
@@ -2102,6 +2170,7 @@ async def run_loop(
             context, anchor = await compact(
                 context, anchor, config, vllm_client,
                 iteration=state.iteration,
+                adapter_name=adapter_name,
             )
             if hooks.on_compaction:
                 try:
@@ -2221,6 +2290,7 @@ async def run_loop(
                 context, anchor = await compact(
                     context, anchor, config, vllm_client,
                     force=True, iteration=state.iteration,
+                    adapter_name=adapter_name,
                 )
                 if hooks.on_compaction:
                     try:
@@ -2368,6 +2438,16 @@ async def run_loop(
                     _lstate_ref["iteration"] = state.iteration
                     _lstate_ref["coordinator_mode"] = state.coordinator_mode
                     _lstate_ref["active_mode"] = state.active_mode.value
+                    _lstate_ref["orchestration_profile"] = (
+                        state.orchestration_profile or "solo_structured"
+                    )
+                    if hooks and hooks.has_active_plan:
+                        try:
+                            _lstate_ref["has_active_plan"] = bool(
+                                hooks.has_active_plan(),
+                            )
+                        except Exception:
+                            pass
                     _recent = _lstate_ref.get("recent_tools", [])
                     _recent.append(_tool_name)
                     if len(_recent) > 10:
@@ -2557,6 +2637,7 @@ async def run_loop(
                         hooks,
                         iteration=state.iteration,
                         reason="error_recovery",
+                        orchestration_profile=state.orchestration_profile,
                     )
                     logger.info(
                         "[LOOP:%s] iter %d: ERROR_RECOVERY directive "
@@ -2725,6 +2806,7 @@ async def run_loop(
                             active_mode=state.active_mode,
                             block_reason=state.pre_delegate_reason or None,
                             orchestrator_recovery=state.orchestrator_recovery,
+                            orchestration_profile=state.orchestration_profile,
                         ):
                             _impl_blocked = True
                             break
@@ -3123,6 +3205,7 @@ async def run_loop(
                                 hooks,
                                 iteration=state.iteration,
                                 reason="orchestrator_hint_post_tool",
+                                orchestration_profile=state.orchestration_profile,
                             )
                             logger.info(
                                 "[LOOP:%s] iter %d: ORCHESTRATOR HINT "
@@ -3717,7 +3800,7 @@ async def run_loop(
                     pass
 
             # MONITORING coordinators with in-flight delegates: suppress
-            # ALL stall nudges and let should_complete_v4 decide.  The
+            # ALL stall nudges and let should_complete decide.  The
             # agent already launched teams — nudging it to "take action"
             # just causes pointless wait/inspect/text cycles instead of
             # a clean exit to background.
@@ -3732,19 +3815,31 @@ async def run_loop(
                 and state.coordinator_mode
                 and _bg_delegates
             )
+            _evaluating_text_spiral = (
+                state.active_mode == AgentMode.EVALUATING
+                and state.coordinator_mode
+                and state.consecutive_text_only >= 2
+                and not _substantive_delivery
+            )
 
             # Only inject stall nudges BELOW the hard limit.
-            # At the limit, let should_complete_v4 / check_guards handle exit.
+            # At the limit, let should_complete / check_guards handle exit.
             # Do NOT stall-nudge after a substantive coordinator status turn —
             # that forced a second model reply after the user already saw text
             # (e.g. "What would you like me to do first?"). Yield via
-            # should_complete_v4 instead.
+            # should_complete instead.
             if _substantive_delivery and _coordinator_has_work:
                 stall_msg = None
             elif _substantive_delivery:
                 stall_msg = None
             elif _monitoring_should_yield:
                 stall_msg = None
+            elif _evaluating_text_spiral:
+                stall_msg = build_evaluating_action_breadcrumb(
+                    _plan_tool,
+                    dispatch_source=dispatch_source
+                    or getattr(state, "dispatch_source", ""),
+                )
             elif state.consecutive_text_only >= config.consecutive_text_only_limit:
                 stall_msg = (
                     "You have responded with text "
@@ -3810,7 +3905,7 @@ async def run_loop(
                 await emit(on_event, AgentEvent(
                     EventType.TURN_END, {"iteration": state.iteration},
                 ))
-            elif await should_complete_v4(
+            elif await should_complete(
                 state, config, hooks, vllm_client, delegate_manager,
                 adapter_name=adapter_name,
             ):

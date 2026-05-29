@@ -6,6 +6,12 @@ import re
 from typing import Any, Callable
 
 from .plan_store import Plan
+from .profile_guard_policy import (
+    EM_COLD_START_GOAL_THRESHOLD,
+    em_cold_start_goal_blocks_enabled,
+    em_pre_delegate_blocks_enabled,
+    normalize_profile,
+)
 from .types import AgentMode, LoopConfig, LoopState
 
 _BUILD_TODO_RE = re.compile(
@@ -154,11 +160,17 @@ def pre_delegate_reason(
         return None
     if orchestrator_recovery:
         return None
+    profile = normalize_profile(getattr(state, "orchestration_profile", None))
+    if not em_pre_delegate_blocks_enabled(
+        profile,
+        plan_requires_team_delegation=plan_requires_team_delegation,
+    ):
+        return None
     if plan_requires_team_delegation:
         return "team_plan"
-    # Goal heuristics only before any plan exists (cold-start nudge).
-    if not has_active_plan:
-        if len(state.goals) >= 3:
+    # Goal heuristics only before any plan exists (cold-start nudge, EM only).
+    if not has_active_plan and em_cold_start_goal_blocks_enabled(profile):
+        if len(state.goals) >= EM_COLD_START_GOAL_THRESHOLD:
             return "tactical_goals"
         if any(_BUILD_TODO_RE.search(g or "") for g in state.goals):
             return "build_goals"
@@ -198,9 +210,12 @@ def block_executing_mode_escape(
     enable_delegation: bool,
     is_delegate_loop: bool,
     orchestrator_recovery: bool = False,
+    orchestration_profile: str | None = None,
 ) -> str | None:
     """Block switch_mode(executing) only for team-style plans before Wave 0."""
     if not enable_delegation or is_delegate_loop or orchestrator_recovery:
+        return None
+    if normalize_profile(orchestration_profile) != "orchestrated":
         return None
     if target_mode != AgentMode.EXECUTING:
         return None
@@ -233,10 +248,17 @@ def pre_delegate_block_message(
     active_mode: AgentMode,
     block_reason: str | None = None,
     orchestrator_recovery: bool = False,
+    orchestration_profile: str | None = None,
 ) -> str | None:
     """Return a block message, or None if the tool call is allowed."""
     if orchestrator_recovery or active_mode in _EXECUTING_ESCAPE_OK_MODES:
         return None
+    profile = normalize_profile(orchestration_profile)
+    if block_reason == "team_plan" and profile != "orchestrated":
+        return None
+    if block_reason in ("tactical_goals", "build_goals"):
+        if not em_cold_start_goal_blocks_enabled(profile):
+            return None
     if tool_name in _PRE_DELEGATE_OK:
         return None
     if tool_name not in _IMPL_TOOLS:
@@ -247,6 +269,8 @@ def pre_delegate_block_message(
             return None
     if block_reason and block_reason in _BLOCK_MESSAGES:
         return _BLOCK_MESSAGES[block_reason]
+    if profile != "orchestrated":
+        return None
     return _BLOCK_MESSAGES["team_plan"]
 
 

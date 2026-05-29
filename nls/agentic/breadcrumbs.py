@@ -12,6 +12,13 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
+from nls.agentic.profile_guard_policy import (
+    breadcrumb_rule_matches_profile,
+    em_static_tool_hints_enabled,
+    normalize_profile,
+    solo_static_tool_hints_enabled,
+)
+
 logger = logging.getLogger(__name__)
 
 _COMM_SEND_TOOLS = frozenset({
@@ -32,6 +39,7 @@ class BreadcrumbContext:
     communications_sent: tuple[str, ...] = ()
     is_coordinator: bool = False
     goals: tuple[str, ...] = ()
+    orchestration_profile: str = "solo_structured"
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +59,8 @@ class BreadcrumbRule:
     requires_tools: frozenset[str] = field(default_factory=frozenset)
     requires_any: frozenset[str] = field(default_factory=frozenset)
     condition: Callable[[BreadcrumbContext], bool] | None = None
+    # When set, rule only fires for these orchestration profiles.
+    profiles: frozenset[str] | None = None
 
 
 class BreadcrumbEngine:
@@ -74,6 +84,10 @@ class BreadcrumbEngine:
         wildcard = self._index.get((ctx.tool_name, "*"), ())
         candidates = (*exact, *wildcard)
         for rule in candidates:
+            if not breadcrumb_rule_matches_profile(
+                rule.profiles, ctx.orchestration_profile,
+            ):
+                continue
             if rule.requires_tools and not rule.requires_tools <= ctx.unlocked_tools:
                 continue
             if rule.requires_any and not rule.requires_any & ctx.unlocked_tools:
@@ -248,16 +262,94 @@ def _render_wave_file_history(ctx: BreadcrumbContext) -> str:
     )
 
 
+def _render_todo_list_solo(ctx: BreadcrumbContext) -> str:
+    return (
+        "[BREADCRUMB] NEXT: show the user the todos with "
+        "todo(action='list', title='-')."
+    )
+
+
+def _render_fetch_then_write(ctx: BreadcrumbContext) -> str:
+    return (
+        "[BREADCRUMB] NEXT: use the fetched content to complete the deliverable. "
+        "If a file was requested, write() it now with citations from what you fetched."
+    )
+
+
+def _render_write_then_edit(ctx: BreadcrumbContext) -> str:
+    return (
+        "[BREADCRUMB] File written. For further changes on the same path, "
+        "use edit() — not another full write()."
+    )
+
+
+def _render_lookup_answer(ctx: BreadcrumbContext) -> str:
+    return (
+        "[BREADCRUMB] NEXT: answer in chat from the lookup results. "
+        "Do not create plans, files, or todos."
+    )
+
+
+_EM_PROFILES = frozenset({"orchestrated"})
+_SOLO_PROFILES = frozenset({"solo_structured"})
+_DIRECT_PROFILES = frozenset({"direct_tool"})
+_SOLO_AND_EM_PROFILES = frozenset({"solo_structured", "orchestrated"})
+
+
 DEFAULT_RULES: list[BreadcrumbRule] = [
+    # --- Solo IC workflow (no team waves) ---
+    BreadcrumbRule(
+        trigger=("todo", "add"),
+        profiles=_SOLO_PROFILES,
+        requires_tools=frozenset({"todo"}),
+        condition=lambda ctx: "plan" not in ctx.unlocked_tools,
+        render=_render_todo_list_solo,
+    ),
+    BreadcrumbRule(
+        trigger=("web_fetch", "*"),
+        profiles=_SOLO_PROFILES,
+        requires_tools=frozenset({"write"}),
+        condition=lambda ctx: not ctx.is_error,
+        render=_render_fetch_then_write,
+    ),
+    BreadcrumbRule(
+        trigger=("write", "*"),
+        profiles=_SOLO_PROFILES,
+        requires_tools=frozenset({"edit"}),
+        condition=lambda ctx: not ctx.is_error,
+        render=_render_write_then_edit,
+    ),
+    # --- Direct lookup workflow ---
+    BreadcrumbRule(
+        trigger=("web_search", "*"),
+        profiles=_DIRECT_PROFILES,
+        condition=lambda ctx: not ctx.is_error,
+        render=_render_lookup_answer,
+    ),
+    BreadcrumbRule(
+        trigger=("web_fetch", "*"),
+        profiles=_DIRECT_PROFILES,
+        condition=lambda ctx: not ctx.is_error,
+        render=_render_lookup_answer,
+    ),
+    BreadcrumbRule(
+        trigger=("browser", "*"),
+        profiles=_DIRECT_PROFILES,
+        condition=lambda ctx: not ctx.is_error,
+        render=_render_lookup_answer,
+    ),
+    # --- EM orchestration workflow ---
     # todo(add) → plan(create)
     BreadcrumbRule(
         trigger=("todo", "add"),
+        profiles=_EM_PROFILES,
         requires_tools=frozenset({"plan"}),
         render=_render_todo_plan,
     ),
     # plan(create) with delegatable steps → team(create)
     BreadcrumbRule(
         trigger=("plan", "create"),
+        profiles=_EM_PROFILES,
         requires_tools=frozenset({"team"}),
         condition=_has_delegatable_steps,
         render=_render_plan_team,
@@ -265,6 +357,7 @@ DEFAULT_RULES: list[BreadcrumbRule] = [
     # team(create) → team(launch)
     BreadcrumbRule(
         trigger=("team", "create"),
+        profiles=_EM_PROFILES,
         requires_tools=frozenset({"team"}),
         condition=lambda ctx: not ctx.is_error,
         render=_render_team_launch,
@@ -272,6 +365,7 @@ DEFAULT_RULES: list[BreadcrumbRule] = [
     # team(create) blocked — prior wave not advanced
     BreadcrumbRule(
         trigger=("team", "create"),
+        profiles=_EM_PROFILES,
         requires_tools=frozenset({"team"}),
         condition=lambda ctx: (
             ctx.is_error
@@ -282,6 +376,7 @@ DEFAULT_RULES: list[BreadcrumbRule] = [
     # team(inspect) terminal wave not yet advanced
     BreadcrumbRule(
         trigger=("team", "inspect"),
+        profiles=_EM_PROFILES,
         requires_tools=frozenset({"team"}),
         condition=lambda ctx: bool(ctx.result_details.get("needs_advance")),
         render=_render_inspect_needs_advance,
@@ -289,6 +384,7 @@ DEFAULT_RULES: list[BreadcrumbRule] = [
     # team(launch) → yield via await_delegates
     BreadcrumbRule(
         trigger=("team", "launch"),
+        profiles=_EM_PROFILES,
         requires_tools=frozenset({"team", "await_delegates"}),
         condition=lambda ctx: ctx.is_coordinator,
         render=_render_post_launch_monitor,
@@ -296,6 +392,7 @@ DEFAULT_RULES: list[BreadcrumbRule] = [
     # plan(complete) on top-level plan with deferred channels → notify
     BreadcrumbRule(
         trigger=("plan", "complete"),
+        profiles=_SOLO_AND_EM_PROFILES,
         requires_any=_COMM_SEND_TOOLS,
         condition=lambda ctx: (
             not ctx.result_details.get("parent_id")
@@ -306,12 +403,14 @@ DEFAULT_RULES: list[BreadcrumbRule] = [
     # team(advance) → hint to use file_history to review delegate work
     BreadcrumbRule(
         trigger=("team", "advance"),
+        profiles=_EM_PROFILES,
         requires_tools=frozenset({"file_history"}),
         render=_render_wave_file_history,
     ),
     # plan(accept_partial) → advance wave, do not replan
     BreadcrumbRule(
         trigger=("plan", "accept_partial"),
+        profiles=_EM_PROFILES,
         requires_tools=frozenset({"team"}),
         condition=lambda ctx: bool(ctx.result_details.get("wave_needs_advance")),
         render=_render_accept_partial_advance,
@@ -319,6 +418,7 @@ DEFAULT_RULES: list[BreadcrumbRule] = [
     # plan(fix_dependencies) → launch next wave
     BreadcrumbRule(
         trigger=("plan", "fix_dependencies"),
+        profiles=_EM_PROFILES,
         requires_tools=frozenset({"team"}),
         render=_render_fix_deps_team,
     ),
@@ -332,7 +432,7 @@ DEFAULT_RULES: list[BreadcrumbRule] = [
 # (errors, wave_needs_advance, deferred channels). These snippets only
 # document the happy-path chain so the model sees it before the first call.
 
-_TOOL_STATIC_HINTS: dict[str, str] = {
+_TOOL_STATIC_HINTS_EM: dict[str, str] = {
     "todo": (
         "\n\nORCHESTRATION: After todo(add), if plan is available → "
         "plan(action='create', todo_id=<id>, title='...')."
@@ -349,7 +449,33 @@ _TOOL_STATIC_HINTS: dict[str, str] = {
     ),
 }
 
+_TOOL_STATIC_HINTS_SOLO: dict[str, str] = {
+    "todo": (
+        "\n\nWORKFLOW: After todo(add), call todo(action='list', title='-') "
+        "to show items back when the user asked for a list."
+    ),
+    "write": (
+        "\n\nWORKFLOW: After the first write() to a path, use edit() for "
+        "targeted changes on that file."
+    ),
+    "web_fetch": (
+        "\n\nWORKFLOW: Use fetched content directly — cite real URLs. "
+        "If a deliverable file was requested, write() it next."
+    ),
+}
 
-def tool_description_supplement(tool_name: str) -> str:
+
+def tool_description_supplement(
+    tool_name: str,
+    *,
+    orchestration_profile: str | None = None,
+) -> str:
     """Compact workflow text appended to tool definitions in the schema."""
-    return _TOOL_STATIC_HINTS.get(tool_name, "")
+    if orchestration_profile is None:
+        return ""
+    profile = normalize_profile(orchestration_profile)
+    if em_static_tool_hints_enabled(profile):
+        return _TOOL_STATIC_HINTS_EM.get(tool_name, "")
+    if solo_static_tool_hints_enabled(profile):
+        return _TOOL_STATIC_HINTS_SOLO.get(tool_name, "")
+    return ""

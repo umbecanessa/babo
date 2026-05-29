@@ -200,15 +200,38 @@ def test_ledger_grant_delegate_paths_mid_wave(tmp_path: Path):
         {"role": "delegate", "delegate_index": 0, "wave": 0},
         file_exists=False,
     )
-    assert err_before is not None
+    assert err_before is None
     granted = ledger.grant_delegate_paths(0, 0, [".gitignore"])
     assert ".gitignore" in granted
-    err_after = ledger.check_mutation_allowed(
+    err_existing = ledger.check_mutation_allowed(
         ".gitignore",
         {"role": "delegate", "delegate_index": 0, "wave": 0},
-        file_exists=False,
+        file_exists=True,
     )
-    assert err_after is None
+    assert err_existing is None
+
+
+def test_ledger_allows_shared_scaffold_create_when_missing(tmp_path: Path):
+    ledger = FileLedger(tmp_path / "file_ledger.jsonl")
+    ledger.set_wave_ownership(
+        0,
+        {0: ["backend/"]},
+        shared_paths=["README.md", "package.json"],
+    )
+    for path in ("README.md", "package.json"):
+        err = ledger.check_mutation_allowed(
+            path,
+            {"role": "delegate", "delegate_index": 0, "wave": 0},
+            file_exists=False,
+        )
+        assert err is None, path
+    err_locked = ledger.check_mutation_allowed(
+        "README.md",
+        {"role": "delegate", "delegate_index": 0, "wave": 0},
+        file_exists=True,
+    )
+    assert err_locked is not None
+    assert "FILE LOCKED" in err_locked
 
 
 def test_ledger_set_delegate_paths_replaces_scope(tmp_path: Path):

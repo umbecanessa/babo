@@ -43,12 +43,23 @@ type ConnectState = 'idle' | 'connecting' | 'waiting' | 'connected' | 'error';
             @switch (state()) {
               @case ('idle') {
                 <div class="state-idle">
-                  <p class="description">
-                    Connect your Google account to give your agent access to Gmail, Calendar, Drive, and Sheets.
-                  </p>
-                  <p class="description muted">
-                    A browser window will open for you to sign in and authorize access. Your credentials stay on your device.
-                  </p>
+                  @if (requiresByo()) {
+                    <p class="description">
+                      Save your Google Cloud <code>client_id</code> and <code>client_secret</code>
+                      in Tools → Google Workspace config first, then connect here.
+                    </p>
+                    <p class="description muted">
+                      Redirect URI:
+                      <code>http://localhost:9222/skills/google-workspace/oauth/callback</code>
+                    </p>
+                  } @else {
+                    <p class="description">
+                      Connect your Google account to give your agent access to Gmail, Calendar, Drive, and Sheets.
+                    </p>
+                    <p class="description muted">
+                      A browser window will open for you to sign in and authorize access. Your credentials stay on your device.
+                    </p>
+                  }
                   <button class="btn-connect" (click)="startConnect()">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
                       <path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4"/><polyline points="10 17 15 12 10 7"/><line x1="15" y1="12" x2="3" y2="12"/>
@@ -368,6 +379,8 @@ type ConnectState = 'idle' | 'connecting' | 'waiting' | 'connected' | 'error';
 export class GoogleConnectModalComponent implements OnChanges, OnDestroy {
   open = input(false);
   agentId = input('');
+  /** When true, user must supply their own Google Cloud OAuth app (self-hosted backend). */
+  requiresByo = input(false);
   closed = output<void>();
   connected = output<{ email: string }>();
 

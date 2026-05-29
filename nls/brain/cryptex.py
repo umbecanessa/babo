@@ -944,6 +944,13 @@ class CryptexMemory:
                 return s.content
         return ""
 
+    def clear_plan_tech_stack(self) -> None:
+        """Drop only the tech stack instruction slot."""
+        if self._active_name == "personal":
+            return
+        ring = self._rings[RING_INSTRUCTIONS]
+        ring.remove_by_domain("tech_stack")
+
     def clear_plan_context(self) -> None:
         """Drop plan requirements and tech stack instruction slots."""
         if self._active_name == "personal":
@@ -1850,6 +1857,15 @@ class CryptexMemory:
         state: optional loop state dict for conditional rendering
         """
         state = state or {}
+        from nls.agentic.orchestration_profile_spec import (
+            behavioral_domain_visible_for_profile,
+            get_profile_spec,
+            normalize_profile,
+        )
+
+        _orch_profile = normalize_profile(state.get("orchestration_profile"))
+        _profile_spec = get_profile_spec(_orch_profile)
+        _has_active_plan = bool(state.get("has_active_plan"))
         used_tokens = 0
         msg0_parts: list[str] = []  # identity + environment + behavioral + tools
         msg1_parts: list[str] = []  # task state + facts + credentials
@@ -1924,17 +1940,32 @@ class CryptexMemory:
             if not behavioral_ring:
                 return
 
-            if render_mode == "chat":
+            if _orch_profile == "conversational":
+                _chat_rules = [
+                    f"- {s.content}"
+                    for s in behavioral_ring.get_active_slots()
+                    if behavioral_domain_visible_for_profile(
+                        getattr(s, "domain", ""), _orch_profile,
+                    )
+                ]
+            elif render_mode == "chat":
                 _chat_rules = [
                     f"- {s.content}"
                     for s in behavioral_ring.get_active_slots()
                     if s.metadata.get("render_mode") == "chat"
                 ]
-                if _chat_rules:
-                    _append(msg0_parts, "## Rules\n" + "\n".join(_chat_rules), force=True)
+            else:
+                _chat_rules = []
+            if _chat_rules:
+                _append(msg0_parts, "## Rules\n" + "\n".join(_chat_rules), force=True)
                 return
 
-            all_slots = behavioral_ring.get_active_slots()
+            all_slots = [
+                s for s in behavioral_ring.get_active_slots()
+                if behavioral_domain_visible_for_profile(
+                    getattr(s, "domain", ""), _orch_profile,
+                )
+            ]
 
             # Build domain → slot mapping
             _domain_map: dict[str, list] = {}
@@ -2018,9 +2049,21 @@ class CryptexMemory:
             """Render task instructions + plan position + todo board."""
             if render_mode not in self._AGENTIC_MODES:
                 return
-            instrs = self.get_instructions()
-            plan_pos = self.get_plan_position()
-            todo_board = self.get_todo_board()
+            if not _profile_spec.ring_visible(RING_INSTRUCTIONS, has_active_plan=_has_active_plan):
+                return
+            instrs = [
+                i for i in self.get_instructions()
+                if _profile_spec.instruction_domain_visible(
+                    getattr(i, "domain", "") or "",
+                    has_active_plan=_has_active_plan,
+                )
+            ]
+            plan_pos = ""
+            if _has_active_plan and _orch_profile in ("solo_structured", "orchestrated"):
+                plan_pos = self.get_plan_position()
+            todo_board = ""
+            if _orch_profile in ("solo_structured", "orchestrated"):
+                todo_board = self.get_todo_board()
             task_parts: list[str] = []
             if instrs:
                 task_parts.append("Task Instructions:")
@@ -2059,6 +2102,10 @@ class CryptexMemory:
             """Render orchestration state (team/delegate status)."""
             if render_mode not in self._AGENTIC_MODES:
                 return
+            if not _profile_spec.ring_visible(
+                RING_ORCHESTRATION, has_active_plan=_has_active_plan,
+            ):
+                return
             orch_ring = self._rings.get(RING_ORCHESTRATION)
             orch_parts: list[str] = []
             orch_view_block = self.active._render_orch_block()
@@ -2073,6 +2120,10 @@ class CryptexMemory:
         def _render_goals() -> None:
             """Render strategic + tactical goals."""
             if render_mode not in self._AGENTIC_MODES:
+                return
+            if not _profile_spec.ring_visible(
+                RING_TACTICAL_GOALS, has_active_plan=_has_active_plan,
+            ):
                 return
             all_goals = self.get_goals()
             if all_goals:
@@ -2164,12 +2215,21 @@ class CryptexMemory:
 
         def _render_tools_mcp() -> None:
             # MCP tool descriptions are only relevant for agentic/task modes.
-            if render_mode == "chat":
+            if render_mode == "chat" or _orch_profile == "conversational":
+                return
+            if not _profile_spec.ring_visible(
+                RING_TOOLS_MCP, has_active_plan=_has_active_plan,
+            ):
                 return
             tools_ring = self._rings.get(RING_TOOLS_MCP)
             if not tools_ring or _budget_remaining() < 200:
                 return
-            tool_slots = tools_ring.get_active_slots()
+            tool_slots = []
+            for s in tools_ring.get_active_slots():
+                dom = getattr(s, "domain", "") or ""
+                group_key = dom.replace("tool_group.", "", 1) if dom.startswith("tool_group.") else dom
+                if _profile_spec.tool_group_visible(group_key):
+                    tool_slots.append(s)
             if not tool_slots:
                 return
             _boost = bool(state.get("skill_discovery_boost"))
@@ -2273,6 +2333,8 @@ class CryptexMemory:
                 continue
             if ring_id in (RING_IDENTITY, RING_ENVIRONMENT):
                 continue  # already rendered as anchors
+            if not _profile_spec.ring_visible(ring_id, has_active_plan=_has_active_plan):
+                continue
             renderer = _ring_renderers.get(ring_id)
             if renderer:
                 # Goals share a renderer — mark both as rendered
@@ -3201,6 +3263,40 @@ class CryptexMemory:
         # --- RING_BEHAVIORAL slots (render_mode tagged) ---
 
         behavioral_defs: list[dict[str, str]] = [
+            {
+                "domain": "answer_in_prose",
+                "render_mode": "chat",
+                "consolidation_status": "permanent",
+                "content": (
+                    "CONVERSATIONAL TURN: Answer the user directly in clear prose. "
+                    "Do NOT create plans, todos, teams, or delegates. Do NOT use "
+                    "shell, file, or research tools unless the user explicitly "
+                    "asks you to act on their machine."
+                ),
+            },
+            {
+                "domain": "direct_tool_answer",
+                "render_mode": "agentic",
+                "consolidation_status": "permanent",
+                "content": (
+                    "DIRECT TOOL TURN: Use lookup tools (web_search, web_fetch, "
+                    "read, browser) as needed, then answer in chat. No plan, "
+                    "team, todo, or delegate."
+                ),
+            },
+            {
+                "domain": "solo_plan_workflow",
+                "render_mode": "agentic",
+                "consolidation_status": "permanent",
+                "content": (
+                    "SOLO PLAN WORKFLOW: You may use plan/todo for your own "
+                    "execution checklist. Mark steps non-delegatable unless "
+                    "you are in full orchestration mode with teams. Execute "
+                    "each step yourself — do NOT mark delegatable steps done "
+                    "without completing the work. Use plan(action='complete') "
+                    "when finished."
+                ),
+            },
             {
                 "domain": "task_focus",
                 "render_mode": "agentic",

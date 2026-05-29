@@ -25,6 +25,8 @@ import { MessageListComponent } from './message-list/message-list.component';
 import { SignalSidebarComponent, ActivityKind } from './signal-sidebar/signal-sidebar.component';
 import { AgentBrowserComponent } from './agent-browser/agent-browser.component';
 import { GoogleConnectModalComponent } from '../../shared/google-connect-modal/google-connect-modal.component';
+import { PlatformIntegrationsService } from '../../core/services/platform-integrations.service';
+import { googleUsesByo } from '../../core/services/platform-integrations.util';
 import { ChatWorkbenchComponent } from './chat-workbench/chat-workbench.component';
 import { RunPanelComponent } from './run-panel/run-panel.component';
 import { RunViewService } from '../../core/services/run-view.service';
@@ -224,7 +226,12 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     private workspaceCtx: AgentWorkspaceContextService,
     private day1Coach: Day1CoachService,
     private agentModels: AgentModelService,
+    readonly platformIntegrations: PlatformIntegrationsService,
   ) {}
+
+  googleUsesByoCredentials(): boolean {
+    return googleUsesByo(this.platformIntegrations.backendChoice());
+  }
 
   private _enrichFilePaths(paths: string[]): string[] {
     const pd = this.workspaceCtx.getProjectDir(this.agentId);
@@ -241,6 +248,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     this.restoreChatUiSnapshot();
     this.hydrateRunFromApi();
     void this.agentModels.refreshFromConfig();
+    void this.platformIntegrations.refresh();
     this.routerSub = this.router.events
       .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
       .subscribe(() => {
@@ -289,7 +297,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     // Skill setup from query param (used by settings channel cards)
     const setupSkill = this.route.snapshot.queryParams['setup'];
     if (setupSkill) {
-      if (setupSkill === 'google-workspace') {
+      if (setupSkill === 'google-workspace' && !this.googleUsesByoCredentials()) {
         this.googleModalOpen.set(true);
       } else {
         this.triggerSkillSetup(setupSkill);
@@ -2343,7 +2351,8 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         const reqId = msg.request_id || '';
         console.log(`[CHAT] Received browser_command: action=${action} url=${url} reqId=${reqId}`);
         this.browserCommand.set({ ...msg });
-        this.browserExpanded.set(true);
+        // Keep the in-app webview in the DOM but do not expand the sidebar —
+        // browsing runs in the background unless the user opens the panel.
 
         // Only add a visible preview card for navigate actions
         if (action === 'navigate' && url) {
@@ -2360,7 +2369,6 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       }
 
       case 'browser_navigation': {
-        this.browserExpanded.set(true);
         this.messages.update(msgs => [...msgs, {
           type: 'browser_navigation' as any,
           content: `${msg.action || 'navigate'}: ${msg.url || ''}`,

@@ -264,7 +264,14 @@ class RequestRestartTool:
 
 def _trigger_shutdown() -> None:
     """Terminate the server process so the desktop runtime can relaunch it."""
+    from server.shutdown_trace import record_initiator
+
     pid = os.getpid()
+    record_initiator(
+        "agent:request_restart_approved",
+        pid=pid,
+        exit_code=RESTART_EXIT_CODE,
+    )
     logger.info("request_restart: terminating PID %d with exit code %d", pid, RESTART_EXIT_CODE)
     os._exit(RESTART_EXIT_CODE)
 

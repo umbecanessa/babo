@@ -88,6 +88,19 @@ class PlanTool:
         # Signature: fn(requirements: str, tech_stack_block: str, tech_stack: dict) -> None
         self._context_sync_fn: Any | None = None
         self._context_clear_fn: Any | None = None
+        self._orchestration_profile_fn: Any | None = None
+
+    def set_orchestration_profile_fn(self, fn: Any | None) -> None:
+        """Return active orchestration profile slug for plan semantics."""
+        self._orchestration_profile_fn = fn
+
+    def _active_orchestration_profile(self) -> str:
+        if self._orchestration_profile_fn is None:
+            return "solo_structured"
+        try:
+            return (self._orchestration_profile_fn() or "solo_structured").strip()
+        except Exception:
+            return "solo_structured"
 
     def set_context_sync_fn(self, fn: Any | None) -> None:
         self._context_sync_fn = fn
@@ -100,8 +113,14 @@ class PlanTool:
         fn = self._context_sync_fn
         if fn is None:
             return
+        from nls.agentic.orchestration_profile_spec import get_profile_spec
         from nls.agentic.wave_coordination import build_tech_stack_block
-        block = build_tech_stack_block(plan=plan)
+
+        profile = self._active_orchestration_profile()
+        spec = get_profile_spec(profile)
+        block = ""
+        if spec.inject_tech_stack_block and plan.tech_stack:
+            block = build_tech_stack_block(plan=plan)
         try:
             fn(plan.requirements or "", block, dict(plan.tech_stack or {}))
         except Exception:
@@ -204,6 +223,8 @@ class PlanTool:
                 continue
             if size == 0:
                 rel = fpath.relative_to(root)
+                if rel.name == "__init__.py":
+                    continue
                 issues.append(f"Empty source file (0 bytes): {rel.as_posix()}")
         return issues
 
@@ -238,6 +259,13 @@ class PlanTool:
         return issues
 
     def _audit_tech_stack(self, plan: Plan) -> list[str]:
+        stack = {
+            str(k): str(v).strip()
+            for k, v in (getattr(plan, "tech_stack", None) or {}).items()
+            if v and str(v).strip()
+        }
+        if not stack:
+            return []
         root = self._project_root(plan)
         if root is None:
             return []
@@ -245,7 +273,7 @@ class PlanTool:
         return detect_tech_stack_drift(
             plan.requirements,
             str(root),
-            tech_stack=plan.tech_stack,
+            tech_stack=stack,
         )
 
     def _audit_local_tests(self, plan: Plan) -> list[str]:
@@ -266,6 +294,22 @@ class PlanTool:
             tok in combined
             for tok in ("pytest", "npm test", "npm run test", "vitest", "jest")
         )
+        if not ran_tests:
+            root = self._project_root(plan)
+            if root is not None:
+                from pathlib import Path
+                root_path = Path(root)
+                test_files = (
+                    list(root_path.glob("test_*.py"))
+                    + list(root_path.glob("*_test.py"))
+                )
+                done_test_steps = [
+                    s for s in plan.steps
+                    if s.status in ("done", "skipped")
+                    and "test" in (s.label or "").lower()
+                ]
+                if test_files and done_test_steps:
+                    ran_tests = True
         if not has_test_step:
             issues.append(
                 "No dedicated local verification step in plan — add a final "
@@ -799,6 +843,7 @@ class PlanTool:
             scaffolding=params.get("files"),
             todo_id=params.get("todo_id"),
             project_dir=params.get("project_dir") or _reuse_dir,
+            orchestration_profile=self._active_orchestration_profile(),
         )
 
         _archive_reason = (

@@ -1,12 +1,11 @@
 """web_search -- Search the web for real-time information.
 
-Uses DuckDuckGo's HTML search (no API key required).  Returns
-summarized snippets with URLs so the agent can follow up with
-web_fetch for full content.
+Uses the ``ddgs`` metasearch library (free, no API key).  Returns summarized
+snippets with URLs so the agent can follow up with ``web_fetch`` for full content.
 
 Fallback chain:
-    1. DuckDuckGo HTML scrape
-    2. If that fails, falls back to `curl` against DuckDuckGo lite
+    1. ``ddgs`` (auto backend — DuckDuckGo, Bing, etc.)
+    2. Legacy DuckDuckGo HTML scrape (if ``ddgs`` is not installed)
 """
 
 from __future__ import annotations
@@ -24,11 +23,17 @@ from .base import AgentTool, ToolResult
 logger = logging.getLogger(__name__)
 
 _USER_AGENT = (
-    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
 
 _MAX_RESULTS = 8
+
+_EMPTY_RESULT_HINT = (
+    "No results found for: {query}\n\n"
+    "Try a shorter or more specific query, or use web_fetch directly "
+    "if you already know a documentation URL."
+)
 
 
 class WebSearchTool:
@@ -44,7 +49,8 @@ class WebSearchTool:
             "Search the web for real-time information. Returns summarized "
             "snippets and URLs. Use when you need current documentation, "
             "error solutions, API references, or any information not in "
-            "your training data."
+            "your training data. Follow up with web_fetch on result URLs "
+            "for full page content."
         )
 
     @property
@@ -76,11 +82,11 @@ class WebSearchTool:
         if not query:
             return ToolResult(content="Error: 'query' is required.", is_error=True)
 
-        max_results = min(params.get("max_results", 5), _MAX_RESULTS)
+        max_results = min(int(params.get("max_results", 5)), _MAX_RESULTS)
 
         try:
             results = await asyncio.get_event_loop().run_in_executor(
-                None, _search_ddg, query, max_results,
+                None, search_web, query, max_results,
             )
         except Exception as e:
             logger.warning("Web search failed: %s", e)
@@ -91,7 +97,7 @@ class WebSearchTool:
 
         if not results:
             return ToolResult(
-                content=f"No results found for: {query}",
+                content=_EMPTY_RESULT_HINT.format(query=query),
                 is_error=False,
             )
 
@@ -110,12 +116,67 @@ class WebSearchTool:
         return ToolResult(
             content="\n".join(lines),
             is_error=False,
-            details={"result_count": len(results)},
+            details={"result_count": len(results), "backend": results[0].get("_backend", "unknown")},
         )
 
 
-def _search_ddg(query: str, max_results: int) -> list[dict]:
-    """Scrape DuckDuckGo HTML results (sync, runs in executor)."""
+def search_web(query: str, max_results: int) -> list[dict]:
+    """Sync search entry point (runs in executor)."""
+    results = _search_with_ddgs(query, max_results)
+    if results:
+        return results
+    return _search_ddg_html(query, max_results)
+
+
+def _normalize_result(item: dict[str, Any], backend: str = "ddgs") -> dict[str, str] | None:
+    """Map a provider-specific hit to {title, url, snippet}."""
+    url = (item.get("href") or item.get("url") or "").strip()
+    title = (item.get("title") or "").strip()
+    snippet = (item.get("body") or item.get("snippet") or "").strip()
+    if not url or not title:
+        return None
+    if not url.startswith(("http://", "https://")):
+        return None
+    return {
+        "title": title,
+        "url": url,
+        "snippet": snippet,
+        "_backend": backend,
+    }
+
+
+def _search_with_ddgs(query: str, max_results: int) -> list[dict]:
+    """Search via ddgs metasearch (free, no API key)."""
+    try:
+        from ddgs import DDGS
+    except ImportError:
+        logger.debug("ddgs not installed — falling back to HTML scrape")
+        return []
+
+    try:
+        with DDGS() as ddgs:
+            raw_hits = list(ddgs.text(query, max_results=max_results))
+    except Exception as exc:
+        logger.warning("ddgs search failed: %s", exc)
+        return []
+
+    results: list[dict] = []
+    seen_urls: set[str] = set()
+    for item in raw_hits:
+        if not isinstance(item, dict):
+            continue
+        norm = _normalize_result(item, backend="ddgs")
+        if norm is None:
+            continue
+        if norm["url"] in seen_urls:
+            continue
+        seen_urls.add(norm["url"])
+        results.append(norm)
+    return results[:max_results]
+
+
+def _search_ddg_html(query: str, max_results: int) -> list[dict]:
+    """Legacy DuckDuckGo HTML scrape (fallback when ddgs unavailable)."""
     encoded = urllib.parse.quote_plus(query)
     url = f"https://html.duckduckgo.com/html/?q={encoded}"
 
@@ -123,10 +184,12 @@ def _search_ddg(query: str, max_results: int) -> list[dict]:
     with urllib.request.urlopen(req, timeout=15) as resp:
         raw = resp.read().decode("utf-8", errors="replace")
 
+    if "challenge" in raw.lower() and "result__a" not in raw:
+        logger.warning("DuckDuckGo HTML returned anti-bot page")
+        return []
+
     results: list[dict] = []
 
-    # DuckDuckGo HTML results are in <a class="result__a"> tags
-    # with snippets in <a class="result__snippet"> tags
     result_blocks = re.findall(
         r'<div class="links_main[^"]*">(.*?)</div>\s*</div>',
         raw,
@@ -141,7 +204,7 @@ def _search_ddg(query: str, max_results: int) -> list[dict]:
         )
 
     if not result_blocks:
-        return _parse_fallback(raw, max_results)
+        return _parse_html_fallback(raw, max_results)
 
     for block in result_blocks[:max_results]:
         title_m = re.search(r'class="result__a"[^>]*>(.*?)</a>', block, re.DOTALL)
@@ -157,7 +220,7 @@ def _search_ddg(query: str, max_results: int) -> list[dict]:
 
         link = url_m.group(1)
         if "duckduckgo.com/y.js" in link:
-            ud = re.search(r'uddg=([^&]+)', link)
+            ud = re.search(r"uddg=([^&]+)", link)
             if ud:
                 link = urllib.parse.unquote(ud.group(1))
 
@@ -165,12 +228,13 @@ def _search_ddg(query: str, max_results: int) -> list[dict]:
             "title": _clean_html(title_m.group(1)),
             "url": link,
             "snippet": _clean_html(snippet_m.group(1)) if snippet_m else "",
+            "_backend": "ddg_html",
         })
 
     return results
 
 
-def _parse_fallback(raw_html: str, max_results: int) -> list[dict]:
+def _parse_html_fallback(raw_html: str, max_results: int) -> list[dict]:
     """Fallback parser for DuckDuckGo lite/alternative HTML layouts."""
     results: list[dict] = []
 
@@ -182,7 +246,7 @@ def _parse_fallback(raw_html: str, max_results: int) -> list[dict]:
 
     for href, title_html in links[:max_results]:
         if "duckduckgo.com" in href and "uddg=" in href:
-            ud = re.search(r'uddg=([^&]+)', href)
+            ud = re.search(r"uddg=([^&]+)", href)
             if ud:
                 href = urllib.parse.unquote(ud.group(1))
 
@@ -190,6 +254,7 @@ def _parse_fallback(raw_html: str, max_results: int) -> list[dict]:
             "title": _clean_html(title_html),
             "url": href,
             "snippet": "",
+            "_backend": "ddg_html",
         })
 
     return results

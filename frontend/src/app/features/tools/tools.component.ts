@@ -2,7 +2,7 @@ import { Component, OnInit, OnDestroy, signal, computed, ChangeDetectorRef, View
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
-import { ActivatedRoute, Router, NavigationEnd } from '@angular/router';
+import { ActivatedRoute, Router, NavigationEnd, RouterLink } from '@angular/router';
 import { filter } from 'rxjs';
 import { HttpClient } from '@angular/common/http';
 import { ApiService } from '../../core/services/api.service';
@@ -14,6 +14,16 @@ import { ToolCardComponent, AgentTool } from './tool-card/tool-card.component';
 import { DetailModalComponent } from './detail-modal/detail-modal.component';
 import { SchemaConfigFormComponent, ConfigFieldSchema } from './schema-config-form/schema-config-form.component';
 import { GoogleConnectModalComponent } from '../../shared/google-connect-modal/google-connect-modal.component';
+import { PlatformIntegrationsService } from '../../core/services/platform-integrations.service';
+import {
+  buildIntegrationContext,
+  emailIsReady,
+  googleUsesByo,
+  localNestWebhookWarning,
+  selfHostedPrerequisiteSteps,
+  type IntegrationChannelId,
+  usesBaboCloudBackend,
+} from '../../core/services/platform-integrations.util';
 
 class ResultCache<T> {
   private store = new Map<string, { data: T; ts: number }>();
@@ -67,7 +77,7 @@ function decodeJwtEmail(): string {
   selector: 'app-tools',
   standalone: true,
   imports: [
-    CommonModule, FormsModule,
+    CommonModule, FormsModule, RouterLink,
     IntegrationCardComponent, SkillCardComponent, ToolCardComponent,
     DetailModalComponent, SchemaConfigFormComponent, GoogleConnectModalComponent,
   ],
@@ -131,6 +141,48 @@ function decodeJwtEmail(): string {
           Integrations
         </h2>
         <p class="section-subtitle">Channel connections for your agent</p>
+
+        @if (agentId) {
+          <div
+            class="relay-status-banner"
+            [class.online]="relayOnline() === true"
+            [class.offline]="relayOnline() === false"
+            [class.checking]="relayOnline() === null">
+            <span class="relay-dot"></span>
+            <div class="relay-text">
+              @if (relayOnline() === null) {
+                <strong>Checking desktop relay…</strong>
+                <span>Connecting to your NestJS server to see if Babo Desktop is online.</span>
+              } @else if (relayOnline()) {
+                <strong>Desktop relay online</strong>
+                <span>Telegram and email webhooks can reach this agent. Babo Desktop is connected to {{ platformIntegrations.nestjsUrl() }}.</span>
+              } @else {
+                <strong>Desktop relay offline</strong>
+                <span>This is separate from Babo Cloud being up — your desktop must keep an open WebSocket to {{ platformIntegrations.nestjsUrl() }} for this agent. Restart Babo Desktop if you closed it.</span>
+              }
+            </div>
+          </div>
+        }
+
+        @if (localWebhookWarning(); as localWarn) {
+          <div class="localhost-webhook-banner">
+            <strong>Localhost NestJS</strong>
+            <p>{{ localWarn }}</p>
+          </div>
+        }
+
+        @if (!usesBaboCloudBackend(platformIntegrations.backendChoice())) {
+          <div class="integration-prereq-banner">
+            <strong>Self-hosted backend</strong>
+            <p>Telegram and email need your NestJS server reachable over HTTPS and Babo Desktop online (relay). Configure platform credentials in <a routerLink="/settings" [queryParams]="{ section: 'integrations' }">Settings → Integrations</a>.</p>
+            <ul>
+              @for (step of selfHostedPrereqSteps(); track step) {
+                <li>{{ step }}</li>
+              }
+            </ul>
+          </div>
+        }
+
         <div class="card-grid">
           @for (int of integrations(); track int.name) {
             <app-integration-card
@@ -410,20 +462,32 @@ function decodeJwtEmail(): string {
           @if (getChannelType(intName) === 'email') {
             <div class="modal-action-block">
               <p class="modal-intro">{{ getSkillOnboarding(intName)?.intro_message || 'Activate your email channel.' }}</p>
-              <button class="modal-action-btn" (click)="connectEmail(intName)" [disabled]="emailActivating()">
+              <ol class="modal-steps-list">
+                @for (step of getIntegrationContext('email').setupSteps; track step) {
+                  <li>{{ step }}</li>
+                }
+              </ol>
+              @if (!emailChannelReady()) {
+                <p class="modal-warning">
+                  {{ getIntegrationContext('email').blockedReason }}
+                  <a routerLink="/settings" [queryParams]="{ section: 'integrations' }">Open Settings → Integrations</a>
+                </p>
+              }
+              <button class="modal-action-btn" (click)="connectEmail(intName)" [disabled]="emailActivating() || !emailChannelReady()">
                 @if (emailActivating()) { <span class="btn-spinner"></span> Activating... }
                 @else { Activate Email }
               </button>
+              <button class="modal-action-btn secondary" type="button" (click)="connectEmailInChat()">Setup in Chat</button>
             </div>
           }
           @if (getChannelType(intName) === 'telegram') {
             <div class="modal-action-block">
               <p class="modal-intro">{{ getSkillOnboarding(intName)?.intro_message || 'Set up Telegram for your agent.' }}</p>
-              <div class="modal-steps">
-                <div class="step-item"><span class="step-num">1</span> Open <strong>@BotFather</strong> on Telegram and create a bot with <code>/newbot</code></div>
-                <div class="step-item"><span class="step-num">2</span> Copy the <strong>bot token</strong> BotFather gives you</div>
-                <div class="step-item"><span class="step-num">3</span> Click "Setup in Chat" -- the agent will walk you through the rest</div>
-              </div>
+              <ol class="modal-steps-list">
+                @for (step of getIntegrationContext('telegram').setupSteps; track step) {
+                  <li>{{ step }}</li>
+                }
+              </ol>
               <button class="modal-action-btn telegram" (click)="connectTelegram()">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
                 Setup in Chat
@@ -433,20 +497,31 @@ function decodeJwtEmail(): string {
           @if (getChannelType(intName) === 'google-workspace') {
             <div class="modal-action-block">
               <p class="modal-intro">{{ getSkillOnboarding(intName)?.intro_message || 'Connect your Google account to let your agent manage Gmail, Calendar, Drive, and Sheets.' }}</p>
-              <div class="modal-steps">
-                <div class="step-item"><span class="step-num">1</span> The agent will guide you through creating a <strong>Google Cloud project</strong></div>
-                <div class="step-item"><span class="step-num">2</span> Enable Gmail, Calendar, Drive, and Sheets APIs</div>
-                <div class="step-item"><span class="step-num">3</span> Create OAuth credentials and authorize access</div>
-              </div>
+              <ol class="modal-steps-list">
+                @for (step of getIntegrationContext('google-workspace').setupSteps; track step) {
+                  <li>{{ step }}</li>
+                }
+              </ol>
+              @if (googleUsesByoCredentials()) {
+                <button class="modal-action-btn" (click)="connectGoogleInChat()">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                  Setup in Chat
+                </button>
+              }
               <button class="modal-action-btn" (click)="connectGoogleWorkspace()">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-                Setup in Chat
+                {{ googleUsesByoCredentials() ? 'Connect (after OAuth app saved)' : 'Connect Google Account' }}
               </button>
             </div>
           }
           @if (getChannelType(intName) === 'whatsapp') {
             <div class="modal-action-block">
               <p class="modal-intro">{{ getSkillOnboarding(intName)?.intro_message || 'Pair WhatsApp with your agent.' }}</p>
+              <ol class="modal-steps-list compact">
+                @for (step of getIntegrationContext('whatsapp').setupSteps; track step) {
+                  <li>{{ step }}</li>
+                }
+              </ol>
               @if (whatsappQR()) {
                 <div class="qr-block">
                   <img [src]="whatsappQR()" alt="WhatsApp QR Code" class="qr-img" />
@@ -454,11 +529,6 @@ function decodeJwtEmail(): string {
                   <p class="qr-status">{{ whatsappStatus() === 'connecting' ? 'Waiting for scan...' : whatsappStatus() }}</p>
                 </div>
               } @else {
-                <div class="modal-steps">
-                  <div class="step-item"><span class="step-num">1</span> Use a <strong>dedicated phone number</strong> for the agent if possible</div>
-                  <div class="step-item"><span class="step-num">2</span> Click "Start Pairing" to generate a QR code</div>
-                  <div class="step-item"><span class="step-num">3</span> Open WhatsApp &rarr; Linked Devices &rarr; Scan the QR code</div>
-                </div>
                 <button class="modal-action-btn whatsapp" (click)="startWhatsAppPairing()" [disabled]="whatsappPairing()">
                   @if (whatsappPairing()) { <span class="btn-spinner"></span> Starting... }
                   @else { Start Pairing }
@@ -658,6 +728,7 @@ function decodeJwtEmail(): string {
     <app-google-connect-modal
       [open]="googleModalOpen()"
       [agentId]="agentId"
+      [requiresByo]="googleUsesByoCredentials()"
       (closed)="closeGoogleModal()"
       (connected)="onGoogleConnected($event)" />
 
@@ -772,6 +843,28 @@ export class ToolsComponent implements OnInit, OnDestroy {
     return [...extensions, ...skills];
   });
 
+  selfHostedPrereqSteps = computed(() =>
+    selfHostedPrerequisiteSteps(
+      this.platformIntegrations.backendChoice(),
+      this.platformIntegrations.nestjsUrl(),
+      this.platformIntegrations.capabilities(),
+    ),
+  );
+
+  localWebhookWarning = computed(() =>
+    localNestWebhookWarning(
+      this.platformIntegrations.backendChoice(),
+      this.platformIntegrations.nestjsUrl(),
+    ),
+  );
+
+  emailChannelReady = computed(() =>
+    emailIsReady(
+      this.platformIntegrations.capabilities(),
+      this.platformIntegrations.backendChoice(),
+    ),
+  );
+
   clawhubCategories = [
     { label: 'Popular', sort: 'downloads' },
     { label: 'Highlighted', sort: 'highlighted' },
@@ -783,6 +876,10 @@ export class ToolsComponent implements OnInit, OnDestroy {
   brainData = signal<any>(null);
   brainLoading = signal(false);
 
+  /** NestJS relay WS: desktop runtime reachable for webhook channels. */
+  relayOnline = signal<boolean | null>(null);
+  private relayPollTimer: ReturnType<typeof setInterval> | null = null;
+
   constructor(
     private api: ApiService,
     private route: ActivatedRoute,
@@ -790,6 +887,7 @@ export class ToolsComponent implements OnInit, OnDestroy {
     private cdr: ChangeDetectorRef,
     private http: HttpClient,
     private toast: ToastService,
+    readonly platformIntegrations: PlatformIntegrationsService,
   ) {}
 
   private routerSub?: ReturnType<typeof this.router.events.subscribe>;
@@ -797,7 +895,9 @@ export class ToolsComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.agentId = this.route.snapshot.paramMap.get('agentId') ?? '';
     this.userEmail = decodeJwtEmail();
+    void this.platformIntegrations.refresh();
     this.loadData();
+    this.startRelayPolling();
     this.loadReviews();
     this.loadAgentTools();
     this.loadFeaturedSkills('Popular');
@@ -806,6 +906,8 @@ export class ToolsComponent implements OnInit, OnDestroy {
       filter((e): e is NavigationEnd => e instanceof NavigationEnd),
     ).subscribe((e) => {
       if (this.agentId && this.skills().length > 0 && e.urlAfterRedirects?.includes('/tools')) {
+        void this.platformIntegrations.refresh();
+        void this.refreshRelayStatus();
         this.loadChannelStatuses(this.skills());
       }
     });
@@ -814,6 +916,30 @@ export class ToolsComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.routerSub?.unsubscribe();
     this.stopWhatsAppQrPoll();
+    this.stopRelayPolling();
+  }
+
+  private startRelayPolling(): void {
+    this.stopRelayPolling();
+    if (!this.agentId) return;
+    void this.refreshRelayStatus();
+    this.relayPollTimer = setInterval(() => void this.refreshRelayStatus(), 10_000);
+  }
+
+  private stopRelayPolling(): void {
+    if (this.relayPollTimer) {
+      clearInterval(this.relayPollTimer);
+      this.relayPollTimer = null;
+    }
+  }
+
+  private refreshRelayStatus(): void {
+    if (!this.agentId) return;
+    const nestAgentId = this.runtimeAgentId || this.agentId;
+    this.api.getRelayStatus(nestAgentId).subscribe({
+      next: (res) => this.relayOnline.set(res.online),
+      error: () => this.relayOnline.set(false),
+    });
   }
 
   // ── Data loading ──────────────────────────────────────────
@@ -835,6 +961,7 @@ export class ToolsComponent implements OnInit, OnDestroy {
       next: (agent) => {
         this.agent.set(agent);
         this.runtimeAgentId = agent.runtimeAgentId ?? '';
+        this.startRelayPolling();
         this.loadSkills();
         this.loading.set(false);
       },
@@ -953,6 +1080,21 @@ export class ToolsComponent implements OnInit, OnDestroy {
     return CHANNEL_SKILL_NAMES[skillName] ?? 'email';
   }
 
+  readonly usesBaboCloudBackend = usesBaboCloudBackend;
+
+  getIntegrationContext(channel: IntegrationChannelId) {
+    return buildIntegrationContext(
+      channel,
+      this.platformIntegrations.backendChoice(),
+      this.platformIntegrations.capabilities(),
+      this.platformIntegrations.nestjsUrl(),
+    );
+  }
+
+  googleUsesByoCredentials(): boolean {
+    return googleUsesByo(this.platformIntegrations.backendChoice());
+  }
+
   getIntegrationStatus(skillName: string): { connected: boolean; displayValue?: string } | null {
     if (skillName === 'email-channel') {
       const alias = this.emailAlias();
@@ -1044,6 +1186,7 @@ export class ToolsComponent implements OnInit, OnDestroy {
 
   openIntegrationModal(skillName: string): void {
     this.activeIntegration.set(skillName);
+    void this.platformIntegrations.refresh();
     this.loadSkillOnboarding(skillName);
     this.loadChannelStatusForSkill(skillName);
   }
@@ -1336,6 +1479,14 @@ export class ToolsComponent implements OnInit, OnDestroy {
 
   connectEmail(skillName: string): void {
     if (!this.agentId) return;
+    if (!this.emailChannelReady()) {
+      this.toast.show(
+        'Configure Resend in Settings → Integrations first',
+        'error',
+        5000,
+      );
+      return;
+    }
     this.emailActivating.set(true);
     this.http.post<any>(`${this.api.apiBase}/channels/email/activate/${this.agentId}`, {}).subscribe({
       next: (res) => {
@@ -1361,6 +1512,20 @@ export class ToolsComponent implements OnInit, OnDestroy {
     if (!this.agentId) return;
     this.router.navigate(['/chat', this.agentId], {
       queryParams: { setup: 'telegram-channel' },
+    });
+  }
+
+  connectEmailInChat(): void {
+    if (!this.agentId) return;
+    this.router.navigate(['/chat', this.agentId], {
+      queryParams: { setup: 'email-channel' },
+    });
+  }
+
+  connectGoogleInChat(): void {
+    if (!this.agentId) return;
+    this.router.navigate(['/chat', this.agentId], {
+      queryParams: { setup: 'google-workspace' },
     });
   }
 

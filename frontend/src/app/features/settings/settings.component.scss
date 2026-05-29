@@ -815,3 +815,64 @@ $red: var(--accent-danger);
 .text-green { color: $green; }
 .text-amber { color: $amber; }
 .text-red { color: $red; }
+
+.info-card {
+  padding: 14px 16px;
+  margin-bottom: 20px;
+  border: 1px solid $border;
+  border-radius: 8px;
+  background: $bg-1;
+
+  &.babo-provided {
+    border-color: rgba($green, 0.25);
+  }
+
+  &.prereq {
+    border-color: rgba($amber, 0.35);
+  }
+
+  &.localhost-webhook {
+    border-color: rgba($red, 0.4);
+    background: rgba($red, 0.06);
+  }
+}
+
+.setup-steps {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  color: $text-dim;
+  font-size: 13px;
+  line-height: 1.55;
+
+  li + li {
+    margin-top: 6px;
+  }
+}
+
+.checklist {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  color: $text-dim;
+  font-size: 13px;
+}
+
+.webhook-hint code,
+.field-hint code {
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.info-pill.ok {
+  color: $green;
+  border-color: rgba($green, 0.3);
+}
+
+.inline-link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: $accent;
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+}

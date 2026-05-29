@@ -68,6 +68,9 @@
                     <span class="wb-tag wb-tag--mini" [class.wb-tag--err]="bucket.status === 'error'">{{ bucket.toolLabel }}</span>
                     @if (bucketErrorText(bucket); as err) {
                       <pre class="wb-preview wb-preview--err wb-preview--inline" [innerHTML]="err | ansi"></pre>
+                      @if (bucketEscalateHint(bucket, err); as hint) {
+                        <p class="wb-escalate-hint wb-escalate-hint--inline">{{ hint }}</p>
+                      }
                     }
                     <div class="wb-tool-bucket-files">
                       @for (child of bucket.entries; track child.id) {
@@ -168,12 +171,15 @@
 
                 @if (entryErrorText(e); as err) {
                   <pre class="wb-preview wb-preview--err" [innerHTML]="err | ansi"></pre>
+                  @if (escalateHint(e, err); as hint) {
+                    <p class="wb-escalate-hint">{{ hint }}</p>
+                  }
                 } @else if (showSubtitle(e)) {
                   <pre class="wb-preview wb-preview--sub" [innerHTML]="e.subtitle | ansi"></pre>
                 }
               }
 
-              @if (e.detail) {
+              @if (showErrorDetail(e, entryErrorText(e))) {
                 <details class="wb-detail">
                   <summary class="wb-detail-summary">Full output</summary>
                   <pre class="wb-detail-pre" [innerHTML]="e.detail | ansi"></pre>

@@ -42,6 +42,63 @@ _BUILD_TASK_RE = re.compile(
     re.IGNORECASE,
 )
 
+from nls.agentic.orchestration_profile_spec import (
+    apply_tool_deny as apply_orchestration_profile_filter,
+    get_profile_spec,
+    is_light_orchestration_profile,
+    normalize_profile,
+)
+
+
+_COORDINATOR_ONLY_MODES = frozenset({
+    AgentMode.PLANNING,
+    AgentMode.DELEGATING,
+    AgentMode.MONITORING,
+    AgentMode.EVALUATING,
+})
+
+
+def block_mode_switch_for_profile(
+    target_mode: AgentMode,
+    profile: str,
+) -> str | None:
+    """Block EM mode switches when turn triage did not request orchestration."""
+    if get_profile_spec(profile).allow_coordinator_modes:
+        return None
+    if target_mode not in _COORDINATOR_ONLY_MODES:
+        return None
+    return (
+        f"BLOCKED: switch_mode(mode='{target_mode.value}') is not available "
+        f"for orchestration profile '{normalize_profile(profile)}'. Complete "
+        "the task in executing mode with the allowed tools — no plan/team waves."
+    )
+
+
+def _effective_orchestration_profile(inputs: ToolPolicyInputs) -> str:
+    """Coordinator / active wave work uses full EM tool surface."""
+    if (
+        inputs.is_coordinator
+        or inputs.delegates_active
+        or inputs.must_await_delegates
+    ):
+        return "orchestrated"
+    return inputs.orchestration_profile
+
+
+def _apply_profile_cap(
+    allowed: frozenset[str],
+    profile: str,
+    *,
+    delegates_active: bool = False,
+    must_await_delegates: bool = False,
+) -> frozenset[str]:
+    # Ongoing wave work outranks the current message's depth profile.
+    if delegates_active or must_await_delegates:
+        return allowed
+    if profile and profile != "orchestrated":
+        return apply_orchestration_profile_filter(allowed, profile)
+    return allowed
+
 
 def is_conversational_user_turn(user_input: str) -> bool:
     """True when the user message is social/onboarding, not an actionable task."""
@@ -121,6 +178,7 @@ class ToolPolicyInputs:
     suppress_raw_delegate: bool
     is_coordinator: bool
     all_unlocked: frozenset[str]
+    orchestration_profile: str = "solo_structured"
 
 
 def build_tool_policy_inputs(
@@ -137,6 +195,7 @@ def build_tool_policy_inputs(
         suppress_raw_delegate=hook_suppresses_raw_delegate(hooks),
         is_coordinator=bool(state.coordinator_mode),
         all_unlocked=frozenset(all_unlocked),
+        orchestration_profile=getattr(state, "orchestration_profile", "") or "solo_structured",
     )
 
 
@@ -148,6 +207,7 @@ def compute_tool_policy_fingerprint(inputs: ToolPolicyInputs) -> str:
         "1" if inputs.delegates_active else "0",
         "1" if inputs.suppress_raw_delegate else "0",
         "1" if inputs.is_coordinator else "0",
+        inputs.orchestration_profile,
         ",".join(sorted(inputs.all_unlocked)),
     ))
     return hashlib.sha256(blob.encode()).hexdigest()[:16]
@@ -166,31 +226,35 @@ def resolve_allowed_tools(inputs: ToolPolicyInputs) -> frozenset[str]:
     """Single policy: effective tool names for schema + executor enforcement."""
     allowed = _base_tools_for_mode(inputs.mode, inputs.all_unlocked)
 
-    # General assistant use (chat, solo executing, responding): keep mode menu.
-    # Do not shrink for background delegates or plan-wave rules.
-    if inputs.mode in _ASSISTANT_FREEFORM_MODES:
-        return allowed
-
     if not inputs.is_coordinator:
-        return allowed
+        return _apply_profile_cap(
+            allowed,
+            _effective_orchestration_profile(inputs),
+            delegates_active=inputs.delegates_active,
+            must_await_delegates=inputs.must_await_delegates,
+        )
 
     if inputs.must_await_delegates:
-        return POST_LAUNCH_TOOLS
-
-    if inputs.delegates_active and inputs.mode in (
+        allowed = POST_LAUNCH_TOOLS
+    elif inputs.delegates_active and inputs.mode in (
         AgentMode.MONITORING,
         AgentMode.DELEGATING,
         AgentMode.EVALUATING,
     ):
-        return MONITORING_DELEGATES_ACTIVE_TOOLS
+        allowed = MONITORING_DELEGATES_ACTIVE_TOOLS
+    else:
+        if inputs.mode == AgentMode.MONITORING:
+            allowed = allowed - frozenset({"wait", "todo", "task_complete", "read"})
 
-    if inputs.mode == AgentMode.MONITORING:
-        allowed = allowed - frozenset({"wait", "todo", "task_complete", "read"})
+        if inputs.suppress_raw_delegate:
+            allowed = allowed - frozenset({"delegate"})
 
-    if inputs.suppress_raw_delegate:
-        allowed = allowed - frozenset({"delegate"})
-
-    return allowed
+    return _apply_profile_cap(
+        allowed,
+        _effective_orchestration_profile(inputs),
+        delegates_active=inputs.delegates_active,
+        must_await_delegates=inputs.must_await_delegates,
+    )
 
 
 def tool_policy_schema_refresh_needed(
@@ -232,8 +296,11 @@ def apply_runtime_tool_filter(
         suppress_raw_delegate=_suppress,
         is_coordinator=bool(state.coordinator_mode),
         all_unlocked=frozenset(all_unlocked),
+        orchestration_profile=getattr(state, "orchestration_profile", "") or "solo_structured",
     )
     allowed = resolve_allowed_tools(inputs)
+    from nls.agentic.profile_guard_policy import tools_denied_by_hints
+    allowed = allowed - tools_denied_by_hints(getattr(state, "hints", None))
 
     if not allowed:
         return list(all_schemas), set(all_unlocked)
@@ -709,6 +776,113 @@ def build_pending_wave_launch_wake(
     return "\n".join(lines)
 
 
+_STALL_POISON_RE = re.compile(
+    r"\[Loop stopped:\s*stalled",
+    re.IGNORECASE,
+)
+
+
+def sanitize_stall_messages(context: list[dict]) -> list[dict]:
+    """Replace prior stall-exit tombstones that poison autonomous wakes."""
+    cleaned: list[dict] = []
+    for msg in context:
+        role = msg.get("role")
+        content = msg.get("content") or ""
+        if role == "assistant" and _STALL_POISON_RE.search(content):
+            cleaned.append({
+                **msg,
+                "content": (
+                    "[Prior loop ended due to stall — summarized, not repeated. "
+                    "Take a concrete tool action now.]"
+                ),
+            })
+            continue
+        cleaned.append(msg)
+    return cleaned
+
+
+def build_plan_wake_breadcrumbs(
+    *,
+    audit_issues: list[str] | None = None,
+    incomplete_steps: list[str] | None = None,
+) -> list[str]:
+    """Actionable plan lines for orchestration wakes."""
+    lines: list[str] = []
+    issues = [i for i in (audit_issues or []) if i]
+    pending = [s for s in (incomplete_steps or []) if s]
+    if issues:
+        lines.append(f"Plan verify blockers ({len(issues)}):")
+        for issue in issues[:4]:
+            lines.append(f"  - {issue[:140]}")
+        lines.append(
+            "[BREADCRUMB] plan(action='read') → fix blockers or "
+            "plan(action='accept_partial', step_id=...) → "
+            "plan(action='verify') → plan(action='complete'). "
+            "Do NOT narrate waiting — call tools."
+        )
+    elif pending:
+        lines.append(f"Plan steps still open ({len(pending)}):")
+        for step in pending[:4]:
+            lines.append(f"  - {step[:120]}")
+        lines.append(
+            "[BREADCRUMB] switch_mode(evaluating) → verify artifacts → "
+            "team(advance) or delegate the next step. No idle status text."
+        )
+    return lines
+
+
+def build_evaluating_action_breadcrumb(
+    plan_tool: Any | None,
+    *,
+    dispatch_source: str = "",
+) -> str:
+    """Hard nudge when EM evaluating loop spirals on text-only turns."""
+    lines = [
+        "[EVALUATING — ACTION REQUIRED]",
+        "You are in evaluating mode. Text-only monitoring is not allowed.",
+    ]
+    src = dispatch_source or ""
+    if src.startswith("team_completion_review:"):
+        lines.append(
+            "Pending delegate completion reviews — call team(inspect) once, "
+            "then team(intervene, decision='approve') for each waiting member."
+        )
+    elif src.startswith("team_wave_complete:"):
+        lines.append(
+            "Wave landed — inspect deliverables, then team(advance) or "
+            "plan(action='verify') before plan(action='complete')."
+        )
+
+    audit_issues: list[str] = []
+    incomplete: list[str] = []
+    if plan_tool is not None and hasattr(plan_tool, "_store"):
+        try:
+            plan = plan_tool._store.find_active()
+            if plan is not None:
+                if plan.audit and plan.audit.issues:
+                    audit_issues = list(plan.audit.issues)
+                incomplete = [
+                    f"[{s.id}] {s.label} ({s.status})"
+                    for s in plan.steps
+                    if s.status not in ("done", "skipped")
+                ]
+        except Exception:
+            pass
+
+    lines.extend(
+        build_plan_wake_breadcrumbs(
+            audit_issues=audit_issues,
+            incomplete_steps=incomplete,
+        ),
+    )
+    if len(lines) <= 2:
+        lines.append(
+            "[BREADCRUMB] Call plan(action='read') then the next management "
+            "tool (team/plan/verify) NOW — do not post status updates."
+        )
+    return "\n".join(lines)
+
+
 def build_orchestration_wake_message(
     *,
     dispatch_source: str,
@@ -716,6 +890,8 @@ def build_orchestration_wake_message(
     plan_progress: str = "",
     delegate_summary: str = "",
     coordinator_phase: str = "",
+    plan_audit_issues: list[str] | None = None,
+    plan_incomplete_steps: list[str] | None = None,
 ) -> str:
     """Compact system message for orchestration wake-ups."""
     lines = [
@@ -754,6 +930,16 @@ def build_orchestration_wake_message(
             "See [WAKE ATTENTION] in working memory for the pending list. "
             "Do NOT call await_delegates until all reviews are resolved."
         )
+        lines.extend(
+            build_plan_wake_breadcrumbs(
+                audit_issues=plan_audit_issues,
+                incomplete_steps=plan_incomplete_steps,
+            ),
+        )
+        lines.append(
+            "FORBIDDEN: repeating 'awaiting progress', 'sent hint', or "
+            "'waiting for user' without a tool call in the same turn."
+        )
         return "\n".join(lines)
     if src.startswith("team_member_escalation:"):
         lines.append(
@@ -780,6 +966,12 @@ def build_orchestration_wake_message(
             "wave after the grace window and auto-launch the next wave when "
             "policy allows (no active delegates)."
         )
+        lines.extend(
+            build_plan_wake_breadcrumbs(
+                audit_issues=plan_audit_issues,
+                incomplete_steps=plan_incomplete_steps,
+            ),
+        )
         return "\n".join(lines)
     if src.startswith("pending_wave_launch:"):
         lines.append(
@@ -790,6 +982,12 @@ def build_orchestration_wake_message(
             "steps yourself with bash/write."
         )
         return "\n".join(lines)
+    lines.extend(
+        build_plan_wake_breadcrumbs(
+            audit_issues=plan_audit_issues,
+            incomplete_steps=plan_incomplete_steps,
+        ),
+    )
     lines.append(
         "Typical flow: team(inspect) if needed → hint/intervene if stuck → "
         "switch_mode(evaluating) to review deliverables OR "
@@ -808,6 +1006,8 @@ def trim_context_for_orchestration_wake(
     if not is_orchestration_dispatch_source(dispatch_source):
         return context
 
+    context = sanitize_stall_messages(context)
+
     system_msgs: list[dict] = []
     other: list[dict] = []
     for msg in context:
@@ -824,7 +1024,7 @@ def trim_context_for_orchestration_wake(
         "Orchestration wake: trimmed context %d → %d messages",
         len(context), len(trimmed),
     )
-    return trimmed
+    return sanitize_stall_messages(trimmed)
 
 
 def checkback_interval_seconds(delegates_active: bool) -> float:

@@ -528,6 +528,21 @@
   color: var(--text-primary);
 }
 
+.wb-escalate-hint {
+  margin: 4px 0 0;
+  padding: 6px 8px;
+  border-radius: 6px;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--accent, #6b8) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent, #6b8) 22%, transparent);
+}
+
+.wb-escalate-hint--inline {
+  margin-top: 2px;
+}
+
 .wb-preview--inline {
   max-height: 5rem;
   overflow: auto;

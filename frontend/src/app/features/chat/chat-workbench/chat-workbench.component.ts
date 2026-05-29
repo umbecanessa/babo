@@ -20,6 +20,11 @@ import {
   type WorkbenchDisplayItem,
   type WorkbenchToolBucket,
 } from '../../../core/services/workbench-display.util';
+import {
+  escalateHintForEntry,
+  extractEntryErrorText,
+  shouldShowErrorDetail,
+} from '../../../core/services/workbench-error.util';
 import { AnsiPipe } from '../../../shared/pipes/ansi.pipe';
 
 export type WorkbenchTab = 'all' | 'chat' | 'background';
@@ -146,21 +151,31 @@ export class ChatWorkbenchComponent {
   bucketErrorText(bucket: WorkbenchToolBucket): string | null {
     for (const e of bucket.entries) {
       if (e.status !== 'error') continue;
-      const block = (e.chips ?? []).find((c) => c.label === 'Error' && c.value);
-      if (block?.value) return block.value;
-      if (e.subtitle?.trim()) return e.subtitle.trim();
-      if (e.detail?.trim()) return e.detail.trim();
+      const text = extractEntryErrorText(e);
+      if (text) return text;
     }
     return null;
   }
 
   entryErrorText(e: WorkbenchEntry): string | null {
-    if (e.status !== 'error') return null;
-    const block = (e.chips ?? []).find((c) => c.label === 'Error' && c.value);
-    if (block?.value) return block.value;
-    if (e.subtitle?.trim()) return e.subtitle.trim();
-    if (e.detail?.trim()) return e.detail.trim();
+    return extractEntryErrorText(e);
+  }
+
+  escalateHint(e: WorkbenchEntry, errorText: string | null): string | null {
+    return escalateHintForEntry(e, errorText);
+  }
+
+  bucketEscalateHint(bucket: WorkbenchToolBucket, errorText: string | null): string | null {
+    for (const e of bucket.entries) {
+      if (e.status !== 'error') continue;
+      const hint = escalateHintForEntry(e, errorText);
+      if (hint) return hint;
+    }
     return null;
+  }
+
+  showErrorDetail(e: WorkbenchEntry, errorText: string | null): boolean {
+    return shouldShowErrorDetail(e, errorText);
   }
 
   isModeEntry(e: WorkbenchEntry): boolean {
@@ -191,9 +206,12 @@ export class ChatWorkbenchComponent {
   bodyBlocks(e: WorkbenchEntry): ActivityChip[] {
     const blocks = (e.chips ?? []).filter(
       (c) =>
-        c.variant === 'block'
-        || c.label === 'Preview'
-        || (c.label === 'Result' && (c.value?.length ?? 0) > 96),
+        c.label !== 'Error'
+        && (
+          c.variant === 'block'
+          || c.label === 'Preview'
+          || (c.label === 'Result' && (c.value?.length ?? 0) > 96)
+        ),
     );
     return blocks;
   }

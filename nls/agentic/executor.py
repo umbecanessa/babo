@@ -1119,6 +1119,7 @@ async def _execute_single(
             orchestrator_recovery=getattr(
                 state, "orchestrator_recovery", False,
             ),
+            orchestration_profile=getattr(state, "orchestration_profile", None),
         )
         if _pre_block:
             result = ToolResult(
@@ -1556,6 +1557,7 @@ async def _launch_team_delegates(
                 action="agent_message",
                 action_message=_checkback_msg,
                 owner="team_manager",
+                owner_agent_id=_agent_id,
             ))
             logger.info(
                 "[EXEC] team check-back job scheduled: '%s' (every %.0fs)",
@@ -2564,6 +2566,20 @@ async def execute_tools(
                 )
                 continue
 
+            from nls.agentic.orchestration_policy import block_mode_switch_for_profile
+
+            _profile_block = block_mode_switch_for_profile(
+                _target_mode,
+                getattr(state, "orchestration_profile", "") or "",
+            )
+            if _profile_block:
+                ordered_results[idx] = ToolResult(
+                    content=_profile_block,
+                    is_error=True,
+                    details={"blocked": True, "profile_mode": True},
+                )
+                continue
+
             _plan_req_team = False
             if hooks and hooks.plan_requires_team_delegation:
                 try:
@@ -2587,6 +2603,7 @@ async def execute_tools(
                 orchestrator_recovery=getattr(
                     state, "orchestrator_recovery", False,
                 ),
+                orchestration_profile=getattr(state, "orchestration_profile", None),
             )
             if _exec_block:
                 ordered_results[idx] = ToolResult(
@@ -2953,6 +2970,7 @@ async def execute_tools(
                         action="agent_message",
                         action_message=_checkback_msg,
                         owner="delegate_manager",
+                        owner_agent_id=_agent_id,
                     ))
                     logger.info(
                         "[EXEC] delegate check-back job scheduled: '%s' "

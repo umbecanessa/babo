@@ -32,7 +32,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .base import (
     DEFAULT_MAX_BYTES,
@@ -116,6 +116,27 @@ _GH_REPO_CREATE_SOURCE_DOT_RE = re.compile(
 )
 # Detect `pip install` / `pip3 install` — redirected to project_install.
 _PIP_INSTALL_RE = re.compile(r"\bpip3?\s+install\b", re.IGNORECASE)
+# Detect `python -m pip install` / `py -m pip install`.
+_PY_PIP_INSTALL_RE = re.compile(
+    r"(?:^|[\s;&|])(?:python|python3|py)\s+-m\s+pip\s+install\b",
+    re.IGNORECASE,
+)
+
+
+def _extract_pip_package_spec(command: str) -> str:
+    """Best-effort package spec from a pip install command."""
+    text = command.strip()
+    for pattern in (
+        r"\bpip3?\s+install\s+(.+)$",
+        r"(?:python|python3|py)\s+-m\s+pip\s+install\s+(.+)$",
+    ):
+        match = re.search(pattern, text, re.IGNORECASE)
+        if match:
+            pkg = match.group(1).strip()
+            pkg = re.sub(r"\s*(--quiet|--user|-q|-U|--upgrade)\b", " ", pkg)
+            pkg = re.sub(r"\s+", " ", pkg).strip()
+            return pkg
+    return ""
 
 # curl: inject -f (fail on HTTP 4xx/5xx) and -sS (silent + show errors) unless
 # the agent explicitly requests verbose/progress output.
@@ -291,7 +312,19 @@ class BashTool:
         self._detached_procs: list[asyncio.subprocess.Process] = []
         # Per-project venv cache: None = not resolved yet, "" = failed
         self._project_venv_bin: str | None = None
+        self._plan_project_dir_fn: Callable[[], str] | None = None
         self._isolated_env = self._build_isolated_env(cwd)
+
+    def set_plan_project_dir_fn(self, fn: Callable[[], str] | None) -> None:
+        self._plan_project_dir_fn = fn
+
+    def _plan_project_dir(self) -> str:
+        if self._plan_project_dir_fn is None:
+            return ""
+        try:
+            return (self._plan_project_dir_fn() or "").strip()
+        except Exception:
+            return ""
 
     def _reap_finished_procs(self) -> None:
         """Remove already-exited processes from _detached_procs."""
@@ -313,7 +346,11 @@ class BashTool:
     def _resolve_project_root(self) -> str | None:
         from .project_runtime import resolve_project_root
 
-        return resolve_project_root(self._cwd, self._workspace_root)
+        return resolve_project_root(
+            self._cwd,
+            self._workspace_root,
+            plan_project_dir=self._plan_project_dir() or None,
+        )
 
     def _ensure_project_venv(self) -> str | None:
         """Lazily create a ``.venv`` in the project directory.
@@ -812,6 +849,32 @@ class BashTool:
         ]
     ]
 
+    def _effective_cwd_for_git_command(self, command: str) -> Path:
+        """Resolve CWD after leading ``cd`` segments in a compound command."""
+        cwd = Path(self._cwd).resolve()
+        for segment in re.split(r"&&|;|\|", command):
+            segment = segment.strip()
+            if not segment:
+                continue
+            cd_match = re.match(
+                r"^cd\s+(?P<target>(?:\"[^\"]+\")|'[^']+'|[^\s&;|]+)",
+                segment,
+                re.IGNORECASE,
+            )
+            if cd_match:
+                target = cd_match.group("target").strip().strip("'\"")
+                target_path = Path(target)
+                if not target_path.is_absolute():
+                    target_path = cwd / target_path
+                cwd = target_path.resolve()
+                continue
+            if (
+                _GIT_INIT_RE.search(segment)
+                or _GH_REPO_CREATE_SOURCE_DOT_RE.search(segment)
+            ):
+                return cwd
+        return cwd
+
     def _is_git_init_at_workspace_root(self, command: str) -> bool:
         """Return True when the command would run `git init` at the workspace root.
 
@@ -826,19 +889,16 @@ class BashTool:
 
             gh repo create my-project --public --clone
 
-        We only block when CWD resolves to the workspace root so that
-        legitimate ``git init`` calls inside project subdirectories are
-        allowed.
+        We only block when the effective CWD for ``git init`` resolves to the
+        workspace root so that ``cd my-project && git init`` is allowed.
         """
         if not _GIT_INIT_RE.search(command):
-            # Also catch `gh repo create ... --source=.` which has the same
-            # effect: it would try to publish the workspace root as a repo.
             if not _GH_REPO_CREATE_SOURCE_DOT_RE.search(command):
                 return False
         try:
-            cwd = Path(self._cwd).resolve()
+            effective = self._effective_cwd_for_git_command(command)
             workspace = Path(self._workspace_root).resolve()
-            return cwd == workspace
+            return effective == workspace
         except Exception:
             return False
 
@@ -1032,9 +1092,8 @@ class BashTool:
             )
 
         # Redirect pip install to project_install (project .venv) or server_install.
-        if _PIP_INSTALL_RE.search(command):
-            _pip_pkg = command.strip().split(None, 2)[2] if len(command.strip().split(None, 2)) > 2 else ""
-            _pip_pkg = re.sub(r"\s*(--quiet|--user|-q)\s*", " ", _pip_pkg).strip()
+        if _PIP_INSTALL_RE.search(command) or _PY_PIP_INSTALL_RE.search(command):
+            _pip_pkg = _extract_pip_package_spec(command)
             _proj = self._resolve_project_root()
             if _proj:
                 return ToolResult(

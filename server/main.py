@@ -38,6 +38,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger("babo.server")
 
+from server.shutdown_trace import format_initiator_summary, install_shutdown_tracing
+
+install_shutdown_tracing()
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -195,11 +199,19 @@ async def lifespan(app: FastAPI):
     agent_manager.consciousness_scheduler = consciousness_scheduler
 
     def _make_scheduler_agent_message_handler(cs, am):
-        import re as _re
+        from nls.tools.agent_tools.scheduler import parse_agent_message_target
 
         async def _handler(message: str) -> None:
-            m = _re.match(r'\[AGENT_MSG\|agent_id=([^\|]+)\|[^\]]*\]', message)
-            target_ids = [m.group(1)] if m else list(am.get_loaded_runtimes().keys())
+            target_id = parse_agent_message_target(message)
+            if target_id:
+                target_ids = [target_id]
+            else:
+                logger.warning(
+                    "Scheduler agent_message dropped — missing "
+                    "[AGENT_MSG|agent_id=...] routing tag: %.120s",
+                    message,
+                )
+                return
             for agent_id in target_ids:
                 entry = cs._agents.get(agent_id) if cs is not None else None
                 il = getattr(entry, "inner_loop", None) if entry else None
@@ -219,8 +231,12 @@ async def lifespan(app: FastAPI):
     logger.info("API docs:  http://%s:%d/docs", settings.host, settings.port)
     logger.info("=" * 60)
 
+    # Re-register after import time (uvicorn may replace handlers at serve time).
+    install_shutdown_tracing()
+
     yield
 
+    logger.warning("SHUTDOWN_TRACE lifespan teardown: %s", format_initiator_summary())
     logger.info("Shutting down Babo server...")
     await scheduler_manager.stop()
     await skill_loader.run_shutdown_hooks()

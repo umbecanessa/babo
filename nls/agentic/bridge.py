@@ -2450,6 +2450,16 @@ def build_hooks_v4(
     _hooks.brain_event_bus = _brain_bus  # type: ignore[attr-defined]
     _hooks._render_mode_ref = _render_mode_ref  # type: ignore[attr-defined]
     _hooks._loop_state_ref = _loop_state_ref  # type: ignore[attr-defined]
+    for _t in (agent_tools or []):
+        if getattr(_t, "name", "") == "plan":
+            if hasattr(_t, "set_orchestration_profile_fn"):
+                _t.set_orchestration_profile_fn(
+                    lambda: _loop_state_ref.get(
+                        "orchestration_profile", "solo_structured",
+                    ),
+                )
+            _hooks._cached_plan_tool = _t  # type: ignore[attr-defined]
+            break
     _hooks._cryptex_compositor = (  # type: ignore[attr-defined]
         dual_wm if (dual_wm is not None and hasattr(dual_wm, "compose_context"))
         else working_memory if hasattr(working_memory, "compose_context")

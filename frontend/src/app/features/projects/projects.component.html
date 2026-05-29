@@ -122,6 +122,34 @@
 
         }
 
+        @if (runView.needsWrapUp()) {
+
+          <div class="orch-ribbon-divider"></div>
+
+          <div class="orch-ribbon-item orch-ribbon-item--wrapup" title="All plan steps are done — orchestrator should verify and plan(complete), or fix remaining gaps">
+
+            <span class="orch-ribbon-val">Wrap-up</span>
+
+            <span class="orch-ribbon-label">Steps complete · plan open</span>
+
+          </div>
+
+        }
+
+        @if (runView.recoveryPending()) {
+
+          <div class="orch-ribbon-divider"></div>
+
+          <div class="orch-ribbon-item orch-ribbon-item--warn" title="Partial step accepted — orchestrator should team(advance) or fix gaps, then continue">
+
+            <span class="orch-ribbon-val">Recovery</span>
+
+            <span class="orch-ribbon-label">Partial accepted</span>
+
+          </div>
+
+        }
+
       </div>
 
     }

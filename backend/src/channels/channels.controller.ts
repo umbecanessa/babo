@@ -23,9 +23,11 @@ export class ChannelsController {
     @Request() req: any,
     @Param('agentId') agentId: string,
   ) {
-    if (!this.channels.isResendConfigured) {
+    const available = await this.channels.isEmailAvailableForUser(req.user.userId);
+    if (!available) {
       throw new HttpException(
-        'Email channel is not available — Resend is not configured on this server.',
+        'Email is not configured — add your Resend API key in Settings → Integrations, '
+          + 'or set RESEND_API_KEY and RESEND_INBOUND_DOMAIN on your NestJS server.',
         HttpStatus.SERVICE_UNAVAILABLE,
       );
     }
@@ -129,7 +131,10 @@ export class ChannelsController {
     const emailId = data.email_id;
     if (emailId) {
       try {
-        const fullEmail = await this.channels.fetchInboundEmail(emailId);
+        const fullEmail = await this.channels.fetchInboundEmailForAgent(
+          emailId,
+          resolved.agentId,
+        );
         enrichedPayload = { ...payload, _full_email: fullEmail };
       } catch {
         // Continue with partial payload

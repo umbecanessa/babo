@@ -22,6 +22,31 @@ from .base import AgentTool, ToolResult
 
 logger = logging.getLogger(__name__)
 
+_AGENT_MSG_RE = __import__("re").compile(
+    r"^\[AGENT_MSG\|agent_id=([^\]|]+)",
+)
+
+
+def tag_agent_message(
+    agent_id: str,
+    message: str,
+    *,
+    owner: str = "agent",
+) -> str:
+    """Prefix a scheduler agent_message with routing metadata."""
+    text = (message or "").strip()
+    if not text or not agent_id:
+        return text
+    if _AGENT_MSG_RE.match(text):
+        return text
+    return f"[AGENT_MSG|agent_id={agent_id}|owner={owner}] {text}"
+
+
+def parse_agent_message_target(message: str) -> str | None:
+    """Return agent_id from a tagged scheduler message, if present."""
+    m = _AGENT_MSG_RE.match((message or "").strip())
+    return m.group(1) if m else None
+
 
 # ---------------------------------------------------------------------------
 # Job model
@@ -41,6 +66,7 @@ class ScheduledJob:
     action_body: str = ""
     action_message: str = ""  # for agent_message type
     owner: str = ""  # skill name or "agent"
+    owner_agent_id: str = ""  # agent that created the job (shared scheduler)
     enabled: bool = True
     created_at: float = 0
     last_run: float = 0
@@ -240,16 +266,27 @@ class SchedulerManager:
 
         if job.action == "agent_message":
             if self._on_agent_message and job.action_message:
-                await self._on_agent_message(job.action_message)
+                routed = tag_agent_message(
+                    job.owner_agent_id,
+                    job.action_message,
+                    owner=job.owner or "agent",
+                )
+                await self._on_agent_message(routed)
             return
 
         if job.action == "notify_user":
             if self._on_notify_user and job.action_message:
                 await self._on_notify_user(job.action_message)
             elif self._on_agent_message and job.action_message:
-                await self._on_agent_message(
-                    f"[REMINDER for user — deliver via active channel] {job.action_message}"
+                routed = tag_agent_message(
+                    job.owner_agent_id,
+                    (
+                        "[REMINDER for user — deliver via active channel] "
+                        f"{job.action_message}"
+                    ),
+                    owner=job.owner or "agent",
                 )
+                await self._on_agent_message(routed)
             return
 
 
@@ -264,8 +301,9 @@ class SchedulerTool:
     restarts.
     """
 
-    def __init__(self, manager: SchedulerManager) -> None:
+    def __init__(self, manager: SchedulerManager, *, agent_id: str = "") -> None:
         self._manager = manager
+        self._agent_id = agent_id
 
     @property
     def name(self) -> str:
@@ -398,6 +436,7 @@ class SchedulerTool:
             name=name,
             schedule_type=schedule_type,
             owner="agent",
+            owner_agent_id=self._agent_id,
             action=params.get("action", "agent_message"),
             action_message=params.get("message", ""),
         )
@@ -441,8 +480,12 @@ class SchedulerTool:
         return ToolResult(content=f"Job '{name}' created ({schedule_type}).")
 
 
-def create_scheduler_tool(data_dir: str) -> tuple[SchedulerTool, SchedulerManager]:
+def create_scheduler_tool(
+    data_dir: str,
+    *,
+    agent_id: str = "",
+) -> tuple[SchedulerTool, SchedulerManager]:
     """Factory: create a scheduler tool and its underlying manager."""
     manager = SchedulerManager(data_dir)
-    tool = SchedulerTool(manager)
+    tool = SchedulerTool(manager, agent_id=agent_id)
     return tool, manager

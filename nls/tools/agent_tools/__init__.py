@@ -280,7 +280,7 @@ def create_coding_tools(
     ]
 
     if data_dir:
-        sched_tool, scheduler_manager = create_scheduler_tool(data_dir)
+        sched_tool, scheduler_manager = create_scheduler_tool(data_dir, agent_id=agent_id)
         tools.append(sched_tool)
         tools.append(create_poller_tool(scheduler_manager))
 

@@ -193,6 +193,9 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
   private subscribeWs(): void {
     this.wsSub = this.ws.onMessage().subscribe((msg: any) => {
       if (msg?.type === 'communicate' && msg.message) {
+        if (msg.autonomous && !msg.user_facing) {
+          return;
+        }
         this.messages.update(msgs => [...msgs, {
           role: 'assistant' as const,
           content: msg.message,

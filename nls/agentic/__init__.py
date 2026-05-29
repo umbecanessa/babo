@@ -18,7 +18,7 @@ from .evaluator import (
     Directive,
     InteroceptiveSnapshot,
     check_guards,
-    evaluate_turn,
+    should_complete,
     should_complete_v4,
 )
 from .hooks import run_post_hooks, run_pre_hooks
@@ -34,7 +34,6 @@ __all__ = [
     "EventType",
     "build_config",
     "build_hooks",
-    "evaluate_turn",
     "Directive",
     "InteroceptiveSnapshot",
     "run_pre_hooks",
@@ -51,6 +50,7 @@ __all__ = [
     "LoopHooks",
     "build_config_v4",
     "build_hooks_v4",
-    "should_complete_v4",
+    "should_complete",
+    "should_complete_v4",  # deprecated alias
     "check_guards",
 ]

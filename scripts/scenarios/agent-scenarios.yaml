@@ -1,0 +1,14 @@
+# Scenario definitions live in this directory (one file per tier).
+# The harness loads every *.yaml here; shared defaults are in _defaults.yaml.
+#
+# Run:
+#   python scripts/run-agent-scenarios.py --dry-run
+#   python scripts/run-agent-scenarios.py --tags tier1
+#   python scripts/run-agent-scenarios.py --category dev
+#   python scripts/run-agent-scenarios.py --parallel 5 --exclude-tags smoke
+#   python scripts/run-agent-scenarios.py --include-disabled --include-slow  # ICF golden path
+#
+# Files:
+#   smoke.yaml, personal-assistant.yaml
+#   tier0-regression.yaml … tier11-recipes.yaml
+#   tier4-channels-manual.yaml, tier10-desktop-manual.yaml  (manual QA)

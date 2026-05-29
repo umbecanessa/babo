@@ -161,6 +161,7 @@ export class UpdateManager {
     this.clearTimers();
 
     try {
+      log.warn('[UpdateManager] SHUTDOWN_TRACE update.installUpdate calling runtime.stop()');
       await this.runtime.stop();
     } catch {
       // Best-effort -- proceed with install even if runtime stop fails

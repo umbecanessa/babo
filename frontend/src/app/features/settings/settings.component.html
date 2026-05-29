@@ -8,7 +8,7 @@
       <button
         class="nav-item"
         [class.active]="activeSection() === section.id"
-        (click)="activeSection.set(section.id)"
+        (click)="onSectionChange(section.id)"
       >
         <span class="nav-label">{{ section.label }}</span>
       </button>
@@ -192,6 +192,118 @@
     }
   }
 
+  <!-- Platform integrations (desktop + web) -->
+  @if (activeSection() === 'integrations') {
+    <section class="section">
+      <h3 class="section-title">Integrations</h3>
+      <p class="section-desc">
+        Platform credentials for agent channels (Resend email, Google OAuth on self-hosted servers).
+        Per-agent connections — Telegram bots, WhatsApp QR, OAuth sign-in — are under
+        <a [routerLink]="toolsLink()">Tools → Integrations</a>.
+      </p>
+
+      @if (localWebhookWarning(); as localWarn) {
+        <div class="info-card localhost-webhook">
+          <h4 class="subsection-title">Localhost NestJS</h4>
+          <p class="field-hint">{{ localWarn }}</p>
+        </div>
+      }
+
+      @if (platformCapsLoading()) {
+        <p class="field-hint">Loading…</p>
+      } @else if (usesBaboCloudBackend(backendChoice())) {
+        <div class="info-card babo-provided">
+          <h4 class="subsection-title">Babo Cloud</h4>
+          <p class="field-hint">
+            Email and Google Workspace use Babo-provided credentials on
+            <strong>{{ nestjsUrl() }}</strong>. Connect channels per agent in Tools.
+          </p>
+          @if (emailServerConfigured()) {
+            <p class="info-pill ok">Email (Resend) active@if (emailInboundDomain()) { · {{ emailInboundDomain() }}}</p>
+          }
+          <ul class="checklist">
+            <li>Telegram — your BotFather token (self-service)</li>
+            <li>WhatsApp — QR pairing on Babo Desktop</li>
+          </ul>
+        </div>
+      } @else {
+        <div class="info-card prereq">
+          <h4 class="subsection-title">Before connecting channels</h4>
+          <ol class="setup-steps">
+            @for (step of integrationPrereqSteps(); track step) {
+              <li>{{ step }}</li>
+            }
+          </ol>
+        </div>
+
+        <h4 class="subsection-title">Email (Resend)</h4>
+        <p class="field-hint">
+          Inbound mail hits your NestJS webhook, then relays to Babo Desktop.
+          Configure Resend here <em>or</em> set <code>RESEND_API_KEY</code> and
+          <code>RESEND_INBOUND_DOMAIN</code> on your NestJS deployment.
+        </p>
+        @if (emailServerConfigured() && !resendConfigured()) {
+          <p class="info-pill ok">Resend configured on server@if (emailInboundDomain()) { · {{ emailInboundDomain() }}}</p>
+        }
+        @if (nestPublicWebhookBase()) {
+          <p class="field-hint webhook-hint">
+            Resend inbound webhook URL:
+            <code>{{ nestPublicWebhookBase() }}/api/channels/email/webhook</code>
+          </p>
+        }
+
+        @if (resendConfigured()) {
+          <p class="info-pill ok">Your Resend credentials saved@if (resendInboundDomain()) { · {{ resendInboundDomain() }}}</p>
+          <button class="btn-secondary danger" type="button" (click)="clearResendCredentials()" [disabled]="resendSaving()">
+            Remove saved credentials
+          </button>
+        } @else if (!emailServerConfigured()) {
+          <div class="field-group">
+            <label class="field-label">Resend API key</label>
+            <input
+              class="field-input"
+              type="password"
+              [ngModel]="resendApiKey()"
+              (ngModelChange)="resendApiKey.set($event)"
+              placeholder="re_…"
+              autocomplete="off"
+            />
+          </div>
+          <div class="field-group">
+            <label class="field-label">Inbound domain</label>
+            <input
+              class="field-input"
+              [ngModel]="resendInboundDomain()"
+              (ngModelChange)="resendInboundDomain.set($event)"
+              placeholder="inbox.yourdomain.com"
+            />
+            <span class="field-hint">Verified domain in Resend for inbound routing.</span>
+          </div>
+          <button class="btn-primary" type="button" (click)="saveResendCredentials()" [disabled]="resendSaving()">
+            {{ resendSaving() ? 'Saving…' : 'Save Resend credentials' }}
+          </button>
+        }
+
+        <h4 class="subsection-title">Google Workspace</h4>
+        <p class="field-hint">
+          Create a Google Cloud OAuth app and save <code>client_id</code> /
+          <code>client_secret</code> in each agent's Tools → Google Workspace config,
+          or ask the agent in chat to walk you through setup.
+        </p>
+        <p class="field-hint">
+          Redirect URI:
+          <code>http://localhost:{{ runtimePort() }}/skills/google-workspace/oauth/callback</code>
+        </p>
+
+        <h4 class="subsection-title">Telegram &amp; WhatsApp</h4>
+        <p class="field-hint">
+          Telegram uses your BotFather token and registers webhooks on your NestJS server.
+          WhatsApp pairs via QR on Babo Desktop — no NestJS webhook for inbound WhatsApp messages.
+        </p>
+      }
+    </section>
+  }
+
   <!-- Appearance (desktop + web) -->
   @if (activeSection() === 'appearance') {
     <section class="section">
@@ -253,15 +365,15 @@
     <section class="section">
       <h3 class="section-title">General</h3>
 
-      @if (platform.isElectron) {
-        <div class="field-group">
-          <label class="field-label">Agent integrations</label>
-          <p class="field-hint">
-            Telegram, email, Google Workspace, and skills are configured per agent under
-            <a [routerLink]="toolsLink()">Tools → Integrations</a>, not here.
-          </p>
-        </div>
-      }
+      <div class="field-group">
+        <label class="field-label">Agent integrations</label>
+        <p class="field-hint">
+          Channel setup lives under
+          <a [routerLink]="toolsLink()">Tools → Integrations</a>.
+          Self-hosted Resend and platform prerequisites are under
+          <button type="button" class="inline-link-btn" (click)="onSectionChange('integrations')">Settings → Integrations</button>.
+        </p>
+      </div>
 
       <div class="field-group">
         <label class="field-label">Onboarding tutorials</label>

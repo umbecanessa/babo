@@ -9,9 +9,69 @@ import asyncio
 import json
 import logging
 import re
-from typing import Any
+from dataclasses import dataclass, field
+from typing import Any, Literal
 
 logger = logging.getLogger(__name__)
+
+OrchestrationProfile = Literal[
+    "conversational", "direct_tool", "solo_structured", "orchestrated",
+]
+IntentLabel = Literal[
+    "CHAT_NOTHINK", "CHAT_THINK", "TASK_NOTHINK", "TASK_THINK",
+]
+
+_VALID_PROFILES = frozenset({
+    "conversational", "direct_tool", "solo_structured", "orchestrated",
+})
+_VALID_INTENTS = frozenset({
+    "CHAT_NOTHINK", "CHAT_THINK", "TASK_NOTHINK", "TASK_THINK",
+})
+
+_SUBSTANTIAL_ANSWER_CHARS = 200
+
+
+@dataclass
+class TurnTriage:
+    """Unified upfront classification for a user turn."""
+
+    intent: str = "CHAT_THINK"
+    thinking: bool = True
+    profile: str = "solo_structured"
+    goals: list[str] = field(default_factory=list)
+    hints: list[str] = field(default_factory=list)
+    deferred: list[dict] = field(default_factory=list)
+
+    @property
+    def is_conversational(self) -> bool:
+        return self.profile == "conversational"
+
+    @property
+    def needs_tools(self) -> bool:
+        return self.profile != "conversational"
+
+    @property
+    def allows_orchestration(self) -> bool:
+        return self.profile == "orchestrated"
+
+    def cap_profile_from_hints(self) -> None:
+        """Downgrade profile using structured hint tokens from triage (language-agnostic)."""
+        from nls.agentic.profile_guard_policy import (
+            HINT_FORBID_TOOLS,
+            apply_structured_hint_caps,
+        )
+
+        tokens = {h.strip().lower() for h in self.hints if h and h.strip()}
+        if tokens & HINT_FORBID_TOOLS:
+            self.profile = "conversational"
+            self.goals = []
+            return
+        capped = apply_structured_hint_caps(self.profile, self.hints)
+        if capped == "conversational":
+            self.profile = "conversational"
+            self.goals = []
+        else:
+            self.profile = capped
 
 _THINKING_BLOCK_RE = re.compile(
     r"<think>.*?</think>",
@@ -80,6 +140,73 @@ _TASK_EXTRACT_SYSTEM = (
     'Output: {"goals": [], "hints": [], "deferred": []}\n'
 )
 
+_TURN_TRIAGE_SYSTEM = (
+    "Classify the user's LATEST message and extract task structure.\n"
+    "Return ONE JSON object with these fields:\n"
+    '  {"intent": "...", "thinking": true|false, "profile": "...", '
+    '"goals": [...], "hints": [...], "deferred": [...]}\n\n'
+    "INTENT (exactly one):\n"
+    "  CHAT_NOTHINK — greeting, thanks, name-setting, casual chat, "
+    "confirmations, NO action needed.\n"
+    "  CHAT_THINK — thoughtful advice/explanation/comparison with NO "
+    "external tools (draft email, career advice, pros/cons).\n"
+    "  TASK_NOTHINK — simple DO action: lookup URL, search online, "
+    "open page, quick fetch, one command.\n"
+    "  TASK_THINK — complex multi-step work: build, architect, deep "
+    "research report, end-to-end project.\n\n"
+    "THINKING: true for CHAT_THINK and TASK_THINK; false for *_NOTHINK.\n\n"
+    "PROFILE (orchestration depth — how much machinery to use):\n"
+    "  conversational — answer in prose only; goals=[]; no plan/team/todo.\n"
+    "  direct_tool — 1-3 tools max (web_search, browser, read); NO "
+    "plan, team, todo, delegate.\n"
+    "  solo_structured — you execute (write/bash/plan/todo); NO team waves.\n"
+    "  orchestrated — full EM stack allowed (plan + team + delegates).\n\n"
+    "GOALS: short imperative phrases (<15 words). Empty [] for chat/recap "
+    "('what did you find?', 'list again'). Group related steps into one goal.\n"
+    "HINTS: methodology permissions — NOT goals. Prefer machine-readable tokens "
+    "when constraints are clear:\n"
+    "  forbid:team — user forbids teams/sub-agents/delegates (any language)\n"
+    "  forbid:tools — user wants prose only, no tools\n"
+    "  orchestration:solo — execute solo, no wave orchestration\n"
+    "Also plain-language hints are allowed ('be thorough', etc.).\n"
+    "DEFERRED: post-task channel delivery "
+    '{"channel":"whatsapp|telegram|email|chat","instruction":"..."}.\n\n'
+    "Rules:\n"
+    "- 'Plan my week' / 'help dad think through careers' → conversational "
+    "or solo_structured, NOT orchestrated (no team).\n"
+    "- 'Check Wikipedia for X' / 'price of Y online' → direct_tool.\n"
+    "- 'Build ICF end-to-end' / monorepo / waves → orchestrated.\n"
+    "- User forbids teams/sub-agents/delegates (any language) → solo_structured "
+    "or direct_tool, NEVER orchestrated; add hint forbid:team.\n"
+    "- User forbids tools / wants chat only (any language) → conversational; "
+    "add hint forbid:tools.\n"
+    "- Multi-step solo task (git repo, file write, todos): ONE coarse goal, "
+    "profile solo_structured — do NOT split into 3+ micro-goals.\n"
+    "- Recap/clarification of prior assistant output → goals=[].\n"
+    "- User sharing credentials to USE → TASK, not CHAT.\n\n"
+    "Examples:\n"
+    'User: "Hey, how are you?"\n'
+    '{"intent":"CHAT_NOTHINK","thinking":false,"profile":"conversational",'
+    '"goals":[],"hints":[],"deferred":[]}\n\n'
+    'User: "Check Wikipedia — what year was the Eiffel Tower built?"\n'
+    '{"intent":"TASK_NOTHINK","thinking":false,"profile":"direct_tool",'
+    '"goals":["Look up Eiffel Tower construction year on Wikipedia"],'
+    '"hints":[],"deferred":[]}\n\n'
+    'User: "Draft a short email to my landlord about the leak"\n'
+    '{"intent":"CHAT_THINK","thinking":true,"profile":"conversational",'
+    '"goals":[],"hints":[],"deferred":[]}\n\n'
+    'User: "Deep relocation research — send report on WhatsApp when done"\n'
+    '{"intent":"TASK_THINK","thinking":true,"profile":"solo_structured",'
+    '"goals":["Research relocation options and compile report"],'
+    '"hints":[],"deferred":[{"channel":"whatsapp",'
+    '"instruction":"Send full relocation research report"}]}\n\n'
+    'User: "Build the ICF platform end-to-end with teams"\n'
+    '{"intent":"TASK_THINK","thinking":true,"profile":"orchestrated",'
+    '"goals":["Build ICF platform end-to-end"],'
+    '"hints":["May use teams for parallel work"],"deferred":[]}\n\n'
+    "Return ONLY the JSON object. No markdown fences or explanation.\n"
+)
+
 _GOAL_EVAL_SYSTEM = (
     "You evaluate which sub-tasks from a task list have been completed "
     "based on the conversation so far.\n"
@@ -132,6 +259,231 @@ def _heuristic_task_goals(user_input: str) -> list[str]:
     return []
 
 
+def _heuristic_triage(user_input: str) -> TurnTriage:
+    """Fallback when triage JSON parse fails."""
+    low = user_input.lower()
+    goals = _heuristic_task_goals(user_input)
+    if "[the user attached" in low:
+        return TurnTriage(
+            intent="TASK_THINK",
+            thinking=True,
+            profile="direct_tool",
+            goals=["Complete the user's request"],
+        )
+    if not goals and len(user_input.strip()) < 25:
+        if re.match(
+            r"^\s*(hi|hello|hey|thanks|thank you|your name is|good morning)\b",
+            low,
+        ):
+            return TurnTriage(
+                intent="CHAT_NOTHINK",
+                thinking=False,
+                profile="conversational",
+            )
+    orchestration_markers = (
+        "monorepo", "end-to-end", "wave", "scaffold", "deploy",
+        "engineering manager", "sub-agent", "sub agent",
+    )
+    if any(m in low for m in orchestration_markers):
+        return TurnTriage(
+            intent="TASK_THINK",
+            thinking=True,
+            profile="orchestrated",
+            goals=goals or ["Complete the user's request"],
+        )
+    lookup_markers = (
+        "wikipedia", "look up", "lookup", "search online", "check online",
+        "open browser", "what is the price", "how much does",
+        "find online", "google ",
+    )
+    if any(m in low for m in lookup_markers):
+        return TurnTriage(
+            intent="TASK_NOTHINK",
+            thinking=False,
+            profile="direct_tool",
+            goals=goals or ["Look up the requested information"],
+        )
+    if goals:
+        return TurnTriage(
+            intent="TASK_THINK",
+            thinking=True,
+            profile="solo_structured",
+            goals=goals,
+        )
+    return TurnTriage(
+        intent="CHAT_THINK",
+        thinking=True,
+        profile="conversational",
+    )
+
+
+def _parse_triage_dict(parsed: dict) -> TurnTriage:
+    intent = str(parsed.get("intent", "CHAT_THINK")).upper().strip()
+    if intent not in _VALID_INTENTS:
+        for label in _VALID_INTENTS:
+            if label in intent:
+                intent = label
+                break
+        else:
+            intent = "CHAT_THINK" if parsed.get("goals") else "CHAT_NOTHINK"
+
+    thinking = parsed.get("thinking")
+    if not isinstance(thinking, bool):
+        thinking = intent.endswith("THINK") and "NOTHINK" not in intent
+
+    profile = str(parsed.get("profile", "solo_structured")).strip().lower()
+    if profile not in _VALID_PROFILES:
+        profile = "solo_structured"
+
+    goals = [
+        str(g).strip()
+        for g in parsed.get("goals", [])
+        if str(g).strip()
+    ][:_MAX_GOALS]
+    hints = [
+        str(h).strip()
+        for h in parsed.get("hints", [])
+        if str(h).strip()
+    ]
+    deferred = [
+        d for d in parsed.get("deferred", [])
+        if isinstance(d, dict) and d.get("channel")
+    ]
+
+    triage = TurnTriage(
+        intent=intent,
+        thinking=thinking,
+        profile=profile,
+        goals=goals,
+        hints=hints,
+        deferred=deferred,
+    )
+    triage.cap_profile_from_hints()
+    return triage
+
+
+def cap_triage_profile_for_tools(
+    triage: TurnTriage,
+    allowed_tools: frozenset[str],
+) -> None:
+    """Structural cap: profile depth cannot exceed available tool surface."""
+    from nls.agentic.orchestration_profile_spec import cap_profile_for_tool_surface
+
+    capped = cap_profile_for_tool_surface(triage.profile, allowed_tools)
+    if capped != triage.profile:
+        triage.profile = capped
+
+
+def _parse_triage_blob(blob: str) -> TurnTriage | None:
+    try:
+        parsed = json.loads(blob)
+    except json.JSONDecodeError:
+        goals_m = re.search(r'"goals"\s*:\s*\[(.*?)\]', blob, re.DOTALL)
+        if goals_m:
+            inner = "[" + goals_m.group(1) + "]"
+            try:
+                goals = json.loads(inner)
+                if isinstance(goals, list):
+                    return TurnTriage(
+                        goals=[
+                            str(g).strip() for g in goals if str(g).strip()
+                        ][:_MAX_GOALS],
+                    )
+            except json.JSONDecodeError:
+                pass
+        return None
+    if isinstance(parsed, dict):
+        return _parse_triage_dict(parsed)
+    return None
+
+
+async def triage_turn(
+    vllm_client: Any,
+    user_input: str,
+    *,
+    history: list[dict] | None = None,
+    adapter_name: str | None = None,
+) -> TurnTriage:
+    """Single micro-inference: intent, thinking, profile, goals, hints, deferred."""
+    if not (user_input or "").strip():
+        return TurnTriage(
+            intent="CHAT_NOTHINK",
+            thinking=False,
+            profile="conversational",
+        )
+    try:
+        msgs: list[dict] = [
+            {"role": "system", "content": _TURN_TRIAGE_SYSTEM},
+        ]
+        if history:
+            for turn in history[-6:]:
+                role = turn.get("role", "user")
+                content = turn.get("content") or ""
+                if role in ("user", "assistant") and content:
+                    msgs.append({"role": role, "content": content[:300]})
+        msgs.append({"role": "user", "content": user_input})
+
+        result = await asyncio.wait_for(
+            vllm_client.generate(
+                messages=msgs,
+                adapter_name=adapter_name,
+                max_tokens=384,
+                temperature=0.1,
+                extra_body=_micro_extra_body(vllm_client),
+            ),
+            timeout=15,
+        )
+        text = _json_parse_surface(_generation_text(result))
+        start = text.find("{")
+        end = text.rfind("}")
+        if start != -1 and end != -1:
+            triage = _parse_triage_blob(text[start : end + 1])
+            if triage is not None:
+                logger.info(
+                    "Turn triage: intent=%s thinking=%s profile=%s goals=%d",
+                    triage.intent,
+                    triage.thinking,
+                    triage.profile,
+                    len(triage.goals),
+                )
+                return triage
+    except Exception:
+        logger.warning("Turn triage failed", exc_info=True)
+
+    fallback = _heuristic_triage(user_input)
+    logger.info(
+        "Turn triage heuristic: intent=%s profile=%s goals=%d",
+        fallback.intent,
+        fallback.profile,
+        len(fallback.goals),
+    )
+    return fallback
+
+
+def substantial_answer(text: str, *, min_chars: int = _SUBSTANTIAL_ANSWER_CHARS) -> bool:
+    return len((text or "").strip()) >= min_chars
+
+
+def deferred_actions_to_goal_strings(deferred: list[dict]) -> list[str]:
+    """Turn deferred channel actions into tactical goal strings."""
+    out: list[str] = []
+    for da in deferred:
+        if not isinstance(da, dict):
+            continue
+        _ch = da.get("channel", "")
+        _instr = da.get("instruction", "")
+        if not _ch:
+            continue
+        if _ch in ("whatsapp", "telegram", "email"):
+            out.append(
+                f"DELIVER full results via {_ch}: {_instr} "
+                f"(user is AFK — {_ch} is the primary output channel)"
+            )
+        else:
+            out.append(f"Send results via {_ch}: {_instr}")
+    return out
+
+
 def _micro_extra_body(vllm_client: Any) -> dict[str, Any]:
     from nls.runtime.inference_compat import micro_inference_extra_body
 
@@ -144,89 +496,16 @@ async def extract_goals(
     user_input: str,
     *,
     adapter_name: str | None = None,
+    history: list[dict] | None = None,
 ) -> tuple[list[str], list[str], list[dict]]:
-    """Extract coarse-grained goals, methodology hints, and deferred actions.
-
-    Returns (goals, hints, deferred). Max ``_MAX_GOALS`` goals per extraction.
-    Deferred actions are ``{"channel": "whatsapp", "instruction": "..."}`` dicts.
-    """
-    try:
-        result = await asyncio.wait_for(
-            vllm_client.generate(
-                messages=[
-                    {"role": "system", "content": _TASK_EXTRACT_SYSTEM},
-                    {"role": "user", "content": user_input},
-                ],
-                adapter_name=adapter_name,
-                max_tokens=256,
-                temperature=0.1,
-                extra_body=_micro_extra_body(vllm_client),
-            ),
-            timeout=15,
-        )
-        text = _json_parse_surface(_generation_text(result))
-        start = text.find("{")
-        end = text.rfind("}")
-        if start != -1 and end != -1:
-            blob = text[start : end + 1]
-            try:
-                parsed = json.loads(blob)
-            except json.JSONDecodeError:
-                # Truncated / slightly malformed JSON from reasoning models
-                goals_m = re.search(
-                    r'"goals"\s*:\s*\[(.*?)\]',
-                    blob,
-                    re.DOTALL,
-                )
-                if goals_m:
-                    inner = "[" + goals_m.group(1) + "]"
-                    try:
-                        goals = json.loads(inner)
-                        if isinstance(goals, list):
-                            return (
-                                [str(g).strip() for g in goals if str(g).strip()][
-                                    :_MAX_GOALS
-                                ],
-                                [],
-                                [],
-                            )
-                    except json.JSONDecodeError:
-                        pass
-                raise
-            if isinstance(parsed, dict):
-                goals = [
-                    str(g).strip()
-                    for g in parsed.get("goals", [])
-                    if str(g).strip()
-                ][:_MAX_GOALS]
-                hints = [
-                    str(h).strip()
-                    for h in parsed.get("hints", [])
-                    if str(h).strip()
-                ]
-                deferred = [
-                    d for d in parsed.get("deferred", [])
-                    if isinstance(d, dict) and d.get("channel")
-                ]
-                return goals, hints, deferred
-        # Fallback: plain array
-        start = text.find("[")
-        end = text.rfind("]")
-        if start != -1 and end != -1:
-            goals = json.loads(text[start : end + 1])
-            if isinstance(goals, list):
-                return (
-                    [str(g).strip() for g in goals if str(g).strip()][:_MAX_GOALS],
-                    [],
-                    [],
-                )
-    except Exception:
-        logger.warning("Goal extraction failed", exc_info=True)
-    heuristic = _heuristic_task_goals(user_input)
-    if heuristic:
-        logger.info("Goal extraction heuristic: %s", heuristic)
-        return heuristic, [], []
-    return [], [], []
+    """Extract goals, hints, and deferred via unified turn triage."""
+    triage = await triage_turn(
+        vllm_client,
+        user_input,
+        history=history,
+        adapter_name=adapter_name,
+    )
+    return triage.goals, triage.hints, triage.deferred
 
 
 async def evaluate_goals(

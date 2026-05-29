@@ -59,6 +59,15 @@
 
       @if (run.expanded()) {
         <div class="run-panel-body">
+          @if (run.recoveryPending()) {
+            <p class="run-recovery-banner">
+              Partial step accepted. Orchestrator should inspect the wave, advance if ready, fix gaps directly, or spin another team.
+            </p>
+          } @else if (run.needsWrapUp()) {
+            <p class="run-recovery-banner run-recovery-banner--wrapup">
+              All steps done — run plan(verify) then plan(complete), or delegate fixes for known gaps (e.g. build errors).
+            </p>
+          }
           @if (run.waves().length > 0) {
             <div class="run-waves">
               @for (wave of run.waves(); track wave.teamId) {
@@ -79,6 +88,7 @@
                  [class.pending]="step.status === 'pending'"
                  [class.active]="step.status === 'active'"
                  [class.done]="step.status === 'done'"
+                 [class.partial]="step.partialAccept"
                  [class.skipped]="step.status === 'skipped'"
                  [class.error]="step.status === 'error'">
               <button type="button" class="run-step-header" (click)="onStepHeaderClick(step)">
@@ -91,6 +101,8 @@
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="8" y1="12" x2="16" y2="12"></line></svg>
                   } @else if (step.status === 'done') {
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent-success)" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="16 9 10.5 15 8 12.5"></polyline></svg>
+                  } @else if (step.partialAccept) {
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent-warning, #d4a017)" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><polyline points="16 9 10.5 15 8 12.5"></polyline></svg>
                   } @else {
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--accent-danger)" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="15" y1="9" x2="9" y2="15"></line><line x1="9" y1="9" x2="15" y2="15"></line></svg>
                   }

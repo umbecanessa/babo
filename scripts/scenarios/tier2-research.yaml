@@ -1,0 +1,140 @@
+scenarios:
+
+  - id: res-01
+
+    name: Market scan report
+
+    category: research
+
+    tags: [tier2, research]
+
+    timeout_s: 900
+
+    prompt: >-
+
+      Research the current state of local-first AI assistants (2024–2025). Use web_search
+
+      and web_fetch. Write a structured markdown report res-01-report.md in workspace with
+
+      sections: Overview, Key players, Trends, Risks. At least 400 words.
+
+    pass:
+
+      tools_any: [web_fetch, write]
+
+      min_response_chars: 100
+
+      response_contains_any: [Overview, http]
+
+
+
+  - id: res-02
+
+    name: Deep dive with citations
+
+    category: research
+
+    tags: [tier2, research]
+
+    timeout_s: 1200
+
+    prompt: >-
+
+      Using web_fetch on at least 3 real URLs about Python asyncio best practices, write
+
+      a summary with bullet citations (URL + one-line takeaway each). Save as res-02.md.
+
+      Do not invent URLs — only cite pages you actually fetched.
+
+    pass:
+
+      tools_any: [web_fetch, write]
+
+      response_contains: http
+
+      artifact_files: [res-02.md]
+
+
+
+  - id: res-03
+
+    name: Codebase archaeology
+
+    category: research
+
+    tags: [tier2, research, dev]
+
+    timeout_s: 900
+
+    workspace_seed:
+
+      - nls/tools/agent_tools/__init__.py
+
+      - nls/tools/agent_tools/base.py
+
+    prompt: >-
+
+      Where is agent tool registration handled in this codebase? Use semantic_search or
+
+      grep plus read. Answer with file path and a one-sentence explanation. No code changes.
+
+    pass:
+
+      tools_any: [semantic_search, grep, read]
+
+      min_response_chars: 80
+
+      response_contains_any: [create_coding_tools, agent_tools]
+
+
+
+  - id: res-04
+
+    name: Compare options decision doc
+
+    category: research
+
+    tags: [tier2, research]
+
+    timeout_s: 900
+
+    prompt: >-
+
+      Compare FastAPI vs Flask for a new internal API. Research briefly, write decision.md
+
+      with pros/cons table and a clear recommendation. No implementation.
+
+    pass:
+
+      tools_any: [write]
+
+      artifact_files: [decision.md]
+
+      min_response_chars: 200
+
+
+
+  - id: res-05
+
+    name: Wikipedia / tool shop lookup
+
+    category: research
+
+    tags: [tier2, research]
+
+    timeout_s: 600
+
+    prompt: >-
+
+      Find factual information about the Rust programming language's first stable release
+
+      year. Prefer discover_tools + wikipedia if available; otherwise web_search or browser.
+
+      Cite your source.
+
+    pass:
+
+      tools_any: [discover_tools, web_search, web_fetch, browser]
+
+      min_response_chars: 40
+

@@ -25,6 +25,11 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
+from nls.agentic.orchestration_profile_spec import (
+    plan_step_delegatable_default,
+    should_auto_mark_delegatable,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -881,6 +886,7 @@ class PlanStore:
         todo_id: str | None = None,
         parent_id: str | None = None,
         project_dir: str | None = None,
+        orchestration_profile: str = "solo_structured",
     ) -> Plan:
         # Defensive: LLMs may pass list args as JSON strings
         if isinstance(acceptance_criteria, str):
@@ -948,20 +954,22 @@ class PlanStore:
                         output_files=s.get("output_files", []),
                         owned_paths=s.get("owned_paths") or [],
                         depends_on=s.get("depends_on") or [],
-                        delegatable=bool(s.get("delegatable", False)),
+                        delegatable=bool(
+                            s.get("delegatable")
+                            if "delegatable" in s
+                            else plan_step_delegatable_default(orchestration_profile)
+                        ),
                     ))
                 else:
                     plan.steps.append(PlanStep(id=step_id, label=str(s)))
-        # Auto-mark delegatable: when 3+ steps are created and none are
-        # marked delegatable, the agent clearly intends to delegate but
-        # forgot the flag.  Auto-set so the dependency safety nets engage.
-        if len(plan.steps) >= 3:
+        # Auto-mark delegatable only for full orchestration profiles.
+        if should_auto_mark_delegatable(orchestration_profile, len(plan.steps)):
             if not any(s.delegatable for s in plan.steps):
                 for s in plan.steps:
                     s.delegatable = True
                 logger.info(
                     "PlanStore: auto-marked %d steps as delegatable "
-                    "(none were explicitly set)",
+                    "(orchestrated profile)",
                     len(plan.steps),
                 )
 

@@ -1,0 +1,10 @@
+# Shared defaults for all scenario files in this directory.
+defaults:
+  timeout_s: 600
+  auto_answer: >-
+    Use your best judgment. Pick reasonable defaults for anything unclear
+    and continue without asking me more questions.
+  setup_name: ScenarioBot
+  delete_agent: true
+
+scenarios: []

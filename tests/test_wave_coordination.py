@@ -7,8 +7,10 @@ from pathlib import Path
 from nls.agentic.wave_coordination import (
     build_tech_stack_block,
     detect_tech_stack_drift,
+    expand_wave0_scaffold_paths,
     resolve_step_owned_paths,
 )
+from nls.agentic.plan_store import PlanStep
 
 
 def test_tech_stack_block_includes_requirements():
@@ -75,6 +77,33 @@ def test_resolve_owned_paths_normalizes_with_project_dir():
 
 def test_owned_paths_empty_without_step_fields():
     assert resolve_step_owned_paths(None) == []
+
+
+def test_wave0_expands_empty_owned_paths():
+    expanded = expand_wave0_scaffold_paths([])
+    assert ".gitignore" in expanded
+    assert "backend/" in expanded
+    assert "." in expanded
+
+
+def test_wave0_expands_root_files_when_step_owns_backend():
+    step = PlanStep(
+        label="Scaffolding",
+        owned_paths=["backend/", "frontend/"],
+    )
+    paths = resolve_step_owned_paths(step, wave_index=0)
+    assert "backend/" in paths
+    assert ".gitignore" in paths
+    assert "README.md" in paths
+
+
+def test_wave1_does_not_auto_expand_root_scaffold():
+    step = PlanStep(
+        label="API",
+        owned_paths=["backend/src/api/"],
+    )
+    paths = resolve_step_owned_paths(step, wave_index=1)
+    assert paths == ["backend/src/api/"]
 
 
 def test_detect_stack_drift_undeclared_fastapi(tmp_path: Path):

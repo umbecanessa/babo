@@ -389,6 +389,8 @@ async def _summarize_span(
     previous_anchor: CompactionAnchor,
     vllm_client: Any,
     config: LoopConfig,
+    *,
+    adapter_name: str | None = None,
 ) -> CompactionDelta:
     """Summarize a dropped span into a structured delta via LLM."""
     conversation_text = _serialize_for_summary(messages)
@@ -412,7 +414,7 @@ async def _summarize_span(
                 {"role": "system", "content": _SUMMARIZE_SYSTEM},
                 {"role": "user", "content": prompt},
             ],
-            adapter_name=None,
+            adapter_name=adapter_name,
             max_tokens=512,
             temperature=0.2,
             extra_body={
@@ -509,6 +511,7 @@ async def compact(
     *,
     force: bool = False,
     iteration: int = 0,
+    adapter_name: str | None = None,
 ) -> tuple[list[dict], CompactionAnchor]:
     """Anchored iterative compaction.
 
@@ -554,6 +557,7 @@ async def compact(
     try:
         delta = await _summarize_span(
             msgs_to_summarize, anchor, vllm_client, config,
+            adapter_name=adapter_name,
         )
         anchor.merge(delta, iteration)
 

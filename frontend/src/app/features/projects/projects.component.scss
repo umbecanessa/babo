@@ -184,6 +184,12 @@ $indigo: var(--accent-primary);
   }
 }
 
+.orch-ribbon-item--wrapup {
+  .orch-ribbon-val {
+    color: var(--accent-primary);
+  }
+}
+
 @keyframes orch-warn-pulse {
   0%, 100% { text-shadow: 0 0 0 transparent; }
   50% { text-shadow: 0 0 8px rgba(251, 191, 36, 0.4); }

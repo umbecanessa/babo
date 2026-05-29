@@ -1,0 +1,57 @@
+scenarios:
+  - id: mem-01
+    name: File provenance history
+    category: memory
+    tags: [tier7, memory]
+    timeout_s: 600
+    prompt: >-
+      Write provenance-test.txt with "line A". Edit to "line B". Use file_history on that
+      file and describe the edit attribution (who changed what).
+    pass:
+      tools_any: [write, edit, file_history]
+
+  - id: mem-02
+    name: Working memory navigation
+    category: memory
+    tags: [tier7, memory]
+    timeout_s: 600
+    prompt: >-
+      Use the wm tool to browse working memory rings. Report one fact or instruction
+      you find about your identity or capabilities. If empty, say so honestly.
+    pass:
+      tools_any: [wm]
+
+  - id: mem-03
+    name: Long session compaction stress
+    category: memory
+    tags: [tier7, memory, slow]
+    timeout_s: 3600
+    disabled: true
+    prompt: >-
+      Perform 30+ lightweight tool calls (read/grep/list_dir on workspace files) while
+      completing a summary task. Goal: stress context without failing compaction (no 400
+      errors). End with a 5-bullet summary of the repo layout.
+    pass:
+      min_response_chars: 200
+
+  - id: mem-04
+    name: DMN / idle consolidation
+    category: memory
+    tags: [tier7, memory, manual]
+    manual: true
+    prompt: >-
+      MANUAL QA: Complete a task, leave agent idle 10+ minutes. Check runtime.log for
+      DMN/sleep/consolidation activity without runaway loops.
+    pass: {}
+
+  - id: mem-05
+    name: Learning accumulator repeat task
+    category: memory
+    tags: [tier7, memory, slow]
+    timeout_s: 1800
+    disabled: true
+    prompt: >-
+      Run twice in same agent (manual re-prompt): "Summarize this workspace's top-level
+      folders." Second run should be faster or reference prior facts. Subjective pass.
+    pass:
+      min_response_chars: 80
