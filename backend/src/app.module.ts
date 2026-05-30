@@ -16,6 +16,7 @@ import { ChannelsModule } from './channels/channels.module';
 import { RuntimeProxyModule } from './runtime-proxy/runtime-proxy.module';
 import { ClawhubModule } from './clawhub/clawhub.module';
 import { BaboCloudModule } from './babo-cloud/babo-cloud.module';
+import { PrismaService } from './prisma/prisma.service';
 import * as path from 'path';
 
 function loadOperatorModule(): unknown[] {
@@ -31,9 +32,12 @@ function loadOperatorModule(): unknown[] {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { OperatorModule } = require(mod);
       console.log(`[operator] Loaded OperatorModule from ${mod}`);
-      return [OperatorModule.forRoot()];
-    } catch {
-      /* try next */
+      return [
+        OperatorModule.forRoot({ prismaService: PrismaService }),
+      ];
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[operator] Failed to activate from ${mod}: ${msg}`);
     }
   }
 
