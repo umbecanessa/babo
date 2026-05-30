@@ -1,5 +1,6 @@
 :root {
   --glass-bg: rgba(255, 255, 255, 0.55);
+  --glass-bg-solid: #f4f5fa;
   --glass-border: rgba(255, 255, 255, 0.60);
   --glass-blur: 20px;
   --bg-primary: #eef0f7;
@@ -21,6 +22,7 @@
 
 [data-theme='dark'] {
   --glass-bg: rgba(22, 24, 38, 0.55);
+  --glass-bg-solid: #1a1d2e;
   --glass-border: rgba(255, 255, 255, 0.08);
   --bg-primary: #0f111a;
   --bg-secondary: #161926;
@@ -47,22 +49,26 @@ body {
 }
 
 .glass-panel {
-  background: var(--glass-bg);
+  background: var(--glass-bg-solid);
   border: 1px solid var(--glass-border);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-glass);
 }
 
 .glass-card {
-  background: var(--glass-bg);
+  background: var(--glass-bg-solid);
   border: 1px solid var(--glass-border);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-glass);
   padding: 1.25rem 1.5rem;
+}
+
+/* Optional subtle glass — no backdrop-filter (avoids black overlay stacking in Chrome) */
+@supports (background: color-mix(in srgb, white 90%, transparent)) {
+  .glass-panel,
+  .glass-card {
+    background: color-mix(in srgb, var(--bg-secondary) 92%, transparent);
+  }
 }
 
 .btn {
@@ -93,7 +99,7 @@ input, select {
   padding: 0.65rem 0.85rem;
   border-radius: var(--radius-md);
   border: 1px solid var(--glass-border);
-  background: var(--glass-bg);
+  background: var(--glass-bg-solid);
   color: var(--text-primary);
   font-size: 0.95rem;
 }
