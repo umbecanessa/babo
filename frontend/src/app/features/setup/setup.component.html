@@ -216,8 +216,8 @@
             <div class="sheet-panel inline connect-panel">
               <p class="panel-label">Chat model (Babo Cloud)</p>
               <p class="panel-hint">
-                Account, agents, and hosted models all use <strong>api.babo.agency</strong>.
-                You’ll sign in and subscribe on the next steps — no separate server to configure.
+                Models and remote access go through <strong>api.babo.agency</strong>.
+                Your agents always run on this computer — Babo Cloud syncs your account and relays when you’re away.
               </p>
               <div class="chip-row providers">
                 @for (m of baboCloudModels; track m.id) {
@@ -360,7 +360,7 @@
     @if (step() === 5 && needsAccountServerStep()) {
       <div class="step-shell">
         <div class="step-body">
-          <h2>Where your account lives</h2>
+          <h2>Where your account syncs</h2>
           <p class="lead">{{ placementStepLead() }}</p>
           <p class="small-muted account-split">
             Chat runs on <strong>{{ inferenceRunLocation() }}</strong> — separate from this NestJS server.

@@ -18,7 +18,7 @@ export const BACKEND_CHOICES: BackendChoice[] = [
     id: 'babo_cloud',
     shortLabel: 'Babo Cloud',
     description:
-      'Hosted control plane at api.babo.agency — agents, sync, and optional Babo-hosted chat.',
+      'Account sync, hosted models, and remote access at api.babo.agency — agents run on your devices.',
     url: BABO_CLOUD_BACKEND_URL,
   },
   {

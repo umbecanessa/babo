@@ -77,7 +77,7 @@ export class SetupComponent implements OnInit, OnDestroy {
   readonly decisionSteps = [
     { id: 'thinking', label: 'Thinking' },
     { id: 'features', label: 'Features' },
-    { id: 'placement', label: 'Account server' },
+    { id: 'placement', label: 'Account sync' },
     { id: 'signin', label: 'Sign in' },
   ];
 
@@ -100,7 +100,7 @@ export class SetupComponent implements OnInit, OnDestroy {
     {
       tier: 'hosted_babo',
       title: 'Babo Cloud',
-      subtitle: 'Hosted models, account, and agents — all at api.babo.agency',
+      subtitle: 'Hosted models + account sync — your agents still run on this computer',
       glyph: '☁',
     },
     {
@@ -281,11 +281,11 @@ export class SetupComponent implements OnInit, OnDestroy {
     if (tier === 'byok_cloud') {
       return (
         'Your API keys can relay through Babo Cloud (recommended) or a NestJS server you run. ' +
-        'Pick where your Babo account and agents live.'
+        'Pick where your Babo account syncs — agents still run locally.'
       );
     }
     return (
-      `Pick the NestJS server for your account and agents. Chat still runs on ${this.inferenceRunLocation()}.`
+      `Pick where your Babo account syncs. Chat runs on ${this.inferenceRunLocation()}; agents stay on your devices.`
     );
   });
 
