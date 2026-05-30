@@ -138,7 +138,7 @@ export class SetupComponent implements OnInit, OnDestroy {
   billingCheckoutLoading = signal(false);
   billingConfirming = signal(false);
   billingAwaitingPayment = signal(false);
-  billingReturnMessage = signal<string | null>(null);
+  billingAlert = signal<{ kind: 'error' | 'warn'; text: string } | null>(null);
   private billingPollTimer: ReturnType<typeof setInterval> | null = null;
   private billingFocusHandler: (() => void) | null = null;
   setupStage = signal<string>('idle');
@@ -873,7 +873,7 @@ export class SetupComponent implements OnInit, OnDestroy {
   }
 
   switchToByokFromBilling(): void {
-    this.billingReturnMessage.set(null);
+    this.billingAlert.set(null);
     this.useOwnApiKey();
     this.goToStep(3);
     this.persistWizardDraft();
@@ -1445,7 +1445,7 @@ export class SetupComponent implements OnInit, OnDestroy {
 
   async startSetupCheckout(): Promise<void> {
     this.billingCheckoutLoading.set(true);
-    this.billingReturnMessage.set(null);
+    this.billingAlert.set(null);
     try {
       this.persistWizardDraft();
       const opened = await this.billing.openCheckout({
@@ -1453,18 +1453,16 @@ export class SetupComponent implements OnInit, OnDestroy {
         caps: this.platformCaps(),
       });
       if (!opened) {
-        this.billingReturnMessage.set('Could not start checkout');
+        this.billingAlert.set({ kind: 'error', text: 'Could not start checkout' });
         return;
       }
       this.billingAwaitingPayment.set(true);
-      this.billingReturnMessage.set(
-        'Complete payment in your browser — waiting for confirmation…',
-      );
       this.startBillingSubscriptionPoll();
     } catch (err: any) {
-      this.billingReturnMessage.set(
-        err?.error?.message || err?.message || 'Could not start checkout',
-      );
+      this.billingAlert.set({
+        kind: 'error',
+        text: err?.error?.message || err?.message || 'Could not start checkout',
+      });
     } finally {
       this.billingCheckoutLoading.set(false);
     }
@@ -1472,24 +1470,26 @@ export class SetupComponent implements OnInit, OnDestroy {
 
   async continueAfterBilling(): Promise<void> {
     this.billingConfirming.set(true);
-    this.billingReturnMessage.set('Checking your subscription…');
+    this.billingAlert.set(null);
     try {
       const active = await this.checkBillingActivation(false);
       if (active) {
-        this.billingReturnMessage.set(null);
+        this.billingAlert.set(null);
         this.clearWizardDraft();
         this.goToStep(8);
         return;
       }
       if (this.billingAwaitingPayment()) {
         this.startBillingSubscriptionPoll();
-        this.billingReturnMessage.set(
-          'Payment not confirmed yet — finish checkout in your browser, or wait a few seconds.',
-        );
+        this.billingAlert.set({
+          kind: 'warn',
+          text: 'Payment not confirmed yet — finish in your browser, or wait a few seconds.',
+        });
       } else {
-        this.billingReturnMessage.set(
-          'Subscription not active yet — start checkout or wait a moment and try again.',
-        );
+        this.billingAlert.set({
+          kind: 'warn',
+          text: 'Subscription not active yet — start checkout or wait a moment and try again.',
+        });
       }
     } finally {
       this.billingConfirming.set(false);
@@ -1523,12 +1523,13 @@ export class SetupComponent implements OnInit, OnDestroy {
   }
 
   private async checkBillingActivation(autoAdvance: boolean): Promise<boolean> {
-    const sub = await this.billing.refresh();
+    const sub =
+      (await this.billing.syncFromStripe()) ?? (await this.billing.refresh());
     if (sub && isPaidOrComp(sub)) {
       this.stopBillingSubscriptionPoll();
       this.billingAwaitingPayment.set(false);
       this.billingConfirming.set(false);
-      this.billingReturnMessage.set(null);
+      this.billingAlert.set(null);
       if (autoAdvance && this.step() === 7) {
         this.toast.show('Subscription active — you\'re all set.', 'info');
         this.clearWizardDraft();
@@ -1541,7 +1542,6 @@ export class SetupComponent implements OnInit, OnDestroy {
 
   private startBillingSubscriptionPoll(): void {
     this.stopBillingSubscriptionPoll();
-    this.billingConfirming.set(true);
     const started = Date.now();
     const maxMs = 10 * 60 * 1000;
     void this.checkBillingActivation(true);
@@ -1554,9 +1554,10 @@ export class SetupComponent implements OnInit, OnDestroy {
         if (active) return;
         if (Date.now() - started > maxMs) {
           this.billingConfirming.set(false);
-          this.billingReturnMessage.set(
-            'Still waiting — tap Check subscription after completing payment.',
-          );
+          this.billingAlert.set({
+            kind: 'warn',
+            text: 'Still waiting — tap Check subscription after completing payment.',
+          });
           this.stopBillingSubscriptionPoll();
         }
       });
@@ -1585,14 +1586,14 @@ export class SetupComponent implements OnInit, OnDestroy {
 
     if (status === 'success') {
       this.billingAwaitingPayment.set(true);
-      this.billingReturnMessage.set('Confirming your subscription…');
+      this.billingAlert.set(null);
       this.goToStep(7);
       this.startBillingSubscriptionPoll();
     } else {
       this.billingAwaitingPayment.set(false);
       this.stopBillingSubscriptionPoll();
       this.toast.show('Checkout canceled — you can try again when ready.', 'info');
-      this.billingReturnMessage.set(null);
+      this.billingAlert.set(null);
       this.goToStep(7);
     }
 

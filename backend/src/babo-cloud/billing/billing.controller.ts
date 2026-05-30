@@ -67,6 +67,16 @@ export class BillingController {
 </html>`);
   }
 
+  /** Reconcile subscription from Stripe after checkout (fallback when webhooks lag). */
+  @Post('sync')
+  @UseGuards(JwtAuthGuard)
+  async sync(@Req() req: any) {
+    if (typeof this.billing.syncSubscription === 'function') {
+      return this.billing.syncSubscription(req.user.userId);
+    }
+    return this.billing.getSubscriptionView(req.user.userId);
+  }
+
   @Post('checkout')
   @UseGuards(JwtAuthGuard)
   async checkout(

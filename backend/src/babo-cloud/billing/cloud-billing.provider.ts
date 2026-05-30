@@ -30,4 +30,7 @@ export interface CloudBillingProvider {
   updateSpendCap(userId: string, capCents: number | null): Promise<void>;
 
   setOnDemandEnabled(userId: string, enabled: boolean): Promise<void>;
+
+  /** Pull active Stripe subscription state (operator only; no-op otherwise). */
+  syncSubscription?(userId: string): Promise<SubscriptionView>;
 }

@@ -8,6 +8,6 @@
     "startCommand": "npm run start:railway",
     "restartPolicyType": "ON_FAILURE",
     "restartPolicyMaxRetries": 3,
-    "deployRevision": "2026-05-30-stripe-esm"
+    "deployRevision": "2026-05-30-stripe-webhook-rawbody"
   }
 }

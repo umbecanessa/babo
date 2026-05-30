@@ -760,6 +760,10 @@ export class ApiService {
     return this.http.get<any>(`${this.API}/cloud/usage`, { params });
   }
 
+  syncBillingSubscription(): Observable<import('../models/cloud-subscription.model').CloudSubscriptionView> {
+    return this.http.post<any>(`${this.API}/billing/sync`, {});
+  }
+
   createBillingCheckout(
     returnUrl: string,
     flow?: 'setup' | 'settings',

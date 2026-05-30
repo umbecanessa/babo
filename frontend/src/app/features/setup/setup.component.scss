@@ -686,6 +686,38 @@
 
 .billing-status {
   margin-top: 4px;
+
+  &.center {
+    text-align: center;
+  }
+}
+
+.billing-status-waiting {
+  max-width: 22rem;
+  margin-left: auto;
+  margin-right: auto;
+  color: var(--text-secondary);
+}
+
+.billing-alert,
+.billing-notice {
+  margin: 12px auto 0;
+  max-width: 22rem;
+  text-align: center;
+}
+
+.billing-notice {
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  padding: 10px 16px;
+  border-radius: 12px;
+  background: var(--overlay-2);
+  border: 1px solid var(--overlay-3);
+}
+
+.billing-step-body .error-badge.billing-alert {
+  margin-bottom: 0;
 }
 
 .billing-step-footer {

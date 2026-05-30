@@ -55,6 +55,17 @@ export class BillingService {
     }
   }
 
+  /** Reconcile from Stripe when webhooks lag after checkout. */
+  async syncFromStripe(): Promise<CloudSubscriptionView | null> {
+    try {
+      const view = await firstValueFrom(this.api.syncBillingSubscription());
+      this.subscription.set(view);
+      return view;
+    } catch {
+      return this.refresh();
+    }
+  }
+
   billingEnabledFromCaps(caps: PlatformCapabilities | null): boolean {
     return !!caps?.billing?.enabled;
   }

@@ -164,6 +164,10 @@ export class InternalCloudBillingProvider implements CloudBillingProvider {
     });
   }
 
+  async syncSubscription(userId: string): Promise<SubscriptionView> {
+    return this.getSubscriptionView(userId);
+  }
+
   async getSubscriptionView(userId: string): Promise<SubscriptionView> {
     const sub = await this.prisma.cloudSubscription.findUnique({
       where: { userId },

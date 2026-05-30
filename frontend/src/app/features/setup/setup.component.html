@@ -576,17 +576,21 @@
           @if (billingCheckoutLoading()) {
             <p class="progress-text center billing-status">Opening secure checkout…</p>
           } @else if (billingConfirming() || billingAwaitingPayment()) {
-            <p class="progress-text center billing-status">
+            <p class="progress-text center billing-status billing-status-waiting">
               Complete payment in your browser — we'll detect it automatically.
             </p>
           } @else if (billing.subscription(); as sub) {
             @if (isPaidOrComp(sub)) {
-              <p class="hint-ok billing-status">You're all set — let's create your agent.</p>
+              <p class="hint-ok billing-status center">You're all set — let's create your agent.</p>
             }
           }
 
-          @if (billingReturnMessage()) {
-            <div class="error-badge">{{ billingReturnMessage() }}</div>
+          @if (billingAlert(); as alert) {
+            @if (alert.kind === 'error') {
+              <div class="error-badge billing-alert">{{ alert.text }}</div>
+            } @else {
+              <p class="billing-notice">{{ alert.text }}</p>
+            }
           }
         </div>
 

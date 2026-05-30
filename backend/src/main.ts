@@ -1,7 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { ValidationPipe } from '@nestjs/common';
-import { json, raw, urlencoded } from 'express';
+import { json, raw, urlencoded, type NextFunction, type Request, type Response } from 'express';
 import { AppModule } from './app.module';
 import { ChannelsService } from './channels/channels.service';
 import { ConfigService } from '@nestjs/config';
@@ -16,8 +16,23 @@ async function bootstrap() {
   // Default Express JSON limit is ~100KB — agentic inference payloads with
   // tool schemas + message history exceed that. File uploads use Multer (25MB).
   // Stripe webhooks require the raw body for signature verification.
-  app.use('/api/billing/stripe/webhook', raw({ type: 'application/json' }));
-  app.use(json({ limit: '8mb' }));
+  const stripeWebhookPath = '/api/billing/stripe/webhook';
+  app.use(
+    stripeWebhookPath,
+    raw({ type: 'application/json' }),
+    (req: Request, _res: Response, next: NextFunction) => {
+      if (Buffer.isBuffer((req as any).body)) {
+        (req as any).rawBody = (req as any).body;
+      }
+      next();
+    },
+  );
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (req.path === stripeWebhookPath) {
+      return next();
+    }
+    return json({ limit: '8mb' })(req, res, next);
+  });
   app.use(urlencoded({ limit: '8mb', extended: true }));
 
   app.enableCors({
