@@ -1219,7 +1219,7 @@ export class SetupComponent implements OnInit, OnDestroy {
       return;
     }
     if (!this.canContinueBackend()) {
-      this.backendSaveError.set('Choose where your account lives, or enter a valid server URL.');
+      this.backendSaveError.set('Choose where your account syncs, or enter a valid server URL.');
       return;
     }
     this.config.nestjsUrl = normalizeNestjsUrl(this.config.nestjsUrl);
