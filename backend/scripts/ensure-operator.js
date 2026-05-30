@@ -76,7 +76,22 @@ if (!fs.existsSync(operatorDir)) {
   run(`git clone --depth 1 "${cloneUrl}" "${operatorDir}"`);
 } else if (fs.existsSync(path.join(operatorDir, '.git'))) {
   console.log('[operator] Updating existing babo-operator clone…');
-  run('git pull --ff-only', operatorDir);
+  try {
+    run('git fetch origin main --depth 1 && git reset --hard origin/main', operatorDir);
+  } catch {
+    console.log('[operator] Fetch failed — recloning babo-operator…');
+    fs.rmSync(operatorDir, { recursive: true, force: true });
+    const token = process.env.GITHUB_TOKEN || process.env.RAILWAY_GITHUB_TOKEN;
+    if (!token) {
+      console.error('[operator] Set GITHUB_TOKEN to refresh babo-operator.');
+      process.exit(1);
+    }
+    const cloneUrl = repo.replace(
+      'https://',
+      `https://x-access-token:${token}@`,
+    );
+    run(`git clone --depth 1 "${cloneUrl}" "${operatorDir}"`);
+  }
 }
 
 console.log('[operator] Installing and building…');
