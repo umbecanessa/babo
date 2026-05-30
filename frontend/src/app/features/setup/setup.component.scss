@@ -561,6 +561,148 @@
   font-size: 11px;
 }
 
+/* ─── Babo Cloud billing step (onboarding) ─────────────── */
+.billing-step-shell {
+  text-align: center;
+}
+
+.billing-step-body {
+  padding: 0 4px 8px;
+}
+
+.billing-hero {
+  margin-bottom: 20px;
+
+  .billing-hero-glyph {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 52px;
+    height: 52px;
+    margin-bottom: 12px;
+    border-radius: 16px;
+    font-size: 26px;
+    background: var(--accent-primary-glow);
+    border: 1px solid var(--accent-primary-glow);
+    box-shadow: 0 8px 28px var(--accent-primary-glow);
+  }
+
+  h2 {
+    margin: 0 0 10px;
+    font-size: 1.45rem;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+  }
+}
+
+.billing-hero-lead {
+  margin: 0 auto;
+  max-width: 26rem;
+  font-size: 0.92rem;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.billing-price-card {
+  margin: 0 auto 18px;
+  max-width: 18rem;
+  padding: 16px 20px;
+  border-radius: 16px;
+  background: var(--overlay-2);
+  border: 1px solid var(--accent-primary-glow);
+  box-shadow: 0 4px 24px var(--accent-primary-glow);
+}
+
+.billing-price-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 4px;
+}
+
+.billing-price-amount {
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--text-primary);
+}
+
+.billing-price-period {
+  font-size: 0.95rem;
+  color: var(--text-muted);
+}
+
+.billing-price-tagline {
+  margin: 6px 0 0;
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+
+  strong {
+    color: var(--text-primary);
+    font-weight: 600;
+  }
+}
+
+.billing-perks {
+  list-style: none;
+  margin: 0 auto 16px;
+  padding: 0;
+  max-width: 22rem;
+  text-align: left;
+
+  li {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    font-size: 0.88rem;
+    line-height: 1.45;
+    color: var(--text-secondary);
+
+    & + li {
+      margin-top: 10px;
+    }
+  }
+
+  .perk-check {
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-size: 11px;
+    font-weight: 700;
+    color: rgba(52, 211, 153, 0.95);
+    background: rgba(52, 211, 153, 0.12);
+  }
+}
+
+.billing-status {
+  margin-top: 4px;
+}
+
+.billing-step-footer {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 8px;
+
+  .billing-cta {
+    flex: 1;
+    padding: 13px 20px;
+    font-size: 0.95rem;
+    font-weight: 600;
+  }
+}
+
+.billing-alt-hint {
+  margin: 14px 0 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
 .auth-step-shell .step-footer .action-btn.launch {
   padding: 12px 28px;
   font-size: 14px;

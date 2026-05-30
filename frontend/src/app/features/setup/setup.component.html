@@ -535,73 +535,94 @@
       </div>
     }
 
-    <!-- 7 · Babo Cloud subscription (required before first chat) -->
+    <!-- 7 · Babo Cloud subscription -->
     @if (step() === 7) {
-      <div class="step-shell auth-step-shell">
-        <div class="step-body">
-          <div class="account-auth-panel billing-setup-panel">
-            <h2 class="account-auth-title">Subscribe to Babo Cloud</h2>
-            <p class="account-auth-lead">
-              You chose Babo Cloud for thinking — an active subscription is required before your first chat.
-              No free inference trial.
+      <div class="step-shell billing-step-shell">
+        <div class="step-body billing-step-body">
+          <div class="billing-hero">
+            <span class="billing-hero-glyph" aria-hidden="true">☁</span>
+            <h2>Power up Babo Cloud</h2>
+            <p class="billing-hero-lead">
+              One last step before your first chat — hosted models, account sync, and remote access
+              while your agent keeps running on this computer.
             </p>
-
-            <ul class="checklist billing-checklist">
-              <li><strong>$6.99/month</strong> — Stripe Checkout (card or Link)</li>
-              <li><strong>$5 included</strong> model usage each month</li>
-              <li>On-demand overage at 1.25× after the pool is used</li>
-              <li>31-day refund on your first payment</li>
-            </ul>
-
-            @if (billingConfirming()) {
-              <p class="progress-text center">Confirming your subscription…</p>
-            } @else if (billing.subscription(); as sub) {
-              @if (isPaidOrComp(sub)) {
-                <p class="hint-ok">Subscription active — continue to create your agent.</p>
-              }
-            }
-
-            @if (billingReturnMessage()) {
-              <div class="error-badge">{{ billingReturnMessage() }}</div>
-            }
-
-            <div class="billing-setup-actions">
-              @if (billing.subscription(); as sub) {
-                @if (isPaidOrComp(sub)) {
-                  <button
-                    class="action-btn launch full"
-                    type="button"
-                    (click)="continueAfterBilling()"
-                  >
-                    Continue
-                  </button>
-                } @else {
-                  <button
-                    class="action-btn launch full"
-                    type="button"
-                    (click)="startSetupCheckout()"
-                    [disabled]="billingCheckoutLoading()"
-                  >
-                    {{ billingCheckoutLoading() ? 'Opening checkout…' : 'Subscribe — $6.99/mo' }}
-                  </button>
-                }
-              } @else {
-                <button
-                  class="action-btn launch full"
-                  type="button"
-                  (click)="startSetupCheckout()"
-                  [disabled]="billingCheckoutLoading()"
-                >
-                  {{ billingCheckoutLoading() ? 'Opening checkout…' : 'Subscribe — $6.99/mo' }}
-                </button>
-              }
-            </div>
           </div>
+
+          <div class="billing-price-card">
+            <div class="billing-price-row">
+              <span class="billing-price-amount">$6.99</span>
+              <span class="billing-price-period">/ month</span>
+            </div>
+            <p class="billing-price-tagline">
+              <strong>$5 included</strong> model usage every month
+            </p>
+          </div>
+
+          <ul class="billing-perks">
+            <li>
+              <span class="perk-check" aria-hidden="true">✓</span>
+              <span>GPT, Claude &amp; Qwen through api.babo.agency</span>
+            </li>
+            <li>
+              <span class="perk-check" aria-hidden="true">✓</span>
+              <span>Pay with card or Link — takes about a minute</span>
+            </li>
+            <li>
+              <span class="perk-check" aria-hidden="true">✓</span>
+              <span>31-day money-back on your first month</span>
+            </li>
+          </ul>
+
+          @if (billingConfirming()) {
+            <p class="progress-text center billing-status">Confirming your subscription…</p>
+          } @else if (billing.subscription(); as sub) {
+            @if (isPaidOrComp(sub)) {
+              <p class="hint-ok billing-status">You’re all set — let’s create your agent.</p>
+            }
+          }
+
+          @if (billingReturnMessage()) {
+            <div class="error-badge">{{ billingReturnMessage() }}</div>
+          }
         </div>
-        <div class="step-footer split">
+
+        <div class="step-footer billing-step-footer">
           <button type="button" class="icon-back" (click)="prevStep()" aria-label="Back">‹</button>
-          <p class="small-muted billing-footer-hint">BYOK (your own API keys) does not require this step.</p>
+          @if (billing.subscription(); as sub) {
+            @if (isPaidOrComp(sub)) {
+              <button
+                class="action-btn launch billing-cta"
+                type="button"
+                (click)="continueAfterBilling()"
+              >
+                Continue
+              </button>
+            } @else {
+              <button
+                class="action-btn launch billing-cta"
+                type="button"
+                (click)="startSetupCheckout()"
+                [disabled]="billingCheckoutLoading() || billingConfirming()"
+              >
+                {{ billingCheckoutLoading() ? 'Opening checkout…' : 'Continue with Babo Cloud' }}
+              </button>
+            }
+          } @else {
+            <button
+              class="action-btn launch billing-cta"
+              type="button"
+              (click)="startSetupCheckout()"
+              [disabled]="billingCheckoutLoading() || billingConfirming()"
+            >
+              {{ billingCheckoutLoading() ? 'Opening checkout…' : 'Continue with Babo Cloud' }}
+            </button>
+          }
         </div>
+
+        <p class="billing-alt-hint">
+          Using your own API keys instead?
+          <button type="button" class="link-btn inline-link" (click)="goToStep(3)">Pick that in Thinking</button>
+        </p>
       </div>
     }
 

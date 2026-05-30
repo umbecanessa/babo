@@ -1439,7 +1439,7 @@ export class SetupComponent implements OnInit, OnDestroy {
         this.goToStep(7);
       }
     } else {
-      this.toast.show('Checkout canceled — subscribe to use Babo Cloud models.', 'info');
+      this.toast.show('Checkout canceled — you can try again when ready.', 'info');
       this.billingReturnMessage.set(null);
       this.goToStep(7);
     }
