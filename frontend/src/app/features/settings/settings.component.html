@@ -193,6 +193,143 @@
   }
 
   <!-- Platform integrations (desktop + web) -->
+  @if (activeSection() === 'billing' && billingEnabled()) {
+    <section class="section">
+      <h3 class="section-title">Billing</h3>
+      <p class="section-desc">
+        Babo Cloud Basic — <strong>$6.99/mo</strong> with <strong>$5 included</strong> model usage.
+        Checkout uses Stripe (Link supported). No free inference trial.
+      </p>
+
+      @if (subscriptionLoading()) {
+        <p class="field-hint">Loading subscription…</p>
+      } @else if (subscription(); as sub) {
+        @if (sub.billingExempt || sub.status === 'lifetime_comp') {
+          <div class="info-card babo-provided">
+            <h4 class="subsection-title">Lifetime access</h4>
+            <p class="field-hint">
+              You have complimentary Babo Cloud access
+              @if (sub.hostedGx10Enabled) {
+                including <strong>Babo Brain (GX10)</strong>.
+              }
+            </p>
+            <p class="info-pill ok">No subscription required</p>
+          </div>
+        } @else if (sub.status === 'none' || sub.status === 'canceled') {
+          <div class="info-card prereq">
+            <h4 class="subsection-title">Subscribe to use Babo Cloud models</h4>
+            <p class="field-hint">
+              Hosted models require an active subscription. Your API key on this device (BYOK) still works without a sub.
+            </p>
+            <ul class="checklist">
+              <li>$6.99/month — billed via Stripe</li>
+              <li>$5 included usage per month (OpenRouter resold)</li>
+              <li>On-demand overage at 1.25× after pool is used</li>
+            </ul>
+            <button
+              class="btn-primary"
+              type="button"
+              (click)="subscribeToCloud()"
+              [disabled]="billingActionLoading()"
+            >
+              {{ billingActionLoading() ? 'Opening checkout…' : 'Subscribe — $6.99/mo' }}
+            </button>
+          </div>
+        } @else {
+          <div class="billing-status-row">
+            <span class="info-pill" [class.ok]="sub.status === 'active'" [class.fail]="sub.status === 'past_due'">
+              {{ subscriptionStatusLabel(sub.status) }}
+              @if (sub.planId === 'cloud_basic') { · Babo Cloud Basic }
+            </span>
+            @if (sub.currentPeriodEnd) {
+              <span class="field-hint">Renews {{ sub.currentPeriodEnd | date: 'mediumDate' }}</span>
+            }
+          </div>
+
+          @if (sub.includedCreditCents > 0) {
+            <div class="usage-block">
+              <div class="usage-head">
+                <span class="field-label">Included usage</span>
+                <span class="field-hint">
+                  {{ formatUsd(sub.usedCreditCents) }} used of {{ formatUsd(sub.includedCreditCents) }}
+                  · {{ includedRemaining() }}% remaining
+                </span>
+              </div>
+              <div class="usage-bar">
+                <div
+                  class="usage-fill"
+                  [style.width.%]="sub.usedPercent"
+                  [class.warn]="sub.usedPercent >= 80"
+                  [class.full]="sub.usedPercent >= 100"
+                ></div>
+              </div>
+            </div>
+          }
+
+          <div class="action-row stacked">
+            <button
+              class="btn-secondary"
+              type="button"
+              (click)="openBillingPortal()"
+              [disabled]="billingActionLoading()"
+            >
+              Manage subscription
+            </button>
+          </div>
+
+          <h4 class="subsection-title">On-demand usage</h4>
+          <p class="field-hint">
+            After included usage is exhausted, enable on-demand to continue at 1.25× upstream cost (capped monthly).
+          </p>
+          <div class="toggle-group compact">
+            <button
+              type="button"
+              class="toggle-btn small"
+              [class.active]="onDemandEnabled()"
+              (click)="setOnDemandSetting(true)"
+            >On</button>
+            <button
+              type="button"
+              class="toggle-btn small"
+              [class.active]="!onDemandEnabled()"
+              (click)="setOnDemandSetting(false)"
+            >Off</button>
+          </div>
+
+          @if (onDemandEnabled()) {
+            <div class="field-group">
+              <label class="field-label">Monthly overage spend cap (USD)</label>
+              <input
+                type="number"
+                class="field-input short"
+                min="0"
+                step="1"
+                [ngModel]="spendCapInput()"
+                (ngModelChange)="spendCapInput.set($event)"
+              />
+              <span class="field-hint">Default $15/mo overage cap beyond included usage.</span>
+              <button
+                class="btn-secondary"
+                type="button"
+                (click)="saveSpendCap()"
+                [disabled]="billingActionLoading()"
+              >
+                Save cap
+              </button>
+            </div>
+          }
+
+          @if (sub.refundEligibleUntil) {
+            <p class="field-hint refund-note">
+              31-day refund available on your first subscription payment until
+              {{ sub.refundEligibleUntil | date: 'mediumDate' }}. Overage charges are not refundable.
+            </p>
+          }
+        }
+      }
+    </section>
+  }
+
   @if (activeSection() === 'integrations') {
     <section class="section">
       <h3 class="section-title">Integrations</h3>

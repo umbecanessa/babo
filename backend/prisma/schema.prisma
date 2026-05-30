@@ -180,18 +180,38 @@ model InferenceUsage {
 }
 
 model CloudSubscription {
-  id               String    @id @default(uuid())
-  userId           String    @unique @map("user_id")
-  status           String    @default("trialing")
-  planId           String    @default("cloud_basic") @map("plan_id")
-  trialEndsAt      DateTime? @map("trial_ends_at")
-  currentPeriodEnd DateTime? @map("current_period_end")
-  includedTokens   Int       @default(500000) @map("included_tokens")
-  usedTokens       Int       @default(0) @map("used_tokens")
-  allowOverage     Boolean   @default(true) @map("allow_overage")
-  createdAt        DateTime  @default(now()) @map("created_at")
-  updatedAt        DateTime  @updatedAt @map("updated_at")
-  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                   String    @id @default(uuid())
+  userId               String    @unique @map("user_id")
+  status               String    @default("none")
+  planId               String    @default("none") @map("plan_id")
+  currentPeriodEnd     DateTime? @map("current_period_end")
+  firstPaidAt          DateTime? @map("first_paid_at")
+  includedCreditCents  Int       @default(0) @map("included_credit_cents")
+  usedCreditCents      Int       @default(0) @map("used_credit_cents")
+  billingExempt        Boolean   @default(false) @map("billing_exempt")
+  hostedGx10Enabled    Boolean   @default(false) @map("hosted_gx10_enabled")
+  grantedByAdminId     String?   @map("granted_by_admin_id")
+  grantNote            String?   @map("grant_note")
+  promotionCodeId      String?   @map("promotion_code_id")
+  referralCode         String?   @unique @map("referral_code")
+  referredByUserId     String?   @map("referred_by_user_id")
+  affiliateId          String?   @map("affiliate_id")
+  allowOverage         Boolean   @default(true) @map("allow_overage")
+  onDemandEnabled      Boolean   @default(false) @map("on_demand_enabled")
+  monthlySpendCapCents Int?      @map("monthly_spend_cap_cents")
+  stripeCustomerId     String?   @map("stripe_customer_id")
+  stripeSubscriptionId String?   @map("stripe_subscription_id")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("cloud_subscriptions")
+}
+
+model StripeWebhookEvent {
+  id          String   @id
+  type        String
+  processedAt DateTime @default(now()) @map("processed_at")
+
+  @@map("stripe_webhook_events")
 }

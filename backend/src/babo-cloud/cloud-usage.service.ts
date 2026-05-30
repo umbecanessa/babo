@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CloudAuthContext } from './cloud-auth.types';
 import { EntitlementsService } from './entitlements.service';
+import { computeUpstreamCostCents } from './pricing/model-prices';
 
 export interface UsageSnapshot {
   promptTokens: number;
@@ -38,8 +39,12 @@ export class CloudUsageService {
       route,
       provider,
       usage,
-      upstreamCostCents,
+      upstreamCostCents: upstreamCostCentsIn,
     } = params;
+
+    const upstreamCostCents =
+      upstreamCostCentsIn ??
+      computeUpstreamCostCents(model, usage.promptTokens, usage.completionTokens);
 
     try {
       await this.prisma.inferenceUsage.upsert({
@@ -57,21 +62,21 @@ export class CloudUsageService {
           promptTokens: usage.promptTokens,
           completionTokens: usage.completionTokens,
           totalTokens: usage.totalTokens,
-          upstreamCostCents: upstreamCostCents ?? null,
+          upstreamCostCents,
           requestId,
         },
         update: {
           promptTokens: usage.promptTokens,
           completionTokens: usage.completionTokens,
           totalTokens: usage.totalTokens,
-          upstreamCostCents: upstreamCostCents ?? undefined,
+          upstreamCostCents,
           updatedAt: new Date(),
         },
       });
 
-      if (usage.totalTokens > 0) {
-        await this.entitlements.addTokenUsage(auth.userId, usage.totalTokens);
-      }
+      await this.entitlements.recordUsage(auth.userId, upstreamCostCents, {
+        placement,
+      });
     } catch (err: any) {
       this.logger.warn(`Usage record failed ${requestId}: ${err.message}`);
     }
@@ -79,7 +84,7 @@ export class CloudUsageService {
 
   async listForUser(userId: string, limit = 25) {
     const take = Math.min(Math.max(limit, 1), 100);
-    const [rows, sub] = await Promise.all([
+    const [rows, view] = await Promise.all([
       this.prisma.inferenceUsage.findMany({
         where: { userId },
         orderBy: { createdAt: 'desc' },
@@ -94,33 +99,28 @@ export class CloudUsageService {
           promptTokens: true,
           completionTokens: true,
           totalTokens: true,
+          upstreamCostCents: true,
           agentId: true,
           apiKeyId: true,
           requestId: true,
           createdAt: true,
         },
       }),
-      this.entitlements.getSubscription(userId),
+      this.entitlements.getSubscriptionView(userId),
     ]);
 
     const ledgerTotal = await this.prisma.inferenceUsage.aggregate({
       where: { userId },
-      _sum: { totalTokens: true },
+      _sum: { totalTokens: true, upstreamCostCents: true },
       _count: true,
     });
 
     return {
-      subscription: sub
-        ? {
-            status: sub.status,
-            includedTokens: sub.includedTokens,
-            usedTokens: sub.usedTokens,
-            trialEndsAt: sub.trialEndsAt,
-          }
-        : null,
+      subscription: view,
       ledger: {
         requestCount: ledgerTotal._count,
         totalTokens: ledgerTotal._sum.totalTokens ?? 0,
+        upstreamCostCents: ledgerTotal._sum.upstreamCostCents ?? 0,
       },
       recent: rows,
     };

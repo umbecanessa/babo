@@ -82,6 +82,7 @@ export class SetupComponent implements OnInit, OnDestroy {
     title: string;
     subtitle: string;
     glyph: string;
+    gx10?: boolean;
   }[] = [
     {
       tier: 'hosted_babo',
@@ -155,6 +156,7 @@ export class SetupComponent implements OnInit, OnDestroy {
   voiceTier = signal<CapabilityTier>('self_local');
   visualTier = signal<CapabilityTier>('off');
   cloudProviderId = signal('openrouter');
+  platformCaps = signal<import('../../core/models/platform-capabilities.model').PlatformCapabilities | null>(null);
   recommendedBrainTier: CapabilityTier = 'hosted_babo';
   savingCapabilities = signal(false);
   visionPrefetchActive = signal(false);
@@ -283,6 +285,26 @@ export class SetupComponent implements OnInit, OnDestroy {
   ];
 
   lanServices = computed(() => this.scan()?.lan ?? []);
+
+  visibleBrainCards = computed(() => {
+    const caps = this.platformCaps();
+    const cards = [...this.brainCards];
+    if (caps?.inference?.hostedGx10Available) {
+      const label = caps.inference.hostedGx10Label || 'Babo Brain (GX10)';
+      return [
+        cards[0],
+        {
+          tier: 'hosted_babo' as CapabilityTier,
+          title: label,
+          subtitle: 'Private GX10 inference — complimentary access',
+          glyph: '🧠',
+          gx10: true,
+        },
+        ...cards.slice(1),
+      ];
+    }
+    return cards;
+  });
 
   config: SetupConfig = {
     inferenceUrl: 'https://openrouter.ai/api',
@@ -1203,6 +1225,7 @@ export class SetupComponent implements OnInit, OnDestroy {
         this.auth.applyTokens(tokens, false);
         this.signingIn.set(false);
       }
+      await this.loadPlatformCaps();
       await this.ensureBaboCloudAccess();
       this.clearWizardDraft();
       this.nextStep();
@@ -1253,6 +1276,16 @@ export class SetupComponent implements OnInit, OnDestroy {
       next = applyBaboCloudPlacements(next, this.config.nestjsUrl);
     }
     return next;
+  }
+
+  async loadPlatformCaps(): Promise<void> {
+    if (!this.auth.isAuthenticated()) return;
+    try {
+      const caps = await firstValueFrom(this.api.getPlatformCapabilities());
+      this.platformCaps.set(caps);
+    } catch {
+      this.platformCaps.set(null);
+    }
   }
 
   async ensureBaboCloudAccess(): Promise<void> {

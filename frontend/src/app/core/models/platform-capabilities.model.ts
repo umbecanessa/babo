@@ -1,5 +1,16 @@
 export interface PlatformCapabilities {
   baboCloudMode: boolean;
+  billing?: {
+    enabled: boolean;
+    trialAvailable: boolean;
+    refundWindowDays: number;
+    refundEligibleUntil: string | null;
+  };
+  inference?: {
+    resoldAvailable: boolean;
+    hostedGx10Available: boolean;
+    hostedGx10Label: string;
+  };
   email: {
     available: boolean;
     source: 'babo_server' | 'byo' | 'server_env' | null;

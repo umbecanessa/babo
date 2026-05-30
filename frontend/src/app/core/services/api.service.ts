@@ -740,6 +740,40 @@ export class ApiService {
     return this.http.delete<{ ok: boolean }>(`${this.API}/cloud/providers/resend`);
   }
 
+  // ─── Babo Cloud billing ───────────────────────────────────────
+  getCloudSubscription(): Observable<import('../models/cloud-subscription.model').CloudSubscriptionView> {
+    return this.http.get<any>(`${this.API}/cloud/subscription`);
+  }
+
+  getCloudUsage(limit = 25): Observable<import('../models/cloud-subscription.model').CloudUsageResponse> {
+    const params = new HttpParams().set('limit', String(limit));
+    return this.http.get<any>(`${this.API}/cloud/usage`, { params });
+  }
+
+  createBillingCheckout(returnUrl: string): Observable<{ url: string }> {
+    return this.http.post<{ url: string }>(`${this.API}/billing/checkout`, {
+      returnUrl,
+    });
+  }
+
+  createBillingPortal(returnUrl: string): Observable<{ url: string }> {
+    return this.http.post<{ url: string }>(`${this.API}/billing/portal`, {
+      returnUrl,
+    });
+  }
+
+  updateBillingSpendCap(capCents: number | null): Observable<{ ok: boolean }> {
+    return this.http.put<{ ok: boolean }>(`${this.API}/billing/spend-cap`, {
+      capCents,
+    });
+  }
+
+  setBillingOnDemand(enabled: boolean): Observable<{ ok: boolean }> {
+    return this.http.put<{ ok: boolean }>(`${this.API}/billing/on-demand`, {
+      enabled,
+    });
+  }
+
   // ─── Helpers ─────────────────────────────────────────────────
   /**
    * Normalize agent payloads from the local Python runtime (snake_case)

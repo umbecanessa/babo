@@ -2,6 +2,7 @@ import { Controller, Get, Req, UseGuards } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CloudUpstreamService } from './cloud-upstream.service';
+import { EntitlementsService } from './entitlements.service';
 import { ProviderKeysService } from './provider-keys.service';
 
 @Controller('cloud')
@@ -11,6 +12,7 @@ export class PlatformCapabilitiesController {
     private config: ConfigService,
     private upstream: CloudUpstreamService,
     private providerKeys: ProviderKeysService,
+    private entitlements: EntitlementsService,
   ) {}
 
   /**
@@ -22,6 +24,7 @@ export class PlatformCapabilitiesController {
   async getPlatformCapabilities(@Req() req: any) {
     const userId = req.user.userId;
     const resend = await this.providerKeys.getResendStatus(userId);
+    const subView = await this.entitlements.getSubscriptionView(userId);
 
     const serverResendKey = !!this.config.get<string>('RESEND_API_KEY');
     const serverResendDomain =
@@ -43,6 +46,17 @@ export class PlatformCapabilitiesController {
 
     return {
       baboCloudMode: this.upstream.cloudMode,
+      billing: {
+        enabled: subView.billingEnabled,
+        trialAvailable: false,
+        refundWindowDays: 31,
+        refundEligibleUntil: subView.refundEligibleUntil,
+      },
+      inference: {
+        resoldAvailable: this.upstream.isResoldInferenceConfigured(),
+        hostedGx10Available: subView.hostedGx10Enabled,
+        hostedGx10Label: 'Babo Brain (GX10)',
+      },
       email: {
         available: emailAvailable,
         source: emailSource,

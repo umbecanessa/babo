@@ -1,0 +1,29 @@
+{
+  "name": "@babo/operator",
+  "version": "0.1.0",
+  "description": "Private Babo Cloud operator — Stripe billing, webhooks, paid entitlements",
+  "private": true,
+  "license": "UNLICENSED",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "lint": "eslint src --ext .ts"
+  },
+  "peerDependencies": {
+    "@nestjs/common": "^11.0.0",
+    "@nestjs/config": "^4.0.0",
+    "@nestjs/core": "^11.0.0",
+    "@prisma/client": "^6.0.0",
+    "stripe": "^17.0.0"
+  },
+  "devDependencies": {
+    "@nestjs/common": "^11.0.1",
+    "@nestjs/config": "^4.0.3",
+    "@nestjs/core": "^11.0.1",
+    "@prisma/client": "^6.0.0",
+    "@types/node": "^22.10.7",
+    "stripe": "^17.7.0",
+    "typescript": "^5.7.3"
+  }
+}

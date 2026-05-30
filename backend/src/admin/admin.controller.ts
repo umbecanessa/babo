@@ -7,6 +7,7 @@ import {
   Param,
   Query,
   Body,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { AdminAuthGuard } from './admin-auth.guard';
@@ -55,6 +56,26 @@ export class AdminController {
   @Patch('users/:id/role')
   updateUserRole(@Param('id') id: string, @Body() dto: UpdateRoleDto) {
     return this.admin.updateUserRole(id, dto.role);
+  }
+
+  @Post('users/:id/grant-lifetime')
+  grantLifetime(
+    @Param('id') id: string,
+    @Req() req: any,
+    @Body() body: { grantNote?: string },
+  ) {
+    return this.admin.grantLifetimeComp(id, req.user.userId, body.grantNote);
+  }
+
+  @Post('users/:id/revoke-lifetime')
+  revokeLifetime(@Param('id') id: string) {
+    return this.admin.revokeLifetimeComp(id);
+  }
+
+  /** Dev / pre-Stripe: activate cloud_basic with $5 included usage. */
+  @Post('users/:id/activate-cloud-basic')
+  activateCloudBasic(@Param('id') id: string) {
+    return this.admin.activateCloudBasicDev(id);
   }
 
   @Delete('users/:id')

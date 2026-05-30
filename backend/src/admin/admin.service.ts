@@ -3,6 +3,7 @@ import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { RuntimeService } from '../runtime/runtime.service';
 import { EntitlementsService } from '../babo-cloud/entitlements.service';
+import { InternalCloudBillingProvider } from '../babo-cloud/billing/internal-cloud-billing.provider';
 
 @Injectable()
 export class AdminService {
@@ -10,6 +11,7 @@ export class AdminService {
     private prisma: PrismaService,
     private runtime: RuntimeService,
     private entitlements: EntitlementsService,
+    private internalBilling: InternalCloudBillingProvider,
   ) {}
 
   // ===================================================================
@@ -91,6 +93,36 @@ export class AdminService {
       data: { role },
       select: { id: true, email: true, role: true },
     });
+  }
+
+  async grantLifetimeComp(
+    targetUserId: string,
+    adminUserId: string,
+    grantNote?: string,
+  ) {
+    const user = await this.prisma.user.findUnique({ where: { id: targetUserId } });
+    if (!user) throw new NotFoundException('User not found');
+    await this.internalBilling.grantLifetimeComp(
+      targetUserId,
+      adminUserId,
+      grantNote,
+    );
+    return this.entitlements.getSubscriptionView(targetUserId);
+  }
+
+  async revokeLifetimeComp(targetUserId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: targetUserId } });
+    if (!user) throw new NotFoundException('User not found');
+    await this.internalBilling.revokeLifetimeComp(targetUserId);
+    return this.entitlements.getSubscriptionView(targetUserId);
+  }
+
+  /** Pre-operator dev: simulate paid cloud_basic without Stripe. */
+  async activateCloudBasicDev(targetUserId: string) {
+    const user = await this.prisma.user.findUnique({ where: { id: targetUserId } });
+    if (!user) throw new NotFoundException('User not found');
+    await this.internalBilling.activatePaidPlan(targetUserId);
+    return this.entitlements.getSubscriptionView(targetUserId);
   }
 
   async deleteUser(id: string) {

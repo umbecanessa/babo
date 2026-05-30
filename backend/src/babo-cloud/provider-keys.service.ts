@@ -1,6 +1,7 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
 import { SettingsService } from '../settings/settings.service';
 import { CryptoService } from './crypto.service';
+import { EntitlementsService } from './entitlements.service';
 import {
   CloudUpstreamService,
   InferenceProviderId,
@@ -25,6 +26,7 @@ export class ProviderKeysService {
     private settings: SettingsService,
     private crypto: CryptoService,
     private upstream: CloudUpstreamService,
+    private entitlements: EntitlementsService,
   ) {}
 
   async setInferenceProviderKey(
@@ -131,6 +133,20 @@ export class ProviderKeysService {
     const keys =
       (data.provider_keys_encrypted as Record<string, string>) || {};
 
+    const gx10Enabled = await this.entitlements.getHostedGx10Enabled(userId);
+    if (
+      gx10Enabled &&
+      this.upstream.isInferenceConfigured() &&
+      (mode === 'hosted' || mode === '' || mode === 'resold')
+    ) {
+      return {
+        baseUrl: this.upstream.inferenceApiBase(),
+        apiKey: this.upstream.inferenceUpstreamKey,
+        placement: 'hosted_babo',
+        provider: 'babo',
+      };
+    }
+
     if (mode === 'hosted') {
       if (!this.upstream.isInferenceConfigured()) {
         throw new BadRequestException('Hosted inference is not configured');
@@ -171,7 +187,7 @@ export class ProviderKeysService {
 
     if (mode === 'byok') {
       throw new BadRequestException(
-        `No API key stored for provider ${provider}. Add one in Settings or use Babo Cloud trial.`,
+        `No API key stored for provider ${provider}. Add one in Settings or subscribe to Babo Cloud.`,
       );
     }
 
@@ -188,4 +204,4 @@ export class ProviderKeysService {
       .map((k) => k.replace('inference:', ''));
   }
 }
-
+

@@ -20,6 +20,12 @@ import { ThemeService, ThemeMode } from '../../core/services/theme.service';
 import { CapabilitySettingsPanelComponent } from '../../shared/capability-settings-panel/capability-settings-panel.component';
 import { AgentModelService } from '../../core/services/agent-model.service';
 import { ApiService } from '../../core/services/api.service';
+import { BillingService } from '../../core/services/billing.service';
+import {
+  formatUsdCents,
+  includedRemainingPercent,
+  type CloudSubscriptionView,
+} from '../../core/models/cloud-subscription.model';
 import {
   isLocalNestBackend,
   localNestWebhookWarning,
@@ -96,6 +102,12 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
   platformCaps = signal<import('../../core/models/platform-capabilities.model').PlatformCapabilities | null>(null);
 
+  subscription = signal<CloudSubscriptionView | null>(null);
+  subscriptionLoading = signal(false);
+  billingActionLoading = signal(false);
+  spendCapInput = signal(15);
+  onDemandEnabled = signal(false);
+
   readonly backendChoices = BACKEND_CHOICES;
   readonly usesBaboCloudBackend = usesBaboCloudBackend;
   readonly isLocalNestBackend = isLocalNestBackend;
@@ -116,11 +128,24 @@ export class SettingsComponent implements OnInit, OnDestroy {
   permissionProfiles = signal<PermissionProfile[]>([]);
   activePermissionProfile = signal<string | null>(null);
 
+  readonly billingEnabled = computed(
+    () => !!this.platformCaps()?.billing?.enabled,
+  );
+
+  readonly includedRemaining = computed(() => {
+    const sub = this.subscription();
+    return sub ? includedRemainingPercent(sub) : 0;
+  });
+
   sections = computed(() => {
+    const billingSection = this.billingEnabled()
+      ? [{ id: 'billing', label: 'Billing' }]
+      : [];
     if (this.platform.isElectron) {
       return [
         { id: 'models', label: 'Models & AI' },
         { id: 'account', label: 'Account' },
+        ...billingSection,
         { id: 'integrations', label: 'Integrations' },
         { id: 'system', label: 'System' },
         { id: 'permissions', label: 'Permissions' },
@@ -130,6 +155,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     }
     return [
       { id: 'appearance', label: 'Appearance' },
+      ...billingSection,
       { id: 'integrations', label: 'Integrations' },
       { id: 'keys', label: 'API keys' },
       { id: 'general', label: 'General' },
@@ -158,6 +184,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
   constructor(
     private http: HttpClient,
     private api: ApiService,
+    private billing: BillingService,
     private toast: ToastService,
     private day1Coach: Day1CoachService,
     private router: Router,
@@ -184,8 +211,18 @@ export class SettingsComponent implements OnInit, OnDestroy {
       void this.loadPlatformIntegrations();
     }
 
-    if (first === 'integrations') {
+    if (first === 'integrations' || first === 'billing') {
       void this.loadPlatformIntegrations();
+    }
+    if (first === 'billing') {
+      void this.loadSubscription();
+    }
+
+    const billingParam = this.route.snapshot.queryParamMap.get('billing');
+    if (billingParam === 'success') {
+      this.toast.show('Subscription active — welcome to Babo Cloud!', 'info', 4000);
+    } else if (billingParam === 'canceled') {
+      this.toast.show('Checkout canceled', 'info', 3000);
     }
 
     void this.loadAppVersion();
@@ -279,6 +316,122 @@ export class SettingsComponent implements OnInit, OnDestroy {
     this.activeSection.set(sectionId);
     if (sectionId === 'integrations') {
       void this.loadPlatformIntegrations();
+    }
+    if (sectionId === 'billing') {
+      void this.loadPlatformIntegrations();
+      void this.loadSubscription();
+    }
+  }
+
+  async loadSubscription(): Promise<void> {
+    if (!this.billingEnabled()) return;
+    this.subscriptionLoading.set(true);
+    try {
+      const view = await this.billing.refresh();
+      this.subscription.set(view);
+      if (view?.monthlySpendCapCents != null) {
+        this.spendCapInput.set(Math.round(view.monthlySpendCapCents / 100));
+      }
+      this.onDemandEnabled.set(!!view?.onDemandEnabled);
+    } finally {
+      this.subscriptionLoading.set(false);
+    }
+  }
+
+  formatUsd(cents: number): string {
+    return formatUsdCents(cents);
+  }
+
+  subscriptionStatusLabel(status: CloudSubscriptionView['status']): string {
+    switch (status) {
+      case 'active':
+        return 'Active';
+      case 'past_due':
+        return 'Payment issue';
+      case 'canceled':
+        return 'Canceled';
+      case 'lifetime_comp':
+        return 'Lifetime';
+      default:
+        return 'Not subscribed';
+    }
+  }
+
+  async subscribeToCloud(): Promise<void> {
+    this.billingActionLoading.set(true);
+    try {
+      const returnUrl = `${window.location.origin}${window.location.pathname}?section=billing`;
+      const url = await this.billing.startCheckout(returnUrl);
+      if (url) {
+        window.location.href = url;
+      }
+    } catch (err: any) {
+      this.toast.show(
+        err?.error?.message || 'Could not start checkout',
+        'error',
+      );
+    } finally {
+      this.billingActionLoading.set(false);
+    }
+  }
+
+  async openBillingPortal(): Promise<void> {
+    this.billingActionLoading.set(true);
+    try {
+      const returnUrl = `${window.location.origin}${window.location.pathname}?section=billing`;
+      const url = await this.billing.openPortal(returnUrl);
+      if (url) {
+        window.location.href = url;
+      }
+    } catch (err: any) {
+      this.toast.show(
+        err?.error?.message || 'Could not open billing portal',
+        'error',
+      );
+    } finally {
+      this.billingActionLoading.set(false);
+    }
+  }
+
+  async saveSpendCap(): Promise<void> {
+    const dollars = this.spendCapInput();
+    if (!Number.isFinite(dollars) || dollars < 0) {
+      this.toast.show('Enter a valid spend cap', 'error');
+      return;
+    }
+    this.billingActionLoading.set(true);
+    try {
+      await this.billing.updateSpendCap(Math.round(dollars * 100));
+      await this.loadSubscription();
+      this.toast.show('Spend cap updated', 'info', 2500);
+    } catch (err: any) {
+      this.toast.show(err?.error?.message || 'Could not update spend cap', 'error');
+    } finally {
+      this.billingActionLoading.set(false);
+    }
+  }
+
+  async setOnDemandSetting(enabled: boolean): Promise<void> {
+    if (enabled === this.onDemandEnabled()) return;
+    await this.toggleOnDemand();
+  }
+
+  async toggleOnDemand(): Promise<void> {
+    const next = !this.onDemandEnabled();
+    this.billingActionLoading.set(true);
+    try {
+      await this.billing.setOnDemandEnabled(next);
+      this.onDemandEnabled.set(next);
+      await this.loadSubscription();
+      this.toast.show(
+        next ? 'On-demand usage enabled' : 'On-demand usage disabled',
+        'info',
+        2500,
+      );
+    } catch (err: any) {
+      this.toast.show(err?.error?.message || 'Could not update setting', 'error');
+    } finally {
+      this.billingActionLoading.set(false);
     }
   }
 

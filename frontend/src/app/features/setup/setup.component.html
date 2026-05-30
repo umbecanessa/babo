@@ -179,7 +179,7 @@
           </p>
 
           <div class="choice-cards">
-            @for (card of brainCards; track card.tier) {
+            @for (card of visibleBrainCards(); track card.title + (card.gx10 ? '-gx10' : '')) {
               <button
                 type="button"
                 class="choice-card"

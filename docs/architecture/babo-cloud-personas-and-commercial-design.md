@@ -1,9 +1,9 @@
 # Babo Cloud: personas, placements & commercial design
 
-**Status:** Living design document — **pricing & billing UX locked** (2026-05-29). Routing, personas, and platform decisions locked 2026-05-26.  
+**Status:** Living design document — **pricing, billing UX, and OSS/operator split locked** (2026-05-29). Routing and personas locked 2026-05-26.  
 **Purpose:** Single source of truth for who runs what where, what Babo bills vs what users bring themselves, and how platform integrations (email, Google) fit the same model.
 
-**Open source vs Babo Cloud:** The repo is self-hostable (same stack as we run). **Babo Cloud** (`api.babo.agency`) is the hosted control plane + optional hosted/resold models. Using Babo-operated services requires a **paid subscription** (no permanent free tier; trial instead — see [Commercial decisions](#commercial-decisions-resolved)).
+**Open source vs Babo Cloud:** The public **`babo`** repo (MIT) is the full local-first agent platform — self-hostable end-to-end. **Babo Cloud** (`api.babo.agency`) is our optional hosted service (like [Home Assistant Cloud](https://www.home-assistant.io/cloud/) by Nabu Casa): convenience, resold models, and integrations out of the box. **Payments and paid entitlements** live in a **private `babo-operator`** repo, deployed only on our infrastructure — not shipped as a turnkey SaaS kit in open source. See [Open source, operator & Babo Cloud](#open-source-operator--babo-cloud-home-assistant-model).
 
 **Related:**
 
@@ -13,15 +13,119 @@
 - [Channels & webhooks](channels-and-webhooks.md) — email, Telegram, WhatsApp
 - [Auth & access](auth-and-access.md) — JWT, `nlsk_` keys, relay secret
 - [Google Workspace guide](../guides/integrations/google-workspace.md) · [Email channel guide](../guides/integrations/email.md)
+- **[Billing implementation plan](babo-cloud-billing-implementation-plan.md)** — end-to-end OSS/operator split, Stripe, frontend, deploy, QA
 
 ---
 
 ## Principles
 
-1. **Local-first** — prefer this machine or my LAN server before cloud.
+1. **Local-first** — prefer this machine or my LAN server before cloud. Mission: foster local AI; long-term, families run agents on their own hardware without rent to big cloud vendors.
 2. **Composable** — brain, vision, voice, and embeddings are independent choices; so are platform services (email, Google).
 3. **Honest metering** — track and bill only where Babo is in the payment or credential path.
-4. **Same product, many topologies** — power users, hybrid users, and cloud-only users share one desktop app and one control plane (`api.babo.agency`).
+4. **Same product, many topologies** — power users, hybrid users, and cloud-only users share one desktop app; control plane is **self-hosted Nest** or **`api.babo.agency`** (Babo Cloud).
+5. **Complete without cloud** — Babo works fully on your machine or LAN without Babo Cloud (Home Assistant model). Cloud is optional convenience, not lock-in.
+
+---
+
+## Open source, operator & Babo Cloud (Home Assistant model)
+
+Reference: [Home Assistant](https://www.home-assistant.io/) (OSS, local-first) + [Nabu Casa](https://www.nabucasa.com/) (commercial operator: [Home Assistant Cloud](https://www.home-assistant.io/cloud/) subscription + official hardware). Babo follows the same split: **give the full product in open source**; **withhold only the operator kit** that turns Babo into a paid hosted business; **sell convenience and hardware** long-term.
+
+### Mapping
+
+| Home Assistant ecosystem | Babo ecosystem |
+|--------------------------|----------------|
+| **Home Assistant** (OSS, runs locally) | **`babo`** (MIT) — desktop, runtime, agents, self-host Nest |
+| **Nabu Casa** (company behind HA Cloud + hardware) | **Babo Agency** (`babo.agency`) — commercial operator |
+| **Home Assistant Cloud** (~$6.50/mo, optional) | **Babo Cloud** ($6.99/mo, optional) — `api.babo.agency` |
+| **HA Green / Yellow** (plug-and-play hub) | **Babo Box** (future) — mini PC with Babo OS pre-installed |
+| *“HA works fully without cloud”* | *“Babo works fully without Babo Cloud”* |
+
+**Public message (mirror Nabu Casa):**
+
+> Babo runs fully on your computer or home server. Babo Cloud is optional — for remote relay, hosted models, agent email, and integrations without running your own server. Subscriptions fund Babo development.
+
+### Three repositories / deployment layers
+
+```text
+babo/                          MIT — public GitHub (this repo)
+├── desktop, nls, server, frontend
+├── backend/src/babo-cloud/    inference proxy, GPU proxy, usage ledger, BYOK, relay
+└── billing interface only     CloudBillingProvider + NoOpBillingProvider
+
+babo-operator/                 PRIVATE — Babo Agency only
+├── stripe/                    Checkout, webhooks, Customer Portal, meters
+├── entitlements-paid/         trial, credit pool, overage, spend caps
+└── Nest module wired at deploy  replaces NoOp on api.babo.agency
+
+api.babo.agency                OUR DEPLOYMENT (not a separate product codebase)
+└── babo backend + babo-operator + our secrets (Stripe, PLATFORM_OPENROUTER_API_KEY, Resend, …)
+```
+
+**Competitors** may fork **`babo`** (MIT) and self-host or build their own product. They **do not** receive **`babo-operator`** — they must implement payments and paid entitlements themselves to run a Babo Cloud–style SaaS. **Trademark:** “Babo Cloud” is our hosted service name, not a license to use our operator code.
+
+### What stays in open source (`babo`)
+
+Everything built for the product **except** the payment/subscription operator:
+
+| In MIT repo | Notes |
+|-------------|--------|
+| Desktop app + Python runtime | Local-first data plane |
+| Agent loop, memory, projects, teams, integrations | Full agent platform |
+| Self-host NestJS | Auth, agents, relay, channels, webhooks |
+| `babo-cloud` inference + GPU proxy | BYOK, self LAN upstream, usage **recording** |
+| `InferenceUsage` + `upstreamCostCents` | Analytics; operator debits pool in private repo |
+| `CloudSubscription` schema + **NoOp** entitlements | `BABO_CLOUD_MODE=false` → no subscription gate |
+| `CloudBillingProvider` interface | Hook for operator injection |
+| Setup wizard, model picker, capability profiles | Billing UI hidden when `billingEnabled: false` |
+| Docs for Raspberry Pi / mini PC / homelab | Long-term Babo Box uses same OSS stack |
+
+### What stays private (`babo-operator`)
+
+Only the **commercial operator kit**:
+
+| In private repo | Notes |
+|-----------------|--------|
+| Stripe integration | Checkout, webhooks, Portal, metered overage |
+| Paid entitlements | Trial cap, `includedCreditCents` debit, overage, spend cap |
+| Subscription lifecycle | trialing → active → past_due → canceled |
+| Billing UI backend | Enriched `GET /cloud/subscription`, activate flows |
+| Platform resold **enforcement** (optional hard line) | Debit pool when using Babo OpenRouter key on Cloud |
+
+Secrets (`STRIPE_*`, `PLATFORM_OPENROUTER_API_KEY`, Babo Resend) remain **env on our deployment**, never in either repo.
+
+### OSS integration pattern
+
+```typescript
+// babo/backend — MIT
+interface CloudBillingProvider {
+  isEnabled(): boolean;
+  assertCloudAccess(userId: string): Promise<void>;
+  recordUsage(userId: string, upstreamCostCents: number): Promise<void>;
+  getSubscriptionView(userId: string): Promise<SubscriptionView>;
+}
+
+// Default when babo-operator not loaded
+class NoOpBillingProvider implements CloudBillingProvider {
+  isEnabled() { return false; }
+  async assertCloudAccess() { /* allow — self-host */ }
+  // …
+}
+```
+
+`api.babo.agency` Docker/Railway image: build **`babo`** backend + install/register **`babo-operator`** Nest dynamic module.
+
+Self-hosters: `BABO_CLOUD_MODE=false` (or operator absent) → full Babo, no paywall.
+
+### Revenue arc (same as Home Assistant)
+
+| Phase | Offering | Role |
+|-------|----------|------|
+| **Now** | Babo Cloud subscription | Optional hosted control plane + resold models; funds development |
+| **Mid** | More Cloud integrations | Email inbox, Google OAuth app, relay — convenience bundle |
+| **Long** | **Babo Box** hardware | Mini computer with Babo OS flashed; plug-in agents for families; Cloud still optional |
+
+Cloud subscription revenue should **fund the open-source Babo project** (future foundation or explicit “supported by Babo Cloud” messaging, like Nabu Casa → Open Home Foundation).
 
 ---
 
@@ -31,7 +135,7 @@
 ┌─────────────────────────────────────────────────────────────────────────┐
 │  CONTROL PLANE (Babo Cloud — NestJS + Postgres)                          │
 │  Accounts · agents · relay · channels · API keys · settings · (future)   │
-│  inference proxy · usage ledger · subscriptions                          │
+│  inference proxy · usage ledger · (operator: subscriptions & billing)   │
 └───────────────────────────────┬─────────────────────────────────────────┘
                                 │ HTTPS / relay WS
                                 ▼
@@ -311,6 +415,8 @@ Rules:
 
 **Billing unit:** **dollar-equivalent upstream cost** (`upstreamCostCents`), **not** raw token count. Token fields remain for transparency and dashboards; mixed models make token quotas misleading.
 
+**Repo split:** Schema and usage writes stay in **OSS** `babo`. **Debit against `includedCreditCents`**, trial gates, and overage enforcement stay in **`babo-operator`**.
+
 **Per-agent API keys (v1):** `ApiKey.agentId` + scopes (`inference`, `gpu`, …).  
 **Rate limits:** wire `rateLimitRpm` (and future caps) in proxy on day one; tune values after business modeling.  
 **Inference proxy must populate `upstreamCostCents`** on every usage write (model price table or provider-reported cost).
@@ -329,17 +435,20 @@ Rules:
 | **Email BYO Resend** | User brings own Resend account → **their aliases/domains**, not `@inbox.babo.agency`. |
 | **Google / email connection fee** | **No** separate charge. Included in Babo Cloud subscription. |
 | **Free tier** | **No permanent free tier** — product is open source; users can self-host for $0. Babo Cloud is paid. |
-| **Trial** | **30 days**, same product access, **`$8` included usage cap** (`800` cents) — enough for ~1 Gemini E2E, not a Sonnet binge. |
+| **Trial** | **No free inference trial** — **$6.99/mo from day one** for Babo Cloud resold models. **31-day refund** on **first subscription payment** only (see below). Self-host remains $0. |
+| **Lifetime comp plan** | **Admin-granted only** (`lifetime_comp`) — family/friends; **no Stripe**; **GX10** via `brain.babo.agency`; hidden from public UI unless granted. |
+| **Coupons / referrals / affiliates** | **Scaffold in v1** (schema + Stripe hooks); full programs later. |
 | **Pricing shape** | **Monthly subscription + included API usage pool + overage** (aligned with [Cursor 2026](https://cursor.com/help/models-and-usage/usage-limits)). |
 | **Composable SKUs** | **v1: single plan** (`cloud_basic`). Pro tier / add-ons deferred. |
 | **Default resold model** | **`google/gemini-2.5-flash`** — recommended in UI; premium models available with cost visibility. |
-| **GX10** | **Single upstream** for Babo-hosted inference/vision; Nest relays — **no per-customer GX10 URL**. |
-| **Self-hosted Nest** | Supported — user runs Nest on laptop or VPS with their own `INFERENCE_UPSTREAM_*` (same code as Babo Cloud). |
+| **GX10 / `brain.babo.agency`** | **Hidden from public setup** — not offered on `cloud_basic`. **Lifetime comp** users only (admin flag). Nest → `INFERENCE_UPSTREAM_URL`; no pool debit for comp users. |
+| **Stripe / payments** | **Private `babo-operator` repo only** — not in public `babo` |
+| **OSS license** | **MIT** for `babo`; operator proprietary (Babo Agency) |
+| **Self-hosted Nest** | Full product — `BABO_CLOUD_MODE=false`, no operator module |
 | **Per-agent API keys** | **Yes, v1** |
 | **API key validation** | **Implement** on Nest proxy + close Python gap |
 | **Stream metering** | Persist/update usage on **every stream chunk** that carries `usage` |
 | **Rate limits** | **Wire in** at launch; adjust RPM/caps with business case |
-| **Stripe** | Checkout + Customer Portal + webhooks; metered overage invoiced in arrears |
 
 ---
 
@@ -347,7 +456,9 @@ Rules:
 
 ### Plan: Babo Cloud Basic — **$6.99/month**
 
-Required to use **Babo Cloud** (`api.babo.agency`): hosted/resold models, Babo Resend inbox, default Google OAuth app, relay, dashboard.
+Required to use **Babo Cloud** (`api.babo.agency`): resold OpenRouter models, Babo Resend inbox, default Google OAuth app, relay, dashboard.
+
+**No free trial** on resold inference — subscribe to start. Early adopters: pay $6.99, get $5 pool (~one Gemini E2E build; see [Empirical cost data](#empirical-cost-data-openrouter-may-2026)).
 
 | Component | Amount | Notes |
 |-----------|--------|-------|
@@ -361,25 +472,99 @@ Required to use **Babo Cloud** (`api.babo.agency`): hosted/resold models, Babo R
 > Babo Cloud — **$6.99/month**  
 > Includes **$5 of model usage** at standard API rates.  
 > Additional usage billed pay-as-you-go.  
-> *Recommended models go further; premium models use included usage faster.*
+> *Recommended models go further; premium models use included usage faster.*  
+> **Full refund of your first month’s subscription within 31 days.** Overage and usage beyond your included allowance are not refundable.
 
 **Secondary copy (optional footnote):** ~14M agent tokens equivalent on Gemini 2.5 Flash; ~1.5M on Claude Sonnet. Token equivalents are illustrative — billing is dollar-based.
 
-### What counts against the included pool
+### What counts against the included pool (paid `cloud_basic` only)
 
-| Placement | Debits included pool? |
-|-----------|----------------------|
-| `babo_resold` (Babo OpenRouter key) | **Yes** |
-| `hosted_babo` (GX10) | **Yes** (at internal cost rate TBD) |
-| `byok_cloud` | **No** — user pays provider; Babo meters for abuse only |
-| `self_local` / `self_lan` | **No** — direct inference |
+| Placement | Who sees it | Debits included pool? |
+|-----------|-------------|------------------------|
+| `babo_resold` (OpenRouter) | All paid Cloud users | **Yes** — real upstream cost |
+| `hosted_babo` → GX10 (`brain.babo.agency`) | **`lifetime_comp` only** (admin) | **No** — comp; not on public plans in v1 |
+| `byok_cloud` | BYOK users on Cloud | **No** — user pays provider |
+| `self_local` / `self_lan` | Self-host / desktop | **No** — direct inference |
 
-### Trial
+### No trial (v1)
 
-- **30 days** from first Babo Cloud sign-in (`status: trialing`)
-- **`$8` included usage** during trial (`800` cents) — full product, capped burn
-- No always-free hosted tier
-- Card optional at signup; required before trial ends to continue
+- Sign up → **Stripe Checkout $6.99/mo** to use Babo Cloud resold models.
+- **`$5` included usage** starts with first paid period.
+- Self-host path unchanged: **$0**, no Babo Cloud account required.
+
+### 31-day refund (first subscription only)
+
+Like [Home Assistant Cloud](https://www.home-assistant.io/cloud/) (Nabu Casa offers a 31-day trial/refund window), Babo Cloud offers a **31-day satisfaction guarantee on the first subscription payment**:
+
+| Refundable | Not refundable |
+|------------|----------------|
+| **First `$6.99` subscription charge** (within 31 days of payment) | **On-demand overage** beyond the included `$5` pool |
+| | **Any usage billed in arrears** after the included pool is exhausted |
+| | **Second and later monthly invoices** |
+| | **Promotion-adjusted amounts** — refund policy applies to net subscription paid; confirm in support |
+
+**Rules:**
+
+1. **Window:** 31 calendar days from **first successful** `cloud_basic` payment (Stripe `invoice.paid` or Checkout completion).
+2. **Scope:** Refund the **subscription fee only** — not upstream model spend you already incurred on OpenRouter for their included-pool usage (that cost is sunk).
+3. **Overage:** If the user enabled on-demand and exceeded the `$5` included pool, **overage charges are never refunded** under this policy.
+4. **Process:** Support request or self-serve link → Stripe **full or partial refund of subscription line** → cancel subscription → revoke resold access.
+5. **Copy (pricing page):** *“Try Babo Cloud risk-free: full refund of your first month’s subscription within 31 days. Additional model usage beyond your included allowance is billed separately and is not refundable.”*
+
+Store `firstPaidAt` on `CloudSubscription` (operator) to enforce the window in admin/support tooling.
+
+### Plan tiers & entitlements
+
+| Plan id | How assigned | Stripe | Inference path | UI |
+|---------|--------------|--------|----------------|-----|
+| **`cloud_basic`** | Checkout / webhook | **Yes** $6.99/mo | **OpenRouter resold** (`babo_resold`) | Standard Babo Cloud model picker; **GX10 hidden** |
+| **`lifetime_comp`** | **Admin grant only** | **No** | **GX10** via Nest → `https://brain.babo.agency` (`hosted_babo`) | Setup + picker show **“Babo Brain (GX10)”** when flag set |
+| *(future)* `cloud_pro` | Checkout | Yes | Resold + higher pool | TBD |
+
+**Admin grant (family & friends):** Operator/admin sets `planId: lifetime_comp`, `billingExempt: true`, `hostedGx10Enabled: true`. User gets full Babo Cloud platform (relay, email, Google) **without payment** and routes brain to **your GX10**, not OpenRouter — so you are not charged per token on OpenRouter for them.
+
+**Public users never see GX10** in setup unless they have `hostedGx10Enabled` (only comp plan today).
+
+### Commercial scaffolding (v1 schema, programs later)
+
+Ship **fields and hooks** now; UI and automation can follow.
+
+| Capability | v1 scaffold | Later |
+|------------|-------------|-------|
+| **Stripe Promotion Codes** | Checkout accepts `promotion_code`; store `promotionCodeId` on subscription | Campaigns, influencer codes |
+| **Admin comp / lifetime** | Admin API: `POST /admin/users/:id/grant-lifetime` | Self-serve credits |
+| **Referrals** | `User.referredByUserId`, `referralCode` (unique); metadata on Stripe Customer | Refer-a-friend credits |
+| **Affiliates** | `User.affiliateId`, `Affiliate` table stub; Stripe metadata `affiliate_id` | Payouts, dashboards |
+| **Coupons** | Stripe Coupons + Promotion Codes in Dashboard; webhook logs redemption | In-app coupon field |
+
+```prisma
+// CloudSubscription (evolved)
+planId              String   // cloud_basic | lifetime_comp
+billingExempt       Boolean  @default(false)
+hostedGx10Enabled   Boolean  @default(false)
+grantedByAdminId    String?
+grantNote           String?
+promotionCodeId     String?  // Stripe, optional
+firstPaidAt         DateTime? @map("first_paid_at")  // 31-day refund window anchor
+referralCode        String?  @unique  // this user's share code (future)
+referredByUserId    String?  // who referred them (future)
+affiliateId         String?  // future
+```
+
+**API:** extend `GET /cloud/platform-capabilities`:
+
+```json
+{
+  "inference": {
+    "resoldAvailable": true,
+    "hostedGx10Available": false,
+    "hostedGx10Label": "Babo Brain (GX10)"
+  },
+  "billing": { "billingEnabled": true, "trialAvailable": false }
+}
+```
+
+**Routing:** `ProviderKeysService.resolveInferenceUpstream()` — if `hostedGx10Enabled` → `mode: hosted`, GX10 upstream; else paid users → `babo_resold` OpenRouter.
 
 ### Enterprise / BYO credentials
 
@@ -450,7 +635,10 @@ Internal reference from Babo agentic E2E platform builds (ICF-style tasks). Use 
 |--------|-------|
 | Full morning session | **~$6.89** upstream |
 | Single heavy E2E hour | **~$5.74** / ~13.6M tokens |
+| **Focused E2E burst (~22 min)** | **~$3.64** / **~7.7M tokens** |
 | Blended rate | **~$0.36 / 1M tokens** |
+
+**Rule of thumb for pricing:** one full ICF-style platform E2E (back + front + repo + sub-agent waves) ≈ **$3.50–7** and **~8–14M tokens** on Gemini Flash — so **`$5` included ≈ one build** for a typical paid user.
 
 ### Incomplete path — Claude Sonnet 4 (May 28)
 
@@ -474,7 +662,9 @@ Internal reference from Babo agentic E2E platform builds (ICF-style tasks). Use 
 
 ---
 
-## Stripe integration (Phase D)
+## Stripe integration (Phase D — `babo-operator` private repo)
+
+All Stripe code lives in **`babo-operator`**, not in public `babo`. OSS backend exposes `CloudBillingProvider`; operator implements paid entitlements and registers webhooks on deploy.
 
 | Piece | Spec |
 |-------|------|
@@ -498,7 +688,7 @@ Internal reference from Babo agentic E2E platform builds (ICF-style tasks). Use 
 4. **Default Babo Cloud brain** to **Gemini 2.5 Flash**; explain premium models cost more per task.
 5. **Test** per workload: inference `/v1/models`, 1 s transcribe, optional vision frame.
 6. **Persist** `capabilityProfile` + platform credential source flags.
-7. **Trial users** see usage bar from day one (`$8` cap during trial).
+7. **Paid Cloud users** see Checkout before resold inference; **comp users** see GX10 brain when admin-granted.
 
 See [capability-profiles-and-onboarding.md](capability-profiles-and-onboarding.md) for env mapping and [production-architecture-and-onboarding.md](production-architecture-and-onboarding.md) for wizard steps.
 
@@ -513,7 +703,7 @@ Goal: ship **Phases A → D** as one coherent Babo Cloud release (not a partial 
 | **A** | Nest `inference-proxy` module: `chat/completions`, `models`, JWT + `nlsk_` auth, usage table, rate-limit hooks, GX10 upstream env | Desktop `hosted_babo` points at `api.babo.agency`; stream usage per chunk |
 | **B** | GPU proxy routes: transcribe, vision, embed → same GX10 fleet via Nest | Hosted voice/vision/embed in capability profile |
 | **C** | Resold + BYOK frontier: store user provider keys securely; route OpenAI/Anthropic through proxy; `upstreamCostCents` | Settings/UI can pick provider; credits/overage backend stub |
-| **D** | Per-agent API keys, per-user Resend BYO, trial + subscription (Stripe), entitlements, billing UX | Dollar credits; Stripe webhooks; usage bar; model picker pricing; spend cap |
+| **D** | **`babo-operator`:** Stripe, paid entitlements, billing UX; OSS: `CloudBillingProvider` + NoOp, dollar credits schema, `upstreamCostCents` | Operator on `api.babo.agency` only; usage bar when `billingEnabled`; model picker pricing — see [implementation plan](babo-cloud-billing-implementation-plan.md) |
 
 **Also in v1:** `ApiKeysService.validateKey()` used by proxy; Python `validate_api_key` implemented or delegated to Nest for cloud paths.
 
@@ -529,11 +719,13 @@ Goal: ship **Phases A → D** as one coherent Babo Cloud release (not a partial 
 | Per-user Resend BYO | `provider-keys` + `channels` | Shipped |
 | Resold + BYOK frontier routing | `provider-keys` + inference proxy | Shipped (OpenRouter) |
 | Usage ledger + stream chunk writes | Prisma `InferenceUsage` | Shipped |
-| Subscription trial stub | `cloud_subscriptions` + `EntitlementsService` | Shipped (token-based — **migrate to cents**) |
-| `upstreamCostCents` on inference proxy | `inference.service.ts` | **Planned** |
-| Dollar credits (`includedCreditCents` / `usedCreditCents`) | Prisma + `EntitlementsService` | **Planned** |
-| Stripe Checkout + webhooks + Portal | `billing/` module | **Planned** |
-| Billing UX: usage bar, spend cap | Settings + `GET /cloud/subscription` | **Planned** |
+| Subscription trial stub | `cloud_subscriptions` + `EntitlementsService` | Shipped (token-based — **migrate to cents in OSS**; paid logic → operator) |
+| `CloudBillingProvider` + `NoOpBillingProvider` | `backend/src/babo-cloud/billing/` | **Planned (OSS)** |
+| `upstreamCostCents` on inference proxy | `inference.service.ts` | **Planned (OSS)** |
+| Dollar credits schema | Prisma `includedCreditCents` / `usedCreditCents` | **Planned (OSS)** |
+| Stripe Checkout + webhooks + Portal | **`babo-operator`** | **Planned (private)** |
+| Paid entitlements + spend cap | **`babo-operator`** | **Planned (private)** |
+| Billing UX: usage bar, upgrade | Frontend + operator API | **Planned** |
 | Model picker: $/1M, tier, usage multiplier | `BABO_CLOUD_MODELS` + picker component | **Planned** |
 | `hosted_babo` / cloud brain env | `capabilityProfileToRuntimeEnv`, setup wizard | Planned |
 | Self-host docs for Nest upstream env | `docs/configuration/` | Planned |
@@ -544,9 +736,9 @@ Goal: ship **Phases A → D** as one coherent Babo Cloud release (not a partial 
 
 Minor — safe to implement without blocking:
 
-1. **`hosted_babo` (GX10) internal cost rate** — how to map GX10 inference to `upstreamCostCents` for pool debit (flat rate vs pass-through).
-2. **Pro tier timing** — when to add `$19.99/mo` with `$20` included usage (mirror Cursor Pro ratio).
-3. **Annual billing** — 20% discount like Cursor? Defer to post-launch.
+1. **Pro tier timing** — when to add `$19.99/mo` with `$20` included usage.
+2. **Annual billing** — 20% discount? Defer to post-launch.
+3. **Referral / affiliate programs** — reward amounts and automation (schema ready in v1).
 
 Record answers here when set.
 
@@ -560,3 +752,5 @@ Record answers here when set.
 | 2026-05-26 | Locked pre-implementation decisions: routing, auth, GX10 relay, pricing shape, roadmap A–D |
 | 2026-05-26 | Clarified BYOK vs LAN; all `byok_cloud` (incl. OpenRouter) via Nest |
 | 2026-05-29 | **Locked v1 pricing:** $6.99/mo + $5 included API usage + 1.25× overage; trial $8 cap; dollar-based ledger; Cursor-aligned UX; empirical OpenRouter cost data (Gemini vs Sonnet) |
+| 2026-05-29 | **Locked OSS/operator split (Home Assistant model):** MIT `babo` = full product; private **`babo-operator`** = Stripe + paid entitlements only; long-term **Babo Box** hardware vision |
+| 2026-05-29 | **No inference trial;** 31-day refund on first subscription only (not overage); lifetime comp + GX10; coupon/referral/affiliate scaffolding |

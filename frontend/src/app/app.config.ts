@@ -6,6 +6,7 @@ import { provideTranslateService } from '@ngx-translate/core';
 import { provideTranslateHttpLoader } from '@ngx-translate/http-loader';
 import { routes } from './app.routes';
 import { jwtInterceptor } from './core/interceptors/jwt.interceptor';
+import { billingPaywallInterceptor } from './core/interceptors/billing-paywall.interceptor';
 import { ApiService } from './core/services/api.service';
 import { isDesktopShell } from './core/desktop-boot';
 import { environment } from '../environments/environment';
@@ -27,7 +28,7 @@ export const appConfig: ApplicationConfig = {
     // accidental navigation at that URL returns an empty HTML document because no such
     // file exists, making the entire app go blank with no error.
     provideRouter(routes, ...(environment.electron || isDesktopShell() ? [withHashLocation()] : [])),
-    provideHttpClient(withInterceptors([jwtInterceptor])),
+    provideHttpClient(withInterceptors([jwtInterceptor, billingPaywallInterceptor])),
     { provide: APP_INITIALIZER, useFactory: initDesktopUrls, multi: true },
     provideTranslateService({
       fallbackLang: 'en',
