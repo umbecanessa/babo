@@ -33,6 +33,7 @@ import {
 } from './setup-inference.util';
 import {
   BACKEND_CHOICES,
+  BABO_CLOUD_BACKEND_URL,
   type BackendChoiceId,
   backendDisplayLabel,
   matchBackendChoice,
@@ -71,7 +72,7 @@ interface ExpRow {
   templateUrl: './setup.component.html',
   styleUrl: './setup.component.scss',
 })
-/** Screen: 0 welcome → 1 prepare → 2 device → 3 thinking → 4 extras → 5 placement → 6 sign-in → 7 ready → 8 name */
+/** Screen: 0 welcome → 1 prepare → 2 device → 3 thinking → 4 extras → [5 placement] → 6 sign-in → 7 billing? → 8 ready → 9 name */
 export class SetupComponent implements OnInit, OnDestroy {
   readonly decisionSteps = [
     { id: 'thinking', label: 'Thinking' },
@@ -79,6 +80,15 @@ export class SetupComponent implements OnInit, OnDestroy {
     { id: 'placement', label: 'Account server' },
     { id: 'signin', label: 'Sign in' },
   ];
+
+  /** Babo Cloud inference only works through api.babo.agency — skip the placement step. */
+  needsAccountServerStep = computed(() => this.brainTier() !== 'hosted_babo');
+
+  visibleDecisionSteps = computed(() =>
+    this.needsAccountServerStep()
+      ? this.decisionSteps
+      : this.decisionSteps.filter((s) => s.id !== 'placement'),
+  );
 
   readonly brainCards: {
     tier: CapabilityTier;
@@ -90,7 +100,7 @@ export class SetupComponent implements OnInit, OnDestroy {
     {
       tier: 'hosted_babo',
       title: 'Babo Cloud',
-      subtitle: 'Qwen 3.6, GPT, Claude via your Babo account',
+      subtitle: 'Hosted models, account, and agents — all at api.babo.agency',
       glyph: '☁',
     },
     {
@@ -179,8 +189,12 @@ export class SetupComponent implements OnInit, OnDestroy {
     const s = this.step();
     if (s === 3) return 0;
     if (s === 4) return 1;
-    if (s === 5) return 2;
-    if (s === 6) return 3;
+    if (this.needsAccountServerStep()) {
+      if (s === 5) return 2;
+      if (s === 6) return 3;
+    } else if (s === 6) {
+      return 2;
+    }
     return -1;
   });
 
@@ -262,11 +276,18 @@ export class SetupComponent implements OnInit, OnDestroy {
     }
   });
 
-  placementStepLead = computed(
-    () =>
-      `Pick the NestJS server for your account and agents. Chat runs on ` +
-      `${this.inferenceRunLocation()} — you already chose that.`,
-  );
+  placementStepLead = computed(() => {
+    const tier = this.brainTier();
+    if (tier === 'byok_cloud') {
+      return (
+        'Your API keys can relay through Babo Cloud (recommended) or a NestJS server you run. ' +
+        'Pick where your Babo account and agents live.'
+      );
+    }
+    return (
+      `Pick the NestJS server for your account and agents. Chat still runs on ${this.inferenceRunLocation()}.`
+    );
+  });
 
   signInStepLead = computed(() => {
     const server = this.backendSummaryLabel();
@@ -595,6 +616,9 @@ export class SetupComponent implements OnInit, OnDestroy {
   }
 
   goToStep(target: number): void {
+    if (target === 5 && !this.needsAccountServerStep()) {
+      target = 6;
+    }
     if (!this.canEnterStep(target)) return;
     this.step.set(target);
     this.highestStepReached = Math.max(this.highestStepReached, target);
@@ -659,6 +683,8 @@ export class SetupComponent implements OnInit, OnDestroy {
       this.highestStepReached = d.highestStepReached ?? target;
       if (this.canEnterStep(target)) {
         this.step.set(target);
+      } else if (target === 5 && !this.needsAccountServerStep()) {
+        this.step.set(6);
       }
     } catch { /* ignore */ }
   }
@@ -679,6 +705,7 @@ export class SetupComponent implements OnInit, OnDestroy {
     if (target <= 1) return true;
     if (target >= 2 && !this.venvReady()) return false;
     if (target >= 3 && !this.profile()) return false;
+    if (target === 5 && !this.needsAccountServerStep()) return false;
     if (target >= 7 && !this.auth.isAuthenticated()) return false;
     if (target >= 8 && this.requiresSetupSubscription()) return false;
     return true;
@@ -691,7 +718,10 @@ export class SetupComponent implements OnInit, OnDestroy {
   }
 
   async prevStep(): Promise<void> {
-    const n = Math.max(this.step() - 1, 0);
+    let n = Math.max(this.step() - 1, 0);
+    if (n === 5 && !this.needsAccountServerStep()) {
+      n = 4;
+    }
     this.goToStep(n);
     if (n === 2 && !this.scan() && !this.scanLoading()) {
       await this.runDeviceScan();
@@ -725,10 +755,23 @@ export class SetupComponent implements OnInit, OnDestroy {
   suggestBackendFromThinking(): void {
     const tier = this.brainTier();
     if (tier === 'hosted_babo' || tier === 'byok_cloud') {
-      this.selectBackendChoice('babo_cloud');
+      this.applyBaboCloudBackend();
     } else if (tier === 'self_local') {
       this.selectBackendChoice('local');
     }
+  }
+
+  applyBaboCloudBackend(): void {
+    this.selectBackendChoice('babo_cloud');
+    this.config.nestjsUrl = BABO_CLOUD_BACKEND_URL;
+    this.backendTestResult.set(null);
+    this.backendSaveError.set(null);
+  }
+
+  async persistBackendUrl(): Promise<void> {
+    this.config.nestjsUrl = normalizeNestjsUrl(this.config.nestjsUrl);
+    await this.nls().config.set({ nestjsUrl: this.config.nestjsUrl });
+    await this.api.whenReady();
   }
 
   private maybeAutoAdvanceFromPrepare(): void {
@@ -951,6 +994,7 @@ export class SetupComponent implements OnInit, OnDestroy {
       p.inference.url = '';
       p.inference.model = resolveBaboCloudModelId(p.inference.model);
       this.config.inferenceModel = p.inference.model;
+      this.applyBaboCloudBackend();
     }
     this.syncInferenceLegacy();
     this.profile.set({ ...p });
@@ -1466,6 +1510,12 @@ export class SetupComponent implements OnInit, OnDestroy {
       this.suggestBackendFromThinking();
       if (this.preferSignInAfterConfig) {
         this.preferSignInAfterConfig = false;
+        if (!this.needsAccountServerStep()) {
+          await this.persistBackendUrl();
+        }
+        this.goToStep(6);
+      } else if (!this.needsAccountServerStep()) {
+        await this.persistBackendUrl();
         this.goToStep(6);
       } else {
         this.nextStep();

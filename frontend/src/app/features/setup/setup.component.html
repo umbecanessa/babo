@@ -25,7 +25,7 @@
 
     @if (showDecisionDots()) {
       <div class="steps compact decision-dots">
-        @for (s of decisionSteps; track s.id; let i = $index) {
+        @for (s of visibleDecisionSteps(); track s.id; let i = $index) {
           <div
             class="step"
             [class.active]="decisionStepIndex() === i"
@@ -172,7 +172,7 @@
         <div class="step-body">
           <h2>How should Babo think?</h2>
           <p class="lead">
-            Where chat runs. Your account and agents come later — after optional features.
+            Where chat runs.
             @if (lanInferenceFound()) {
               We found a chat server on your network — <strong>My server</strong> is suggested.
             }
@@ -216,7 +216,8 @@
             <div class="sheet-panel inline connect-panel">
               <p class="panel-label">Chat model (Babo Cloud)</p>
               <p class="panel-hint">
-                Routed through api.babo.agency after sign-in. Add provider API keys in Settings if prompted.
+                Account, agents, and hosted models all use <strong>api.babo.agency</strong>.
+                You’ll sign in and subscribe on the next steps — no separate server to configure.
               </p>
               <div class="chip-row providers">
                 @for (m of baboCloudModels; track m.id) {
@@ -355,14 +356,14 @@
       </div>
     }
 
-    <!-- 5 · Account server (NestJS — not where chat runs) -->
-    @if (step() === 5) {
+    <!-- 5 · Account server (skipped when Babo Cloud thinking — backend is fixed) -->
+    @if (step() === 5 && needsAccountServerStep()) {
       <div class="step-shell">
         <div class="step-body">
           <h2>Where your account lives</h2>
           <p class="lead">{{ placementStepLead() }}</p>
           <p class="small-muted account-split">
-            Chat runs on <strong>{{ inferenceRunLocation() }}</strong>
+            Chat runs on <strong>{{ inferenceRunLocation() }}</strong> — separate from this NestJS server.
           </p>
 
           <div class="choice-cards backend-cards">
@@ -456,7 +457,11 @@
             <div class="server-pill static">
               <span class="dot online"></span>
               <span>{{ backendSummaryLabel() }}</span>
-              <button type="button" class="link-btn inline-link" (click)="goToStep(5)">Change</button>
+              @if (needsAccountServerStep()) {
+                <button type="button" class="link-btn inline-link" (click)="goToStep(5)">Change</button>
+              } @else {
+                <button type="button" class="link-btn inline-link" (click)="goToStep(3)">Change thinking</button>
+              }
             </div>
 
             @if (!auth.isAuthenticated()) {
