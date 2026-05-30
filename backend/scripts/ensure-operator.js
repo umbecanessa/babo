@@ -27,8 +27,12 @@ if (provider !== 'operator') {
   process.exit(0);
 }
 
-function run(cmd, cwd = backendDir) {
-  execSync(cmd, { cwd, stdio: 'inherit', env: process.env });
+function run(cmd, cwd = backendDir, extraEnv = {}) {
+  execSync(cmd, {
+    cwd,
+    stdio: 'inherit',
+    env: { ...process.env, ...extraEnv },
+  });
 }
 
 const operatorPackageJson = path.join(operatorDir, 'package.json');
@@ -61,8 +65,10 @@ if (!fs.existsSync(operatorDir)) {
 }
 
 console.log('[operator] Installing and building…');
-run('npm install', operatorDir);
-run('npm run build', operatorDir);
+run('npm install --include=dev --no-audit --no-fund', operatorDir, {
+  NODE_ENV: 'development',
+});
+run('npm run build', operatorDir, { NODE_ENV: 'development' });
 
 console.log('[operator] Linking into node_modules/@babo/operator…');
 run('npm install "./babo-operator" --no-audit --no-fund');

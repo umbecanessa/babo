@@ -12,12 +12,8 @@ RUN npm ci
 
 COPY . .
 
-# Railway service env vars are available at Docker build time — pass through for operator clone.
-ARG BILLING_PROVIDER
-ARG GITHUB_TOKEN
-ENV BILLING_PROVIDER=${BILLING_PROVIDER} \
-    GITHUB_TOKEN=${GITHUB_TOKEN} \
-    NODE_ENV=development
+# Railway service env vars are available at Docker build time.
+ENV NODE_ENV=development
 
 RUN node scripts/ensure-operator.js
 RUN npm run build
