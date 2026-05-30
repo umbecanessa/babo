@@ -16,20 +16,31 @@ import { ChannelsModule } from './channels/channels.module';
 import { RuntimeProxyModule } from './runtime-proxy/runtime-proxy.module';
 import { ClawhubModule } from './clawhub/clawhub.module';
 import { BaboCloudModule } from './babo-cloud/babo-cloud.module';
+import * as path from 'path';
 
 function loadOperatorModule(): unknown[] {
   if (process.env.BILLING_PROVIDER !== 'operator') return [];
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { OperatorModule } = require('@babo/operator');
-    return [OperatorModule.forRoot()];
-  } catch (err) {
-    console.error(
-      'BILLING_PROVIDER=operator but @babo/operator is not installed:',
-      (err as Error).message,
-    );
-    return [];
+
+  const candidates = [
+    '@babo/operator',
+    path.join(__dirname, '..', 'babo-operator'),
+  ];
+
+  for (const mod of candidates) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { OperatorModule } = require(mod);
+      console.log(`[operator] Loaded OperatorModule from ${mod}`);
+      return [OperatorModule.forRoot()];
+    } catch {
+      /* try next */
+    }
   }
+
+  throw new Error(
+    'BILLING_PROVIDER=operator but @babo/operator could not be loaded. ' +
+      'Ensure GITHUB_TOKEN is set and scripts/ensure-operator.js ran successfully.',
+  );
 }
 
 @Module({
@@ -55,4 +66,3 @@ function loadOperatorModule(): unknown[] {
   ],
 })
 export class AppModule {}
-

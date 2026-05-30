@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Clone/build private @babo/operator when BILLING_PROVIDER=operator.
- * OSS self-host builds skip this (internal/noop billing).
+ * Installs into backend/babo-operator (inside the app dir) so Railway images include it.
  */
 const fs = require('fs');
 const path = require('path');
@@ -9,11 +9,30 @@ const { execSync } = require('child_process');
 
 const provider = process.env.BILLING_PROVIDER || 'internal';
 const backendDir = path.join(__dirname, '..');
-const operatorDir = path.join(backendDir, '..', 'babo-operator');
-const repo = process.env.BABO_OPERATOR_REPO || 'https://github.com/umbecanessa/babo-operator.git';
+const operatorDir = path.join(backendDir, 'babo-operator');
+const installedMain = path.join(
+  backendDir,
+  'node_modules',
+  '@babo',
+  'operator',
+  'dist',
+  'index.js',
+);
+const repo =
+  process.env.BABO_OPERATOR_REPO ||
+  'https://github.com/umbecanessa/babo-operator.git';
 
 if (provider !== 'operator') {
   console.log('[operator] Skipping — BILLING_PROVIDER is not "operator"');
+  process.exit(0);
+}
+
+function run(cmd, cwd = backendDir) {
+  execSync(cmd, { cwd, stdio: 'inherit', env: process.env });
+}
+
+if (fs.existsSync(installedMain) && fs.existsSync(operatorDir)) {
+  console.log('[operator] Already installed in node_modules');
   process.exit(0);
 }
 
@@ -21,7 +40,7 @@ if (!fs.existsSync(operatorDir)) {
   const token = process.env.GITHUB_TOKEN || process.env.RAILWAY_GITHUB_TOKEN;
   if (!token) {
     console.error(
-      '[operator] ../babo-operator missing. Clone it locally or set GITHUB_TOKEN for Railway.',
+      '[operator] babo-operator/ missing. Set GITHUB_TOKEN (read access to umbecanessa/babo-operator).',
     );
     process.exit(1);
   }
@@ -29,16 +48,20 @@ if (!fs.existsSync(operatorDir)) {
     'https://',
     `https://x-access-token:${token}@`,
   );
-  console.log('[operator] Cloning private babo-operator…');
-  execSync(`git clone --depth 1 "${cloneUrl}" "${operatorDir}"`, {
-    stdio: 'inherit',
-  });
+  console.log('[operator] Cloning private babo-operator into backend/babo-operator…');
+  run(`git clone --depth 1 "${cloneUrl}" "${operatorDir}"`);
 }
 
 console.log('[operator] Installing and building…');
-execSync('npm install', { cwd: operatorDir, stdio: 'inherit' });
-execSync('npm run build', { cwd: operatorDir, stdio: 'inherit' });
-execSync('npm install "file:../babo-operator"', {
-  cwd: backendDir,
-  stdio: 'inherit',
-});
+run('npm install', operatorDir);
+run('npm run build', operatorDir);
+
+console.log('[operator] Linking into node_modules/@babo/operator…');
+run('npm install "./babo-operator" --no-audit --no-fund');
+
+if (!fs.existsSync(installedMain)) {
+  console.error('[operator] Install failed — dist/index.js not found in node_modules');
+  process.exit(1);
+}
+
+console.log('[operator] Ready');
