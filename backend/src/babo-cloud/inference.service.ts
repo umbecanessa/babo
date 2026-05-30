@@ -11,6 +11,7 @@ import { ApiKeysService } from '../api-keys/api-keys.service';
 import { CloudAuthContext } from './cloud-auth.types';
 import { CloudRateLimiterService } from './cloud-rate-limiter.service';
 import { CloudUsageService } from './cloud-usage.service';
+import { EntitlementsService } from './entitlements.service';
 import { ProviderKeysService } from './provider-keys.service';
 
 @Injectable()
@@ -24,6 +25,7 @@ export class InferenceService {
     private rateLimiter: CloudRateLimiterService,
     private usage: CloudUsageService,
     private providerKeys: ProviderKeysService,
+    private entitlements: EntitlementsService,
   ) {
     this.defaultRpm = Number(this.config.get('INFERENCE_DEFAULT_RPM') || 120);
   }
@@ -48,6 +50,10 @@ export class InferenceService {
     const upstream = await this.providerKeys.resolveInferenceUpstream(
       auth.userId,
     );
+    await this.entitlements.assertCloudAccessForPlacement(
+      auth.userId,
+      upstream.placement,
+    );
     const url = `${upstream.baseUrl.replace(/\/+$/, '')}/models`;
     const res = await fetch(url, {
       headers: this.upstreamHeaders(upstream.apiKey),
@@ -67,6 +73,10 @@ export class InferenceService {
     await this.assertRateLimit(auth);
     const upstream = await this.providerKeys.resolveInferenceUpstream(
       auth.userId,
+    );
+    await this.entitlements.assertCloudAccessForPlacement(
+      auth.userId,
+      upstream.placement,
     );
 
     const stream = body.stream === true;

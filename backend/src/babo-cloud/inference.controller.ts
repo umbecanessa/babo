@@ -11,13 +11,12 @@ import {
 } from '@nestjs/common';
 import type { Response } from 'express';
 import { CloudAuthGuard } from './cloud-auth.guard';
-import { CloudAccessGuard } from './cloud-access.guard';
 import { CloudScope } from './cloud-scope.decorator';
 import { InferenceService } from './inference.service';
 import { CloudUpstreamService } from './cloud-upstream.service';
 
 @Controller('inference/v1')
-@UseGuards(CloudAuthGuard, CloudAccessGuard)
+@UseGuards(CloudAuthGuard)
 @CloudScope('inference')
 export class InferenceController {
   constructor(

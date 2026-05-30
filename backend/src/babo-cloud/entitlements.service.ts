@@ -43,6 +43,16 @@ export class EntitlementsService {
     await this.billing.assertCloudAccess(userId);
   }
 
+  /** BYOK inference relay does not require Babo Cloud subscription. */
+  async assertCloudAccessForPlacement(
+    userId: string,
+    placement: string,
+  ): Promise<void> {
+    if (!this.cloudMode) return;
+    if (placement === 'byok_cloud') return;
+    await this.billing.assertCloudAccess(userId);
+  }
+
   async recordUsage(
     userId: string,
     upstreamCostCents: number,

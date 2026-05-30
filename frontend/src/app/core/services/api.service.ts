@@ -740,6 +740,16 @@ export class ApiService {
     return this.http.delete<{ ok: boolean }>(`${this.API}/cloud/providers/resend`);
   }
 
+  setCloudInferenceProviderKey(
+    provider: string,
+    apiKey: string,
+  ): Observable<{ ok: boolean; provider: string }> {
+    return this.http.put<{ ok: boolean; provider: string }>(
+      `${this.API}/cloud/providers/inference/${encodeURIComponent(provider)}`,
+      { apiKey },
+    );
+  }
+
   // ─── Babo Cloud billing ───────────────────────────────────────
   getCloudSubscription(): Observable<import('../models/cloud-subscription.model').CloudSubscriptionView> {
     return this.http.get<any>(`${this.API}/cloud/subscription`);

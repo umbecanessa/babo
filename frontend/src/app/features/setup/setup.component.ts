@@ -840,6 +840,21 @@ export class SetupComponent implements OnInit, OnDestroy {
     this.onBrainTierChange('byok_cloud');
   }
 
+  switchToByokFromBilling(): void {
+    this.billingReturnMessage.set(null);
+    this.useOwnApiKey();
+    this.goToStep(3);
+    this.persistWizardDraft();
+  }
+
+  private async syncByokKeyToCloud(): Promise<void> {
+    const key = this.config.inferenceApiKey?.trim();
+    if (!key || !this.auth.isAuthenticated()) return;
+    await firstValueFrom(
+      this.api.setCloudInferenceProviderKey(this.cloudProviderId(), key),
+    );
+  }
+
   canContinueThinking(): boolean {
     const tier = this.brainTier();
     if (tier === 'hosted_babo') return true;
@@ -1089,18 +1104,38 @@ export class SetupComponent implements OnInit, OnDestroy {
     const p = this.profile();
     if (!p) return;
     let url = stripInferenceV1Suffix(p.inference.url || this.config.inferenceUrl);
-    if (p.inference.tier === 'hosted_babo' || p.inference.tier === 'byok_cloud') {
+    let authToken: string | undefined =
+      this.config.inferenceApiKey?.trim() || undefined;
+
+    if (p.inference.tier === 'byok_cloud') {
+      if (this.auth.isAuthenticated()) {
+        try {
+          await this.syncByokKeyToCloud();
+        } catch (err: any) {
+          this.testResult.set({
+            ok: false,
+            message: err?.error?.message || err?.message || 'Could not save API key',
+            latency: 0,
+          });
+          this.brainTestedTier.set('byok_cloud');
+          return;
+        }
+        const base = this.config.nestjsUrl.replace(/\/+$/, '');
+        const apiBase = base.endsWith('/api') ? base : `${base}/api`;
+        url = `${apiBase}/inference`;
+        authToken = this.auth.getAccessToken() ?? undefined;
+      } else {
+        const prov = CLOUD_PROVIDERS.find((x) => x.id === this.cloudProviderId());
+        if (prov) {
+          url = stripInferenceV1Suffix(prov.baseUrl);
+        }
+      }
+    } else if (p.inference.tier === 'hosted_babo') {
       const base = this.config.nestjsUrl.replace(/\/+$/, '');
       const apiBase = base.endsWith('/api') ? base : `${base}/api`;
       url = `${apiBase}/inference`;
-    }
-    let authToken: string | undefined =
-      this.config.inferenceApiKey?.trim() || undefined;
-    if (p.inference.tier === 'hosted_babo' || p.inference.tier === 'byok_cloud') {
-      if (!authToken && this.auth.getAccessToken()) {
-        authToken = this.auth.getAccessToken() ?? undefined;
-      }
-      if (p.inference.tier === 'hosted_babo' && !authToken) {
+      authToken = this.auth.getAccessToken() ?? undefined;
+      if (!authToken) {
         this.testResult.set({
           ok: false,
           message: 'Sign in after setup to verify Babo Cloud',
@@ -1108,7 +1143,18 @@ export class SetupComponent implements OnInit, OnDestroy {
         });
         return;
       }
+      await this.billing.refresh();
+      if (this.requiresSetupSubscription()) {
+        this.testResult.set({
+          ok: true,
+          message: 'Subscribe on the next step to activate Babo Cloud models',
+          latency: 0,
+        });
+        this.brainTestedTier.set('hosted_babo');
+        return;
+      }
     }
+
     if (!url) {
       this.testResult.set({ ok: false, message: 'Enter a server address first', latency: 0 });
       return;
@@ -1482,8 +1528,14 @@ export class SetupComponent implements OnInit, OnDestroy {
       });
       await this.nls().capabilities.applyProfile(synced);
 
-      if (p.inference.tier === 'hosted_babo' && this.config.inferenceApiKey) {
+      if (p.inference.tier === 'byok_cloud' && this.config.inferenceApiKey?.trim()) {
+        await this.syncByokKeyToCloud();
         await this.testBrain();
+      } else if (p.inference.tier === 'hosted_babo' && this.config.inferenceApiKey) {
+        await this.billing.refresh();
+        if (!this.requiresSetupSubscription()) {
+          await this.testBrain();
+        }
       }
     } finally {
       this.provisioningCloud.set(false);
