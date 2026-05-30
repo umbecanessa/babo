@@ -31,9 +31,17 @@ function run(cmd, cwd = backendDir) {
   execSync(cmd, { cwd, stdio: 'inherit', env: process.env });
 }
 
-if (fs.existsSync(installedMain) && fs.existsSync(operatorDir)) {
+const operatorPackageJson = path.join(operatorDir, 'package.json');
+const operatorReady =
+  fs.existsSync(installedMain) && fs.existsSync(operatorPackageJson);
+
+if (operatorReady) {
   console.log('[operator] Already installed in node_modules');
   process.exit(0);
+}
+
+if (fs.existsSync(operatorDir) && !fs.existsSync(operatorPackageJson)) {
+  fs.rmSync(operatorDir, { recursive: true, force: true });
 }
 
 if (!fs.existsSync(operatorDir)) {

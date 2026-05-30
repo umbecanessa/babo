@@ -2,7 +2,7 @@
 FROM node:22-bookworm-slim AS build
 WORKDIR /app
 
-# node-pty needs node-gyp when prebuilds are missing (Alpine/musl); build once here.
+# node-pty needs node-gyp when prebuilds are missing; compile once in the build stage.
 RUN apt-get update \
   && apt-get install -y --no-install-recommends git ca-certificates python3 make g++ \
   && rm -rf /var/lib/apt/lists/*
@@ -12,8 +12,13 @@ RUN npm ci
 
 COPY . .
 
-# GITHUB_TOKEN + BILLING_PROVIDER must be set on Railway for operator builds
-ENV NODE_ENV=development
+# Railway service env vars are available at Docker build time — pass through for operator clone.
+ARG BILLING_PROVIDER
+ARG GITHUB_TOKEN
+ENV BILLING_PROVIDER=${BILLING_PROVIDER} \
+    GITHUB_TOKEN=${GITHUB_TOKEN} \
+    NODE_ENV=development
+
 RUN node scripts/ensure-operator.js
 RUN npm run build
 RUN if [ -f babo-operator/dist/index.js ]; then npm install ./babo-operator --no-audit --no-fund; fi \
@@ -31,7 +36,6 @@ COPY prisma ./prisma
 COPY scripts ./scripts
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/babo-operator ./babo-operator
 
 ENV NODE_ENV=production
 
