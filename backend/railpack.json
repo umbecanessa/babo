@@ -2,7 +2,7 @@
   "$schema": "https://schema.railpack.com",
   "steps": {
     "build": {
-      "deployOutputs": ["."],
+      "deployOutputs": [{ "include": ["."] }],
       "commands": [
         "...",
         "npm install --include=dev && npm run build:operator && npm run build"
