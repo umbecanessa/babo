@@ -1404,7 +1404,8 @@ export class SetupComponent implements OnInit, OnDestroy {
 
   requiresSetupSubscription(): boolean {
     if (!usesHostedBaboCloud(this.profile())) return false;
-    if (!this.billing.billingEnabledFromCaps(this.platformCaps())) return false;
+    const caps = this.platformCaps();
+    if (caps && !this.billing.billingEnabledFromCaps(caps)) return false;
     const sub = this.billing.subscription();
     if (!sub) return true;
     return this.billing.needsSubscription();

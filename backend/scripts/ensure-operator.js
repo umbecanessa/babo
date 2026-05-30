@@ -36,46 +36,10 @@ function run(cmd, cwd = backendDir, extraEnv = {}) {
 }
 
 const operatorPackageJson = path.join(operatorDir, 'package.json');
-const operatorModuleJs = path.join(operatorDir, 'dist', 'operator.module.js');
 
-function operatorSupportsHostPrisma() {
-  if (!fs.existsSync(operatorModuleJs)) return false;
-  try {
-    return fs.readFileSync(operatorModuleJs, 'utf8').includes('prismaService');
-  } catch {
-    return false;
-  }
-}
-
-if (
-  fs.existsSync(installedMain) &&
-  fs.existsSync(operatorPackageJson) &&
-  operatorSupportsHostPrisma()
-) {
-  console.log('[operator] Already installed in node_modules');
-  process.exit(0);
-}
-
-if (fs.existsSync(operatorDir) && !fs.existsSync(operatorPackageJson)) {
-  fs.rmSync(operatorDir, { recursive: true, force: true });
-}
-
-if (!fs.existsSync(operatorDir)) {
-  const token = process.env.GITHUB_TOKEN || process.env.RAILWAY_GITHUB_TOKEN;
-  if (!token) {
-    console.error(
-      '[operator] babo-operator/ missing. Set GITHUB_TOKEN (read access to umbecanessa/babo-operator).',
-    );
-    process.exit(1);
-  }
-  const cloneUrl = repo.replace(
-    'https://',
-    `https://x-access-token:${token}@`,
-  );
-  console.log('[operator] Cloning private babo-operator into backend/babo-operator…');
-  run(`git clone --depth 1 "${cloneUrl}" "${operatorDir}"`);
-} else if (fs.existsSync(path.join(operatorDir, '.git'))) {
-  console.log('[operator] Updating existing babo-operator clone…');
+function refreshOperatorClone() {
+  if (!fs.existsSync(path.join(operatorDir, '.git'))) return;
+  console.log('[operator] Pulling latest babo-operator…');
   try {
     run('git fetch origin main --depth 1 && git reset --hard origin/main', operatorDir);
   } catch {
@@ -92,6 +56,38 @@ if (!fs.existsSync(operatorDir)) {
     );
     run(`git clone --depth 1 "${cloneUrl}" "${operatorDir}"`);
   }
+}
+
+if (!fs.existsSync(operatorDir)) {
+  const token = process.env.GITHUB_TOKEN || process.env.RAILWAY_GITHUB_TOKEN;
+  if (!token) {
+    console.error(
+      '[operator] babo-operator/ missing. Set GITHUB_TOKEN (read access to umbecanessa/babo-operator).',
+    );
+    process.exit(1);
+  }
+  const cloneUrl = repo.replace(
+    'https://',
+    `https://x-access-token:${token}@`,
+  );
+  console.log('[operator] Cloning private babo-operator into backend/babo-operator…');
+  run(`git clone --depth 1 "${cloneUrl}" "${operatorDir}"`);
+} else {
+  refreshOperatorClone();
+}
+
+if (fs.existsSync(operatorDir) && !fs.existsSync(operatorPackageJson)) {
+  fs.rmSync(operatorDir, { recursive: true, force: true });
+  const token = process.env.GITHUB_TOKEN || process.env.RAILWAY_GITHUB_TOKEN;
+  if (!token) {
+    console.error('[operator] Set GITHUB_TOKEN to refresh babo-operator.');
+    process.exit(1);
+  }
+  const cloneUrl = repo.replace(
+    'https://',
+    `https://x-access-token:${token}@`,
+  );
+  run(`git clone --depth 1 "${cloneUrl}" "${operatorDir}"`);
 }
 
 console.log('[operator] Installing and building…');

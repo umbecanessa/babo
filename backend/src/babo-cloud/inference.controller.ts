@@ -16,20 +16,25 @@ import { InferenceService } from './inference.service';
 import { CloudUpstreamService } from './cloud-upstream.service';
 
 @Controller('inference/v1')
-@UseGuards(CloudAuthGuard)
-@CloudScope('inference')
 export class InferenceController {
   constructor(
     private inference: InferenceService,
     private upstream: CloudUpstreamService,
   ) {}
 
+  /** Liveness probe — no auth or subscription required. */
   @Get('health')
   health() {
-    return { ok: true, service: 'babo-inference' };
+    return {
+      ok: true,
+      service: 'babo-inference',
+      upstreamConfigured: this.upstream.isInferenceConfigured(),
+    };
   }
 
   @Get('models')
+  @UseGuards(CloudAuthGuard)
+  @CloudScope('inference')
   async listModels(@Req() req: any) {
     if (!this.upstream.isInferenceConfigured()) {
       throw new HttpException(
@@ -41,6 +46,8 @@ export class InferenceController {
   }
 
   @Post('chat/completions')
+  @UseGuards(CloudAuthGuard)
+  @CloudScope('inference')
   async chatCompletions(
     @Req() req: any,
     @Res() res: Response,

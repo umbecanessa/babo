@@ -250,6 +250,19 @@ export function normalizeInferenceBaseUrl(url: string): string {
   return url.trim().replace(/\/+$/, '').replace(/\/v1$/i, '');
 }
 
+/** Nest Babo Cloud relay (`…/api/inference`) — use /v1/health, not /v1/models, for setup probes. */
+export function isBaboCloudInferenceRelay(baseUrl: string): boolean {
+  const base = normalizeInferenceBaseUrl(baseUrl).toLowerCase();
+  return /\/api\/inference$/i.test(base) || /api\.babo\.agency\/api\/inference$/i.test(base);
+}
+
+function inferenceProbePath(baseUrl: string): string {
+  if (isBaboCloudInferenceRelay(baseUrl)) {
+    return '/v1/health';
+  }
+  return '/v1/models';
+}
+
 /** Ollama exposes tags at /api/tags (not OpenAI /v1/models). */
 export async function testOllamaEndpoint(
   baseUrl: string,
@@ -287,7 +300,8 @@ export async function testInferenceEndpoint(
   if (/:11434(\/|$)/.test(base)) {
     return testOllamaEndpoint(base);
   }
-  const url = `${base}/v1/models`;
+  const baboRelay = isBaboCloudInferenceRelay(base);
+  const url = `${base}${inferenceProbePath(base)}`;
   const headers: Record<string, string> = {};
   if (apiKey?.trim()) {
     headers.Authorization = `Bearer ${apiKey.trim()}`;
@@ -301,6 +315,14 @@ export async function testInferenceEndpoint(
     return {
       ok: false,
       message,
+      latency: r.latency,
+      models: [],
+    };
+  }
+  if (baboRelay) {
+    return {
+      ok: true,
+      message: 'Babo Cloud reachable',
       latency: r.latency,
       models: [],
     };
