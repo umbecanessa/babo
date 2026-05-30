@@ -43,6 +43,7 @@ export class PlatformCapabilitiesController {
       this.config.get<string>('PUBLIC_API_URL') ||
       this.config.get<string>('APP_URL') ||
       '';
+    const publicApiBase = webhookBase.replace(/\/+$/, '') || null;
 
     return {
       baboCloudMode: this.upstream.cloudMode,
@@ -51,6 +52,9 @@ export class PlatformCapabilitiesController {
         trialAvailable: false,
         refundWindowDays: 31,
         refundEligibleUntil: subView.refundEligibleUntil,
+        returnUrlBase: publicApiBase
+          ? `${publicApiBase}/billing/return`
+          : 'https://api.babo.agency/api/billing/return',
       },
       inference: {
         resoldAvailable: this.upstream.isResoldInferenceConfigured(),
@@ -83,7 +87,7 @@ export class PlatformCapabilitiesController {
         requiredForWebhooks: true,
         webhookPathPattern: '/api/channels/webhook/{channel}/{runtimeAgentId}',
       },
-      publicApiBase: webhookBase.replace(/\/+$/, '') || null,
+      publicApiBase: publicApiBase,
     };
   }
 }

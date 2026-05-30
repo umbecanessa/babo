@@ -362,10 +362,12 @@ export class SettingsComponent implements OnInit, OnDestroy {
   async subscribeToCloud(): Promise<void> {
     this.billingActionLoading.set(true);
     try {
-      const returnUrl = `${window.location.origin}${window.location.pathname}?section=billing`;
-      const url = await this.billing.startCheckout(returnUrl);
-      if (url) {
-        window.location.href = url;
+      const opened = await this.billing.openCheckout({
+        flow: 'settings',
+        caps: this.platformCaps(),
+      });
+      if (!opened) {
+        this.toast.show('Could not start checkout', 'error');
       }
     } catch (err: any) {
       this.toast.show(
@@ -380,10 +382,12 @@ export class SettingsComponent implements OnInit, OnDestroy {
   async openBillingPortal(): Promise<void> {
     this.billingActionLoading.set(true);
     try {
-      const returnUrl = `${window.location.origin}${window.location.pathname}?section=billing`;
-      const url = await this.billing.openPortal(returnUrl);
-      if (url) {
-        window.location.href = url;
+      const opened = await this.billing.openPortalExternal({
+        flow: 'settings',
+        caps: this.platformCaps(),
+      });
+      if (!opened) {
+        this.toast.show('Could not open billing portal', 'error');
       }
     } catch (err: any) {
       this.toast.show(

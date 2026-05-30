@@ -567,10 +567,14 @@
 }
 
 .billing-step-body {
-  padding: 0 4px 8px;
+  padding: 4px 8px 8px;
+  text-align: center;
 }
 
 .billing-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   margin-bottom: 20px;
 
   .billing-hero-glyph {
@@ -601,6 +605,7 @@
   font-size: 0.92rem;
   line-height: 1.55;
   color: var(--text-secondary);
+  text-align: center;
 }
 
 .billing-price-card {
@@ -648,6 +653,7 @@
   margin: 0 auto 16px;
   padding: 0;
   max-width: 22rem;
+  width: 100%;
   text-align: left;
 
   li {

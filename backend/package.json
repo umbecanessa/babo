@@ -17,7 +17,7 @@
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
-    "start:railway": "node scripts/ensure-operator.js && node scripts/ensure-dist.js && npx prisma migrate deploy && node dist/main",
+    "start:railway": "node scripts/ensure-operator.js && node scripts/ensure-dist.js && node scripts/ensure-migrations.js && node dist/main",
     "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
     "test": "jest",
     "test:watch": "jest --watch",

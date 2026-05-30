@@ -5,6 +5,7 @@ export interface PlatformCapabilities {
     trialAvailable: boolean;
     refundWindowDays: number;
     refundEligibleUntil: string | null;
+    returnUrlBase?: string;
   };
   inference?: {
     resoldAvailable: boolean;

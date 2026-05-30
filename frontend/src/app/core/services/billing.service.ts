@@ -1,8 +1,18 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ApiService } from './api.service';
+import {
+  openExternalUrl,
+  resolveCheckoutReturnUrl,
+} from './billing-return.util';
 import type { CloudSubscriptionView } from '../models/cloud-subscription.model';
 import type { PlatformCapabilities } from '../models/platform-capabilities.model';
+
+export interface BillingCheckoutOptions {
+  returnUrl?: string;
+  flow?: 'setup' | 'settings';
+  caps?: PlatformCapabilities | null;
+}
 
 @Injectable({ providedIn: 'root' })
 export class BillingService {
@@ -49,25 +59,41 @@ export class BillingService {
     return !!caps?.billing?.enabled;
   }
 
-  async startCheckout(returnUrl?: string): Promise<string | null> {
+  async startCheckout(opts: BillingCheckoutOptions = {}): Promise<string | null> {
     this.checkoutLoading.set(true);
     try {
-      const url =
-        returnUrl ||
-        `${window.location.origin}/settings?section=billing`;
-      const res = await firstValueFrom(this.api.createBillingCheckout(url));
+      const flow = opts.flow ?? 'settings';
+      const returnUrl =
+        opts.returnUrl || resolveCheckoutReturnUrl(flow, opts.caps);
+      const res = await firstValueFrom(
+        this.api.createBillingCheckout(returnUrl, flow),
+      );
       return res.url;
     } finally {
       this.checkoutLoading.set(false);
     }
   }
 
-  async openPortal(returnUrl?: string): Promise<string | null> {
-    const url =
-      returnUrl ||
-      `${window.location.origin}/settings?section=billing`;
-    const res = await firstValueFrom(this.api.createBillingPortal(url));
+  async openCheckout(opts: BillingCheckoutOptions = {}): Promise<boolean> {
+    const url = await this.startCheckout(opts);
+    if (!url) return false;
+    openExternalUrl(url);
+    return true;
+  }
+
+  async openPortal(opts: BillingCheckoutOptions = {}): Promise<string | null> {
+    const flow = opts.flow ?? 'settings';
+    const returnUrl =
+      opts.returnUrl || resolveCheckoutReturnUrl(flow, opts.caps);
+    const res = await firstValueFrom(this.api.createBillingPortal(returnUrl, flow));
     return res.url;
+  }
+
+  async openPortalExternal(opts: BillingCheckoutOptions = {}): Promise<boolean> {
+    const url = await this.openPortal(opts);
+    if (!url) return false;
+    openExternalUrl(url);
+    return true;
   }
 
   async updateSpendCap(capCents: number | null): Promise<void> {

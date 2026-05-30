@@ -760,15 +760,23 @@ export class ApiService {
     return this.http.get<any>(`${this.API}/cloud/usage`, { params });
   }
 
-  createBillingCheckout(returnUrl: string): Observable<{ url: string }> {
+  createBillingCheckout(
+    returnUrl: string,
+    flow?: 'setup' | 'settings',
+  ): Observable<{ url: string }> {
     return this.http.post<{ url: string }>(`${this.API}/billing/checkout`, {
       returnUrl,
+      flow,
     });
   }
 
-  createBillingPortal(returnUrl: string): Observable<{ url: string }> {
+  createBillingPortal(
+    returnUrl: string,
+    flow?: 'setup' | 'settings',
+  ): Observable<{ url: string }> {
     return this.http.post<{ url: string }>(`${this.API}/billing/portal`, {
       returnUrl,
+      flow,
     });
   }
 

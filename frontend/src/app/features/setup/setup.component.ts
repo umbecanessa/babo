@@ -1410,18 +1410,17 @@ export class SetupComponent implements OnInit, OnDestroy {
     return this.billing.needsSubscription();
   }
 
-  setupBillingReturnUrl(): string {
-    return `${window.location.origin}/setup?billing=success`;
-  }
-
   async startSetupCheckout(): Promise<void> {
     this.billingCheckoutLoading.set(true);
     this.billingReturnMessage.set(null);
     try {
       this.persistWizardDraft();
-      const url = await this.billing.startCheckout(this.setupBillingReturnUrl());
-      if (url) {
-        window.location.href = url;
+      const opened = await this.billing.openCheckout({
+        flow: 'setup',
+        caps: this.platformCaps(),
+      });
+      if (!opened) {
+        this.billingReturnMessage.set('Could not start checkout');
       }
     } catch (err: any) {
       this.billingReturnMessage.set(
