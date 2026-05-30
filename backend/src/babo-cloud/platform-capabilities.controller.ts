@@ -47,7 +47,7 @@ export class PlatformCapabilitiesController {
     return {
       baboCloudMode: this.upstream.cloudMode,
       billing: {
-        enabled: subView.billingEnabled,
+        enabled: this.entitlements.billingEnabled(),
         trialAvailable: false,
         refundWindowDays: 31,
         refundEligibleUntil: subView.refundEligibleUntil,

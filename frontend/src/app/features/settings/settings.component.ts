@@ -129,7 +129,9 @@ export class SettingsComponent implements OnInit, OnDestroy {
   activePermissionProfile = signal<string | null>(null);
 
   readonly billingEnabled = computed(
-    () => !!this.platformCaps()?.billing?.enabled,
+    () =>
+      !!this.platformCaps()?.baboCloudMode &&
+      !!this.platformCaps()?.billing?.enabled,
   );
 
   readonly includedRemaining = computed(() => {

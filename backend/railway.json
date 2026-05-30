@@ -1,9 +1,9 @@
 {
   "$schema": "https://railway.app/railway.schema.json",
   "build": {
-    "buildCommand": "npm install && npm run build:operator && npx prisma generate && npx prisma migrate deploy && npm run build"
+    "buildCommand": "npm install && npm run build:operator && npm run build"
   },
   "deploy": {
-    "startCommand": "npm run start:prod"
+    "startCommand": "npm run start:railway"
   }
 }
