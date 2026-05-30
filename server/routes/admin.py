@@ -1859,9 +1859,17 @@ async def hot_reload_inference(request: Request):
     hf_model = (body.get("hf_model") or "").strip()
     delegate_hf_model = body.get("delegate_hf_model")
     delegate_use_primary = body.get("delegate_use_primary", True)
+    inference_api_key = body.get("inference_api_key")
 
     model_manager = request.app.state.model_manager
     agent_manager = request.app.state.agent_manager
+
+    if inference_api_key is not None:
+        key = str(inference_api_key).strip()
+        model_manager.inference_api_key = key
+        os.environ["NLS_INFERENCE_API_KEY"] = key
+        if getattr(model_manager, "vllm_client", None) is not None:
+            model_manager.vllm_client._api_key = key
 
     if hf_model:
         model_manager.hf_model = hf_model
@@ -1883,6 +1891,8 @@ async def hot_reload_inference(request: Request):
 
     updated = 0
     for runtime in agent_manager.get_loaded_runtimes().values():
+        if inference_api_key is not None:
+            runtime._babo_cloud_vllm_client = None
         if hf_model and getattr(runtime, "vllm_client", None) is not None:
             runtime.vllm_client.default_model = hf_model
         if delegate_use_primary:
@@ -1892,16 +1902,18 @@ async def hot_reload_inference(request: Request):
         updated += 1
 
     logger.info(
-        "Inference hot-reload: hf_model=%s delegate=%s use_primary=%s agents=%d",
+        "Inference hot-reload: hf_model=%s delegate=%s use_primary=%s api_key=%s agents=%d",
         hf_model or "(unchanged)",
         delegate_value if not delegate_use_primary else "(primary)",
         delegate_use_primary,
+        "updated" if inference_api_key is not None else "(unchanged)",
         updated,
     )
     return {
         "ok": True,
         "hf_model": hf_model or model_manager.hf_model,
         "delegate_hf_model": delegate_value,
+        "inference_api_key_updated": inference_api_key is not None,
         "agents_updated": updated,
     }
 

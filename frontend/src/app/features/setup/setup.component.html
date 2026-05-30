@@ -183,9 +183,9 @@
               <button
                 type="button"
                 class="choice-card"
-                [class.active]="brainTier() === card.tier || (card.tier === 'hosted_babo' && brainTier() === 'byok_cloud')"
+                [class.active]="isBrainCardActive(card) || (card.tier === 'hosted_babo' && brainTier() === 'byok_cloud' && !card.gx10)"
                 [class.suggested]="isBrainSuggested(card.tier)"
-                (click)="selectBrainCard(card.tier)"
+                (click)="selectBrainCard(card.tier, card.gx10)"
               >
                 <span class="card-glyph">{{ card.glyph }}</span>
                 <span class="card-body">
@@ -220,7 +220,7 @@
                 Your agents always run on this computer — Babo Cloud syncs your account and relays when you’re away.
               </p>
               <div class="chip-row providers">
-                @for (m of baboCloudModels; track m.id) {
+                @for (m of baboCloudModels(); track m.id) {
                   <button
                     type="button"
                     class="chip"

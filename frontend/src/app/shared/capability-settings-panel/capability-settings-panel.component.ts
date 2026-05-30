@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, output, signal } from '@angular/core';
+import { Component, OnInit, computed, inject, output, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import type {
@@ -7,13 +7,14 @@ import type {
   CapabilityTier,
 } from '../../features/setup/capability-profile.model';
 import {
-  BABO_CLOUD_MODELS,
   CLOUD_PROVIDERS,
+  baboCloudModelsForUser,
   matchCloudProvider,
   resolveBaboCloudModelId,
   stripInferenceV1Suffix,
 } from '../../features/setup/setup-inference.util';
 import { AgentModelService } from '../../core/services/agent-model.service';
+import { PlatformIntegrationsService } from '../../core/services/platform-integrations.service';
 import { applyBaboCloudPlacements } from '../../features/setup/setup-cloud.util';
 
 interface ExpRow {
@@ -37,6 +38,7 @@ interface SetupConfig {
 })
 export class CapabilitySettingsPanelComponent implements OnInit {
   private readonly agentModels = inject(AgentModelService);
+  private readonly platformIntegrations = inject(PlatformIntegrationsService);
 
   /** Emitted after profile is saved and applied to the runtime. */
   saved = output<void>();
@@ -61,7 +63,14 @@ export class CapabilitySettingsPanelComponent implements OnInit {
   saveError = signal<string | null>(null);
 
   readonly cloudProviders = CLOUD_PROVIDERS;
-  readonly baboCloudModels = BABO_CLOUD_MODELS;
+  readonly baboCloudModels = computed(() =>
+    baboCloudModelsForUser({
+      hostedGx10Available:
+        this.platformIntegrations.capabilities()?.inference?.hostedGx10Available,
+      hostedGx10Label:
+        this.platformIntegrations.capabilities()?.inference?.hostedGx10Label,
+    }),
+  );
 
   readonly brainCards = [
     {
@@ -103,6 +112,7 @@ export class CapabilitySettingsPanelComponent implements OnInit {
   };
 
   async ngOnInit(): Promise<void> {
+    await this.platformIntegrations.refresh();
     await this.load();
     if (!this.scan()) {
       void this.runDeviceScan();
@@ -525,6 +535,7 @@ export class CapabilitySettingsPanelComponent implements OnInit {
           hf_model: primaryModel,
           delegate_hf_model: delegateUsePrimary ? null : (del?.model ?? null),
           delegate_use_primary: delegateUsePrimary,
+          inference_api_key: this.config.inferenceApiKey || undefined,
         });
       } catch {
         /* runtime may be stopped */

@@ -9,6 +9,9 @@ import pytest
 from nls.tools.agent_tools.project_runtime import (
     detect_ecosystem,
     detect_node_package_manager,
+    find_package_json,
+    find_requirements_file,
+    parse_pip_requirements_ref,
     resolve_project_root,
 )
 
@@ -66,6 +69,15 @@ def test_resolve_project_root_uses_plan_project_dir(tmp_path: Path):
     ) == str(ws / "app-b")
 
 
+def test_resolve_project_root_monorepo_backend_requirements(tmp_path: Path):
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    (ws / "backend").mkdir()
+    (ws / "backend" / "requirements.txt").write_text("fastapi\n", encoding="utf-8")
+
+    assert resolve_project_root(str(ws), str(ws)) == str(ws)
+
+
 def test_resolve_project_root_plan_dir_before_scaffold_markers(tmp_path: Path):
     ws = tmp_path / "workspace"
     ws.mkdir()
@@ -87,6 +99,23 @@ def test_detect_ecosystem_node(tmp_path: Path):
     root.mkdir()
     (root / "package.json").write_text("{}", encoding="utf-8")
     assert detect_ecosystem(str(root)) == "node"
+
+
+def test_detect_ecosystem_monorepo_backend_requirements(tmp_path: Path):
+    root = tmp_path / "app"
+    (root / "backend").mkdir(parents=True)
+    (root / "backend" / "requirements.txt").write_text("fastapi\n", encoding="utf-8")
+    (root / "frontend").mkdir()
+    (root / "frontend" / "package.json").write_text("{}", encoding="utf-8")
+    assert detect_ecosystem(str(root)) == "python"
+    assert find_requirements_file(str(root)) == root / "backend" / "requirements.txt"
+    assert find_package_json(str(root)) == root / "frontend" / "package.json"
+
+
+def test_parse_pip_requirements_ref():
+    assert parse_pip_requirements_ref("-r backend/requirements.txt") == "backend/requirements.txt"
+    assert parse_pip_requirements_ref("--requirement backend/requirements.txt") == "backend/requirements.txt"
+    assert parse_pip_requirements_ref("fastapi") is None
 
 
 def test_detect_node_package_manager_prefers_pnpm(tmp_path: Path):
@@ -131,3 +160,36 @@ async def test_project_install_python_from_requirements_txt(tmp_path: Path):
     assert not result.is_error, result.content
     assert "requirements.txt" in result.content.lower()
     assert ".venv" in result.content
+
+
+@pytest.mark.asyncio
+async def test_project_install_python_from_backend_requirements(tmp_path: Path):
+    pytest.importorskip("pip")
+    root = tmp_path / "app"
+    (root / "backend").mkdir(parents=True)
+    (root / "backend" / "requirements.txt").write_text("six\n", encoding="utf-8")
+
+    from nls.tools.agent_tools.project_install import ProjectInstallTool
+
+    tool = ProjectInstallTool(str(root))
+    result = await tool.execute({"ecosystem": "python"})
+    assert not result.is_error, result.content
+    assert "backend/requirements.txt" in result.content
+
+
+@pytest.mark.asyncio
+async def test_project_install_accepts_r_flag_in_package(tmp_path: Path):
+    pytest.importorskip("pip")
+    root = tmp_path / "app"
+    (root / "backend").mkdir(parents=True)
+    (root / "backend" / "requirements.txt").write_text("six\n", encoding="utf-8")
+
+    from nls.tools.agent_tools.project_install import ProjectInstallTool
+
+    tool = ProjectInstallTool(str(root))
+    result = await tool.execute({
+        "ecosystem": "python",
+        "package": "-r backend/requirements.txt",
+    })
+    assert not result.is_error, result.content
+    assert "backend/requirements.txt" in result.content

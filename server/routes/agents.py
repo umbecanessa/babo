@@ -166,6 +166,17 @@ async def list_agents(request: Request):
     return request.app.state.agent_manager.list_agents()
 
 
+@router.get("/{agent_id}/relay-status")
+async def get_relay_status(agent_id: str, request: Request):
+    """Whether this agent's ChannelRelayClient is connected to NestJS."""
+    agent_dir = request.app.state.settings.agents_dir / agent_id
+    if not agent_dir.exists():
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    online = request.app.state.connection_manager.relay_connected(agent_id)
+    return {"online": online, "connected": online}
+
+
 @router.get("/{agent_id}")
 async def get_agent(agent_id: str, request: Request):
     """Get detailed status for a specific agent."""

@@ -15,6 +15,7 @@ import { DetailModalComponent } from './detail-modal/detail-modal.component';
 import { SchemaConfigFormComponent, ConfigFieldSchema } from './schema-config-form/schema-config-form.component';
 import { GoogleConnectModalComponent } from '../../shared/google-connect-modal/google-connect-modal.component';
 import { PlatformIntegrationsService } from '../../core/services/platform-integrations.service';
+import { PlatformService } from '../../core/services/platform.service';
 import {
   buildIntegrationContext,
   emailIsReady,
@@ -888,6 +889,7 @@ export class ToolsComponent implements OnInit, OnDestroy {
     private http: HttpClient,
     private toast: ToastService,
     readonly platformIntegrations: PlatformIntegrationsService,
+    private platform: PlatformService,
   ) {}
 
   private routerSub?: ReturnType<typeof this.router.events.subscribe>;
@@ -897,7 +899,6 @@ export class ToolsComponent implements OnInit, OnDestroy {
     this.userEmail = decodeJwtEmail();
     void this.platformIntegrations.refresh();
     this.loadData();
-    this.startRelayPolling();
     this.loadReviews();
     this.loadAgentTools();
     this.loadFeaturedSkills('Popular');
@@ -935,8 +936,17 @@ export class ToolsComponent implements OnInit, OnDestroy {
 
   private refreshRelayStatus(): void {
     if (!this.agentId) return;
-    const nestAgentId = this.runtimeAgentId || this.agentId;
-    this.api.getRelayStatus(nestAgentId).subscribe({
+    const runtimeId = this.runtimeAgentId || this.agentId;
+
+    if (this.platform.isElectron) {
+      this.api.getLocalRelayStatus(runtimeId).subscribe({
+        next: (res) => this.relayOnline.set(!!res.online),
+        error: () => this.relayOnline.set(false),
+      });
+      return;
+    }
+
+    this.api.getRelayStatus(this.agentId).subscribe({
       next: (res) => this.relayOnline.set(res.online),
       error: () => this.relayOnline.set(false),
     });

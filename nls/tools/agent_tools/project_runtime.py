@@ -7,6 +7,7 @@ target the same project-local Python environment.
 from __future__ import annotations
 
 import logging
+import re
 import sys
 import venv as _venv_mod
 from pathlib import Path
@@ -63,6 +64,8 @@ def resolve_project_root(
         for marker in PROJECT_MARKERS:
             if (current / marker).exists():
                 return str(current)
+        if find_requirements_file(str(current)) or find_package_json(str(current)):
+            return str(current)
         if current == workspace or current.parent == current:
             break
         current = current.parent
@@ -137,6 +140,60 @@ def list_workspace_project_candidates(workspace_root: str) -> list[Path]:
     return found
 
 
+_MONOREPO_REQUIREMENTS_CANDIDATES: tuple[str, ...] = (
+    "requirements.txt",
+    "backend/requirements.txt",
+    "server/requirements.txt",
+    "api/requirements.txt",
+    "apps/backend/requirements.txt",
+    "packages/server/requirements.txt",
+)
+
+_MONOREPO_PACKAGE_JSON_CANDIDATES: tuple[str, ...] = (
+    "package.json",
+    "frontend/package.json",
+    "client/package.json",
+    "apps/frontend/package.json",
+    "packages/client/package.json",
+)
+
+
+def find_requirements_file(project_root: str) -> Path | None:
+    """Locate requirements.txt at project root or common monorepo paths."""
+    root = Path(project_root)
+    for rel in _MONOREPO_REQUIREMENTS_CANDIDATES:
+        path = root / rel
+        if path.is_file():
+            return path
+    return None
+
+
+def find_package_json(project_root: str) -> Path | None:
+    """Locate package.json at project root or common monorepo paths."""
+    root = Path(project_root)
+    for rel in _MONOREPO_PACKAGE_JSON_CANDIDATES:
+        path = root / rel
+        if path.is_file():
+            return path
+    return None
+
+
+def parse_pip_requirements_ref(package: str) -> str | None:
+    """Return requirements file path when *package* is ``-r path`` or ``--requirement path``."""
+    text = (package or "").strip()
+    if not text:
+        return None
+    for pattern in (
+        r"^-r\s+(.+)$",
+        r"^--requirement\s+(.+)$",
+        r"^-r\s*['\"](.+)['\"]$",
+    ):
+        match = re.match(pattern, text, re.IGNORECASE)
+        if match:
+            return match.group(1).strip().strip("'\"")
+    return None
+
+
 def _venv_paths(project_root: str) -> tuple[Path, Path, Path]:
     venv_dir = Path(project_root) / ".venv"
     bin_dir = venv_dir / ("Scripts" if _IS_WINDOWS else "bin")
@@ -194,8 +251,10 @@ def _ensure_gitignore(project_root: str) -> None:
 def detect_ecosystem(project_root: str) -> str:
     """Return ``python``, ``node``, or ``unknown`` for *project_root*."""
     root = Path(project_root)
-    has_python = any((root / m).exists() for m in _PYTHON_MARKERS)
-    has_node = any((root / m).exists() for m in _NODE_MARKERS)
+    has_python = find_requirements_file(project_root) is not None
+    if not has_python:
+        has_python = any((root / m).exists() for m in _PYTHON_MARKERS if m != "requirements.txt")
+    has_node = find_package_json(project_root) is not None
     if has_python and not has_node:
         return "python"
     if has_node and not has_python:

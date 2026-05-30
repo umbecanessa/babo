@@ -22,6 +22,12 @@ export interface BaboCloudModelOption {
   label: string;
 }
 
+/** Private GX10 inference (lifetime / comp users only). */
+export const BABO_GX10_MODEL: BaboCloudModelOption = {
+  id: BABO_HOSTED_MODEL_ID,
+  label: 'Babo Brain (GX10)',
+};
+
 /** Partner models available through Babo Cloud (api.babo.agency relay). */
 export const BABO_CLOUD_MODELS: BaboCloudModelOption[] = [
   { id: DEFAULT_BABO_CLOUD_MODEL, label: 'Gemini 2.5 Flash' },
@@ -34,18 +40,32 @@ export const BABO_CLOUD_MODELS: BaboCloudModelOption[] = [
   { id: 'google/gemini-2.0-flash', label: 'Gemini 2.0 Flash' },
 ];
 
+export function isBaboHostedModelId(model: string): boolean {
+  return (model ?? '').trim() === BABO_HOSTED_MODEL_ID;
+}
+
 export function isBaboCloudModelId(model: string): boolean {
-  return BABO_CLOUD_MODELS.some((m) => m.id === model);
+  return isBaboHostedModelId(model) || BABO_CLOUD_MODELS.some((m) => m.id === model);
+}
+
+/** Resold OpenRouter models + optional GX10 for comp users. */
+export function baboCloudModelsForUser(opts?: {
+  hostedGx10Available?: boolean;
+  hostedGx10Label?: string;
+}): BaboCloudModelOption[] {
+  if (!opts?.hostedGx10Available) return [...BABO_CLOUD_MODELS];
+  const label = opts.hostedGx10Label?.trim() || BABO_GX10_MODEL.label;
+  return [{ id: BABO_HOSTED_MODEL_ID, label }, ...BABO_CLOUD_MODELS];
 }
 
 /** Map legacy/scan defaults to a Babo Cloud chip id. */
 export function resolveBaboCloudModelId(model?: string | null): string {
   const m = (model ?? '').trim();
+  if (m === BABO_HOSTED_MODEL_ID) return BABO_HOSTED_MODEL_ID;
   if (
     !m ||
     m === 'llama3.2' ||
     m === 'gpt-4o-mini' ||
-    m === BABO_HOSTED_MODEL_ID ||
     m === 'qwen/qwen3.6-35b-a3b' ||
     /qwen3\.7/i.test(m)
   ) {

@@ -91,6 +91,13 @@ class ConnectionManager:
         """Remove a relay client for an agent."""
         self._relay_clients.pop(agent_id, None)
 
+    def relay_connected(self, agent_id: str) -> bool:
+        """True when a ChannelRelayClient is registered and connected to NestJS."""
+        relay = self._relay_clients.get(agent_id)
+        if relay is None:
+            return False
+        return bool(getattr(relay, "connected", False))
+
     def is_connected(self, agent_id: str) -> bool:
         """Check if any client is connected for this agent."""
         return bool(self._connections.get(agent_id))

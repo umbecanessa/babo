@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import importlib
 import logging
+import re
 import shutil
 import subprocess
 import sys
@@ -22,8 +23,11 @@ from .project_runtime import (
     detect_ecosystem,
     detect_node_package_manager,
     ensure_project_venv,
+    find_package_json,
+    find_requirements_file,
     format_project_root_hint,
     list_workspace_project_candidates,
+    parse_pip_requirements_ref,
     resolve_project_root,
 )
 from .server_install import _BLOCKED_PACKAGES, _CLI_NOT_PYTHON
@@ -42,8 +46,17 @@ def _format_install_failure_output(stdout: str, stderr: str) -> str:
         lines = [ln for ln in (text or "").strip().splitlines() if ln.strip()]
         if not lines:
             continue
-        tail = lines[-_MAX_INSTALL_DIAG_LINES:]
-        body = "\n".join(tail)
+        error_lines = [
+            ln for ln in lines
+            if re.search(r"\b(ERROR|error:|Could not find|No matching distribution)\b", ln, re.I)
+        ]
+        notice_lines = [ln for ln in lines if "[notice]" in ln.lower()]
+        if error_lines:
+            body = "\n".join(error_lines[-_MAX_INSTALL_DIAG_LINES:])
+        else:
+            non_notice = [ln for ln in lines if ln not in notice_lines]
+            tail = non_notice[-_MAX_INSTALL_DIAG_LINES:] if non_notice else lines[-5:]
+            body = "\n".join(tail)
         if len(body) > _MAX_INSTALL_DIAG_CHARS:
             body = body[-_MAX_INSTALL_DIAG_CHARS:]
         chunks.append(f"{label}:\n{body}")
@@ -91,8 +104,9 @@ class ProjectInstallTool:
             "Install a dependency into the PROJECT you are building — not "
             "into Babo's agent runtime.\n"
             "- Python (PyPI): creates/uses project/.venv and runs pip there. "
-            "Pass package= for one library, or omit package when requirements.txt "
-            "exists to run pip install -r requirements.txt.\n"
+            "Pass package= for one library, omit package to install from "
+            "requirements.txt (root or backend/requirements.txt in monorepos), "
+            "or set requirements_file= explicitly.\n"
             "- Node: runs npm/pnpm/yarn in the project root (auto-detected "
             "from lockfiles).\n"
             "Use this for libraries your generated app needs (e.g. "
@@ -108,12 +122,18 @@ class ProjectInstallTool:
                 "package": {
                     "type": "string",
                     "description": (
-                        "Package specifier: pip syntax for Python "
-                        "(e.g. 'assemblyai', 'requests>=2.0') or npm package "
-                        "name for Node (e.g. 'express'). Omit for Node to run "
-                        "a full install from package.json. For Python, omit "
-                        "when requirements.txt exists in the project — installs "
-                        "all pins via pip install -r requirements.txt."
+                        "Single PyPI package (e.g. 'assemblyai', 'requests>=2.0') "
+                        "or npm package name. Do NOT pass '-r requirements.txt' here — "
+                        "use requirements_file instead. Omit for bulk install from "
+                        "requirements.txt / package.json."
+                    ),
+                },
+                "requirements_file": {
+                    "type": "string",
+                    "description": (
+                        "Python only: path to requirements file relative to project "
+                        "root (e.g. 'backend/requirements.txt'). Used when package "
+                        "is omitted or when installing from a monorepo backend folder."
                     ),
                 },
                 "ecosystem": {
@@ -140,8 +160,15 @@ class ProjectInstallTool:
         signal: asyncio.Event | None = None,
     ) -> ToolResult:
         package = (params.get("package") or "").strip()
+        requirements_file = (params.get("requirements_file") or "").strip()
         ecosystem = (params.get("ecosystem") or "auto").strip().lower()
         dev = bool(params.get("dev", False))
+
+        req_from_package = parse_pip_requirements_ref(package)
+        if req_from_package:
+            if not requirements_file:
+                requirements_file = req_from_package
+            package = ""
 
         plan_dir = self._plan_project_dir()
         project_root = resolve_project_root(
@@ -180,40 +207,61 @@ class ProjectInstallTool:
                 return ToolResult(
                     content=(
                         f"Error: Could not detect ecosystem in {project_root}.\n"
-                        "Add requirements.txt / pyproject.toml (Python) or "
-                        "package.json (Node) under the project folder, or pass "
-                        "ecosystem='python' or ecosystem='node' explicitly.\n"
-                        f"If your app lives in a subfolder, run from that "
-                        f"directory (e.g. cd {rel}) before project_install."
+                        "Add requirements.txt (root or backend/) / pyproject.toml "
+                        "(Python) or package.json (Node), or pass "
+                        "ecosystem='python' with requirements_file='backend/requirements.txt'."
                     ),
                     is_error=True,
                 )
             ecosystem = detected
 
         if ecosystem == "python":
+            req_path = self._resolve_requirements_path(
+                project_root, requirements_file,
+            )
             if not package:
-                req_file = project_path / "requirements.txt"
-                if req_file.is_file():
+                if req_path is not None:
                     return await self._install_python_requirements(
-                        project_root, str(req_file),
+                        project_root, str(req_path),
                     )
                 return ToolResult(
                     content=(
-                        "Error: 'package' is required for Python installs, "
-                        "or create requirements.txt in the project root and "
-                        "call project_install() with no package to install from it."
+                        "Error: no requirements file found. Create requirements.txt "
+                        "(e.g. backend/requirements.txt) or pass "
+                        "project_install(package='fastapi') for a single package."
                     ),
                     is_error=True,
                 )
             return await self._install_python(project_root, package)
 
         if ecosystem == "node":
+            pkg_json = find_package_json(project_root)
+            if package:
+                return await self._install_node(project_root, package, dev=dev)
+            if pkg_json is not None:
+                return await self._install_node(
+                    str(pkg_json.parent), "", dev=dev,
+                )
             return await self._install_node(project_root, package, dev=dev)
 
         return ToolResult(
             content=f"Error: Unknown ecosystem '{ecosystem}'.",
             is_error=True,
         )
+
+    def _resolve_requirements_path(
+        self,
+        project_root: str,
+        requirements_file: str,
+    ) -> Path | None:
+        root = Path(project_root)
+        if requirements_file:
+            candidate = root / requirements_file.replace("\\", "/")
+            if candidate.is_file():
+                return candidate
+            return None
+        found = find_requirements_file(project_root)
+        return found
 
     async def _install_python(
         self,
@@ -349,7 +397,12 @@ class ProjectInstallTool:
                 is_error=True,
             )
 
-        req = Path(requirements_path)
+        req = Path(requirements_path).resolve()
+        root = Path(project_root).resolve()
+        try:
+            rel = req.relative_to(root).as_posix()
+        except ValueError:
+            rel = req.name
         logger.info(
             "project_install: pip install -r %s via %s",
             req.name,
@@ -410,7 +463,7 @@ class ProjectInstallTool:
                 f"{summary}\n"
                 f"Project: {project_root}\n"
                 f"Python: {python_exe}\n"
-                f"Requirements: {req.name}\n\n"
+                f"Requirements: {rel}\n\n"
                 "bash `python` in this project directory uses the same venv."
             ),
         )
@@ -422,16 +475,19 @@ class ProjectInstallTool:
         *,
         dev: bool,
     ) -> ToolResult:
-        if not (Path(project_root) / "package.json").exists():
+        pkg_json = find_package_json(project_root)
+        node_root = str(pkg_json.parent) if pkg_json is not None else project_root
+        if not (Path(node_root) / "package.json").exists():
             return ToolResult(
                 content=(
-                    f"Error: No package.json in {project_root}.\n"
-                    "Create package.json before installing Node packages."
+                    f"Error: No package.json in {node_root}.\n"
+                    "Create package.json (e.g. under frontend/) before installing "
+                    "Node packages."
                 ),
                 is_error=True,
             )
 
-        pm = detect_node_package_manager(project_root)
+        pm = detect_node_package_manager(node_root)
         exe = shutil.which(pm)
         if not exe:
             return ToolResult(
@@ -462,7 +518,7 @@ class ProjectInstallTool:
             else:
                 cmd = [exe, "install"]
 
-        logger.info("project_install: %s in %s", " ".join(cmd), project_root)
+        logger.info("project_install: %s in %s", " ".join(cmd), node_root)
 
         try:
             proc = await asyncio.get_event_loop().run_in_executor(
@@ -472,7 +528,7 @@ class ProjectInstallTool:
                     capture_output=True,
                     text=True,
                     timeout=300,
-                    cwd=project_root,
+                    cwd=node_root,
                 ),
             )
         except subprocess.TimeoutExpired:
@@ -502,7 +558,7 @@ class ProjectInstallTool:
         label = package or "dependencies from package.json"
         return ToolResult(
             content=(
-                f"Installed {label} via {pm} in {project_root}.\n"
+                f"Installed {label} via {pm} in {node_root}.\n"
                 + (tail + "\n" if tail else "")
                 + "Use bash npm/node commands from the project directory."
             ),

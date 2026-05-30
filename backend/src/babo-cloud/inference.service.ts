@@ -62,7 +62,22 @@ export class InferenceService {
     if (!res.ok) {
       throw new HttpException(text || res.statusText, res.status);
     }
-    return JSON.parse(text);
+    const data = JSON.parse(text) as { data?: Array<Record<string, unknown>> };
+    const gx10Enabled = await this.entitlements.getHostedGx10Enabled(
+      auth.userId,
+    );
+    if (gx10Enabled && this.config.get<string>('INFERENCE_UPSTREAM_URL')) {
+      const rows = Array.isArray(data.data) ? data.data : [];
+      if (!rows.some((row) => row?.id === 'babo-hosted')) {
+        rows.unshift({
+          id: 'babo-hosted',
+          object: 'model',
+          owned_by: 'babo',
+        });
+      }
+      return { ...data, data: rows };
+    }
+    return data;
   }
 
   async proxyChatCompletions(
@@ -71,18 +86,19 @@ export class InferenceService {
     res: Response,
   ): Promise<void> {
     await this.assertRateLimit(auth);
-    const upstream = await this.providerKeys.resolveInferenceUpstream(
-      auth.userId,
-    );
-    await this.entitlements.assertCloudAccessForPlacement(
-      auth.userId,
-      upstream.placement,
-    );
 
     const stream = body.stream === true;
     const model = String(body.model || 'unknown');
     const requestId = randomUUID();
     const route = 'chat/completions';
+    const upstream = await this.providerKeys.resolveInferenceUpstream(
+      auth.userId,
+      model,
+    );
+    await this.entitlements.assertCloudAccessForPlacement(
+      auth.userId,
+      upstream.placement,
+    );
     const url = `${upstream.baseUrl.replace(/\/+$/, '')}/chat/completions`;
 
     const upstreamRes = await fetch(url, {

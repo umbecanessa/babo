@@ -138,6 +138,32 @@ def _extract_pip_package_spec(command: str) -> str:
             return pkg
     return ""
 
+
+def _extract_pip_requirements_file(command: str) -> str | None:
+    """Return requirements file path when pip install uses -r / --requirement."""
+    spec = _extract_pip_package_spec(command)
+    if not spec:
+        return None
+    for pattern in (
+        r"(?:^|\s)-r\s+([^\s]+)",
+        r"(?:^|\s)--requirement\s+([^\s]+)",
+    ):
+        match = re.search(pattern, spec, re.IGNORECASE)
+        if match:
+            return match.group(1).strip().strip("'\"")
+    return None
+
+
+def _project_install_redirect_hint(command: str) -> str:
+    """Suggest project_install() args for a blocked pip install command."""
+    req_file = _extract_pip_requirements_file(command)
+    if req_file:
+        return f"  project_install(requirements_file={repr(req_file)})"
+    pkg = _extract_pip_package_spec(command)
+    if pkg:
+        return f"  project_install(package={repr(pkg)})"
+    return "  project_install(ecosystem='python')"
+
 # curl: inject -f (fail on HTTP 4xx/5xx) and -sS (silent + show errors) unless
 # the agent explicitly requests verbose/progress output.
 _CURL_BIN_RE = re.compile(r"(?<![\w.-])(curl(?:\.exe)?)(?=\s|$)", re.IGNORECASE)
@@ -1093,7 +1119,7 @@ class BashTool:
 
         # Redirect pip install to project_install (project .venv) or server_install.
         if _PIP_INSTALL_RE.search(command) or _PY_PIP_INSTALL_RE.search(command):
-            _pip_pkg = _extract_pip_package_spec(command)
+            _install_hint = _project_install_redirect_hint(command)
             _proj = self._resolve_project_root()
             if _proj:
                 return ToolResult(
@@ -1101,12 +1127,13 @@ class BashTool:
                         "pip is not available in bash. For PROJECT dependencies "
                         "use project_install (installs into project/.venv — "
                         "the same python bash uses here):\n\n"
-                        f"  project_install(package={repr(_pip_pkg)})\n\n"
+                        f"{_install_hint}\n\n"
                         "Use server_install ONLY when YOU need a package in "
                         "Babo's agent runtime (not the app being built)."
                     ),
                     is_error=True,
                 )
+            _pip_pkg = _extract_pip_package_spec(command)
             return ToolResult(
                 content=(
                     "pip is not available in bash. Use server_install for "

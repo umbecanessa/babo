@@ -25,8 +25,9 @@ import {
   isBackendReachableStatus,
 } from '../../core/backend-reachability.util';
 import {
-  BABO_CLOUD_MODELS,
+  BABO_HOSTED_MODEL_ID,
   CLOUD_PROVIDERS,
+  baboCloudModelsForUser,
   resolveBaboCloudModelId,
   matchCloudProvider,
   stripInferenceV1Suffix,
@@ -46,6 +47,7 @@ import {
 } from './setup-cloud.util';
 import { ApiKeyService } from '../../core/services/api-key.service';
 import { BillingService } from '../../core/services/billing.service';
+import { AgentModelService } from '../../core/services/agent-model.service';
 import { isPaidOrComp } from '../../core/models/cloud-subscription.model';
 import { ToastService } from '../../shared/toast/toast.service';
 import { Day1CoachService } from '../../shared/onboarding/day1-coach.service';
@@ -117,7 +119,12 @@ export class SetupComponent implements OnInit, OnDestroy {
     },
   ];
 
-  readonly baboCloudModels = BABO_CLOUD_MODELS;
+  readonly baboCloudModels = computed(() =>
+    baboCloudModelsForUser({
+      hostedGx10Available: this.platformCaps()?.inference?.hostedGx10Available,
+      hostedGx10Label: this.platformCaps()?.inference?.hostedGx10Label,
+    }),
+  );
 
   step = signal(0);
   returningUser = signal(false);
@@ -358,6 +365,7 @@ export class SetupComponent implements OnInit, OnDestroy {
     private api: ApiService,
     private apiKeys: ApiKeyService,
     public billing: BillingService,
+    private agentModels: AgentModelService,
     private toast: ToastService,
     private day1Coach: Day1CoachService,
   ) {
@@ -568,7 +576,7 @@ export class SetupComponent implements OnInit, OnDestroy {
     if (tier === 'hosted_babo') {
       const m = this.profile()?.inference.model;
       const id = resolveBaboCloudModelId(m);
-      const label = this.baboCloudModels.find((x) => x.id === id)?.label ?? m;
+      const label = this.baboCloudModels().find((x) => x.id === id)?.label ?? m;
       return label ? `✓ ${label} (via Babo Cloud)` : '✓ Babo Cloud';
     }
     if (tier === 'self_local' && tr.message) {
@@ -820,13 +828,23 @@ export class SetupComponent implements OnInit, OnDestroy {
     return tier === this.recommendedBrainTier;
   }
 
-  async selectBrainCard(tier: CapabilityTier): Promise<void> {
+  isBrainCardActive(card: { tier: CapabilityTier; gx10?: boolean }): boolean {
+    if (this.brainTier() !== card.tier) return false;
+    const resolved = resolveBaboCloudModelId(this.profile()?.inference.model);
+    if (card.gx10) return resolved === BABO_HOSTED_MODEL_ID;
+    return resolved !== BABO_HOSTED_MODEL_ID;
+  }
+
+  async selectBrainCard(tier: CapabilityTier, gx10 = false): Promise<void> {
     const previous = this.brainTier();
     this.showByokPanel.set(false);
     this.brainUndoTier.set(null);
     this.testResult.set(null);
     this.brainTestedTier.set(null);
     this.onBrainTierChange(tier);
+    if (gx10) {
+      this.selectBaboCloudModel(BABO_HOSTED_MODEL_ID);
+    }
 
     if (tier === 'hosted_babo') {
       if (this.auth.isAuthenticated()) {
@@ -1770,6 +1788,10 @@ export class SetupComponent implements OnInit, OnDestroy {
         if (scoped.key) {
           this.config.inferenceApiKey = scoped.key;
           await this.nls().config.set({ inferenceApiKey: scoped.key });
+          await this.agentModels.hotReloadInference({
+            inference_api_key: scoped.key,
+            hf_model: p.inference.model || this.config.inferenceModel,
+          });
         }
       }
 

@@ -125,6 +125,7 @@ export class ProviderKeysService {
 
   async resolveInferenceUpstream(
     userId: string,
+    modelId?: string,
   ): Promise<ResolvedInferenceUpstream> {
     const data = await this.settings.getSettings(userId);
     const mode = (data.cloud_inference_mode as string) || '';
@@ -133,11 +134,12 @@ export class ProviderKeysService {
     const keys =
       (data.provider_keys_encrypted as Record<string, string>) || {};
 
+    const wantsGx10 = (modelId ?? '').trim().toLowerCase() === 'babo-hosted';
     const gx10Enabled = await this.entitlements.getHostedGx10Enabled(userId);
     if (
+      wantsGx10 &&
       gx10Enabled &&
-      this.upstream.isInferenceConfigured() &&
-      (mode === 'hosted' || mode === '' || mode === 'resold')
+      this.upstream.isInferenceConfigured()
     ) {
       return {
         baseUrl: this.upstream.inferenceApiBase(),

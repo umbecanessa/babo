@@ -1,7 +1,9 @@
 import type { CapabilityTier } from '../../features/setup/capability-profile.model';
 import {
   BABO_CLOUD_MODELS,
+  BABO_HOSTED_MODEL_ID,
   CLOUD_PROVIDERS,
+  baboCloudModelsForUser,
   resolveBaboCloudModelId,
 } from '../../features/setup/setup-inference.util';
 import type { ModelPickerOption } from './agent-model.service';
@@ -29,6 +31,7 @@ export function providerDefaultModelOptions(providerId: string): ModelPickerOpti
 export function labelForModelId(modelId: string): string {
   const id = (modelId ?? '').trim();
   if (!id) return 'Default';
+  if (id === BABO_HOSTED_MODEL_ID) return 'Babo Brain (GX10)';
   const cloud = BABO_CLOUD_MODELS.find((m) => m.id === id);
   if (cloud) return cloud.label;
   const slash = id.lastIndexOf('/');
@@ -48,6 +51,8 @@ export function mergeModelCatalog(opts: {
   cloudModelIds?: string[];
   includeProviderDefaults?: boolean;
   providerId?: string;
+  hostedGx10Available?: boolean;
+  hostedGx10Label?: string;
 }): ModelPickerOption[] {
   const seen = new Set<string>();
   const out: ModelPickerOption[] = [];
@@ -76,7 +81,7 @@ export function mergeModelCatalog(opts: {
       }
     }
     if (offerCloud) {
-      for (const m of BABO_CLOUD_MODELS) {
+      for (const m of baboCloudModelsForUser(opts)) {
         add(m.id, m.label);
       }
       for (const id of opts.cloudModelIds ?? []) {
@@ -87,7 +92,7 @@ export function mergeModelCatalog(opts: {
   }
 
   if (offerCloud) {
-    for (const m of BABO_CLOUD_MODELS) {
+    for (const m of baboCloudModelsForUser(opts)) {
       add(m.id, m.label);
     }
     for (const id of opts.cloudModelIds ?? []) {
@@ -146,6 +151,7 @@ export function partitionModelPickerOptions(
 
   const def = defaultModelId.trim();
   if (def) pushFeatured(def);
+  pushFeatured(BABO_HOSTED_MODEL_ID);
   for (const id of POPULAR_MODEL_IDS) {
     pushFeatured(id);
   }

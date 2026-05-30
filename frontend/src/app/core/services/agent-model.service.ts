@@ -14,6 +14,7 @@ import {
   parseOpenAiModelList,
   shouldOfferBaboCloudModels,
 } from './model-catalog.util';
+import { ApiService } from './api.service';
 import { PlatformService } from './platform.service';
 
 export interface ModelPickerOption {
@@ -25,6 +26,7 @@ export interface InferenceHotReloadPayload {
   hf_model?: string;
   delegate_hf_model?: string | null;
   delegate_use_primary?: boolean;
+  inference_api_key?: string;
 }
 
 export interface AgentSessionInference {
@@ -51,6 +53,7 @@ export interface AgentInferenceSettingsResponse {
 export class AgentModelService {
   private readonly http = inject(HttpClient);
   private readonly platform = inject(PlatformService);
+  private readonly api = inject(ApiService);
 
   readonly defaultModelId = signal('');
   readonly defaultModelLabel = signal('');
@@ -387,6 +390,9 @@ export class AgentModelService {
     if (payload.delegate_use_primary !== undefined) {
       body.delegate_use_primary = payload.delegate_use_primary;
     }
+    if (payload.inference_api_key !== undefined) {
+      body.inference_api_key = payload.inference_api_key;
+    }
     if (!Object.keys(body).length) return;
 
     if (this.platform.isElectron && (window as any).nls?.runtime?.hotReloadInference) {
@@ -486,6 +492,7 @@ export class AgentModelService {
     }
 
     let cloudModelIds: string[] = [];
+    const gx10Caps = await this.fetchGx10Capabilities();
     if (shouldOfferBaboCloudModels({ tier, hasCloudApi })) {
       cloudModelIds = await this.fetchCloudModelIds().catch(() => []);
     }
@@ -501,6 +508,8 @@ export class AgentModelService {
         cloudModelIds,
         includeProviderDefaults: tier === 'byok_cloud',
         providerId: matchCloudProvider(profile?.inference?.url ?? cfg.inferenceUrl ?? ''),
+        hostedGx10Available: gx10Caps.available,
+        hostedGx10Label: gx10Caps.label,
       }),
     );
   }
@@ -512,6 +521,7 @@ export class AgentModelService {
 
     let model = resolveBaboCloudModelId('');
     let cloudModelIds: string[] = [];
+    const gx10Caps = await this.fetchGx10Capabilities();
 
     try {
       cloudModelIds = await this.fetchCloudModelIds();
@@ -533,8 +543,26 @@ export class AgentModelService {
         hasCloudApi,
         defaultModelId: model,
         cloudModelIds,
+        hostedGx10Available: gx10Caps.available,
+        hostedGx10Label: gx10Caps.label,
       }),
     );
+  }
+
+  private async fetchGx10Capabilities(): Promise<{
+    available: boolean;
+    label?: string;
+  }> {
+    if (!this.apiBase()) return { available: false };
+    try {
+      const caps = await firstValueFrom(this.api.getPlatformCapabilities());
+      return {
+        available: !!caps.inference?.hostedGx10Available,
+        label: caps.inference?.hostedGx10Label,
+      };
+    } catch {
+      return { available: false };
+    }
   }
 
   private async fetchCloudModelIds(): Promise<string[]> {

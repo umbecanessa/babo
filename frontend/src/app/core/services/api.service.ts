@@ -525,6 +525,13 @@ export class ApiService {
   }
 
   // ─── Relay Status ──────────────────────────────────────────────
+  /** Local Python runtime: ChannelRelayClient connected to NestJS (Electron). */
+  getLocalRelayStatus(agentId: string): Observable<{ online: boolean; connected?: boolean }> {
+    return this.http.get<{ online: boolean; connected?: boolean }>(
+      `${this.RUNTIME}/agents/${agentId}/relay-status`,
+    );
+  }
+
   getRelayStatus(agentId: string): Observable<{ online: boolean }> {
     return this.http.get<{ online: boolean }>(`${this.API}/agents/${agentId}/relay-status`);
   }
