@@ -99,6 +99,12 @@ run('npm run build', operatorDir, { NODE_ENV: 'development' });
 console.log('[operator] Linking into node_modules/@babo/operator…');
 run('npm install "./babo-operator" --no-audit --no-fund');
 
+const stripeModule = path.join(backendDir, 'node_modules', 'stripe', 'package.json');
+if (!fs.existsSync(stripeModule)) {
+  console.log('[operator] Installing stripe runtime dependency…');
+  run('npm install stripe@^22.2.0 --no-audit --no-fund');
+}
+
 if (!fs.existsSync(installedMain)) {
   console.error('[operator] Install failed — dist/index.js not found in node_modules');
   process.exit(1);
