@@ -137,7 +137,10 @@ export class SetupComponent implements OnInit, OnDestroy {
   provisioningCloud = signal(false);
   billingCheckoutLoading = signal(false);
   billingConfirming = signal(false);
+  billingAwaitingPayment = signal(false);
   billingReturnMessage = signal<string | null>(null);
+  private billingPollTimer: ReturnType<typeof setInterval> | null = null;
+  private billingFocusHandler: (() => void) | null = null;
   setupStage = signal<string>('idle');
   setupProgress = signal(0);
   setupMessage = signal('');
@@ -463,9 +466,21 @@ export class SetupComponent implements OnInit, OnDestroy {
       }
     };
     nls.on('vision:prefetch-progress', this.visionPrefetchListener);
+
+    this.billingFocusHandler = () => {
+      if (this.step() === 7 && this.billingAwaitingPayment()) {
+        void this.checkBillingActivation(true);
+      }
+    };
+    window.addEventListener('focus', this.billingFocusHandler);
   }
 
   ngOnDestroy(): void {
+    this.stopBillingSubscriptionPoll();
+    if (this.billingFocusHandler) {
+      window.removeEventListener('focus', this.billingFocusHandler);
+      this.billingFocusHandler = null;
+    }
     this.stopElapsedTimer();
     const nls = (window as any).nls;
     if (this.progressListener) {
@@ -620,9 +635,26 @@ export class SetupComponent implements OnInit, OnDestroy {
       target = 6;
     }
     if (!this.canEnterStep(target)) return;
+    if (this.step() === 7 && target !== 7) {
+      this.stopBillingSubscriptionPoll();
+      this.billingAwaitingPayment.set(false);
+    }
     this.step.set(target);
     this.highestStepReached = Math.max(this.highestStepReached, target);
     this.persistWizardDraft();
+    if (target === 7) {
+      void this.onEnterBillingStep();
+    }
+  }
+
+  private async onEnterBillingStep(): Promise<void> {
+    if (!this.auth.isAuthenticated()) return;
+    await this.loadPlatformCaps();
+    const active = await this.checkBillingActivation(false);
+    if (active) return;
+    if (this.billingAwaitingPayment()) {
+      this.startBillingSubscriptionPoll();
+    }
   }
 
   persistWizardDraft(): void {
@@ -1422,7 +1454,13 @@ export class SetupComponent implements OnInit, OnDestroy {
       });
       if (!opened) {
         this.billingReturnMessage.set('Could not start checkout');
+        return;
       }
+      this.billingAwaitingPayment.set(true);
+      this.billingReturnMessage.set(
+        'Complete payment in your browser — waiting for confirmation…',
+      );
+      this.startBillingSubscriptionPoll();
     } catch (err: any) {
       this.billingReturnMessage.set(
         err?.error?.message || err?.message || 'Could not start checkout',
@@ -1433,26 +1471,103 @@ export class SetupComponent implements OnInit, OnDestroy {
   }
 
   async continueAfterBilling(): Promise<void> {
-    await this.billing.refresh();
-    if (this.requiresSetupSubscription()) {
-      this.billingReturnMessage.set(
-        'Subscription not active yet — complete checkout or wait a moment and try again.',
-      );
-      return;
+    this.billingConfirming.set(true);
+    this.billingReturnMessage.set('Checking your subscription…');
+    try {
+      const active = await this.checkBillingActivation(false);
+      if (active) {
+        this.billingReturnMessage.set(null);
+        this.clearWizardDraft();
+        this.goToStep(8);
+        return;
+      }
+      if (this.billingAwaitingPayment()) {
+        this.startBillingSubscriptionPoll();
+        this.billingReturnMessage.set(
+          'Payment not confirmed yet — finish checkout in your browser, or wait a few seconds.',
+        );
+      } else {
+        this.billingReturnMessage.set(
+          'Subscription not active yet — start checkout or wait a moment and try again.',
+        );
+      }
+    } finally {
+      this.billingConfirming.set(false);
     }
-    this.billingReturnMessage.set(null);
-    this.clearWizardDraft();
-    this.goToStep(8);
   }
 
-  private async waitForActiveSubscription(timeoutMs: number): Promise<boolean> {
-    const start = Date.now();
-    while (Date.now() - start < timeoutMs) {
-      const sub = await this.billing.refresh();
-      if (sub && isPaidOrComp(sub)) return true;
-      await new Promise((r) => setTimeout(r, 1500));
+  billingPrimaryLabel(): string {
+    const sub = this.billing.subscription();
+    if (sub && isPaidOrComp(sub)) return 'Continue';
+    if (this.billingCheckoutLoading()) return 'Opening checkout…';
+    if (this.billingConfirming()) return 'Confirming…';
+    if (this.billingAwaitingPayment()) return 'Check subscription';
+    return 'Continue with Babo Cloud';
+  }
+
+  billingPrimaryDisabled(): boolean {
+    return this.billingCheckoutLoading() || this.billingConfirming();
+  }
+
+  async onBillingPrimaryAction(): Promise<void> {
+    const sub = this.billing.subscription();
+    if (sub && isPaidOrComp(sub)) {
+      await this.continueAfterBilling();
+      return;
+    }
+    if (this.billingAwaitingPayment() || this.billingConfirming()) {
+      await this.continueAfterBilling();
+      return;
+    }
+    await this.startSetupCheckout();
+  }
+
+  private async checkBillingActivation(autoAdvance: boolean): Promise<boolean> {
+    const sub = await this.billing.refresh();
+    if (sub && isPaidOrComp(sub)) {
+      this.stopBillingSubscriptionPoll();
+      this.billingAwaitingPayment.set(false);
+      this.billingConfirming.set(false);
+      this.billingReturnMessage.set(null);
+      if (autoAdvance && this.step() === 7) {
+        this.toast.show('Subscription active — you\'re all set.', 'info');
+        this.clearWizardDraft();
+        this.goToStep(8);
+      }
+      return true;
     }
     return false;
+  }
+
+  private startBillingSubscriptionPoll(): void {
+    this.stopBillingSubscriptionPoll();
+    this.billingConfirming.set(true);
+    const started = Date.now();
+    const maxMs = 10 * 60 * 1000;
+    void this.checkBillingActivation(true);
+    this.billingPollTimer = setInterval(() => {
+      if (this.step() !== 7) {
+        this.stopBillingSubscriptionPoll();
+        return;
+      }
+      void this.checkBillingActivation(true).then((active) => {
+        if (active) return;
+        if (Date.now() - started > maxMs) {
+          this.billingConfirming.set(false);
+          this.billingReturnMessage.set(
+            'Still waiting — tap Check subscription after completing payment.',
+          );
+          this.stopBillingSubscriptionPoll();
+        }
+      });
+    }, 2500);
+  }
+
+  private stopBillingSubscriptionPoll(): void {
+    if (this.billingPollTimer) {
+      clearInterval(this.billingPollTimer);
+      this.billingPollTimer = null;
+    }
   }
 
   private async enforceBillingStepIfNeeded(): Promise<void> {
@@ -1469,22 +1584,13 @@ export class SetupComponent implements OnInit, OnDestroy {
     }
 
     if (status === 'success') {
-      this.billingConfirming.set(true);
+      this.billingAwaitingPayment.set(true);
       this.billingReturnMessage.set('Confirming your subscription…');
-      const active = await this.waitForActiveSubscription(20_000);
-      this.billingConfirming.set(false);
-      if (active) {
-        this.toast.show('Subscription active — you\'re all set.', 'info');
-        this.billingReturnMessage.set(null);
-        this.clearWizardDraft();
-        this.goToStep(8);
-      } else {
-        this.billingReturnMessage.set(
-          'Payment received — still activating. Tap Continue below in a few seconds.',
-        );
-        this.goToStep(7);
-      }
+      this.goToStep(7);
+      this.startBillingSubscriptionPoll();
     } else {
+      this.billingAwaitingPayment.set(false);
+      this.stopBillingSubscriptionPoll();
       this.toast.show('Checkout canceled — you can try again when ready.', 'info');
       this.billingReturnMessage.set(null);
       this.goToStep(7);

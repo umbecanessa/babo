@@ -573,11 +573,15 @@
             </li>
           </ul>
 
-          @if (billingConfirming()) {
-            <p class="progress-text center billing-status">Confirming your subscription…</p>
+          @if (billingCheckoutLoading()) {
+            <p class="progress-text center billing-status">Opening secure checkout…</p>
+          } @else if (billingConfirming() || billingAwaitingPayment()) {
+            <p class="progress-text center billing-status">
+              Complete payment in your browser — we'll detect it automatically.
+            </p>
           } @else if (billing.subscription(); as sub) {
             @if (isPaidOrComp(sub)) {
-              <p class="hint-ok billing-status">You’re all set — let’s create your agent.</p>
+              <p class="hint-ok billing-status">You're all set — let's create your agent.</p>
             }
           }
 
@@ -588,35 +592,14 @@
 
         <div class="step-footer billing-step-footer">
           <button type="button" class="icon-back" (click)="prevStep()" aria-label="Back">‹</button>
-          @if (billing.subscription(); as sub) {
-            @if (isPaidOrComp(sub)) {
-              <button
-                class="action-btn launch billing-cta"
-                type="button"
-                (click)="continueAfterBilling()"
-              >
-                Continue
-              </button>
-            } @else {
-              <button
-                class="action-btn launch billing-cta"
-                type="button"
-                (click)="startSetupCheckout()"
-                [disabled]="billingCheckoutLoading() || billingConfirming()"
-              >
-                {{ billingCheckoutLoading() ? 'Opening checkout…' : 'Continue with Babo Cloud' }}
-              </button>
-            }
-          } @else {
-            <button
-              class="action-btn launch billing-cta"
-              type="button"
-              (click)="startSetupCheckout()"
-              [disabled]="billingCheckoutLoading() || billingConfirming()"
-            >
-              {{ billingCheckoutLoading() ? 'Opening checkout…' : 'Continue with Babo Cloud' }}
-            </button>
-          }
+          <button
+            class="action-btn launch billing-cta"
+            type="button"
+            (click)="onBillingPrimaryAction()"
+            [disabled]="billingPrimaryDisabled()"
+          >
+            {{ billingPrimaryLabel() }}
+          </button>
         </div>
 
         <p class="billing-alt-hint">
