@@ -36,10 +36,22 @@ function run(cmd, cwd = backendDir, extraEnv = {}) {
 }
 
 const operatorPackageJson = path.join(operatorDir, 'package.json');
-const operatorReady =
-  fs.existsSync(installedMain) && fs.existsSync(operatorPackageJson);
+const operatorModuleJs = path.join(operatorDir, 'dist', 'operator.module.js');
 
-if (operatorReady) {
+function operatorSupportsHostPrisma() {
+  if (!fs.existsSync(operatorModuleJs)) return false;
+  try {
+    return fs.readFileSync(operatorModuleJs, 'utf8').includes('prismaService');
+  } catch {
+    return false;
+  }
+}
+
+if (
+  fs.existsSync(installedMain) &&
+  fs.existsSync(operatorPackageJson) &&
+  operatorSupportsHostPrisma()
+) {
   console.log('[operator] Already installed in node_modules');
   process.exit(0);
 }
@@ -62,6 +74,9 @@ if (!fs.existsSync(operatorDir)) {
   );
   console.log('[operator] Cloning private babo-operator into backend/babo-operator…');
   run(`git clone --depth 1 "${cloneUrl}" "${operatorDir}"`);
+} else if (fs.existsSync(path.join(operatorDir, '.git'))) {
+  console.log('[operator] Updating existing babo-operator clone…');
+  run('git pull --ff-only', operatorDir);
 }
 
 console.log('[operator] Installing and building…');
