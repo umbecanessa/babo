@@ -530,8 +530,78 @@
       </div>
     }
 
-    <!-- 7 · Ready summary -->
+    <!-- 7 · Babo Cloud subscription (required before first chat) -->
     @if (step() === 7) {
+      <div class="step-shell auth-step-shell">
+        <div class="step-body">
+          <div class="account-auth-panel billing-setup-panel">
+            <h2 class="account-auth-title">Subscribe to Babo Cloud</h2>
+            <p class="account-auth-lead">
+              You chose Babo Cloud for thinking — an active subscription is required before your first chat.
+              No free inference trial.
+            </p>
+
+            <ul class="checklist billing-checklist">
+              <li><strong>$6.99/month</strong> — Stripe Checkout (card or Link)</li>
+              <li><strong>$5 included</strong> model usage each month</li>
+              <li>On-demand overage at 1.25× after the pool is used</li>
+              <li>31-day refund on your first payment</li>
+            </ul>
+
+            @if (billingConfirming()) {
+              <p class="progress-text center">Confirming your subscription…</p>
+            } @else if (billing.subscription(); as sub) {
+              @if (isPaidOrComp(sub)) {
+                <p class="hint-ok">Subscription active — continue to create your agent.</p>
+              }
+            }
+
+            @if (billingReturnMessage()) {
+              <div class="error-badge">{{ billingReturnMessage() }}</div>
+            }
+
+            <div class="billing-setup-actions">
+              @if (billing.subscription(); as sub) {
+                @if (isPaidOrComp(sub)) {
+                  <button
+                    class="action-btn launch full"
+                    type="button"
+                    (click)="continueAfterBilling()"
+                  >
+                    Continue
+                  </button>
+                } @else {
+                  <button
+                    class="action-btn launch full"
+                    type="button"
+                    (click)="startSetupCheckout()"
+                    [disabled]="billingCheckoutLoading()"
+                  >
+                    {{ billingCheckoutLoading() ? 'Opening checkout…' : 'Subscribe — $6.99/mo' }}
+                  </button>
+                }
+              } @else {
+                <button
+                  class="action-btn launch full"
+                  type="button"
+                  (click)="startSetupCheckout()"
+                  [disabled]="billingCheckoutLoading()"
+                >
+                  {{ billingCheckoutLoading() ? 'Opening checkout…' : 'Subscribe — $6.99/mo' }}
+                </button>
+              }
+            </div>
+          </div>
+        </div>
+        <div class="step-footer split">
+          <button type="button" class="icon-back" (click)="prevStep()" aria-label="Back">‹</button>
+          <p class="small-muted billing-footer-hint">BYOK (your own API keys) does not require this step.</p>
+        </div>
+      </div>
+    }
+
+    <!-- 8 · Ready summary -->
+    @if (step() === 8) {
       <div class="step-shell">
         <div class="step-body center">
           <div class="success-check large">✓</div>
@@ -553,8 +623,8 @@
       </div>
     }
 
-    <!-- 8 · Name your agent -->
-    @if (step() === 8) {
+    <!-- 9 · Name your agent -->
+    @if (step() === 9) {
       <div class="step-shell">
         <div class="step-body center">
           <h2>Name your agent</h2>

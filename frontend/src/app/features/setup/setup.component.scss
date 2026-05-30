@@ -538,6 +538,29 @@
   margin: 8px 0 16px;
 }
 
+.billing-setup-panel .billing-checklist {
+  margin: 16px 0 20px;
+  padding-left: 1.2rem;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.55;
+
+  li + li {
+    margin-top: 6px;
+  }
+}
+
+.billing-setup-actions {
+  margin-top: 8px;
+}
+
+.billing-footer-hint {
+  flex: 1;
+  text-align: right;
+  margin: 0;
+  font-size: 11px;
+}
+
 .auth-step-shell .step-footer .action-btn.launch {
   padding: 12px 28px;
   font-size: 14px;

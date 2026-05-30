@@ -60,3 +60,14 @@ export function usesBaboCloudRelay(profile: CapabilityProfile | null): boolean {
     profile.inference.tier === 'byok_cloud'
   );
 }
+
+/** Hosted Babo Cloud relay (not BYOK) — requires an active subscription when billing is on. */
+export function usesHostedBaboCloud(profile: CapabilityProfile | null): boolean {
+  if (!profile) return false;
+  return (
+    profile.inference.tier === 'hosted_babo' ||
+    profile.visualCortex.tier === 'hosted_babo' ||
+    profile.transcribe.tier === 'hosted_babo' ||
+    profile.embeddings.tier === 'hosted_babo'
+  );
+}

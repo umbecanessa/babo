@@ -10,7 +10,7 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { Router, ActivatedRoute, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { PlatformService } from '../../core/services/platform.service';
 import { AuthService } from '../../core/services/auth.service';
@@ -41,8 +41,11 @@ import {
 import {
   applyBaboCloudPlacements,
   usesBaboCloudRelay,
+  usesHostedBaboCloud,
 } from './setup-cloud.util';
 import { ApiKeyService } from '../../core/services/api-key.service';
+import { BillingService } from '../../core/services/billing.service';
+import { isPaidOrComp } from '../../core/models/cloud-subscription.model';
 import { ToastService } from '../../shared/toast/toast.service';
 import { Day1CoachService } from '../../shared/onboarding/day1-coach.service';
 
@@ -122,6 +125,9 @@ export class SetupComponent implements OnInit, OnDestroy {
   brainUndoTier = signal<CapabilityTier | null>(null);
   agentName = '';
   provisioningCloud = signal(false);
+  billingCheckoutLoading = signal(false);
+  billingConfirming = signal(false);
+  billingReturnMessage = signal<string | null>(null);
   setupStage = signal<string>('idle');
   setupProgress = signal(0);
   setupMessage = signal('');
@@ -157,6 +163,7 @@ export class SetupComponent implements OnInit, OnDestroy {
   visualTier = signal<CapabilityTier>('off');
   cloudProviderId = signal('openrouter');
   platformCaps = signal<import('../../core/models/platform-capabilities.model').PlatformCapabilities | null>(null);
+  isPaidOrComp = isPaidOrComp;
   recommendedBrainTier: CapabilityTier = 'hosted_babo';
   savingCapabilities = signal(false);
   visionPrefetchActive = signal(false);
@@ -321,10 +328,12 @@ export class SetupComponent implements OnInit, OnDestroy {
 
   constructor(
     private router: Router,
+    private route: ActivatedRoute,
     public platform: PlatformService,
     public auth: AuthService,
     private api: ApiService,
     private apiKeys: ApiKeyService,
+    public billing: BillingService,
     private toast: ToastService,
     private day1Coach: Day1CoachService,
   ) {
@@ -384,6 +393,13 @@ export class SetupComponent implements OnInit, OnDestroy {
 
     if (!setupComplete) {
       this.restoreWizardDraft();
+    }
+
+    const billingReturn = this.route.snapshot.queryParamMap.get('billing');
+    if (billingReturn === 'success' || billingReturn === 'canceled') {
+      void this.handleBillingReturn(billingReturn);
+    } else if (!setupComplete && this.step() >= 8 && this.auth.isAuthenticated()) {
+      void this.enforceBillingStepIfNeeded();
     }
 
     this.progressListener = (data: any) => {
@@ -639,7 +655,7 @@ export class SetupComponent implements OnInit, OnDestroy {
       if (typeof d.codeSearchOn === 'boolean') {
         this.codeSearchOn.set(d.codeSearchOn);
       }
-      const target = Math.min(Math.max(d.step ?? 0, 1), 8);
+      const target = Math.min(Math.max(d.step ?? 0, 1), 9);
       this.highestStepReached = d.highestStepReached ?? target;
       if (this.canEnterStep(target)) {
         this.step.set(target);
@@ -663,11 +679,13 @@ export class SetupComponent implements OnInit, OnDestroy {
     if (target <= 1) return true;
     if (target >= 2 && !this.venvReady()) return false;
     if (target >= 3 && !this.profile()) return false;
+    if (target >= 7 && !this.auth.isAuthenticated()) return false;
+    if (target >= 8 && this.requiresSetupSubscription()) return false;
     return true;
   }
 
   nextStep(): void {
-    const n = Math.min(this.step() + 1, 8);
+    const n = Math.min(this.step() + 1, 9);
     if (!this.canEnterStep(n)) return;
     this.goToStep(n);
   }
@@ -680,7 +698,7 @@ export class SetupComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** Full first-run path: prepare → device → thinking → extras → placement → sign-in → name */
+  /** Full first-run path: prepare → … → sign-in → billing (if Babo Cloud) → ready → name */
   continueFromWelcome(): void {
     this.goToStep(1);
     if (this.setupStage() === 'idle') {
@@ -1227,8 +1245,14 @@ export class SetupComponent implements OnInit, OnDestroy {
       }
       await this.loadPlatformCaps();
       await this.ensureBaboCloudAccess();
-      this.clearWizardDraft();
-      this.nextStep();
+      await this.billing.refresh();
+      if (this.requiresSetupSubscription()) {
+        this.persistWizardDraft();
+        this.goToStep(7);
+      } else {
+        this.clearWizardDraft();
+        this.goToStep(8);
+      }
     } catch (err: any) {
       this.authError.set(err?.error?.message || err?.message || 'Could not sign in');
     } finally {
@@ -1286,6 +1310,101 @@ export class SetupComponent implements OnInit, OnDestroy {
     } catch {
       this.platformCaps.set(null);
     }
+  }
+
+  requiresSetupSubscription(): boolean {
+    if (!usesHostedBaboCloud(this.profile())) return false;
+    if (!this.billing.billingEnabledFromCaps(this.platformCaps())) return false;
+    const sub = this.billing.subscription();
+    if (!sub) return true;
+    return this.billing.needsSubscription();
+  }
+
+  setupBillingReturnUrl(): string {
+    return `${window.location.origin}/setup?billing=success`;
+  }
+
+  async startSetupCheckout(): Promise<void> {
+    this.billingCheckoutLoading.set(true);
+    this.billingReturnMessage.set(null);
+    try {
+      this.persistWizardDraft();
+      const url = await this.billing.startCheckout(this.setupBillingReturnUrl());
+      if (url) {
+        window.location.href = url;
+      }
+    } catch (err: any) {
+      this.billingReturnMessage.set(
+        err?.error?.message || err?.message || 'Could not start checkout',
+      );
+    } finally {
+      this.billingCheckoutLoading.set(false);
+    }
+  }
+
+  async continueAfterBilling(): Promise<void> {
+    await this.billing.refresh();
+    if (this.requiresSetupSubscription()) {
+      this.billingReturnMessage.set(
+        'Subscription not active yet — complete checkout or wait a moment and try again.',
+      );
+      return;
+    }
+    this.billingReturnMessage.set(null);
+    this.clearWizardDraft();
+    this.goToStep(8);
+  }
+
+  private async waitForActiveSubscription(timeoutMs: number): Promise<boolean> {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const sub = await this.billing.refresh();
+      if (sub && isPaidOrComp(sub)) return true;
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+    return false;
+  }
+
+  private async enforceBillingStepIfNeeded(): Promise<void> {
+    await this.loadPlatformCaps();
+    await this.billing.refresh();
+    if (this.requiresSetupSubscription()) {
+      this.goToStep(7);
+    }
+  }
+
+  async handleBillingReturn(status: string): Promise<void> {
+    if (this.auth.isAuthenticated()) {
+      await this.loadPlatformCaps();
+    }
+
+    if (status === 'success') {
+      this.billingConfirming.set(true);
+      this.billingReturnMessage.set('Confirming your subscription…');
+      const active = await this.waitForActiveSubscription(20_000);
+      this.billingConfirming.set(false);
+      if (active) {
+        this.toast.show('Subscription active — you\'re all set.', 'info');
+        this.billingReturnMessage.set(null);
+        this.clearWizardDraft();
+        this.goToStep(8);
+      } else {
+        this.billingReturnMessage.set(
+          'Payment received — still activating. Tap Continue below in a few seconds.',
+        );
+        this.goToStep(7);
+      }
+    } else {
+      this.toast.show('Checkout canceled — subscribe to use Babo Cloud models.', 'info');
+      this.billingReturnMessage.set(null);
+      this.goToStep(7);
+    }
+
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: {},
+      replaceUrl: true,
+    });
   }
 
   async ensureBaboCloudAccess(): Promise<void> {
@@ -1405,6 +1524,19 @@ export class SetupComponent implements OnInit, OnDestroy {
       }
 
       await this.api.whenReady();
+
+      if (usesHostedBaboCloud(p)) {
+        await this.loadPlatformCaps();
+        await this.billing.refresh();
+        if (this.requiresSetupSubscription()) {
+          this.launching.set(false);
+          this.launchError.set(
+            'Subscribe to Babo Cloud before creating your agent.',
+          );
+          this.goToStep(7);
+          return;
+        }
+      }
 
       this.launchMessage.set('Starting agent runtime...');
       await this.nls().runtime.start();
