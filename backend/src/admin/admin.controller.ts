@@ -33,6 +33,16 @@ export class AdminController {
     return this.admin.getDashboard();
   }
 
+  @Get('platform')
+  getPlatform() {
+    return this.admin.getPlatformInfo();
+  }
+
+  @Get('billing/subscriptions')
+  listBillingSubscriptions() {
+    return this.admin.listBillingSubscriptions();
+  }
+
   // ===================================================================
   // Users
   // ===================================================================

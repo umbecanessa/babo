@@ -5,6 +5,7 @@ import { AdminApiService } from '../../core/admin-api.service';
 import { PageToolbarComponent } from '../../shared/page-toolbar.component';
 import { ApiErrorBannerComponent } from '../../shared/api-error-banner.component';
 import { matchesSearch, paginate, sortBy, type ListQuery } from '../../shared/list.util';
+import { subscriptionStatusLabel } from '../../shared/format.util';
 
 @Component({
   selector: 'app-users',
@@ -45,6 +46,9 @@ import { matchesSearch, paginate, sortBy, type ListQuery } from '../../shared/li
               <th>Email</th>
               <th>Name</th>
               <th>Role</th>
+              @if (billingEnabled()) {
+                <th>Cloud</th>
+              }
               <th>Agents</th>
               <th>API keys</th>
               <th>Created</th>
@@ -61,6 +65,17 @@ import { matchesSearch, paginate, sortBy, type ListQuery } from '../../shared/li
                     {{ u.role }}
                   </span>
                 </td>
+                @if (billingEnabled()) {
+                  <td>
+                    @if (u.subscription) {
+                      <span class="badge sm" [class.badge-admin]="u.subscription.status === 'lifetime_comp'">
+                        {{ subscriptionStatusLabel(u.subscription.status) }}
+                      </span>
+                    } @else {
+                      <span class="muted">—</span>
+                    }
+                  </td>
+                }
                 <td>{{ u.agentCount }}</td>
                 <td>{{ u.apiKeyCount }}</td>
                 <td>{{ u.createdAt | date:'mediumDate' }}</td>
@@ -95,6 +110,7 @@ import { matchesSearch, paginate, sortBy, type ListQuery } from '../../shared/li
       padding: 0;
       font-weight: 600;
     }
+    .badge.sm { font-size: 0.68rem; }
   `],
 })
 export class UsersComponent implements OnInit {
@@ -116,6 +132,8 @@ export class UsersComponent implements OnInit {
     { value: 'admin', label: 'Administrators' },
     { value: 'user', label: 'Users only' },
   ];
+
+  billingEnabled = signal(false);
 
   sortOptions = [
     { value: 'createdAt', label: 'Created' },
@@ -146,7 +164,13 @@ export class UsersComponent implements OnInit {
 
   constructor(private api: AdminApiService) {}
 
+  subscriptionStatusLabel = subscriptionStatusLabel;
+
   async ngOnInit(): Promise<void> {
+    try {
+      const platform = await this.api.platform();
+      this.billingEnabled.set(!!platform.billingEnabled);
+    } catch { /* ignore */ }
     await this.reload();
   }
 

@@ -1,7 +1,8 @@
-import { Component } from '@angular/core';
+import { Component, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AuthService } from '../../core/auth.service';
+import { AdminApiService, type AdminPlatformInfo } from '../../core/admin-api.service';
 
 @Component({
   selector: 'app-admin-layout',
@@ -17,10 +18,16 @@ import { AuthService } from '../../core/auth.service';
         <nav>
           <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Dashboard</a>
           <a routerLink="/users" routerLinkActive="active">Users</a>
+          @if (platform()?.billingEnabled) {
+            <a routerLink="/billing" routerLinkActive="active">Billing</a>
+          }
           <a routerLink="/agents" routerLinkActive="active">Agents</a>
           <a routerLink="/usage" routerLinkActive="active">Token usage</a>
         </nav>
         <div class="sidebar-foot">
+          @if (platform()?.billingEnabled) {
+            <div class="billing-pill">Billing on · {{ platform()!.billingProvider }}</div>
+          }
           @if (auth.operatorEmail) {
             <div class="operator">{{ auth.operatorEmail }}</div>
           }
@@ -64,6 +71,11 @@ import { AuthService } from '../../core/auth.service';
       color: var(--accent-primary);
     }
     .sidebar-foot { margin-top: auto; }
+    .billing-pill {
+      font-size: 0.72rem;
+      color: var(--accent-success);
+      padding: 0 0.5rem 0.5rem;
+    }
     .operator {
       font-size: 0.78rem;
       color: var(--text-muted);
@@ -74,8 +86,21 @@ import { AuthService } from '../../core/auth.service';
     .content { flex: 1; padding: 1rem 1.5rem 2rem; overflow: auto; max-width: 1400px; }
   `],
 })
-export class AdminLayoutComponent {
-  constructor(public auth: AuthService) {}
+export class AdminLayoutComponent implements OnInit {
+  platform = signal<AdminPlatformInfo | null>(null);
+
+  constructor(
+    public auth: AuthService,
+    private api: AdminApiService,
+  ) {}
+
+  async ngOnInit(): Promise<void> {
+    try {
+      this.platform.set(await this.api.platform());
+    } catch {
+      this.platform.set(null);
+    }
+  }
 
   logout(): void {
     this.auth.logout();

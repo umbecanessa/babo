@@ -11,11 +11,30 @@ export interface SetupStatus {
   setupMode: 'create' | 'claim' | 'ready';
 }
 
+export interface AdminPlatformInfo {
+  baboCloudMode: boolean;
+  billingEnabled: boolean;
+  billingProvider: string;
+}
+
 @Injectable({ providedIn: 'root' })
 export class AdminApiService {
   private base = `${environment.apiUrl}/admin`;
+  private platformCache: AdminPlatformInfo | null = null;
 
   constructor(private http: HttpClient) {}
+
+  platform(force = false) {
+    if (this.platformCache && !force) {
+      return Promise.resolve(this.platformCache);
+    }
+    return firstValueFrom(
+      this.http.get<AdminPlatformInfo>(`${this.base}/platform`),
+    ).then((p) => {
+      this.platformCache = p;
+      return p;
+    });
+  }
 
   setupStatus() {
     return firstValueFrom(
@@ -86,6 +105,32 @@ export class AdminApiService {
     const params = new HttpParams().set('limit', String(limit));
     return firstValueFrom(
       this.http.get<any>(`${this.base}/users/${userId}/usage`, { params }),
+    );
+  }
+
+  billingSubscriptions() {
+    return firstValueFrom(
+      this.http.get<any>(`${this.base}/billing/subscriptions`),
+    );
+  }
+
+  grantLifetime(userId: string, grantNote?: string) {
+    return firstValueFrom(
+      this.http.post<any>(`${this.base}/users/${userId}/grant-lifetime`, {
+        grantNote: grantNote || undefined,
+      }),
+    );
+  }
+
+  revokeLifetime(userId: string) {
+    return firstValueFrom(
+      this.http.post<any>(`${this.base}/users/${userId}/revoke-lifetime`, {}),
+    );
+  }
+
+  activateCloudBasicDev(userId: string) {
+    return firstValueFrom(
+      this.http.post<any>(`${this.base}/users/${userId}/activate-cloud-basic`, {}),
     );
   }
 

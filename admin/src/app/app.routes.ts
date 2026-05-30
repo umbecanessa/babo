@@ -36,6 +36,11 @@ export const routes: Routes = [
           import('./pages/users/user-detail.component').then((m) => m.UserDetailComponent),
       },
       {
+        path: 'billing',
+        loadComponent: () =>
+          import('./pages/billing/billing.component').then((m) => m.BillingComponent),
+      },
+      {
         path: 'agents',
         loadComponent: () =>
           import('./pages/agents/agents.component').then((m) => m.AgentsComponent),

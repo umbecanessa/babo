@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, ForbiddenException, UnauthorizedException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../prisma/prisma.service';
 import { RuntimeService } from '../runtime/runtime.service';
@@ -12,13 +13,70 @@ export class AdminService {
     private runtime: RuntimeService,
     private entitlements: EntitlementsService,
     private internalBilling: InternalCloudBillingProvider,
+    private config: ConfigService,
   ) {}
+
+  private assertBillingAdmin(): void {
+    if (!this.entitlements.billingEnabled()) {
+      throw new ForbiddenException('Billing is not enabled on this server');
+    }
+  }
+
+  getPlatformInfo() {
+    return {
+      baboCloudMode: this.entitlements.isCloudMode(),
+      billingEnabled: this.entitlements.billingEnabled(),
+      billingProvider: this.config.get<string>('BILLING_PROVIDER') || 'internal',
+    };
+  }
+
+  async listBillingSubscriptions() {
+    this.assertBillingAdmin();
+
+    const rows = await this.prisma.cloudSubscription.findMany({
+      include: {
+        user: { select: { id: true, email: true, displayName: true } },
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+
+    const views = await Promise.all(
+      rows.map(async (row) => ({
+        userId: row.userId,
+        email: row.user.email,
+        displayName: row.user.displayName,
+        subscription: await this.entitlements.getSubscriptionView(row.userId),
+        grantNote: row.grantNote,
+        grantedByAdminId: row.grantedByAdminId,
+        stripeCustomerId: row.stripeCustomerId,
+      })),
+    );
+
+    const statusCounts: Record<string, number> = {};
+    for (const v of views) {
+      const s = v.subscription.status;
+      statusCounts[s] = (statusCounts[s] ?? 0) + 1;
+    }
+
+    return {
+      summary: {
+        total: views.length,
+        byStatus: statusCounts,
+        activePaid: views.filter((v) => v.subscription.status === 'active').length,
+        lifetimeComp: views.filter(
+          (v) => v.subscription.status === 'lifetime_comp' || v.subscription.billingExempt,
+        ).length,
+      },
+      subscriptions: views,
+    };
+  }
 
   // ===================================================================
   // Users
   // ===================================================================
 
   async listUsers() {
+    const billing = this.entitlements.billingEnabled();
     const users = await this.prisma.user.findMany({
       select: {
         id: true,
@@ -28,6 +86,20 @@ export class AdminService {
         createdAt: true,
         updatedAt: true,
         _count: { select: { agents: true, apiKeys: true } },
+        ...(billing
+          ? {
+              cloudSubscription: {
+                select: {
+                  status: true,
+                  planId: true,
+                  billingExempt: true,
+                  hostedGx10Enabled: true,
+                  includedCreditCents: true,
+                  usedCreditCents: true,
+                },
+              },
+            }
+          : {}),
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -41,6 +113,20 @@ export class AdminService {
       updatedAt: u.updatedAt,
       agentCount: u._count.agents,
       apiKeyCount: u._count.apiKeys,
+      ...(billing && 'cloudSubscription' in u
+        ? {
+            subscription: (u as any).cloudSubscription
+              ? {
+                  status: (u as any).cloudSubscription.status,
+                  planId: (u as any).cloudSubscription.planId,
+                  billingExempt: (u as any).cloudSubscription.billingExempt,
+                  hostedGx10Enabled: (u as any).cloudSubscription.hostedGx10Enabled,
+                  usedCreditCents: (u as any).cloudSubscription.usedCreditCents,
+                  includedCreditCents: (u as any).cloudSubscription.includedCreditCents,
+                }
+              : null,
+          }
+        : {}),
     }));
   }
 
@@ -100,6 +186,7 @@ export class AdminService {
     adminUserId: string,
     grantNote?: string,
   ) {
+    this.assertBillingAdmin();
     const user = await this.prisma.user.findUnique({ where: { id: targetUserId } });
     if (!user) throw new NotFoundException('User not found');
     await this.internalBilling.grantLifetimeComp(
@@ -111,6 +198,7 @@ export class AdminService {
   }
 
   async revokeLifetimeComp(targetUserId: string) {
+    this.assertBillingAdmin();
     const user = await this.prisma.user.findUnique({ where: { id: targetUserId } });
     if (!user) throw new NotFoundException('User not found');
     await this.internalBilling.revokeLifetimeComp(targetUserId);
@@ -119,6 +207,7 @@ export class AdminService {
 
   /** Pre-operator dev: simulate paid cloud_basic without Stripe. */
   async activateCloudBasicDev(targetUserId: string) {
+    this.assertBillingAdmin();
     const user = await this.prisma.user.findUnique({ where: { id: targetUserId } });
     if (!user) throw new NotFoundException('User not found');
     await this.internalBilling.activatePaidPlan(targetUserId);
@@ -688,6 +777,9 @@ export class AdminService {
 
     return {
       user,
+      subscription: this.entitlements.billingEnabled()
+        ? await this.entitlements.getSubscriptionView(userId)
+        : null,
       ledger: {
         requestCount: totals._count,
         promptTokens: totals._sum.promptTokens ?? 0,

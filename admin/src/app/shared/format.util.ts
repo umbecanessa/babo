@@ -3,6 +3,32 @@ export function formatNumber(n: number | null | undefined): string {
   return new Intl.NumberFormat().format(n);
 }
 
+export function formatUsdCents(cents: number | null | undefined): string {
+  if (cents == null || Number.isNaN(cents)) return '—';
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+  }).format(cents / 100);
+}
+
+export function subscriptionStatusLabel(status: string | null | undefined): string {
+  switch (status) {
+    case 'active':
+      return 'Active';
+    case 'past_due':
+      return 'Past due';
+    case 'canceled':
+      return 'Canceled';
+    case 'lifetime_comp':
+      return 'Lifetime';
+    case 'none':
+      return 'None';
+    default:
+      return status || '—';
+  }
+}
+
 export function runtimeStatusLabel(agent: any): string {
   if (!agent?.live?.reachable && agent?.live?.status === 'unreachable') return 'Unreachable';
   return (
