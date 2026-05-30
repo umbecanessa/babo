@@ -144,6 +144,7 @@ class UpdateManager {
         this.broadcast('update:installing', {});
         this.clearTimers();
         try {
+            electron_log_1.default.warn('[UpdateManager] SHUTDOWN_TRACE update.installUpdate calling runtime.stop()');
             await this.runtime.stop();
         }
         catch {
