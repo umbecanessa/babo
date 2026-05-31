@@ -511,7 +511,8 @@ export class CapabilitySettingsPanelComponent implements OnInit {
       if (!isBaboHostedModelId(p.inference.model ?? '')) {
         p.inference.model = resolveBaboCloudModelId(p.inference.model);
       }
-      this.config.inferenceModel = p.inference.model;
+      this.config.inferenceModel =
+        p.inference.model ?? resolveBaboCloudModelId(p.inference.model);
     }
     this.saving.set(true);
     this.saveError.set(null);
