@@ -24,6 +24,8 @@ export class CloudUpstreamService {
   readonly cloudMode: boolean;
   /** Babo-operated OpenRouter key for trial / resold inference (Railway secret). */
   readonly platformOpenRouterKey: string;
+  /** vLLM model id on GX10 when desktop sends ``babo-hosted``. */
+  readonly inferenceUpstreamModel: string;
 
   constructor(private config: ConfigService) {
     const inf =
@@ -62,6 +64,11 @@ export class CloudUpstreamService {
       config.get<string>('PLATFORM_OPENROUTER_API_KEY') ||
       config.get<string>('BABO_OPENROUTER_API_KEY') ||
       '';
+    this.inferenceUpstreamModel = (
+      config.get<string>('INFERENCE_UPSTREAM_MODEL') ||
+      config.get<string>('BABO_INFERENCE_UPSTREAM_MODEL') ||
+      ''
+    ).trim();
   }
 
   isResoldInferenceConfigured(): boolean {

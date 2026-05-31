@@ -27,6 +27,7 @@ $red: var(--accent-danger);
   display: flex;
   height: calc(100vh - 48px);
   width: 100%;
+  overflow: hidden;
 }
 
 .settings-page {
@@ -36,6 +37,9 @@ $red: var(--accent-danger);
   margin: 0 auto;
   padding: 24px;
   gap: 32px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
 }
 
 // ── Sidebar ──────────────────────────────────────────────────
@@ -88,6 +92,10 @@ $red: var(--accent-danger);
 .settings-content {
   flex: 1;
   min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-right: 4px;
 }
 
 .section {

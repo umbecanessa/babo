@@ -12,12 +12,16 @@ import { CloudAuthContext } from './cloud-auth.types';
 import { CloudRateLimiterService } from './cloud-rate-limiter.service';
 import { CloudUsageService } from './cloud-usage.service';
 import { EntitlementsService } from './entitlements.service';
+import { CloudUpstreamService } from './cloud-upstream.service';
 import { ProviderKeysService } from './provider-keys.service';
+import type { ResolvedInferenceUpstream } from './provider-keys.service';
 
 @Injectable()
 export class InferenceService {
   private readonly logger = new Logger(InferenceService.name);
   private readonly defaultRpm: number;
+  /** Cached first model id from GX10 /v1/models (for ``babo-hosted`` alias). */
+  private hostedUpstreamModelCache: string | null = null;
 
   constructor(
     private config: ConfigService,
@@ -26,6 +30,7 @@ export class InferenceService {
     private usage: CloudUsageService,
     private providerKeys: ProviderKeysService,
     private entitlements: EntitlementsService,
+    private upstream: CloudUpstreamService,
   ) {
     this.defaultRpm = Number(this.config.get('INFERENCE_DEFAULT_RPM') || 120);
   }
@@ -43,6 +48,47 @@ export class InferenceService {
     const h: Record<string, string> = { 'Content-Type': 'application/json' };
     if (apiKey) h.Authorization = `Bearer ${apiKey}`;
     return h;
+  }
+
+  /** Map desktop alias ``babo-hosted`` to a real vLLM model id on GX10. */
+  private async resolveHostedUpstreamModel(
+    upstream: ResolvedInferenceUpstream,
+    requestedModel: string,
+  ): Promise<string> {
+    if (upstream.placement !== 'hosted_babo') return requestedModel;
+    if (requestedModel.toLowerCase() !== 'babo-hosted') return requestedModel;
+
+    if (this.upstream.inferenceUpstreamModel) {
+      return this.upstream.inferenceUpstreamModel;
+    }
+
+    if (this.hostedUpstreamModelCache) {
+      return this.hostedUpstreamModelCache;
+    }
+
+    try {
+      const url = `${upstream.baseUrl.replace(/\/+$/, '')}/models`;
+      const res = await fetch(url, {
+        headers: this.upstreamHeaders(upstream.apiKey),
+      });
+      if (res.ok) {
+        const data = (await res.json()) as {
+          data?: Array<{ id?: string }>;
+        };
+        const ids = (data.data ?? [])
+          .map((row) => row?.id?.trim())
+          .filter((id): id is string => !!id && id !== 'babo-hosted');
+        if (ids.length) {
+          this.hostedUpstreamModelCache = ids[0];
+          this.logger.log(`GX10 upstream model for babo-hosted: ${ids[0]}`);
+          return ids[0];
+        }
+      }
+    } catch (err: any) {
+      this.logger.warn(`GX10 model catalog probe failed: ${err.message}`);
+    }
+
+    return requestedModel;
   }
 
   async listModels(auth: CloudAuthContext): Promise<unknown> {
@@ -99,12 +145,15 @@ export class InferenceService {
       auth.userId,
       upstream.placement,
     );
+    const upstreamModel = await this.resolveHostedUpstreamModel(upstream, model);
+    const payload =
+      upstreamModel !== model ? { ...body, model: upstreamModel } : body;
     const url = `${upstream.baseUrl.replace(/\/+$/, '')}/chat/completions`;
 
     const upstreamRes = await fetch(url, {
       method: 'POST',
       headers: this.upstreamHeaders(upstream.apiKey),
-      body: JSON.stringify(body),
+      body: JSON.stringify(payload),
     });
 
     if (!stream) {

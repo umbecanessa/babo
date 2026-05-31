@@ -279,7 +279,11 @@ export class AgentModelService {
 
   beginCreationMode(): void {
     this.creationMode.set(true);
+    const def = this.defaultModelId();
     this.creationDraft = this.emptySession();
+    if (def) {
+      this.creationDraft.orchestratorModelId = def;
+    }
     this.advancedMode.set(false);
     this.bumpCreation();
   }
@@ -319,26 +323,28 @@ export class AgentModelService {
       this.endCreationMode();
       return;
     }
-    const snapshot: AgentSessionInference = { ...draft };
+    const defaultId = this.defaultModelId();
+    const orch = draft.orchestratorModelId ?? defaultId;
+    const snapshot: AgentSessionInference = {
+      orchestratorModelId: orch || null,
+      delegateModelId: draft.delegateModelId,
+      delegateLockToOrchestrator: draft.delegateLockToOrchestrator,
+      requestOverrideId: null,
+    };
     this.endCreationMode();
 
-    const needsPersist = Boolean(
-      snapshot.orchestratorModelId
-      || snapshot.delegateModelId
-      || !snapshot.delegateLockToOrchestrator,
-    );
-
     this.activeAgentId.set(runtimeAgentId);
-    this.sessionByAgent.set(runtimeAgentId, {
-      orchestratorModelId: snapshot.orchestratorModelId,
-      delegateModelId: snapshot.delegateModelId,
-      delegateLockToOrchestrator: snapshot.delegateLockToOrchestrator,
-      requestOverrideId: null,
-    });
+    this.sessionByAgent.set(runtimeAgentId, { ...snapshot });
     this.bumpSession();
 
-    if (!needsPersist) return;
-    await this.persistAgentSessionModels(runtimeAgentId);
+    if (orch) {
+      try {
+        await this.hotReloadInference({ hf_model: orch });
+      } catch {
+        /* runtime may still be starting */
+      }
+      await this.persistAgentSessionModels(runtimeAgentId);
+    }
   }
 
   /** Model id to send on the wire (only when it differs from resolved backend default). */

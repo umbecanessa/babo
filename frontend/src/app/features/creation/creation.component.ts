@@ -466,11 +466,9 @@ export class CreationComponent implements OnInit, OnDestroy {
 
   // ─── Phase transitions ──────────────────────────────────
 
-  confirmSelection(): void {
+  async confirmSelection(): Promise<void> {
     if (!this.selectedVersion()) return;
-    if (!this.modelService.loaded()) {
-      void this.modelService.refreshFromConfig();
-    }
+    await this.modelService.refreshFromConfig();
     this.modelService.beginCreationMode();
     this.phase.set('soul-wish');
   }

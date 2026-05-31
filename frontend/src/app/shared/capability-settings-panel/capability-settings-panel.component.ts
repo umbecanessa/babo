@@ -9,6 +9,7 @@ import type {
 import {
   CLOUD_PROVIDERS,
   baboCloudModelsForUser,
+  isBaboHostedModelId,
   matchCloudProvider,
   resolveBaboCloudModelId,
   stripInferenceV1Suffix,
@@ -229,7 +230,7 @@ export class CapabilitySettingsPanelComponent implements OnInit {
 
   applyProfileToUi(p: CapabilityProfile): void {
     this.brainTier.set(p.inference.tier);
-    if (p.inference.tier === 'hosted_babo') {
+    if (p.inference.tier === 'hosted_babo' && !isBaboHostedModelId(p.inference.model ?? '')) {
       p.inference.model = resolveBaboCloudModelId(p.inference.model);
     }
     this.voiceTier.set(p.transcribe.tier);
@@ -507,7 +508,9 @@ export class CapabilitySettingsPanelComponent implements OnInit {
       };
     }
     if (p.inference.tier === 'hosted_babo') {
-      p.inference.model = resolveBaboCloudModelId(p.inference.model);
+      if (!isBaboHostedModelId(p.inference.model ?? '')) {
+        p.inference.model = resolveBaboCloudModelId(p.inference.model);
+      }
       this.config.inferenceModel = p.inference.model;
     }
     this.saving.set(true);
