@@ -3,6 +3,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import type { CapabilityTier } from '../../features/setup/capability-profile.model';
 import {
+  isBaboHostedModelId,
   matchCloudProvider,
   resolveBaboCloudModelId,
 } from '../../features/setup/setup-inference.util';
@@ -472,7 +473,7 @@ export class AgentModelService {
 
     let model =
       profile?.inference?.model || cfg.inferenceModel || cfg.hfModel || '';
-    if (tier === 'hosted_babo') {
+    if (tier === 'hosted_babo' && !isBaboHostedModelId(model)) {
       model = resolveBaboCloudModelId(model);
     }
 

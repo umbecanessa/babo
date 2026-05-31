@@ -145,14 +145,17 @@ const BABO_CLOUD_MODEL_IDS = new Set([
 /** Default Babo Cloud model — must pass OpenRouter tool-calling probe with tool_choice=auto. */
 const DEFAULT_BABO_CLOUD_MODEL = 'google/gemini-2.5-flash';
 
+/** GX10 private inference alias (desktop + Nest relay). */
+export const BABO_HOSTED_MODEL_ID = 'babo-hosted';
+
 /** Keep runtime/chat model ids valid for Babo Cloud (OpenRouter-style). */
 export function resolveBaboCloudModelId(model?: string | null): string {
   const m = (model ?? '').trim();
+  if (m === BABO_HOSTED_MODEL_ID) return BABO_HOSTED_MODEL_ID;
   if (
     !m ||
     m === 'llama3.2' ||
     m === 'gpt-4o-mini' ||
-    m === 'babo-hosted' ||
     m === 'qwen/qwen3.6-35b-a3b' ||
     /qwen3\.7/i.test(m)
   ) {
