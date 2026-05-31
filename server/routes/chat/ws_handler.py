@@ -35,6 +35,7 @@ from nls.tools.tool_call_normalizer import has_tool_calls
 
 from .agentic import _run_agentic_with_receive
 from .commands import _handle_command
+from .generation_abort import listen_for_generation_abort
 from .helpers import (
     _CHAT_TOOLCALL_NUDGE,
     _INLINE_JSON_TOOLCALL_RE,
@@ -71,6 +72,9 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
     agentic_abort = asyncio.Event()
     websocket.state.agentic_abort = agentic_abort
     websocket.state.agentic_running = False
+    generation_abort = asyncio.Event()
+    websocket.state.generation_abort = generation_abort
+    websocket.state.generation_running = False
 
     copilot_queue: asyncio.Queue = asyncio.Queue()
     websocket.state.copilot_queue = copilot_queue
@@ -609,15 +613,22 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                 _in_signal = False
                 _initial_thinking = ""
                 _SIGNAL_STARTS = ("```tool_call", "<tool_call>")
+                _aborted = False
                 try:
-                    async for token in runtime.process_message_stream_async(
-                        _gen_input,
-                        history=history,
-                        model_override=_request_model,
-                        force_thinking=needs_thinking,
-                        include_tools=not _conversational_turn,
+                    async with listen_for_generation_abort(
+                        websocket, agent_id, generation_abort,
                     ):
-                        if isinstance(token, tuple):
+                        async for token in runtime.process_message_stream_async(
+                            _gen_input,
+                            history=history,
+                            model_override=_request_model,
+                            force_thinking=needs_thinking,
+                            include_tools=not _conversational_turn,
+                        ):
+                            if generation_abort.is_set():
+                                _aborted = True
+                                break
+                            if isinstance(token, tuple):
                             _kind, _text = token
                             if _kind == "thinking":
                                 if needs_thinking:
@@ -656,7 +667,7 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                                     "content": _signal_buf[:_safe],
                                 })
                                 _signal_buf = _signal_buf[_safe:]
-                    if not _in_signal and _signal_buf:
+                    if not _in_signal and _signal_buf and not _aborted:
                         await websocket.send_json({
                             "type": "token",
                             "content": _signal_buf,
@@ -683,6 +694,26 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                         })
                     except Exception:
                         pass
+                    continue
+
+                if _aborted:
+                    latency_ms = (time.perf_counter() - t0) * 1000
+                    _stopped = full_response.strip() or "Stopped."
+                    await websocket.send_json({
+                        "type": "response_end",
+                        "response": _stopped,
+                        "reasoning": _initial_thinking or "",
+                        "latency_ms": round(latency_ms, 1),
+                        "nls": _build_nls_metadata(runtime.get_status()),
+                    })
+                    history.append({"role": "user", "content": user_input})
+                    if _stopped and _stopped != "Stopped.":
+                        history.append({"role": "assistant", "content": _stopped})
+                    if len(history) > 40:
+                        history = history[-40:]
+                    runtime.save_conversation_history(history)
+                    if consciousness_scheduler is not None:
+                        consciousness_scheduler.on_user_message_complete(agent_id)
                     continue
 
                 # Post-process: strip tool-call artifacts

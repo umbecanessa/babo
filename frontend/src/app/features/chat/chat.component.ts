@@ -66,6 +66,8 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
   sidebarOpen = signal(ChatComponent.readNeuralSidebarPreference());
   streamingText = signal('');
   streamingReasoning = signal('');
+  /** True after the user sends until the agent shows streaming or a reply. */
+  awaitingResponse = signal(false);
   nlsMetadata = signal<any>(null);
   latestProbeSignals = signal<{
     signals: Record<string, number>;
@@ -79,6 +81,18 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
   private _iterTextCommitted = false;
   private _pendingIterText = '';  // text generated alongside tool calls, saved before streamingText is cleared
 
+  /** User message sent or reply streaming — show stop control in composer. */
+  readonly generationActive = computed(() =>
+    this.awaitingResponse()
+    || !!this.streamingText().trim()
+    || !!this.streamingReasoning().trim()
+    || this.agenticActive(),
+  );
+
+  readonly stopInFlight = computed(() =>
+    this.generationStopping() || this.agenticStopping(),
+  );
+
   bottomSheetOpen = signal(false);
   daydreams = signal<any[]>([]);
   activities = signal<any[]>([]);
@@ -89,6 +103,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
   agenticMaxSteps = signal(0);
   activityStatus = signal('');
   agenticStopping = signal(false);
+  generationStopping = signal(false);
   lastAgenticResult = signal<{ steps: number; tools: number; durationMs: number; aborted: boolean } | null>(null);
   backgroundTaskActive = signal(false);
   private _backgroundTaskId: number = 0;
@@ -318,6 +333,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
     this.agentId = nextId;
     this._seenLearningKeys.clear();
+    this.awaitingResponse.set(false);
     this.agentModels.bindAgent(nextId);
     this.workbench.bindAgent(nextId);
     this.runView.bindAgent(nextId);
@@ -498,6 +514,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
     this.inputText = '';
     this.pendingAttachments.set([]);
+    this.awaitingResponse.set(true);
     if (!this.agenticActive()) {
       this.streamingText.set('');
       this.streamingReasoning.set('');
@@ -972,6 +989,20 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     return this.runView.visible();
   }
 
+  private clearAwaitingResponse(): void {
+    this.awaitingResponse.set(false);
+    this.generationStopping.set(false);
+  }
+
+  stopGeneration(): void {
+    if (this.agenticActive()) {
+      this.cancelAgentic();
+      return;
+    }
+    this.generationStopping.set(true);
+    this.ws.sendAbort();
+  }
+
   private handleRuntimeMessage(msg: any) {
     if (!msg._wbDone) {
       msg._wbDone = true;
@@ -1088,10 +1119,12 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         break;
 
       case 'token':
+        this.clearAwaitingResponse();
         this.streamingText.update(t => t + msg.content);
         break;
 
       case 'reasoning_token':
+        this.clearAwaitingResponse();
         this.streamingReasoning.update(t => t + (msg.content || ''));
         break;
 
@@ -1099,6 +1132,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         break;
 
       case 'response_replace':
+        this.clearAwaitingResponse();
         this.streamingText.set(msg.response || '');
         break;
 
@@ -1125,6 +1159,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         }
         this.streamingText.set('');
         this.streamingReasoning.set('');
+        this.clearAwaitingResponse();
       }
         if (msg.nls) {
           // Merge response NLS data with existing status data
@@ -1167,9 +1202,11 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
           this.agenticStep.set(0);
           this.streamingText.set('');
           this.streamingReasoning.set('');
+          this.clearAwaitingResponse();
         }
 
         if (statusText === 'sleeping') {
+          this.clearAwaitingResponse();
           const reason = msg.sleep_reason || 'consolidating memories';
           this.messages.update(msgs => [...msgs, {
             type: 'status',
@@ -1180,6 +1217,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
           // Wake chat bubble handled in case 'sleep_complete'
         } else if (statusText !== 'alive') {
           // Show other status messages (errors, custom content)
+          this.clearAwaitingResponse();
           this.messages.update(msgs => [...msgs, {
             type: 'status',
             content: statusText,
@@ -1368,6 +1406,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
       case 'agentic_start': {
         if (msg.sub_agent === true) break;
+        this.clearAwaitingResponse();
 
         if (msg.autonomous) {
           this.backgroundTaskActive.set(true);
@@ -1404,6 +1443,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
       case 'agentic_iteration': {
         if (msg.sub_agent === true) break;
+        this.clearAwaitingResponse();
 
         if (msg.autonomous) {
           const bgStep = msg.step || 0;
@@ -1570,6 +1610,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         }
 
         // Foreground task: show full details in chat
+        this.clearAwaitingResponse();
         // Commit any remaining streaming text before clearing
         const remainingText = this.streamingText();
         const remainingReasoning = this.streamingReasoning();
@@ -1812,6 +1853,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
       case 'agentic_token': {
         if (msg.sub_agent === true || msg.autonomous) break;
+        this.clearAwaitingResponse();
         if (msg.thinking) {
           this.streamingReasoning.update(t => t + (msg.token || ''));
         } else {
@@ -1945,6 +1987,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
       case 'turn_thinking': {
         if (msg.sub_agent === true || msg.autonomous) break;
+        this.clearAwaitingResponse();
         const streamedThinking = this.streamingReasoning();
         this.streamingReasoning.set('');
         const thinkingText = msg.thinking || streamedThinking || '';
@@ -2052,6 +2095,9 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       case 'tool_execution_start': {
         const toolName = msg.tool_name || '';
         const args = msg.arguments || {};
+        if (!msg.autonomous) {
+          this.clearAwaitingResponse();
+        }
 
         if (msg.autonomous) {
           let bgLabel = toolName;
@@ -2434,6 +2480,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       }
 
       case 'copilot_ack': {
+        this.clearAwaitingResponse();
         this.messages.update(msgs => [...msgs, {
           type: 'copilot_ack' as any,
           content: msg.message || 'Guidance received.',
@@ -2443,6 +2490,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       }
 
       case 'ask_user': {
+        this.clearAwaitingResponse();
         this.askUserPending.set(true);
         this.messages.update(msgs => [...msgs, {
           type: 'ask_user',
@@ -2462,6 +2510,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         if (hideAutonomousChatter) {
           break;
         }
+        this.clearAwaitingResponse();
         this.messages.update(msgs => [...msgs, {
           type: 'assistant' as any,
           content: msg.message || '',

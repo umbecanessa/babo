@@ -751,14 +751,14 @@
       </div>
     }
 
-    <!-- Generation indicator — shown between tool calls while LLM generates next step -->
-    @if (showGenerationIndicator) {
+    <!-- Thinking / planning indicator (no bubble) -->
+    @if (showPendingIndicator) {
       <div class="message-row agentic-row">
         <div class="planning-row" [class.planning-long]="generationElapsed() >= 10">
           <span class="planning-dots">
             <span></span><span></span><span></span>
           </span>
-          <span class="planning-label">{{ generationLabel }}</span>
+          <span class="planning-label">{{ pendingLabel }}</span>
         </div>
       </div>
     }

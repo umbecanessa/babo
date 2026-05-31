@@ -272,6 +272,7 @@
         [messages]="filteredMessages()"
         [streamingText]="streamingText()"
         [streamingReasoning]="streamingReasoning()"
+        [awaitingResponse]="awaitingResponse()"
         [agenticActive]="agenticActive()"
         [agentId]="agentId"
         (drowsyAction)="onDrowsyAction($event)"
@@ -384,7 +385,7 @@
           <app-chat-model-picker />
         </div>
       @if (agenticActive()) {
-        <!-- Agentic mode: show cancel button -->
+        <!-- Agentic mode: guidance + stop -->
         <div class="input-wrapper agentic-active">
           <button (click)="fileInput.click()" class="attach-btn" title="Attach files">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -407,8 +408,8 @@
               </svg>
             </button>
           }
-          <button (click)="cancelAgentic()" class="cancel-btn" [class.stopping]="agenticStopping()" title="Stop task">
-            @if (agenticStopping()) {
+          <button (click)="stopGeneration()" class="cancel-btn" [class.stopping]="stopInFlight()" title="Stop">
+            @if (stopInFlight()) {
               <div class="cancel-spinner"></div>
             } @else {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
@@ -433,7 +434,17 @@
             placeholder="Message this agent..."
             class="chat-textarea"
           ></textarea>
-          @if (inputText.trim() || pendingAttachments().length) {
+          @if (generationActive()) {
+            <button (click)="stopGeneration()" class="cancel-btn" [class.stopping]="stopInFlight()" title="Stop">
+              @if (stopInFlight()) {
+                <div class="cancel-spinner"></div>
+              } @else {
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                  <rect x="4" y="4" width="16" height="16" rx="2"></rect>
+                </svg>
+              }
+            </button>
+          } @else if (inputText.trim() || pendingAttachments().length) {
             <button (click)="sendMessage()" class="send-btn has-text">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="22" y1="2" x2="11" y2="13"></line>

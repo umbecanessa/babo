@@ -43,6 +43,7 @@ export class MessageListComponent implements OnChanges, AfterViewChecked, OnDest
   @Input() messages: ChatMessage[] = [];
   @Input() streamingText = '';
   @Input() streamingReasoning = '';
+  @Input() awaitingResponse = false;
   @Input() agenticActive = false;
   @Input() agentId = '';
   @Output() drowsyAction = new EventEmitter<'confirm' | 'deny'>();
@@ -176,6 +177,7 @@ export class MessageListComponent implements OnChanges, AfterViewChecked, OnDest
       changes['messages'] ||
       changes['streamingText'] ||
       changes['streamingReasoning'] ||
+      changes['awaitingResponse'] ||
       changes['agenticActive']
     ) {
       this.scrollToBottomAfterView = true;
@@ -306,12 +308,20 @@ export class MessageListComponent implements OnChanges, AfterViewChecked, OnDest
     this.scrollToBottom();
   }
 
-  /** True when the generation indicator should display. */
+  /** True when the agentic planning indicator should display. */
   get showGenerationIndicator(): boolean {
     return this.agenticActive
       && !this.streamingText?.trim()
       && !this.streamingReasoning?.trim()
       && this.isLastMessageAgenticIteration();
+  }
+
+  /** True after the user sends until tokens or a reply arrive. */
+  get showAwaitingIndicator(): boolean {
+    return this.awaitingResponse
+      && !this.streamingText?.trim()
+      && !this.streamingReasoning?.trim()
+      && !this.showGenerationIndicator;
   }
 
   get generationLabel(): string {
@@ -323,8 +333,29 @@ export class MessageListComponent implements OnChanges, AfterViewChecked, OnDest
     return `Crunching data\u2026 (${m}m ${rem}s)`;
   }
 
+  get awaitingLabel(): string {
+    const s = this.generationElapsed();
+    if (s < 10) return 'Thinking\u2026';
+    if (s < 60) return `Still thinking\u2026 (${s}s)`;
+    const m = Math.floor(s / 60);
+    const rem = s % 60;
+    return `Still thinking\u2026 (${m}m ${rem}s)`;
+  }
+
+  /** True when any in-flight indicator should display. */
+  get showPendingIndicator(): boolean {
+    return this.showAwaitingIndicator || this.showGenerationIndicator;
+  }
+
+  get pendingLabel(): string {
+    if (this.showGenerationIndicator) {
+      return this.generationLabel;
+    }
+    return this.awaitingLabel;
+  }
+
   private _updateGenerationTimer(): void {
-    const shouldRun = this.showGenerationIndicator;
+    const shouldRun = this.showPendingIndicator;
     if (shouldRun && !this._genTimerHandle) {
       this._genStartedAt = Date.now();
       this.generationElapsed.set(0);
