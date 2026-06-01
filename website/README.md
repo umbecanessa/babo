@@ -1,8 +1,18 @@
 # Babo marketing site
 
-Early-access homepage for [umbecanessa.github.io/babo](https://umbecanessa.github.io/babo/).
+Early-access homepage: [umbecanessa.github.io/babo](https://umbecanessa.github.io/babo/)
 
-Uses the same **light / dark / system** theme tokens as `frontend/src/styles.scss` (`babo_theme` in localStorage). The site toggle cycles Light → Dark → System like the app settings.
+## Audiences (query param)
+
+| URL | Audience |
+|-----|----------|
+| `/babo/` | **Innovators** (default) — token cost, local inference, builders |
+| `/babo/?audience=everyday` | **Early adopters** — PA, no terminal, beyond ChatGPT |
+| `/babo/?audience=home` | Alias for `everyday` |
+
+Also accepts `utm_content=everyday` or `innovator`. Choice persists in `sessionStorage` (`babo_audience`).
+
+Copy lives in `js/audience.js`. Theme tokens match `frontend/src/styles.scss` (`babo_theme` in localStorage).
 
 ## Local preview
 
