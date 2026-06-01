@@ -629,49 +629,49 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                                 _aborted = True
                                 break
                             if isinstance(token, tuple):
-                            _kind, _text = token
-                            if _kind == "thinking":
-                                if needs_thinking:
-                                    await websocket.send_json({
-                                        "type": "reasoning_token",
-                                        "content": _text,
-                                    })
-                            elif _kind == "thinking_end":
-                                if needs_thinking:
-                                    await websocket.send_json({
-                                        "type": "reasoning_end",
-                                    })
-                            continue
+                                _kind, _text = token
+                                if _kind == "thinking":
+                                    if needs_thinking:
+                                        await websocket.send_json({
+                                            "type": "reasoning_token",
+                                            "content": _text,
+                                        })
+                                elif _kind == "thinking_end":
+                                    if needs_thinking:
+                                        await websocket.send_json({
+                                            "type": "reasoning_end",
+                                        })
+                                continue
 
-                        full_response += token
-                        if _in_signal:
+                            full_response += token
+                            if _in_signal:
+                                _signal_buf += token
+                                continue
                             _signal_buf += token
-                            continue
-                        _signal_buf += token
-                        for _marker in _SIGNAL_STARTS:
-                            if _marker in _signal_buf:
-                                _pre = _signal_buf[:_signal_buf.index(_marker)]
-                                if _pre:
+                            for _marker in _SIGNAL_STARTS:
+                                if _marker in _signal_buf:
+                                    _pre = _signal_buf[:_signal_buf.index(_marker)]
+                                    if _pre:
+                                        await websocket.send_json({
+                                            "type": "token",
+                                            "content": _pre,
+                                        })
+                                    _in_signal = True
+                                    _signal_buf = _signal_buf[_signal_buf.index(_marker):]
+                                    break
+                            else:
+                                _safe = max(0, len(_signal_buf) - 20)
+                                if _safe > 0:
                                     await websocket.send_json({
                                         "type": "token",
-                                        "content": _pre,
+                                        "content": _signal_buf[:_safe],
                                     })
-                                _in_signal = True
-                                _signal_buf = _signal_buf[_signal_buf.index(_marker):]
-                                break
-                        else:
-                            _safe = max(0, len(_signal_buf) - 20)
-                            if _safe > 0:
-                                await websocket.send_json({
-                                    "type": "token",
-                                    "content": _signal_buf[:_safe],
-                                })
-                                _signal_buf = _signal_buf[_safe:]
-                    if not _in_signal and _signal_buf and not _aborted:
-                        await websocket.send_json({
-                            "type": "token",
-                            "content": _signal_buf,
-                        })
+                                    _signal_buf = _signal_buf[_safe:]
+                        if not _in_signal and _signal_buf and not _aborted:
+                            await websocket.send_json({
+                                "type": "token",
+                                "content": _signal_buf,
+                            })
                 except Exception as gen_exc:
                     if isinstance(gen_exc, WebSocketDisconnect):
                         raise
