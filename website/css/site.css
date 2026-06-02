@@ -1371,7 +1371,7 @@ body.lightbox-open {
   white-space: nowrap;
 }
 
-.nav-links a[href="#manifesto"] {
+.nav-links a[href="manifesto/"] {
   font-weight: 600;
 }
 
