@@ -735,8 +735,8 @@ section[id] {
   display: block;
   width: auto;
   height: auto;
-  max-width: min(38vw, 340px);
-  max-height: min(52vh, 460px);
+  max-width: min(26vw, 240px);
+  max-height: min(36vh, 320px);
   object-fit: contain;
   filter: drop-shadow(0 12px 40px rgba(0, 0, 0, 0.14));
 }
@@ -1651,7 +1651,7 @@ code {
 
   .hero-visual { order: -1; }
 
-  .hero-seal-logo { max-width: min(56vw, 280px); max-height: min(44vh, 360px); }
+  .hero-seal-logo { max-width: min(38vw, 200px); max-height: min(28vh, 260px); }
 
   .punch-card,
   .punch-card-featured {
