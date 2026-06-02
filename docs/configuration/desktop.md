@@ -48,7 +48,7 @@ One command from the repo root (patch bump by default):
 ./scripts/tag-desktop-release.sh
 ```
 
-Examples: `-Bump minor`, `-Version 1.9.7` / `--version 1.9.7`, `-DryRun` / `--dry-run`.
+Examples: `-Bump minor`, `-Version 1.0.0` (PowerShell) or `--version 1.0.0`, `-DryRun` / `--dry-run`.
 
 That bumps `desktop/package.json`, commits on `main`, pushes tag `vX.Y.Z`, and triggers [`.github/workflows/release-desktop.yml`](../../.github/workflows/release-desktop.yml) to build Windows + macOS and publish the GitHub Release (`latest.yml` / `latest-mac.yml`).
 

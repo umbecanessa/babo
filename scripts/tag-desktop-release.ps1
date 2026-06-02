@@ -21,22 +21,59 @@
 .EXAMPLE
   .\scripts\tag-desktop-release.ps1
   .\scripts\tag-desktop-release.ps1 -Bump minor
-  .\scripts\tag-desktop-release.ps1 -Version 2.0.0
+  .\scripts\tag-desktop-release.ps1 -Version 1.0.0
+  .\scripts\tag-desktop-release.ps1 --version 1.0.0 -DryRun
   .\scripts\tag-desktop-release.ps1 -DryRun
 #>
 
-param(
-    [ValidateSet("patch", "minor", "major")]
-    [string]$Bump = "patch",
-
-    [string]$Version,
-
-    [string]$Branch = "main",
-
-    [switch]$DryRun
-)
-
 $ErrorActionPreference = "Stop"
+
+# Supports PowerShell (-Version) and bash-style (--version) flags.
+$Bump = "patch"
+$Version = ""
+$Branch = "main"
+$DryRun = $false
+
+for ($i = 0; $i -lt $args.Count; $i++) {
+    $arg = $args[$i]
+    switch -Regex ($arg) {
+        '^(-Version|--version|-v)$' {
+            if ($i + 1 -ge $args.Count) { throw "Missing value after $arg" }
+            $Version = $args[++$i]
+            continue
+        }
+        '^(-Bump|--bump)$' {
+            if ($i + 1 -ge $args.Count) { throw "Missing value after $arg" }
+            $Bump = $args[++$i]
+            continue
+        }
+        '^--patch$' { $Bump = "patch"; continue }
+        '^--minor$' { $Bump = "minor"; continue }
+        '^--major$' { $Bump = "major"; continue }
+        '^(-DryRun|--dry-run)$' { $DryRun = $true; continue }
+        '^(-Branch|--branch)$' {
+            if ($i + 1 -ge $args.Count) { throw "Missing value after $arg" }
+            $Branch = $args[++$i]
+            continue
+        }
+        '^-Bump$' {
+            if ($i + 1 -ge $args.Count) { throw "Missing value after -Bump" }
+            $Bump = $args[++$i]
+            continue
+        }
+        default {
+            if ($arg -match '^\d+\.\d+\.\d+$') {
+                $Version = $arg
+                continue
+            }
+            throw "Unknown argument: $arg (use -Version 1.0.0 or --version 1.0.0)"
+        }
+    }
+}
+
+if ($Bump -notin @("patch", "minor", "major")) {
+    throw "Bump must be patch, minor, or major (got: $Bump)"
+}
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $PkgPath = Join-Path $RepoRoot "desktop\package.json"
 Set-Location $RepoRoot
@@ -68,13 +105,13 @@ function Bump-Version([string]$current, [string]$type) {
     return "$ma.$mi.$pa"
 }
 
-function Invoke-Git([string[]]$Args) {
+function Invoke-Git([string[]]$GitArgv) {
     if ($DryRun) {
-        Write-Host "   [dry-run] git $($Args -join ' ')" -ForegroundColor DarkGray
+        Write-Host "   [dry-run] git $($GitArgv -join ' ')" -ForegroundColor DarkGray
         return
     }
-    & git @Args
-    if ($LASTEXITCODE -ne 0) { Write-Err "git $($Args -join ' ') failed" }
+    & git @GitArgv
+    if ($LASTEXITCODE -ne 0) { Write-Err "git $($GitArgv -join ' ') failed" }
 }
 
 # ── Pre-flight ─────────────────────────────────────────────────────────────
@@ -88,7 +125,7 @@ if ($branch -ne $Branch) {
     Write-Err "Current branch is '$branch'. Checkout '$Branch' first (or pass -Branch)."
 }
 
-$dirty = git status --porcelain
+$dirty = git status --porcelain --untracked-files=no
 if ($dirty -and -not $DryRun) {
     Write-Host "   Uncommitted changes:" -ForegroundColor Yellow
     $dirty | ForEach-Object { Write-Host "     $_" }
@@ -127,11 +164,11 @@ if ($DryRun) {
 }
 
 Write-Step "Commit, push branch, tag, push tag"
-Invoke-Git add desktop/package.json
-Invoke-Git commit -m "release: $tag"
-Invoke-Git push origin $Branch
-Invoke-Git tag -a $tag -m "release: $tag"
-Invoke-Git push origin $tag
+Invoke-Git @("add", "desktop/package.json")
+Invoke-Git @("commit", "-m", "release: $tag")
+Invoke-Git @("push", "origin", $Branch)
+Invoke-Git @("tag", "-a", $tag, "-m", "release: $tag")
+Invoke-Git @("push", "origin", $tag)
 
 # ── Done ───────────────────────────────────────────────────────────────────
 

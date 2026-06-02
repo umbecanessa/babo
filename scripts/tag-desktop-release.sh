@@ -81,7 +81,7 @@ command -v node >/dev/null || die "node not found"
 current_branch="$(git rev-parse --abbrev-ref HEAD)"
 [[ "$current_branch" == "$BRANCH" ]] || die "On branch '$current_branch'; checkout '$BRANCH' first."
 
-if [[ -n "$(git status --porcelain)" && "$DRY_RUN" -eq 0 ]]; then
+if [[ -n "$(git status --porcelain --untracked-files=no)" && "$DRY_RUN" -eq 0 ]]; then
   git status --short
   die "Commit or stash other changes before releasing."
 fi
