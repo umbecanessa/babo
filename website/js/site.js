@@ -69,6 +69,23 @@
     const metaEl = document.getElementById("hero-meta");
     if (metaEl) metaEl.textContent = copy.hero.meta;
 
+    const integratesLabel = document.getElementById("integrates-label");
+    const integratesLogos = document.getElementById("integrates-logos");
+    if (integratesLabel) integratesLabel.textContent = copy.integratesLabel || "Works with";
+    if (integratesLogos && copy.integrations) {
+      integratesLogos.innerHTML = copy.integrations
+        .map(
+          (item) => `
+        <li>
+          <span class="integrates-item" title="${item.name}">
+            <img src="assets/integrations/${item.id}.svg" alt="${item.name}" width="28" height="28" loading="lazy" />
+            <span class="integrates-name">${item.name}</span>
+          </span>
+        </li>`
+        )
+        .join("");
+    }
+
     const punchesLabel = document.getElementById("punches-label");
     const punchesTitle = document.getElementById("punches-title");
     if (punchesLabel) punchesLabel.textContent = copy.punchesLabel;
@@ -78,14 +95,23 @@
     if (punchGrid) {
       punchGrid.innerHTML = copy.punches
         .map(
-          (p, i) => `
-        <article class="punch-card glass${i === 0 ? " punch-card-featured" : ""}">
-          <span class="punch-num">${i + 1}</span>
-          <h3>${p.title}</h3>
-          <p>${p.text}</p>
+          (p) => `
+        <article class="punch-card">
+          <div class="punch-body">
+            <h3>${p.title}</h3>
+            <p>${p.text}</p>
+          </div>
         </article>`
         )
         .join("");
+    }
+
+    const marqueeTrack = document.getElementById("marquee-track");
+    if (marqueeTrack && copy.marquee && copy.marquee.length) {
+      const items = copy.marquee
+        .map((t) => `<span class="marquee-item">${t}</span>`)
+        .join("");
+      marqueeTrack.innerHTML = `<div class="marquee-group">${items}</div><div class="marquee-group" aria-hidden="true">${items}</div>`;
     }
 
     const productLead = document.getElementById("product-lead");
@@ -114,6 +140,39 @@
       }
     }
 
+    if (copy.pricing) {
+      const pricingLabel = document.getElementById("pricing-label");
+      const pricingTitle = document.getElementById("pricing-title");
+      const pricingLead = document.getElementById("pricing-lead");
+      const pricingFootnote = document.getElementById("pricing-footnote");
+      const pricingGrid = document.getElementById("pricing-grid");
+      if (pricingLabel) pricingLabel.textContent = copy.pricing.label;
+      if (pricingTitle) pricingTitle.textContent = copy.pricing.title;
+      if (pricingLead) pricingLead.textContent = copy.pricing.lead;
+      if (pricingFootnote) pricingFootnote.textContent = copy.pricing.footnote || "";
+      if (pricingGrid && copy.pricing.plans) {
+        pricingGrid.innerHTML = copy.pricing.plans
+          .map(
+            (plan) => `
+        <article class="pricing-card${plan.featured ? " pricing-card-featured" : ""}">
+          ${plan.badge ? `<span class="pricing-badge">${plan.badge}</span>` : ""}
+          <h3>${plan.name}</h3>
+          <p class="pricing-desc">${plan.description}</p>
+          <div class="pricing-amount">
+            <span class="pricing-price">${plan.price}</span>
+            <span class="pricing-period">${plan.period}</span>
+          </div>
+          <ul class="pricing-features">
+            ${plan.features.map((f) => `<li>${f}</li>`).join("")}
+          </ul>
+          ${plan.note ? `<p class="pricing-note">${plan.note}</p>` : ""}
+          <a class="btn ${plan.featured ? "btn-primary" : "btn-ghost"}" href="${plan.cta.href}">${plan.cta.label}</a>
+        </article>`
+          )
+          .join("");
+      }
+    }
+
     const downloadTitle = document.getElementById("download-title");
     const downloadLead = document.getElementById("download-lead");
     if (downloadTitle) downloadTitle.textContent = copy.bottom.downloadTitle;
@@ -122,12 +181,21 @@
     const contribTitle = document.getElementById("contribute-title");
     const contribLead = document.getElementById("contribute-lead");
     const contribP = document.getElementById("contribute-primary");
+    const contribD = document.getElementById("contribute-discord");
+    const contribDLabel = document.getElementById("contribute-discord-label");
     const contribS = document.getElementById("contribute-secondary");
     if (contribTitle) contribTitle.textContent = copy.bottom.contributeTitle;
     if (contribLead) contribLead.textContent = copy.bottom.contributeLead;
     if (contribP) {
       contribP.href = copy.bottom.contributePrimary.href;
       contribP.textContent = copy.bottom.contributePrimary.label;
+    }
+    if (contribD && copy.bottom.contributeDiscord) {
+      contribD.href = copy.bottom.contributeDiscord.href;
+      if (contribDLabel) contribDLabel.textContent = copy.bottom.contributeDiscord.label;
+      contribD.hidden = false;
+    } else if (contribD) {
+      contribD.hidden = true;
     }
     if (contribS) {
       contribS.href = copy.bottom.contributeSecondary.href;
@@ -141,6 +209,40 @@
 
   const audienceId = resolveAudience();
   applyAudience(audienceId);
+
+  function observeReveals() {
+    const els = document.querySelectorAll(".reveal:not(.is-visible)");
+    if (!("IntersectionObserver" in window) || !els.length) {
+      els.forEach((el) => el.classList.add("is-visible"));
+      return;
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((e) => {
+          if (e.isIntersecting) {
+            e.target.classList.add("is-visible");
+            io.unobserve(e.target);
+          }
+        });
+      },
+      { threshold: 0.12, rootMargin: "0px 0px -40px 0px" }
+    );
+    els.forEach((el) => io.observe(el));
+  }
+
+  document.querySelectorAll("#punch-grid .punch-card").forEach((card, i) => {
+    card.classList.add("reveal");
+    card.style.transitionDelay = `${0.08 + i * 0.1}s`;
+  });
+  const driftPanel = document.querySelector("#drift .drift-panel");
+  if (driftPanel) driftPanel.classList.add("reveal");
+  document.querySelector(".contribute-panel")?.classList.add("reveal");
+
+  observeReveals();
+
+  requestAnimationFrame(() => {
+    document.querySelectorAll(".hero .reveal").forEach((el) => el.classList.add("is-visible"));
+  });
 
   /* Theme */
   function loadMode() {
@@ -226,6 +328,31 @@
   const year = document.getElementById("year");
   if (year) year.textContent = String(new Date().getFullYear());
 
+  /* Nav scroll state */
+  const nav = document.querySelector(".site-nav");
+  if (nav) {
+    const onScroll = () => nav.classList.toggle("is-scrolled", window.scrollY > 24);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+  }
+
+  /* Hero device tilt */
+  const tiltEl = document.querySelector("[data-tilt]");
+  if (tiltEl && window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
+    const frame = tiltEl.querySelector(".device-frame");
+    if (frame) {
+      tiltEl.addEventListener("mousemove", (e) => {
+        const r = tiltEl.getBoundingClientRect();
+        const x = (e.clientX - r.left) / r.width - 0.5;
+        const y = (e.clientY - r.top) / r.height - 0.5;
+        frame.style.transform = `rotateY(${x * 8}deg) rotateX(${-y * 6}deg)`;
+      });
+      tiltEl.addEventListener("mouseleave", () => {
+        frame.style.transform = "";
+      });
+    }
+  }
+
   /* Showcase tabs */
   const showcase = document.querySelector("[data-showcase]");
   if (!showcase) return;
@@ -253,7 +380,15 @@
   showcase.querySelectorAll(".showcase-panel").forEach((panel) => {
     const subtabs = panel.querySelectorAll(".showcase-subtab");
     if (!subtabs.length) return;
+    const viewport = panel.querySelector(".screen-viewport-showcase");
     const images = panel.querySelectorAll(".screen-viewport img[data-subpanel], img[data-subpanel]");
+
+    function syncPortraitMode(activeId) {
+      if (!viewport) return;
+      const activeImg = panel.querySelector(`img[data-subpanel="${activeId}"]`);
+      viewport.classList.toggle("is-portrait", !!activeImg?.hasAttribute("data-portrait"));
+    }
+
     subtabs.forEach((btn) => {
       btn.addEventListener("click", () => {
         const id = btn.dataset.subtab;
@@ -265,7 +400,61 @@
         images.forEach((img) => {
           img.hidden = img.dataset.subpanel !== id;
         });
+        syncPortraitMode(id);
       });
     });
+
+    const initial = panel.querySelector(".showcase-subtab.is-active")?.dataset.subtab;
+    if (initial) syncPortraitMode(initial);
   });
+
+  /* Fullscreen lightbox for showcase screenshots */
+  const lightbox = document.getElementById("screenshot-lightbox");
+  if (lightbox) {
+    const lbImg = lightbox.querySelector(".lightbox-img");
+    const lbStage = lightbox.querySelector(".lightbox-stage");
+    const lbBackdrop = lightbox.querySelector(".lightbox-backdrop");
+    const lbClose = lightbox.querySelector(".lightbox-close");
+    let lastFocus = null;
+
+    function openLightbox(img) {
+      if (!img || img.hidden) return;
+      lastFocus = document.activeElement;
+      lbImg.src = img.currentSrc || img.src;
+      lbImg.alt = img.alt || "Enlarged product screenshot";
+      lbStage.classList.toggle("is-portrait", img.hasAttribute("data-portrait"));
+      lightbox.hidden = false;
+      lightbox.setAttribute("aria-hidden", "false");
+      document.body.classList.add("lightbox-open");
+      lbClose.focus();
+    }
+
+    function closeLightbox() {
+      lightbox.hidden = true;
+      lightbox.setAttribute("aria-hidden", "true");
+      document.body.classList.remove("lightbox-open");
+      lbImg.removeAttribute("src");
+      if (lastFocus && typeof lastFocus.focus === "function") lastFocus.focus();
+    }
+
+    showcase.querySelectorAll(".screen-viewport-showcase img").forEach((img) => {
+      img.classList.add("showcase-zoomable");
+      img.addEventListener("click", (e) => {
+        e.stopPropagation();
+        openLightbox(img);
+      });
+    });
+
+    showcase.querySelectorAll(".screen-viewport-showcase").forEach((viewport) => {
+      viewport.addEventListener("click", () => {
+        openLightbox(viewport.querySelector("img:not([hidden])"));
+      });
+    });
+
+    lbClose.addEventListener("click", closeLightbox);
+    lbBackdrop.addEventListener("click", closeLightbox);
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && !lightbox.hidden) closeLightbox();
+    });
+  }
 })();
