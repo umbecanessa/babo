@@ -1,30 +1,47 @@
-# Babo marketing site (optional)
+# Babo marketing site
 
-Static early-access homepage — **separate from the open-source documentation**.
+Early-access homepage overlaid on the docs build for **https://babo.agency/**.
 
-| Artifact | Purpose |
-|----------|---------|
-| `website/` | Marketing HTML/CSS/JS (audience variants in `js/audience.js`) |
-| `docs/` + `mkdocs.yml` | Technical documentation (published via [Deploy documentation](../../.github/workflows/docs.yml)) |
+| Path | Source |
+|------|--------|
+| `/` | `website/index.html` (marketing landing) |
+| `/getting-started/…`, `/guides/…`, etc. | MkDocs from `docs/` |
 
-Documentation is published at **https://babo.agency/** (MkDocs from `docs/`). The marketing site is not overlaid on that build.
+## Audiences (query param)
 
-## Local preview (marketing only)
+| URL | Audience |
+|-----|----------|
+| `/` | **Innovators** (default) |
+| `/?audience=everyday` | **Early adopters** |
+| `/?audience=home` | Alias for `everyday` |
+
+Also accepts `utm_content=everyday` or `innovator`. Choice persists in `sessionStorage` (`babo_audience`).
+
+Copy lives in `js/audience.js`. Theme tokens match `frontend/src/styles.scss` (`babo_theme` in localStorage).
+
+## Local preview
 
 ```powershell
+# Marketing only
 cd website
 npx --yes serve -l 3456
 ```
 
-## Local preview (docs only)
-
 ```powershell
+# Full Pages layout (marketing + docs)
 pip install -r requirements-docs.txt
-mkdocs serve
+mkdocs build
+Copy-Item website/index.html site/index.html -Force
+Copy-Item -Recurse website/css, website/js, website/assets site/
+npx --yes serve site -l 3456
 ```
+
+## Deploy
+
+The [Deploy documentation](../../.github/workflows/docs.yml) workflow builds MkDocs, then **overlays** `website/` onto `site/` (`index.html`, `css/`, `js/`, `assets/`). Without that step, `babo.agency` would show only the docs home page.
 
 ## Custom domain
 
-If you host marketing on a custom domain, configure DNS and GitHub Pages separately from the docs workflow. Update `site_url` in `mkdocs.yml` only when the **documentation** origin changes.
+See `CNAME.example` — copy to `website/CNAME` with your hostname so deploys keep the domain. Update `site_url` in `mkdocs.yml` when the public docs origin changes.
 
-Privacy policy for OAuth may live on your public marketing domain; keep a copy under `docs/legal/` for the docs site.
+Privacy policy: **https://babo.agency/legal/privacy-policy/** (from `docs/legal/`).

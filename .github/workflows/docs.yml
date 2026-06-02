@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'docs/**'
+      - 'website/**'
       - 'mkdocs.yml'
       - 'requirements-docs.txt'
       - '.github/workflows/docs.yml'
@@ -34,6 +35,12 @@ jobs:
 
       - name: Build site
         run: mkdocs build --strict
+
+      - name: Overlay marketing homepage
+        run: |
+          cp website/index.html site/index.html
+          cp -r website/css website/js website/assets site/
+          if [ -f website/CNAME ]; then cp website/CNAME site/CNAME; fi
 
       - uses: actions/upload-pages-artifact@v3
         with:
