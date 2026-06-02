@@ -336,10 +336,10 @@
     window.addEventListener("scroll", onScroll, { passive: true });
   }
 
-  /* Hero device tilt */
+  /* Hero seal tilt */
   const tiltEl = document.querySelector("[data-tilt]");
   if (tiltEl && window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
-    const frame = tiltEl.querySelector(".device-frame");
+    const frame = tiltEl.querySelector(".hero-seal");
     if (frame) {
       tiltEl.addEventListener("mousemove", (e) => {
         const r = tiltEl.getBoundingClientRect();
