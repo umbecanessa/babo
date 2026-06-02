@@ -1355,6 +1355,22 @@ body.lightbox-open {
   margin-inline: auto;
 }
 
+.manifesto-more {
+  margin: 1.35rem 0 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.manifesto-more a {
+  color: var(--accent-primary-soft);
+  text-decoration: none;
+}
+
+.manifesto-more a:hover {
+  color: var(--accent-primary);
+  text-decoration: underline;
+}
+
 /* ── Download ── */
 .section-download { padding-bottom: calc(var(--section-gap) * 0.5); }
 

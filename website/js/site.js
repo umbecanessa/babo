@@ -140,8 +140,18 @@
 
     const quoteEl = document.getElementById("manifesto-quote");
     const bodyEl = document.getElementById("manifesto-body");
+    const moreEl = document.getElementById("manifesto-more");
     if (quoteEl) quoteEl.textContent = copy.manifesto.quote;
     if (bodyEl) bodyEl.innerHTML = copy.manifesto.body;
+    if (moreEl) {
+      if (copy.manifesto.moreHtml) {
+        moreEl.innerHTML = copy.manifesto.moreHtml;
+        moreEl.classList.remove("hidden");
+      } else {
+        moreEl.innerHTML = "";
+        moreEl.classList.add("hidden");
+      }
+    }
 
     const driftSection = document.getElementById("drift");
     if (driftSection) {

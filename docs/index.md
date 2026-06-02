@@ -2,6 +2,8 @@
 
 Welcome to the Babo docs. Babo is a persistent AI agent platform with long-term memory, autonomous task execution, project orchestration, and one-click channel integrations.
 
+**Mission & vision:** [The Babo manifesto](manifesto.md) — local agents, honest economics, and the long-term bet.
+
 **Download desktop app:** [GitHub Releases](https://github.com/umbecanessa/babo/releases) — **Windows and macOS** installers from CI; Linux builds from source (`npm run dist:linux`).
 
 New users: [download the latest release](https://github.com/umbecanessa/babo/releases), then follow [Installation](getting-started/installation.md) and [Quickstart](getting-started/quickstart.md).
@@ -26,6 +28,7 @@ Details: **[Deployment topologies](architecture/deployment-topologies.md)**
 
 | Goal | Start here |
 |------|------------|
+| Why Babo exists | [Manifesto](manifesto.md) |
 | Install & first agent | [Download (Releases)](https://github.com/umbecanessa/babo/releases) → [Installation](getting-started/installation.md) → [Quickstart](getting-started/quickstart.md) |
 | Understand concepts | [Core concepts](getting-started/concepts.md) |
 | Deploy backend to Railway | [Cloud deployment](configuration/cloud-deployment.md) |

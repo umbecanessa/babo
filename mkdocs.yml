@@ -66,6 +66,7 @@ extra_css:
 
 nav:
   - Home: index.md
+  - Manifesto: manifesto.md
   - Getting started:
       - Overview: getting-started/index.md
       - Installation: getting-started/installation.md

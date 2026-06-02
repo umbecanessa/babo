@@ -48,10 +48,10 @@ window.BABO_AUDIENCE = {
     },
     manifesto: {
       quote:
-        "Intelligence sold like water — metered tokens forever — is the future we’re refusing.",
+        "LLMs are infrastructure — like electricity. They should run in your home and office, not only in a vendor’s meter.",
       body:
-        "Babo is the bet on a box under your desk: open source, local brain, optional cloud only where it saves you time. <a href=\"https://github.com/umbecanessa/neural-ledger-system\">NLS research</a> points at stateful inference so cost stays flat as history grows.",
-      showNlsLink: true,
+        "Most work does not need a frontier model every turn. Babo is the open-source agent OS on your machine: persistent memory, real tools, optional cloud. Pay for power when you choose it — not because the product forgot you overnight. <a href=\"https://github.com/umbecanessa/neural-ledger-system\">NLS research</a> is the longer bet on stateful inference so cost stays flat as history grows.",
+      moreHtml: '<a href="manifesto/">Read the full manifesto</a>',
     },
     drift: {
       title: "Built against drift",
@@ -172,10 +172,10 @@ window.BABO_AUDIENCE = {
       brain: "Optional — see what your agent is doing inside.",
     },
     manifesto: {
-      quote: "You shouldn’t need a hacker setup to get an agent that runs your week.",
+      quote: "Every family deserves an agent on their own computer — not another subscription that forgets them.",
       body:
-        "Babo brings the power people get from terminal-heavy agents — with a desktop wizard and guardrails for people who’d rather not live in a shell. Open source, early access, getting smoother every week.",
-      showNlsLink: false,
+        "Babo is early access, open source, and local-first: one brain for your tasks, email, and messages, with a wizard instead of a terminal. The big vision is an agent in every home; today we ship the software you can actually install.",
+      moreHtml: '<a href="manifesto/">Read the full manifesto</a>',
     },
     drift: null,
     pricing: {
