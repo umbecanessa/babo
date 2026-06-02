@@ -19,8 +19,14 @@ $radius-lg: 12px;
 :host {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  height: calc(100vh - 52px);
   width: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
+
+  @media (max-width: 768px) {
+    height: calc(100vh - 48px);
+  }
 }
 
 .brain-container {

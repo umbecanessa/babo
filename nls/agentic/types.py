@@ -2211,6 +2211,12 @@ class LoopState:
     # automatically after the agent delivers its response.
     _pre_responding_mode: "AgentMode | None" = None
 
+    # Prose-only turn evaluation (micro-inference on 2nd+ consecutive prose)
+    _last_iter_text: str = ""
+    last_prose_hash: str = ""
+    last_prose_verdict: str = ""
+    prose_show_to_user: bool = True
+
     # Backward compat property
     @property
     def coordinator_mode(self) -> bool:

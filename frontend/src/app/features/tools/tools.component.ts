@@ -3,9 +3,10 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
 import { ActivatedRoute, Router, NavigationEnd, RouterLink } from '@angular/router';
-import { filter } from 'rxjs';
+import { filter, Subscription } from 'rxjs';
 import { HttpClient } from '@angular/common/http';
 import { ApiService } from '../../core/services/api.service';
+import { WebSocketService } from '../../core/services/websocket.service';
 import { ToastService } from '../../shared/toast/toast.service';
 import { Agent } from '../../core/models/agent.model';
 import { IntegrationCardComponent, IntegrationChannelType } from './integration-card/integration-card.component';
@@ -890,9 +891,11 @@ export class ToolsComponent implements OnInit, OnDestroy {
     private toast: ToastService,
     readonly platformIntegrations: PlatformIntegrationsService,
     private platform: PlatformService,
+    private ws: WebSocketService,
   ) {}
 
   private routerSub?: ReturnType<typeof this.router.events.subscribe>;
+  private wsSub?: Subscription;
 
   ngOnInit(): void {
     this.agentId = this.route.snapshot.paramMap.get('agentId') ?? '';
@@ -903,6 +906,9 @@ export class ToolsComponent implements OnInit, OnDestroy {
     this.loadAgentTools();
     this.loadFeaturedSkills('Popular');
     this.loadConnectedExtensions();
+    if (this.agentId) {
+      this.subscribeSkillsRefresh();
+    }
     this.routerSub = this.router.events.pipe(
       filter((e): e is NavigationEnd => e instanceof NavigationEnd),
     ).subscribe((e) => {
@@ -916,8 +922,20 @@ export class ToolsComponent implements OnInit, OnDestroy {
 
   ngOnDestroy(): void {
     this.routerSub?.unsubscribe();
+    this.wsSub?.unsubscribe();
     this.stopWhatsAppQrPoll();
     this.stopRelayPolling();
+  }
+
+  /** Refresh Tools grid when the agent hot-loads a ClawHub skill mid-chat. */
+  private subscribeSkillsRefresh(): void {
+    this.ws.joinAgent(this.agentId);
+    this.wsSub = this.ws.onMessage(this.agentId).subscribe((msg: any) => {
+      if (msg?.type === 'skill_installed') {
+        this.loadSkills();
+        this.cdr.detectChanges();
+      }
+    });
   }
 
   private startRelayPolling(): void {

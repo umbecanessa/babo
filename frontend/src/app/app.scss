@@ -1,10 +1,12 @@
 :host {
   display: block;
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
 }
 
 .app-shell {
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
   position: relative;
   z-index: 1;
 }
@@ -328,7 +330,12 @@ main {
 }
 
 main.with-nav {
+  height: 100vh;
+  box-sizing: border-box;
   padding-top: 52px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
 
   @media (max-width: 768px) {
     padding-top: 48px;

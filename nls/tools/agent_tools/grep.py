@@ -27,6 +27,30 @@ logger = logging.getLogger(__name__)
 
 _IS_WINDOWS = sys.platform == "win32"
 _MAX_RESULTS = 200
+_PYTHON_GREP_TIMEOUT_S = 30
+_MAX_FILES_SCANNED = 20_000
+
+# Prune during directory walk — do not descend into these names.
+_SKIP_DIR_NAMES = frozenset({
+    ".git", "__pycache__", "node_modules", ".venv", "venv",
+    ".mypy_cache", ".pytest_cache", ".ruff_cache",
+    "release-build", "release-build-test", "dist", "dist-electron",
+    "site",  # generated MkDocs output
+    "browser",  # packaged frontend assets in dev trees
+})
+
+# Ripgrep negated globs (when rg is available).
+_RG_EXCLUDE_GLOBS = (
+    "!**/.git/**",
+    "!**/node_modules/**",
+    "!**/__pycache__/**",
+    "!**/.venv/**",
+    "!**/venv/**",
+    "!**/release-build/**",
+    "!**/release-build-test/**",
+    "!**/dist-electron/**",
+    "!**/site/**",
+)
 
 
 from .write import _resolve_path  # shared dedup-aware resolver
@@ -46,6 +70,31 @@ def _match_glob(filename: str, pattern: str) -> bool:
     if "**" in pattern or "/" in pattern or os.sep in pattern:
         return fnmatch.fnmatch(filename.replace(os.sep, "/"), pattern.replace(os.sep, "/"))
     return False
+
+
+def _should_skip_dir(name: str) -> bool:
+    if name in _SKIP_DIR_NAMES:
+        return True
+    return name.startswith(".")
+
+
+def _iter_search_files(root: Path) -> tuple[list[Path], bool]:
+    """Collect files under root, pruning heavy dirs. Returns (files, scan_truncated)."""
+    if root.is_file():
+        return [root], False
+
+    files: list[Path] = []
+    truncated = False
+    for dirpath, dirnames, filenames in os.walk(root, topdown=True):
+        dirnames[:] = [d for d in dirnames if not _should_skip_dir(d)]
+        for name in filenames:
+            if name.startswith(".") and name != ".env":
+                continue
+            files.append(Path(dirpath) / name)
+            if len(files) >= _MAX_FILES_SCANNED:
+                truncated = True
+                return files, truncated
+    return files, truncated
 
 
 def _python_grep(
@@ -71,24 +120,18 @@ def _python_grep(
     results: list[str] = []
     total_matches = 0
 
-    if root.is_file():
-        files = [root]
-    else:
-        files = sorted(root.rglob("*"))
+    files, scan_truncated = _iter_search_files(root)
 
     for file_path in files:
         if not file_path.is_file():
             continue
-        # Skip binary-looking files and common noise dirs
-        if any(part.startswith(".") for part in file_path.parts):
-            # Allow .env files and similar but skip .git, __pycache__, node_modules
-            if any(
-                part in (".git", "__pycache__", "node_modules", ".venv", "venv")
-                for part in file_path.parts
-            ):
-                continue
 
-        rel_path = str(file_path.relative_to(root) if not root.is_file() else file_path)
+        try:
+            rel_path = str(
+                file_path.relative_to(root) if not root.is_file() else file_path.name
+            )
+        except ValueError:
+            rel_path = str(file_path)
 
         if glob_filter and not _match_glob(rel_path, glob_filter):
             continue
@@ -101,7 +144,6 @@ def _python_grep(
         lines = text.splitlines()
         for i, line in enumerate(lines):
             if regex.search(line):
-                # Context lines
                 ctx_start = max(0, i - before)
                 ctx_end = min(len(lines), i + after + 1)
 
@@ -111,14 +153,20 @@ def _python_grep(
 
                 total_matches += 1
                 if total_matches >= max_results:
+                    if scan_truncated:
+                        results.append(
+                            f"... (file scan truncated at {_MAX_FILES_SCANNED} files)",
+                        )
                     return results, total_matches
 
         if results and results[-1] != "--":
             results.append("--")
 
-    # Remove trailing separator
     while results and results[-1] == "--":
         results.pop()
+
+    if scan_truncated:
+        results.append(f"... (file scan truncated at {_MAX_FILES_SCANNED} files)")
 
     return results, total_matches
 
@@ -255,11 +303,10 @@ class GrepTool:
                 pattern, search_root, glob_filter, case_insensitive,
                 fixed_strings, before, after, max_results,
             )
-        else:
-            return self._run_python(
-                pattern, search_root, glob_filter, case_insensitive,
-                fixed_strings, before, after, max_results,
-            )
+        return await self._run_python_async(
+            pattern, search_root, glob_filter, case_insensitive,
+            fixed_strings, before, after, max_results,
+        )
 
     async def _run_rg(
         self,
@@ -289,6 +336,8 @@ class GrepTool:
             cmd.extend(["-A", str(after)])
         if glob_filter:
             cmd.extend(["--glob", glob_filter])
+        for exclude in _RG_EXCLUDE_GLOBS:
+            cmd.extend(["--glob", exclude])
         # rg's --max-count limits per-file; we use per-file=max_results as an
         # approximation and then truncate the total output ourselves.
         cmd.extend(["--max-count", str(max(1, max_results // 5))])
@@ -367,6 +416,38 @@ class GrepTool:
             details={"match_count": len(match_lines), "truncated": truncated, "backend": "rg"},
         )
 
+    async def _run_python_async(
+        self,
+        pattern: str,
+        root: Path,
+        glob_filter: str,
+        case_insensitive: bool,
+        fixed_strings: bool,
+        before: int,
+        after: int,
+        max_results: int,
+    ) -> ToolResult:
+        loop = asyncio.get_running_loop()
+        try:
+            return await asyncio.wait_for(
+                loop.run_in_executor(
+                    None,
+                    lambda: self._run_python(
+                        pattern, root, glob_filter, case_insensitive,
+                        fixed_strings, before, after, max_results,
+                    ),
+                ),
+                timeout=_PYTHON_GREP_TIMEOUT_S,
+            )
+        except asyncio.TimeoutError:
+            return ToolResult(
+                content=(
+                    f"Error: grep timed out after {_PYTHON_GREP_TIMEOUT_S} seconds. "
+                    "Narrow the search with path= or glob= (e.g. glob='*.py')."
+                ),
+                is_error=True,
+            )
+
     def _run_python(
         self,
         pattern: str,
@@ -383,6 +464,9 @@ class GrepTool:
             case_insensitive, fixed_strings,
             before, after, max_results,
         )
+
+        if lines and lines[0].startswith("Error:"):
+            return ToolResult(content=lines[0], is_error=True)
 
         if not lines:
             return ToolResult(

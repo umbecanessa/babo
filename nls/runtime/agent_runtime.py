@@ -4689,11 +4689,19 @@ class AgentRuntime:
         return self._get_enabled_skills()
 
     def enable_skill(self, skill_setup: Any) -> None:
-        """Enable a skill at runtime (called from chat.py on skill connect)."""
+        """Enable a skill at runtime (callable register hook or skill name string)."""
         try:
-            if callable(skill_setup):
+            if isinstance(skill_setup, str):
+                from nls.tools.skill_manager import enable_skill as persist_enable_skill
+
+                persist_enable_skill(self.agent_dir, skill_setup, refresh_fn=None)
+            elif callable(skill_setup):
                 skill_setup(self)
             self.refresh_tools()
+            try:
+                self._populate_skills_ring()
+            except Exception:
+                pass
             # Re-populate channels ring so new channel-aware skills
             # (e.g. google-calendar) appear in the agent's WM immediately.
             try:

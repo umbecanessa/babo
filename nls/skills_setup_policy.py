@@ -385,7 +385,11 @@ def platform_doc_url(path: str = "") -> str:
 _NATIVE_SKILL_AUTHORING_RE = re.compile(
     r"\b(?:nls|native|bundled)\s+(?:python\s+)?skill\b"
     r"|\b(?:build|create|author|write|implement)\s+(?:a|an)\s+"
-    r"(?:native|bundled|nls)\s+(?:python\s+)?skill\b"
+    r"(?:native|bundled|nls|live|discord|telegram|whatsapp)\s+"
+    r"(?:python\s+)?(?:channel\s+)?skill\b"
+    r"|\b(?:discord|telegram|whatsapp)-channel\b"
+    r"|\blive\s+discord\b"
+    r"|\bdiscord\s+gateway\b"
     r"|\bskill\s+(?:with|using)\s+(?:register|config\.schema|config_schema)\b"
     r"|\bnls/skills/bundled\b"
     r"|\bregister\s*\(\s*app\s*,\s*ctx\b",

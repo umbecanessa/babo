@@ -6,6 +6,7 @@ Extracted from loop_v3.py — same LLM prompts and logic, cleaner interface.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import re
@@ -331,6 +332,44 @@ _GOAL_EVAL_SYSTEM = (
     "If the agent attempted the goal and produced a reasonable answer "
     "or output, mark it done.\n"
     "Return ONLY the JSON object. No explanation."
+)
+
+ProseVerdict = Literal[
+    "awaiting_user_input",
+    "deliverable_done",
+    "should_continue",
+    "duplicate",
+]
+
+_PROSE_EVAL_SYSTEM = (
+    "You classify the agent's latest prose-only turn during a tool-using task.\n"
+    "You receive GOALS, HINTS, recent ACTIONS, the latest PROSE text, and any "
+    "recent TOOL ERRORS.\n\n"
+    'Return JSON: {"prose_verdict": "<one of: awaiting_user_input | '
+    "deliverable_done | should_continue | duplicate>\", "
+    '"show_to_user": <true|false>}\n\n'
+    "Verdict rules:\n"
+    "- awaiting_user_input: agent is blocked on credentials, a choice, or "
+    "missing info only the user can provide (401/unauthorized, invalid token, "
+    "paste your API key). Exit the loop; show once.\n"
+    "- duplicate: prose repeats a prior turn without new facts or asks. "
+    "Do not show again; exit.\n"
+    "- deliverable_done: agent reports verified success and the deliverable "
+    "is complete (even if task_complete was not called).\n"
+    "- should_continue: agent should keep working with tools; prose is "
+    "premature status or incomplete.\n\n"
+    "show_to_user: false for duplicate; true otherwise when exiting.\n"
+    "Return ONLY the JSON object."
+)
+
+_CREDENTIAL_BLOCK_MARKERS = (
+    "401", "403", "unauthorized", "invalid token", "authentication failed",
+    "forbidden", "bad credentials",
+)
+_AWAITING_USER_MARKERS = (
+    "token", "api key", "password", "credential", "paste your", "provide your",
+    "send me", "waiting for you", "need you to", "reset your", "regenerate",
+    "invalidated", "expired", "bot token", "share the", "give me",
 )
 
 
@@ -702,3 +741,135 @@ async def evaluate_goals(
             logger.warning("Goal evaluation failed", exc_info=True)
             break
     return fallback
+
+
+def prose_fingerprint(text: str) -> str:
+    """Stable hash for duplicate-prose detection."""
+    normalized = re.sub(r"\s+", " ", (text or "").lower().strip())
+    return hashlib.md5(normalized.encode()).hexdigest()[:16]
+
+
+def _heuristic_prose_verdict(
+    prose: str,
+    *,
+    prior_hash: str = "",
+    last_error: str = "",
+    consecutive_text_only: int = 0,
+) -> tuple[ProseVerdict, bool]:
+    """Rule-based fallback when micro-inference is unavailable."""
+    text = (prose or "").strip()
+    if not text:
+        return "should_continue", False
+
+    fp = prose_fingerprint(text)
+    if prior_hash and fp == prior_hash and consecutive_text_only >= 2:
+        return "duplicate", False
+
+    err_low = (last_error or "").lower()
+    text_low = text.lower()
+    if any(m in err_low for m in _CREDENTIAL_BLOCK_MARKERS):
+        if any(m in text_low for m in _AWAITING_USER_MARKERS):
+            return "awaiting_user_input", True
+        if consecutive_text_only >= 2:
+            return "awaiting_user_input", True
+
+    if consecutive_text_only >= 2:
+        if any(m in text_low for m in _AWAITING_USER_MARKERS):
+            if "?" in text[-400:] or "please" in text_low:
+                return "awaiting_user_input", True
+
+    return "should_continue", True
+
+
+async def evaluate_prose_turn(
+    vllm_client: Any,
+    *,
+    goals: list[str],
+    action_summary: str,
+    prose: str,
+    hints: list[str] | None = None,
+    last_error: str = "",
+    prior_prose_hash: str = "",
+    consecutive_text_only: int = 0,
+    adapter_name: str | None = None,
+) -> tuple[ProseVerdict, bool]:
+    """Classify a prose-only turn; returns (verdict, show_to_user)."""
+    prose = (prose or "").strip()
+    if consecutive_text_only < 2 and not last_error:
+        return "should_continue", True
+
+    fp = prose_fingerprint(prose)
+    if prior_prose_hash and fp == prior_prose_hash and consecutive_text_only >= 2:
+        return "duplicate", False
+
+    if vllm_client is None:
+        return _heuristic_prose_verdict(
+            prose,
+            prior_hash=prior_prose_hash,
+            last_error=last_error,
+            consecutive_text_only=consecutive_text_only,
+        )
+
+    hints_block = ""
+    if hints:
+        hints_block = f"HINTS: {json.dumps(hints)}\n"
+    err_block = ""
+    if last_error:
+        err_block = f"RECENT TOOL ERROR:\n{last_error[:400]}\n\n"
+    prompt = (
+        f"GOALS: {json.dumps(goals)}\n"
+        f"{hints_block}"
+        f"{err_block}"
+        f"ACTIONS:\n{action_summary[-3000:]}\n\n"
+        f"PROSE:\n{prose[:2000]}"
+    )
+    for attempt in range(2):
+        try:
+            _eval_msgs, _eval_body = _prepare_micro_inference(
+                [
+                    {"role": "system", "content": _PROSE_EVAL_SYSTEM},
+                    {"role": "user", "content": prompt},
+                ],
+                vllm_client,
+                adapter_name=adapter_name,
+            )
+            result = await asyncio.wait_for(
+                vllm_client.generate(
+                    messages=_eval_msgs,
+                    adapter_name=adapter_name,
+                    max_tokens=96,
+                    temperature=0.1,
+                    extra_body=_eval_body,
+                ),
+                timeout=12,
+            )
+            text = (result.text or "").strip()
+            start = text.find("{")
+            end = text.rfind("}")
+            if start != -1 and end != -1:
+                parsed = json.loads(text[start : end + 1])
+                verdict = str(parsed.get("prose_verdict", "")).strip()
+                show = parsed.get("show_to_user", True)
+                if verdict in (
+                    "awaiting_user_input",
+                    "deliverable_done",
+                    "should_continue",
+                    "duplicate",
+                ):
+                    return verdict, bool(show) if verdict != "duplicate" else False
+        except Exception as exc:
+            err_str = str(exc).lower()
+            if attempt == 0 and any(
+                t in err_str for t in ("event loop", "timeout", "connection")
+            ):
+                await asyncio.sleep(1)
+                continue
+            logger.warning("Prose evaluation failed", exc_info=True)
+            break
+
+    return _heuristic_prose_verdict(
+        prose,
+        prior_hash=prior_prose_hash,
+        last_error=last_error,
+        consecutive_text_only=consecutive_text_only,
+    )

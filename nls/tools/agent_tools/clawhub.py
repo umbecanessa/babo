@@ -203,10 +203,30 @@ class ClawHubTool:
             if runtime:
                 runtime.enable_skill(slug)
 
+            await self._broadcast_skill_installed(slug)
+
             return True
         except Exception as exc:
             logger.warning("Hot-load failed for '%s': %s", slug, exc)
             return False
+
+    async def _broadcast_skill_installed(self, slug: str) -> None:
+        """Notify connected clients so the Tools tab refreshes."""
+        if not self._agent_id:
+            return
+        try:
+            from server.main import app as _app
+
+            cm = getattr(_app.state, "connection_manager", None)
+            if cm is None:
+                return
+            await cm.broadcast(self._agent_id, {
+                "type": "skill_installed",
+                "skill": slug,
+                "slug": slug,
+            })
+        except Exception:
+            logger.debug("skill_installed broadcast failed for %s", slug, exc_info=True)
 
     def _get_runtime(self) -> Any:
         """Get the ServerRuntime for this agent."""

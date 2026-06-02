@@ -420,6 +420,11 @@ def apply_final_response_backfill(
     if (last_substantive_text or "").strip():
         state.final_response = last_substantive_text
         return
+    if state.exit_reason in ("max_iterations", "stalled", "total_timeout"):
+        lit = (getattr(state, "_last_iter_text", "") or "").strip()
+        if lit:
+            state.final_response = lit
+            return
     if state.exit_reason == "task_complete":
         lit = (getattr(state, "_last_iter_text", "") or "").strip()
         if lit:
@@ -4195,6 +4200,18 @@ async def run_loop(
                 continue
 
             # --- Stall injection (before completion check) ---
+            from nls.agentic.evaluator import (
+                prose_stream_text,
+                refresh_prose_verdict,
+            )
+
+            await refresh_prose_verdict(
+                state, vllm_client, adapter_name=adapter_name,
+            )
+            _prose_exit = getattr(state, "last_prose_verdict", "") in (
+                "awaiting_user_input", "duplicate",
+            )
+
             _had_errors = any(
                 v > 0 for v in state.tool_errors.values()
             )
@@ -4281,6 +4298,8 @@ async def run_loop(
                     dispatch_source=dispatch_source
                     or getattr(state, "dispatch_source", ""),
                 )
+            elif _prose_exit:
+                stall_msg = None
             elif state.consecutive_text_only >= config.consecutive_text_only_limit:
                 stall_msg = (
                     "You have responded with text "
@@ -4380,11 +4399,15 @@ async def run_loop(
                     state.consecutive_text_only,
                 )
                 state.exit_reason = "task_complete"
-                state.final_response = response.text
+                _streamed = prose_stream_text(state, response.text or "")
+                if _streamed.strip():
+                    state.final_response = _streamed
+                elif getattr(state, "last_prose_verdict", "") != "duplicate":
+                    state.final_response = response.text or ""
                 await emit(on_event, AgentEvent(
                     EventType.TURN_END, {
                         "iteration": state.iteration,
-                        "response_text": response.text or "",
+                        "response_text": _streamed,
                     },
                 ))
                 break
@@ -4392,7 +4415,9 @@ async def run_loop(
                 await emit(on_event, AgentEvent(
                     EventType.TURN_END, {
                         "iteration": state.iteration,
-                        "response_text": response.text or "",
+                        "response_text": prose_stream_text(
+                            state, response.text or "",
+                        ),
                     },
                 ))
 

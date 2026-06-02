@@ -163,6 +163,9 @@ export class MessageListComponent implements OnChanges, AfterViewChecked, OnDest
 
   /** Only scroll when transcript inputs change — not on every CD (clicks/selection used to jump to bottom). */
   private scrollToBottomAfterView = false;
+  /** When false, user scrolled up — do not follow streaming/thinking updates. */
+  private scrollPinnedToBottom = true;
+  private static readonly SCROLL_PIN_THRESHOLD_PX = 80;
 
   collapsedWaveGroups = new Set<string>();
   private _autoCollapsedWaves = new Set<string>();
@@ -173,6 +176,10 @@ export class MessageListComponent implements OnChanges, AfterViewChecked, OnDest
   ]);
 
   ngOnChanges(changes: SimpleChanges): void {
+    if (changes['awaitingResponse']?.currentValue === true) {
+      this.scrollPinnedToBottom = true;
+    }
+
     if (
       changes['messages'] ||
       changes['streamingText'] ||
@@ -180,7 +187,9 @@ export class MessageListComponent implements OnChanges, AfterViewChecked, OnDest
       changes['awaitingResponse'] ||
       changes['agenticActive']
     ) {
-      this.scrollToBottomAfterView = true;
+      if (this.scrollPinnedToBottom) {
+        this.scrollToBottomAfterView = true;
+      }
       if (changes['messages']) {
         this._syncWaveAutoCollapse();
       }
@@ -697,6 +706,13 @@ export class MessageListComponent implements OnChanges, AfterViewChecked, OnDest
     return (bytes / (1024 * 1024)).toFixed(1) + 'MB';
   }
 
+  @HostListener('scroll', ['$event'])
+  onScrollContainerScroll(event: Event): void {
+    const el = event.target as HTMLElement;
+    if (el !== this.scrollContainer?.nativeElement) return;
+    this.scrollPinnedToBottom = this._isNearBottom(el);
+  }
+
   @HostListener('click', ['$event'])
   onHostClick(event: MouseEvent) {
     const target = event.target as HTMLElement;
@@ -794,5 +810,10 @@ export class MessageListComponent implements OnChanges, AfterViewChecked, OnDest
       const el = this.scrollContainer?.nativeElement;
       if (el) el.scrollTop = el.scrollHeight;
     } catch {}
+  }
+
+  private _isNearBottom(el: HTMLElement): boolean {
+    const distance = el.scrollHeight - el.scrollTop - el.clientHeight;
+    return distance <= MessageListComponent.SCROLL_PIN_THRESHOLD_PX;
   }
 }

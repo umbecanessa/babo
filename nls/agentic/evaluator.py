@@ -471,6 +471,29 @@ async def should_complete(
         and state.total_tool_calls <= 5
     ):
         _implicit_min_chars = 25
+
+    _prose_verdict = getattr(state, "last_prose_verdict", "") or ""
+    if _prose_verdict == "duplicate":
+        logger.info("[EVAL] -> COMPLETE (duplicate prose — suppressed)")
+        return True
+    if _prose_verdict == "awaiting_user_input":
+        logger.info("[EVAL] -> COMPLETE (awaiting user input — yield once)")
+        return True
+    if (
+        _prose_verdict == "deliverable_done"
+        and state.consecutive_text_only >= 1
+        and _last_text_len >= _implicit_min_chars
+        and (
+            has_substantive_tool_success(state)
+            or not requires_substantive_delivery(state)
+        )
+    ):
+        logger.info(
+            "[EVAL] -> COMPLETE (prose verdict deliverable_done, text_len=%d)",
+            _last_text_len,
+        )
+        return True
+
     if (
         state.consecutive_text_only >= 1
         and len(state.final_response or state.user_input) > 0
@@ -480,6 +503,7 @@ async def should_complete(
         and _last_text_len >= _implicit_min_chars
         and _instruction_skill_setup_in_progress(state)
         and (state.goals or requires_substantive_delivery(state))
+        and _prose_verdict not in ("awaiting_user_input", "deliverable_done")
     ):
         logger.info(
             "[EVAL] -> CONTINUE (instruction-skill setup: call task_complete "
@@ -919,6 +943,74 @@ def _instruction_skill_setup_in_progress(state: "LoopState") -> bool:
     return "setup:instruction_skill" in hints or "setup:native_skill" in hints
 
 
+async def refresh_prose_verdict(
+    state: "LoopState",
+    vllm_client: Any = None,
+    *,
+    adapter_name: str | None = None,
+) -> None:
+    """Run prose micro-inference when the agent has repeated text-only turns."""
+    from nls.agentic.goals import evaluate_prose_turn, prose_fingerprint
+
+    prose = getattr(state, "_last_iter_text", "") or ""
+    if not prose.strip():
+        state.last_prose_verdict = ""
+        state.prose_show_to_user = True
+        return
+
+    _err = (state.last_error_preview or "").lower()
+    _needs_eval = (
+        state.consecutive_text_only >= 2
+        or (
+            state.consecutive_text_only >= 1
+            and any(
+                m in _err
+                for m in ("401", "403", "unauthorized", "invalid token", "forbidden")
+            )
+        )
+    )
+    if not _needs_eval:
+        state.last_prose_verdict = ""
+        state.prose_show_to_user = True
+        return
+
+    verdict, show = await evaluate_prose_turn(
+        vllm_client,
+        goals=state.goals,
+        action_summary="\n".join(state.cumulative_actions[-20:]),
+        prose=prose,
+        hints=state.hints or None,
+        last_error=state.last_error_preview or "",
+        prior_prose_hash=state.last_prose_hash or "",
+        consecutive_text_only=state.consecutive_text_only,
+        adapter_name=adapter_name,
+    )
+    state.last_prose_verdict = verdict
+    state.prose_show_to_user = show
+    fp = prose_fingerprint(prose)
+    if fp != state.last_prose_hash:
+        state.last_prose_hash = fp
+    logger.info(
+        "[EVAL] prose_verdict=%s show_to_user=%s consec_text=%d",
+        verdict, show, state.consecutive_text_only,
+    )
+
+
+def prose_stream_text(state: "LoopState", response_text: str) -> str:
+    """Suppress duplicate or held prose from reaching the user."""
+    text = (response_text or "").strip()
+    if not text:
+        return ""
+    if state.consecutive_text_only < 2:
+        return response_text or ""
+    verdict = getattr(state, "last_prose_verdict", "")
+    if verdict == "duplicate":
+        return ""
+    if not getattr(state, "prose_show_to_user", True):
+        return ""
+    return response_text or ""
+
+
 def _diverse_bash_signatures(state: "LoopState", window: int) -> bool:
     sigs = getattr(state, "tool_call_signatures", [])[-window:]
     bash_sigs = [s for s in sigs if s.startswith("bash:")]
@@ -1045,6 +1137,39 @@ def detect_stall(state: "LoopState", config: "LoopConfig") -> str | None:
                     state, _REPEAT_NUDGE_MESSAGE, _SOLO_REPEAT_NUDGE_MESSAGE,
                 )
 
+    # Pattern 0b: re-reading the same file(s) without writing
+    read_paths: list[str] = []
+    for sig in sigs[-6:]:
+        if not sig.startswith("read:"):
+            continue
+        raw = sig[5:]
+        m = re.search(r'"path"\s*:\s*"([^"]+)"', raw)
+        read_paths.append(m.group(1) if m else raw[:60])
+    if len(read_paths) >= 4:
+        unique_paths = set(read_paths)
+        writes = (
+            state.tool_successes.get("write", 0)
+            + state.tool_successes.get("edit", 0)
+        )
+        if len(unique_paths) <= 2 and writes <= 1:
+            logger.info(
+                "[STALL] read loop: %d reads on %d path(s), writes=%d",
+                len(read_paths), len(unique_paths), writes,
+            )
+            return _stall_nudge_for_state(
+                state,
+                (
+                    "You keep re-reading the same file(s) — content has not "
+                    "changed. Stop reading and take the next concrete action "
+                    "(write, bash, or task_complete). Use read(force=true) "
+                    "only if the file changed on disk."
+                ),
+                (
+                    "Stop re-reading. You already have the file contents. "
+                    "Build, run, or call task_complete(summary='...')."
+                ),
+            )
+
     # Pattern 1a: 2+ consecutive errors on the same tool
     if state.consecutive_errors >= 2 and len(state.tool_history) >= 2:
         recent = state.tool_history[-2:]
@@ -1169,9 +1294,9 @@ def detect_stall(state: "LoopState", config: "LoopConfig") -> str | None:
 
     # Pattern 4: prose repetition loop — model keeps talking without new tools.
     if (
-        state.consecutive_text_only >= 6
+        state.consecutive_text_only >= 4
         and state.total_tool_calls <= 3
-        and state.iteration >= 10
+        and state.iteration >= 8
     ):
         logger.info(
             "[STALL] prose loop: %d consecutive text-only iterations, "
