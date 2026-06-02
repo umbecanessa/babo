@@ -692,19 +692,15 @@ section[id] {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
-  max-width: 340px;
+  width: min(92vw, 480px);
   aspect-ratio: 1;
-  padding: 2.5rem;
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-glass);
   transform-style: preserve-3d;
   transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .hero-seal-orb {
   position: absolute;
-  inset: 12%;
+  inset: 4%;
   pointer-events: none;
 }
 
@@ -712,12 +708,12 @@ section[id] {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 14px;
-  height: 14px;
-  margin: -7px 0 0 -7px;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
   border-radius: 50%;
   background: var(--accent-primary);
-  box-shadow: 0 0 20px var(--accent-primary-glow), 0 0 48px var(--accent-primary-glow);
+  box-shadow: 0 0 24px var(--accent-primary-glow), 0 0 56px var(--accent-primary-glow);
   animation: nav-pulse 3s ease-in-out infinite;
 }
 
@@ -732,10 +728,10 @@ section[id] {
 .hero-seal-logo {
   position: relative;
   z-index: 1;
-  width: min(52vw, 220px);
+  width: 100%;
   height: auto;
   object-fit: contain;
-  filter: drop-shadow(0 8px 32px rgba(0, 0, 0, 0.12));
+  filter: drop-shadow(0 12px 40px rgba(0, 0, 0, 0.14));
 }
 
 .device-frame {
@@ -1648,8 +1644,7 @@ code {
 
   .hero-visual { order: -1; }
 
-  .hero-seal { max-width: 280px; padding: 2rem; }
-  .hero-seal-logo { width: min(48vw, 180px); }
+  .hero-seal { width: min(78vw, 320px); }
 
   .punch-card,
   .punch-card-featured {
