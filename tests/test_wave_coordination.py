@@ -8,9 +8,11 @@ from nls.agentic.wave_coordination import (
     build_tech_stack_block,
     detect_tech_stack_drift,
     expand_wave0_scaffold_paths,
+    format_owned_paths_assignment_reminder,
     resolve_step_owned_paths,
+    steps_missing_owned_paths,
 )
-from nls.agentic.plan_store import PlanStep
+from nls.agentic.plan_store import Plan, PlanStep
 
 
 def test_tech_stack_block_includes_requirements():
@@ -106,6 +108,50 @@ def test_wave1_does_not_auto_expand_root_scaffold():
     assert paths == ["backend/src/api/"]
 
 
+def test_frontend_directory_covers_nested_files(tmp_path: Path):
+    from nls.tools.agent_tools.file_ledger import FileLedger
+
+    ledger = FileLedger(tmp_path / "file_ledger.jsonl")
+    ledger.set_wave_ownership(3, {3: ["frontend/"]})
+    err = ledger.check_mutation_allowed(
+        "frontend/public/index.html",
+        {"role": "delegate", "delegate_index": 3, "wave": 3},
+        file_exists=True,
+    )
+    assert err is None
+
+
+def test_unclaimed_bash_scaffold_writable_with_empty_owned_paths(tmp_path: Path):
+    from nls.tools.agent_tools.file_ledger import FileLedger
+
+    ledger = FileLedger(tmp_path / "file_ledger.jsonl")
+    ledger.set_wave_ownership(3, {3: []})
+    err = ledger.check_mutation_allowed(
+        "frontend/public/index.html",
+        {"role": "delegate", "delegate_index": 3, "wave": 3},
+        file_exists=True,
+    )
+    assert err is None
+
+
+def test_steps_missing_owned_paths_and_reminder():
+    plan = Plan(
+        id="plan_x",
+        steps=[
+            PlanStep(id="step-4", label="Frontend Development"),
+            PlanStep(id="step-3", label="Backend API", owned_paths=["backend/"]),
+        ],
+    )
+    missing = steps_missing_owned_paths(plan, ["step-4", "step-3"])
+    assert missing == [("step-4", "Frontend Development")]
+    reminder = format_owned_paths_assignment_reminder(
+        plan, ["step-4"], plan_id="plan_x",
+    )
+    assert "PATH ASSIGNMENT" in reminder
+    assert "step-4" in reminder
+    assert "frontend" not in reminder.lower() or "owned_paths" in reminder
+
+
 def test_detect_stack_drift_undeclared_fastapi(tmp_path: Path):
     root = tmp_path / "proj"
     (root / "packages/server/app").mkdir(parents=True)
@@ -136,6 +182,22 @@ def test_detect_stack_compliance_express(tmp_path: Path):
         "",
         str(root),
         tech_stack={"backend_framework": "express"},
+    )
+    assert issues == []
+
+
+def test_detect_stack_fastapi_in_backend_pyproject(tmp_path: Path):
+    root = tmp_path / "proj"
+    backend = root / "backend"
+    backend.mkdir(parents=True)
+    (backend / "pyproject.toml").write_text(
+        '[tool.poetry.dependencies]\nfastapi = "^0.110"\n',
+        encoding="utf-8",
+    )
+    issues = detect_tech_stack_drift(
+        "",
+        str(root),
+        tech_stack={"backend_framework": "FastAPI"},
     )
     assert issues == []
 

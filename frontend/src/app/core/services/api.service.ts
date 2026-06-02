@@ -33,6 +33,16 @@ export interface FileAttachment {
   mime_type: string;
 }
 
+/** Detached project dev server / background process from agent bash tool. */
+export interface ProjectProcess {
+  pid: number;
+  kind: string;
+  label: string;
+  command: string;
+  cwd: string;
+  started_at: number;
+}
+
 /**
  * API Service with dual routing:
  *
@@ -291,6 +301,18 @@ export class ApiService {
   // ─── Agent Detail ─────────────────────────────────────────────
   getAgentStatus(agentId: string): Observable<AgentRuntimeStatus> {
     return this.http.get<AgentRuntimeStatus>(`${this.RUNTIME}/agents/${agentId}`);
+  }
+
+  listProjectProcesses(agentId: string): Observable<ProjectProcess[]> {
+    return this.http
+      .get<{ processes: ProjectProcess[] }>(`${this.RUNTIME}/agents/${agentId}/processes`)
+      .pipe(map(res => res.processes || []));
+  }
+
+  killProjectProcess(agentId: string, pid: number): Observable<ProjectProcess[]> {
+    return this.http
+      .delete<{ processes: ProjectProcess[] }>(`${this.RUNTIME}/agents/${agentId}/processes/${pid}`)
+      .pipe(map(res => res.processes || []));
   }
 
   getAgentChain(agentId: string): Observable<ChainState> {
@@ -804,6 +826,34 @@ export class ApiService {
   }
 
   // ─── Helpers ─────────────────────────────────────────────────
+  /** Coerce unix seconds, ISO strings, or Date-like values to ISO UTC. */
+  private normalizeTimestamp(value: unknown): string {
+    if (value == null || value === '') return '';
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      const ms = value < 1e12 ? value * 1000 : value;
+      return new Date(ms).toISOString();
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (/^\d+(\.\d+)?$/.test(trimmed)) {
+        const ms = Number(trimmed) < 1e12 ? Number(trimmed) * 1000 : Number(trimmed);
+        return new Date(ms).toISOString();
+      }
+      const ts = this.parseUtcTimestamp(trimmed);
+      return ts != null ? new Date(ts).toISOString() : trimmed;
+    }
+    return String(value);
+  }
+
+  /** Naive ISO datetimes from Python utcnow() are UTC, not local. */
+  private parseUtcTimestamp(value: string): number | null {
+    const naiveIso =
+      /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$/.test(value);
+    const normalized = naiveIso ? `${value}Z` : value;
+    const ts = Date.parse(normalized);
+    return Number.isNaN(ts) ? null : ts;
+  }
+
   /**
    * Normalize agent payloads from the local Python runtime (snake_case)
    * to the Angular Agent model (camelCase). Handles both NestJS and
@@ -825,7 +875,7 @@ export class ApiService {
       name: raw.name || null,
       genesisVersion: raw.genesisVersion || raw.genesis_version || '',
       status: agentStatus,
-      createdAt: raw.createdAt || raw.created_at || '',
+      createdAt: this.normalizeTimestamp(raw.createdAt ?? raw.created_at),
       runtime,
       userPaused: raw.userPaused ?? raw.user_paused ?? false,
     };
@@ -850,6 +900,10 @@ export class ApiService {
       if (raw[key] !== undefined && runtime[key] === undefined) {
         runtime[key] = raw[key];
       }
+    }
+
+    if (runtime.last_interaction) {
+      runtime.last_interaction = this.normalizeTimestamp(runtime.last_interaction);
     }
 
     return Object.keys(runtime).length > 0 ? runtime : undefined;

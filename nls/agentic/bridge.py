@@ -85,7 +85,9 @@ class LoopHooks:
     wm_upsert_digest: Callable[[str, str, str, str], None] | None = None
     wm_set_plan_position: Callable[[str], None] | None = None
     wm_push_instructions: Callable[[list[str]], None] | None = None
+    wm_push_task_goals: Callable[[list[str]], None] | None = None
     wm_refresh_todo_board: Callable[[], None] | None = None
+    guardrails_registry: Any | None = None
 
     # --- Compaction hook ---
     on_compaction: Callable[[Any], None] | None = None
@@ -121,6 +123,7 @@ class LoopHooks:
     wm_orch_add_escalation: Callable[..., None] | None = None
     wm_orch_resolve_escalation: Callable[..., None] | None = None
     wm_sync_wake_attention_board: Callable[[Any], None] | None = None
+    wm_absorb_wave_review: Callable[[Any], None] | None = None
     wm_prune_stale_tactical_goals: Callable[[Any, str], None] | None = None
     wm_get_credentials: Callable[[], list[tuple[str, str]]] | None = None
 
@@ -1422,6 +1425,29 @@ def build_hooks_v4(
         for instr in instructions:
             _ring_wm.add_instruction(instr, source="task")
 
+    def _wm_push_task_goals(goals: list[str]):
+        """Replace tactical goals with the current user-task goals."""
+        if _ring_wm is None or not goals:
+            return
+        clear_goals = getattr(_ring_wm, "clear_goals", None)
+        add_goal = getattr(_ring_wm, "add_goal", None)
+        if not callable(clear_goals) or not callable(add_goal):
+            return
+        try:
+            clear_goals("tactical")
+            for goal in goals[:5]:
+                add_goal(level="tactical", content=goal, source="task_extract")
+                if ans is not None:
+                    ans.inject_signal(
+                        signal_type="LEARN",
+                        domain_path=f"Goal.Tactical.{goal[:40].replace(' ', '_')}",
+                        content=f"Goal.Tactical: {goal}",
+                        source="goal_extraction",
+                        hypothalamus=hypothalamus,
+                    )
+        except Exception:
+            pass
+
     def _wm_refresh_todo_board():
         """Build a compact Kanban snapshot and push it into WM."""
         if _ring_wm is None:
@@ -1456,23 +1482,10 @@ def build_hooks_v4(
     # ----- Goals & Hints -----
 
     def _on_goals_extracted(goals: list[str]):
-        if working_memory is None:
+        if not goals:
             return
         try:
-            for goal_text in goals[:5]:
-                working_memory.add_goal(
-                    level="tactical",
-                    content=goal_text,
-                    source="goal_extraction",
-                )
-                if ans is not None:
-                    ans.inject_signal(
-                        signal_type="LEARN",
-                        domain_path=f"Goal.Tactical.{goal_text[:40].replace(' ', '_')}",
-                        content=f"Goal.Tactical: {goal_text}",
-                        source="goal_extraction",
-                        hypothalamus=hypothalamus,
-                    )
+            _wm_push_task_goals(goals[:5])
         except Exception:
             pass
 
@@ -1598,8 +1611,41 @@ def build_hooks_v4(
 
     def _on_after_tool(name: str, args: dict, result: Any):
         result_str = str(getattr(result, "content", ""))
+        is_error = bool(getattr(result, "is_error", False))
+        details = dict(getattr(result, "details", None) or {})
+        if _loop_state_ref:
+            details.setdefault(
+                "coordinator_mode",
+                bool(_loop_state_ref.get("coordinator_mode")),
+            )
+            details.setdefault(
+                "delegates_active",
+                int(_loop_state_ref.get("delegate_count", 0) or 0) > 0,
+            )
+            details.setdefault(
+                "active_mode",
+                str(_loop_state_ref.get("active_mode") or ""),
+            )
         if working_memory is not None:
             _extract_operational_wm_v4(name, args, result_str)
+        _cryptex = dual_wm if (
+            dual_wm is not None and hasattr(dual_wm, "absorb_tool_result")
+        ) else None
+        if _cryptex is None and working_memory is not None:
+            _cryptex = working_memory if hasattr(
+                working_memory, "absorb_tool_result",
+            ) else None
+        if _cryptex is not None:
+            try:
+                _cryptex.absorb_tool_result(
+                    name,
+                    args or {},
+                    result_str,
+                    is_error,
+                    details=details,
+                )
+            except Exception:
+                logger.debug("Cryptex absorb_tool_result failed", exc_info=True)
 
     def _extract_operational_wm_v4(tool_name: str, args: dict, result_str: str):
         """Regex-based operational fact extraction — zero GPU cost."""
@@ -2279,6 +2325,32 @@ def build_hooks_v4(
         try:
             from nls.agentic.wake_coordination import build_batched_completion_review_message
 
+            if _orch_wm is not None and hasattr(_orch_wm, "orch_prune_stale_escalations"):
+                reconcile = getattr(team_manager, "reconcile_with_delegates", None)
+                if reconcile is not None:
+                    try:
+                        reconcile(persist=False)
+                    except Exception:
+                        pass
+
+                def _member_terminal(team_id: str, member_idx: int) -> bool:
+                    team = team_manager._teams.get(team_id)
+                    if team is None or member_idx < 0 or member_idx >= len(team.members):
+                        return True
+                    return team.members[member_idx].status in (
+                        "done", "failed", "cancelled",
+                    )
+
+                try:
+                    pruned = _orch_wm.orch_prune_stale_escalations(_member_terminal)
+                    if pruned:
+                        logger.debug(
+                            "wm_sync: pruned %d stale orchestration escalation(s)",
+                            pruned,
+                        )
+                except Exception:
+                    logger.debug("orch_prune_stale_escalations failed", exc_info=True)
+
             parts: list[str] = []
             pending = getattr(team_manager, "_pending_completion_reviews", {}) or {}
             team_ids = {
@@ -2294,6 +2366,13 @@ def build_hooks_v4(
             board = "\n\n".join(p for p in parts if p.strip()).strip()
             if board:
                 compositor.set_wake_attention_board(board)
+                if hasattr(compositor, "absorb_wake_attention_content"):
+                    try:
+                        compositor.absorb_wake_attention_content(board)
+                    except Exception:
+                        logger.debug(
+                            "absorb_wake_attention_content failed", exc_info=True,
+                        )
             else:
                 compositor.clear_wake_attention_board()
             terminal = {
@@ -2304,6 +2383,17 @@ def build_hooks_v4(
                 compositor.prune_stale_orchestration_team_slots(terminal)
         except Exception:
             logger.debug("wm_sync_wake_attention_board failed", exc_info=True)
+
+    def _wm_absorb_wave_review(team: Any) -> None:
+        compositor = dual_wm if (
+            dual_wm is not None and hasattr(dual_wm, "absorb_wave_review")
+        ) else working_memory
+        if compositor is None or not hasattr(compositor, "absorb_wave_review"):
+            return
+        try:
+            compositor.absorb_wave_review(team)
+        except Exception:
+            logger.debug("wm_absorb_wave_review failed", exc_info=True)
 
     def _wm_prune_stale_tactical_goals(plan_store: Any, plan_id: str) -> None:
         compositor = dual_wm if dual_wm is not None else working_memory
@@ -2425,6 +2515,7 @@ def build_hooks_v4(
         wm_upsert_digest=_wm_upsert_digest,
         wm_set_plan_position=_wm_set_plan_position,
         wm_push_instructions=_wm_push_instructions,
+        wm_push_task_goals=_wm_push_task_goals,
         wm_refresh_todo_board=_wm_refresh_todo_board,
         on_compaction=_on_compaction,
         ans_tool_learning=_ans_tool_learning,
@@ -2441,6 +2532,7 @@ def build_hooks_v4(
         wm_orch_add_escalation=_wm_orch_add_escalation,
         wm_orch_resolve_escalation=_wm_orch_resolve_escalation,
         wm_sync_wake_attention_board=_wm_sync_wake_attention_board,
+        wm_absorb_wave_review=_wm_absorb_wave_review,
         wm_prune_stale_tactical_goals=_wm_prune_stale_tactical_goals,
         wm_get_credentials=_wm_get_credentials,
         wm_get_tactical_goals=_wm_get_tactical_goals,
@@ -2467,5 +2559,37 @@ def build_hooks_v4(
     )
     _hooks._accumulator = _accumulator  # type: ignore[attr-defined]
     _hooks._accumulator_wm_target = dual_wm  # type: ignore[attr-defined]
+    _guardrails_registry = None
+    if agent_dir is not None:
+        try:
+            from nls.tools.agent_tools.guardrails_registry import (
+                AgentGuardrailsRegistry,
+            )
+            _guardrails_registry = AgentGuardrailsRegistry(agent_dir)
+        except Exception:
+            logger.debug(
+                "build_hooks_v4: guardrails registry init failed",
+                exc_info=True,
+            )
+    _hooks.guardrails_registry = _guardrails_registry  # type: ignore[attr-defined]
+    if _hooks.guardrails_registry is not None:
+        _cryptex_bind = dual_wm if (
+            dual_wm is not None and hasattr(dual_wm, "absorb_tool_result")
+        ) else (
+            working_memory
+            if hasattr(working_memory, "absorb_tool_result")
+            else None
+        )
+        if _cryptex_bind is not None:
+            try:
+                _cryptex_bind._guardrails_registry = _hooks.guardrails_registry  # type: ignore[attr-defined]
+                from nls.tools.agent_tools.guardrails_registry import (
+                    inject_guardrails_into_cryptex,
+                )
+                inject_guardrails_into_cryptex(
+                    _cryptex_bind, _hooks.guardrails_registry,
+                )
+            except Exception:
+                logger.debug("Cryptex guardrails bind failed", exc_info=True)
     hooks_ref[0] = _hooks
     return _hooks

@@ -45,6 +45,42 @@
         </span>
       }
 
+      @if (projectProcesses().length > 0) {
+        <div class="project-processes-chip">
+          <button
+            type="button"
+            class="project-processes-trigger"
+            (click)="toggleProjectProcessesMenu($event)"
+            [attr.aria-expanded]="projectProcessesOpen()"
+            title="Project servers running in the background">
+            <span class="project-processes-dot"></span>
+            {{ projectProcesses().length === 1 ? projectProcesses()[0].label : (projectProcesses().length + ' servers') }}
+          </button>
+          @if (projectProcessesOpen()) {
+            <div class="project-processes-backdrop" (click)="projectProcessesOpen.set(false)"></div>
+            <div class="project-processes-menu" role="menu">
+              <div class="project-processes-menu-title">Running locally</div>
+              @for (proc of projectProcesses(); track proc.pid) {
+                <div class="project-process-row">
+                  <div class="project-process-info">
+                    <span class="project-process-kind">{{ projectProcessKindLabel(proc.kind) }}</span>
+                    <span class="project-process-label">{{ proc.label }}</span>
+                    <span class="project-process-meta">PID {{ proc.pid }}</span>
+                  </div>
+                  <button
+                    type="button"
+                    class="project-process-stop"
+                    (click)="killProjectProcess(proc.pid, $event)"
+                    title="Stop process">
+                    Stop
+                  </button>
+                </div>
+              }
+            </div>
+          }
+        </div>
+      }
+
       <!-- Agentic progress indicator -->
       @if (agenticActive()) {
         <div class="agentic-progress">

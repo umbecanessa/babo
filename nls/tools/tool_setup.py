@@ -82,16 +82,52 @@ def setup_tools(
     # File-change ledger — inject into write/edit tools so every successful
     # file mutation is recorded with a unified diff and author attribution.
     _file_ledger = None
+    _read_index = None
+    _guardrails_registry = None
+    try:
+        from .agent_tools.guardrails_registry import AgentGuardrailsRegistry
+        _guardrails_registry = AgentGuardrailsRegistry(agent_dir)
+        runtime._guardrails_registry = _guardrails_registry
+    except Exception as _gre:
+        logger.warning("Agent %s: guardrails registry init failed: %s", agent_id, _gre)
     try:
         from .agent_tools.file_ledger import FileLedger, FileHistoryTool
+        _agentic_cfg = config.get("agentic_loop", {}) or {}
+        _enable_read_index = _agentic_cfg.get("enable_read_index", True)
         _file_ledger = FileLedger(agent_dir / "file_ledger.jsonl")
+        if _enable_read_index:
+            from .agent_tools.read_index import AgentReadIndex
+            _read_index = AgentReadIndex(agent_dir)
+            _file_ledger.set_read_index(_read_index)
         _orchestrator_meta = {"role": "orchestrator", "loop_id": agent_id}
+        _file_cache = next(
+            (
+                getattr(t, "_file_state_cache", None)
+                for t in tools
+                if getattr(t, "name", "") == "read"
+            ),
+            None,
+        )
+        _shared_cwd_ref = next(
+            (getattr(t, "_shared_cwd", None) for t in tools
+             if getattr(t, "_shared_cwd", None) is not None),
+            None,
+        )
         for _t in tools:
             _tname = getattr(_t, "name", None)
             if _tname in ("write", "edit"):
                 _t._ledger = _file_ledger
                 _t._ledger_meta = _orchestrator_meta
-        tools.append(FileHistoryTool(_file_ledger))
+            if _tname == "read" and _read_index is not None:
+                _t._read_index = _read_index
+                _t._reader_label = "orchestrator"
+                _t._loop_id = agent_id
+        tools.append(FileHistoryTool(
+            _file_ledger,
+            file_state_cache=_file_cache,
+            cwd=work_dir,
+            shared_cwd=_shared_cwd_ref,
+        ))
         logger.info("Agent %s: file ledger initialized at %s", agent_id, _file_ledger._path)
     except Exception as _le:
         logger.warning("Agent %s: file ledger init failed: %s", agent_id, _le)
@@ -112,15 +148,18 @@ def setup_tools(
             client, adapter = await _resolve_inference()
             if client is None:
                 return "ALL_CRITERIA_MET"
-            _content = prompt if prompt.startswith("/no_think") else "/no_think\n" + prompt
-            from nls.runtime.inference_compat import micro_inference_extra_body
+            from nls.runtime.inference_compat import prepare_micro_inference
 
-            _upstream = getattr(client, "base_url", "") or ""
+            _micro_msgs, _micro_body = prepare_micro_inference(
+                [{"role": "user", "content": prompt}],
+                vllm_client=client,
+                adapter_name=adapter,
+            )
             result = await client.generate(
                 adapter_name=adapter,
-                messages=[{"role": "user", "content": _content}],
+                messages=_micro_msgs,
                 max_tokens=512, temperature=0.1,
-                extra_body=micro_inference_extra_body(_upstream, thinking=False),
+                extra_body=_micro_body,
             )
             return getattr(result, "text", str(result)).strip()
 
@@ -129,15 +168,18 @@ def setup_tools(
             client, adapter = await _resolve_inference()
             if client is None:
                 raise RuntimeError("No inference client for dependency inference")
-            _content = prompt if prompt.startswith("/no_think") else "/no_think\n" + prompt
-            from nls.runtime.inference_compat import micro_inference_extra_body
+            from nls.runtime.inference_compat import prepare_micro_inference
 
-            _upstream = getattr(client, "base_url", "") or ""
+            _micro_msgs, _micro_body = prepare_micro_inference(
+                [{"role": "user", "content": prompt}],
+                vllm_client=client,
+                adapter_name=adapter,
+            )
             result = await client.generate(
                 adapter_name=adapter,
-                messages=[{"role": "user", "content": _content}],
+                messages=_micro_msgs,
                 max_tokens=1024, temperature=0.0,
-                extra_body=micro_inference_extra_body(_upstream, thinking=False),
+                extra_body=_micro_body,
             )
             return getattr(result, "text", str(result)).strip()
 
@@ -182,9 +224,21 @@ def setup_tools(
             except Exception:
                 return ""
 
+        def _plan_blocks_server_install() -> bool:
+            try:
+                store = plan_tool.get_store()
+                active = store.find_active()
+                if not active:
+                    return False
+                return bool(getattr(active, "tech_stack", None))
+            except Exception:
+                return False
+
         for _t in tools:
             if hasattr(_t, "set_plan_project_dir_fn"):
                 _t.set_plan_project_dir_fn(_get_plan_project_dir)
+            if hasattr(_t, "set_plan_blocks_server_install_fn"):
+                _t.set_plan_blocks_server_install_fn(_plan_blocks_server_install)
 
         _ring_wm = dual_wm if dual_wm is not None else working_memory
         if plan_tool is not None and _ring_wm is not None:

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -105,7 +105,11 @@ def get_status(
         status["sleep_count"] = sleep_count
         last = last_interaction
         if last:
-            status["last_interaction"] = datetime.fromtimestamp(last).isoformat()
+            status["last_interaction"] = (
+                datetime.fromtimestamp(last, tz=timezone.utc)
+                .isoformat()
+                .replace("+00:00", "Z")
+            )
 
     if _want("hormones") and hypothalamus is not None:
         try:

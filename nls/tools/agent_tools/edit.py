@@ -315,8 +315,14 @@ class EditTool:
         if not old_text:
             return ToolResult(content="Error: 'old_text' is required.", is_error=True)
 
-        from .file_ledger import normalize_ledger_path
-        path_str = normalize_ledger_path(path_str) or path_str
+        from .tool_path_args import normalize_tool_path_arg
+        from .file_ledger import append_must_read_scaffold_hint
+
+        path_str, path_err = normalize_tool_path_arg(
+            path_str, cwd=self._effective_cwd, key="path",
+        )
+        if path_err:
+            return ToolResult(content=path_err, is_error=True)
 
         path = _resolve_path(path_str, self._effective_cwd)
 
@@ -376,7 +382,10 @@ class EditTool:
         if self._file_state_cache is not None:
             stale_err = self._file_state_cache.check(str(path.resolve()))
             if stale_err:
-                return ToolResult(content=stale_err, is_error=True)
+                return ToolResult(
+                    content=append_must_read_scaffold_hint(stale_err),
+                    is_error=True,
+                )
 
         # Read file
         try:

@@ -145,6 +145,15 @@ export class VenvManager {
       }
     }
 
+    // Ensure PowerShell 7 for Windows agent shell (bash() maps to pwsh)
+    if (os.platform() === 'win32' && !this.getPwshBin()) {
+      try {
+        await this.ensureStandalonePowerShell();
+      } catch (err: any) {
+        this.broadcastLog('stderr', `PowerShell setup failed: ${err.message}`);
+      }
+    }
+
     this.updateStatus('ready', 'Dependencies up to date', 100);
   }
 
@@ -228,8 +237,14 @@ export class VenvManager {
       this.updateStatus('installing', 'Setting up Node.js runtime...', 92);
       await this.ensureStandaloneNode();
 
-      // Step 8: Ensure data directories
-      this.updateStatus('installing', 'Setting up data directories...', 96);
+      // Step 9: Ensure standalone PowerShell 7 (Windows agent shell)
+      if (os.platform() === 'win32') {
+        this.updateStatus('installing', 'Setting up PowerShell 7...', 95);
+        await this.ensureStandalonePowerShell();
+      }
+
+      // Step 10: Ensure data directories
+      this.updateStatus('installing', 'Setting up data directories...', 98);
       this.ensureDataDirs();
 
       // Done
@@ -862,6 +877,98 @@ export class VenvManager {
       }
     } catch (err: any) {
       this.broadcastLog('stderr', `Failed to install Node.js: ${err.message} (bridges will be disabled)`);
+      try { fs.unlinkSync(archivePath); } catch { /* clean up */ }
+    }
+  }
+
+  // ─── Standalone PowerShell 7 (Windows agent shell) ──────────────
+
+  private static readonly STANDALONE_PWSH_VERSION = '7.5.7';
+
+  private getStandalonePwshDir(): string {
+    return path.join(app.getPath('userData'), 'powershell-standalone');
+  }
+
+  getPwshBin(): string | null {
+    if (os.platform() !== 'win32') return null;
+    const bin = path.join(this.getStandalonePwshDir(), 'pwsh', 'pwsh.exe');
+    return fs.existsSync(bin) ? bin : null;
+  }
+
+  private getStandalonePwshUrl(): { url: string } | null {
+    if (os.platform() !== 'win32') return null;
+
+    const ver = VenvManager.STANDALONE_PWSH_VERSION;
+    const base = `https://github.com/PowerShell/PowerShell/releases/download/v${ver}`;
+    const arch = os.arch();
+
+    const files: Record<string, string> = {
+      x64: `PowerShell-${ver}-win-x64.zip`,
+      arm64: `PowerShell-${ver}-win-arm64.zip`,
+    };
+    const file = files[arch];
+    if (!file) return null;
+    return { url: `${base}/${file}` };
+  }
+
+  private async ensureStandalonePowerShell(): Promise<void> {
+    if (os.platform() !== 'win32') return;
+
+    if (this.getPwshBin()) {
+      this.broadcastLog('stdout', `PowerShell 7 already installed at ${this.getPwshBin()}`);
+      return;
+    }
+
+    const target = this.getStandalonePwshUrl();
+    if (!target) {
+      this.broadcastLog(
+        'stderr',
+        `No PowerShell build available for ${os.platform()}-${os.arch()} (will use system shell)`,
+      );
+      return;
+    }
+
+    const standaloneDir = this.getStandalonePwshDir();
+    const pwshDir = path.join(standaloneDir, 'pwsh');
+    const archivePath = path.join(standaloneDir, 'powershell.zip');
+
+    try {
+      if (fs.existsSync(pwshDir)) {
+        await this.removeDirRobust(pwshDir);
+      }
+      fs.mkdirSync(pwshDir, { recursive: true });
+
+      this.broadcastLog(
+        'stdout',
+        `Downloading PowerShell v${VenvManager.STANDALONE_PWSH_VERSION}...`,
+      );
+      this.updateStatus('installing', 'Downloading PowerShell 7...', 95);
+
+      await this.downloadFile(target.url, archivePath, (percent) => {
+        this.updateStatus(
+          'installing',
+          `Downloading PowerShell 7... ${percent}%`,
+          95 + Math.floor(percent * 0.015),
+        );
+      });
+
+      this.updateStatus('installing', 'Extracting PowerShell 7...', 97);
+      this.broadcastLog('stdout', 'Extracting PowerShell 7...');
+
+      await this.execSimple('tar', ['xf', archivePath, '-C', pwshDir], 300_000);
+
+      try { fs.unlinkSync(archivePath); } catch { /* non-critical */ }
+
+      if (this.getPwshBin()) {
+        this.broadcastLog('stdout', `PowerShell 7 installed at ${this.getPwshBin()}`);
+      } else {
+        this.broadcastLog('stderr', 'PowerShell extraction succeeded but pwsh.exe not found');
+      }
+    } catch (err: any) {
+      this.broadcastLog(
+        'stderr',
+        `Failed to install PowerShell 7: ${err.message} (will use system shell)`,
+      );
       try { fs.unlinkSync(archivePath); } catch { /* clean up */ }
     }
   }

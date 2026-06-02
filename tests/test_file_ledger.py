@@ -268,3 +268,15 @@ def test_ledger_blocks_teammate_scope_even_for_new_file(tmp_path: Path):
     )
     assert err is not None
     assert "TEAMMATE" in err
+
+
+def test_ledger_allows_bash_scaffold_before_first_write(tmp_path: Path):
+    """Files on disk from bash/npx with no ledger claim are writable."""
+    ledger = FileLedger(tmp_path / "file_ledger.jsonl")
+    ledger.set_wave_ownership(3, {3: []})
+    err = ledger.check_mutation_allowed(
+        "frontend/public/index.html",
+        {"role": "delegate", "delegate_index": 3, "wave": 3},
+        file_exists=True,
+    )
+    assert err is None

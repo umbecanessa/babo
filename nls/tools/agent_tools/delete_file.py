@@ -86,6 +86,14 @@ class DeleteFileTool:
         if not path_str:
             return ToolResult(content="Error: 'path' is required.", is_error=True)
 
+        from .tool_path_args import normalize_tool_path_arg
+
+        path_str, path_err = normalize_tool_path_arg(
+            path_str, cwd=self._effective_cwd, key="path",
+        )
+        if path_err:
+            return ToolResult(content=path_err, is_error=True)
+
         recursive = bool(params.get("recursive", False))
         target = _resolve_path(path_str, self._effective_cwd)
 

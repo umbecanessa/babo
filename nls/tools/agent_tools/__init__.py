@@ -60,34 +60,83 @@ class SharedCWD:
         return self.path
 
 
+import contextvars
+
+# Agent loop scope for read-before-write enforcement.  Set once at the start
+# of run_loop() so reads in iteration N and writes in iteration N+1 share
+# the same cache (asyncio Task ids differ per iteration / parallel tool call).
+_file_cache_scope: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "nls_file_cache_scope", default="",
+)
+
+
+def enter_file_cache_scope(scope: str) -> contextvars.Token:
+    """Bind read-before-write cache to an agent loop (delegate or orchestrator)."""
+    return _file_cache_scope.set(scope)
+
+
+def exit_file_cache_scope(token: contextvars.Token) -> None:
+    _file_cache_scope.reset(token)
+
+
+# Per-loop metrics (read cache hits, etc.) — set at run_loop() start.
+_loop_metrics_scope: contextvars.ContextVar[dict[str, int] | None] = (
+    contextvars.ContextVar("nls_loop_metrics_scope", default=None)
+)
+
+
+def enter_loop_metrics_scope() -> dict[str, int]:
+    """Bind mutable per-loop counters shared with tools."""
+    metrics = {"read_cache_hits": 0}
+    _loop_metrics_scope.set(metrics)
+    return metrics
+
+
+def exit_loop_metrics_scope(token: contextvars.Token) -> None:
+    _loop_metrics_scope.reset(token)
+
+
+def bump_read_cache_hit() -> None:
+    metrics = _loop_metrics_scope.get()
+    if metrics is not None:
+        metrics["read_cache_hits"] = metrics.get("read_cache_hits", 0) + 1
+
+
+def get_loop_metrics() -> dict[str, int] | None:
+    return _loop_metrics_scope.get()
+
+
 class FileStateCache:
-    """Thread-safe, per-caller mtime cache for read-before-edit enforcement.
+    """Thread-safe mtime cache for read-before-edit enforcement.
 
-    Tracks mtime snapshots **per caller** (identified by asyncio Task or
-    thread), so concurrent delegates cannot bypass each other's writes.
+    Tracks mtime snapshots **per agent loop** when
+    :func:`enter_file_cache_scope` is active (normal agent/delegate runs).
+    Falls back to per-asyncio-task / per-thread isolation for tests and
+    ad-hoc tool use without a loop scope.
 
-    On ``read_file``: call :meth:`record` to snapshot the file's mtime
-    for the calling task.
+    On ``read_file``: call :meth:`record` to snapshot the file's mtime.
     On ``write_file`` / ``edit_file``: call :meth:`check` — returns an
-    error string if the file was never read by this caller or changed
-    since this caller's last read.  After a successful write, call
-    :meth:`update` to refresh the caller's snapshot.
+    error string if the file was never read in this scope or changed
+    since the last read.  After a successful write, call :meth:`update`.
     """
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._reads: dict[tuple[str, int], float] = {}
+        self._reads: dict[tuple[str, str], float] = {}
 
     @staticmethod
-    def _caller_id() -> int:
+    def _scope_key() -> str:
+        scope = _file_cache_scope.get()
+        if scope:
+            return scope
         import asyncio
         try:
             task = asyncio.current_task()
             if task is not None:
-                return id(task)
+                return f"task:{id(task)}"
         except RuntimeError:
             pass
-        return threading.get_ident()
+        return f"thread:{threading.get_ident()}"
 
     def record(self, path: str) -> None:
         """Record the current mtime for *path* (call after a successful read)."""
@@ -96,24 +145,30 @@ class FileStateCache:
         except OSError:
             return
         with self._lock:
-            self._reads[(path, self._caller_id())] = mt
+            self._reads[(path, self._scope_key())] = mt
 
     def check(self, path: str) -> str | None:
         """Return an error message if *path* is unsafe to write, else ``None``.
 
-        Unsafe means: (a) the caller never read the file, or (b) the file
-        changed on disk since the caller's last read.  New files (path does
-        not exist) are always allowed.
+        Unsafe means: (a) the scope never read the file, or (b) the file
+        changed on disk since the last read.  New files (path does not
+        exist) are always allowed.
         """
-        cid = self._caller_id()
+        key = self._scope_key()
         with self._lock:
-            recorded = self._reads.get((path, cid))
+            recorded = self._reads.get((path, key))
         if recorded is None:
             if os.path.exists(path):
+                try:
+                    size = os.path.getsize(path)
+                    size_hint = f" ({size:,} bytes)"
+                except OSError:
+                    size_hint = ""
                 return (
-                    f"MUST READ FIRST: {path} exists but you haven't read it "
-                    f"in this session. Call read() on the file before editing "
-                    f"to avoid overwriting concurrent changes."
+                    f"MUST READ FIRST: {path} exists{size_hint} but you haven't read it "
+                    f"in this session. Call read() on the file before write/edit "
+                    f"to avoid overwriting concurrent changes. "
+                    f"If bash/npm scaffolded this file, read it once then rewrite."
                 )
             return None
         try:
@@ -130,16 +185,16 @@ class FileStateCache:
         return None
 
     def update(self, path: str) -> None:
-        """Update the caller's cached mtime after a successful write."""
-        cid = self._caller_id()
+        """Update the scope's cached mtime after a successful write."""
+        key = self._scope_key()
         try:
             mt = os.path.getmtime(path)
         except OSError:
             with self._lock:
-                self._reads.pop((path, cid), None)
+                self._reads.pop((path, key), None)
             return
         with self._lock:
-            self._reads[(path, cid)] = mt
+            self._reads[(path, key)] = mt
 
     def clear(self) -> None:
         with self._lock:
@@ -261,6 +316,7 @@ def create_coding_tools(
             blocked_patterns=blocked_commands,
             on_output=on_bash_output,
             shared_cwd=shared_cwd,
+            file_state_cache=file_cache,
         ),
         create_web_search_tool(),
         create_web_fetch_tool(),
@@ -283,6 +339,22 @@ def create_coding_tools(
         sched_tool, scheduler_manager = create_scheduler_tool(data_dir, agent_id=agent_id)
         tools.append(sched_tool)
         tools.append(create_poller_tool(scheduler_manager))
+
+    _bash_tool = None
+    _project_install_tool = None
+    _server_install_tool = None
+    for t in tools:
+        if getattr(t, "name", "") == "bash":
+            _bash_tool = t
+        elif getattr(t, "name", "") == "project_install":
+            _project_install_tool = t
+        elif getattr(t, "name", "") == "server_install":
+            _server_install_tool = t
+    if _bash_tool is not None and hasattr(_bash_tool, "set_install_tools"):
+        _bash_tool.set_install_tools(
+            project_install=_project_install_tool,
+            server_install=_server_install_tool,
+        )
 
     if runtime_url:
         tools.append(create_vision_tool(runtime_url))

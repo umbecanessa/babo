@@ -135,15 +135,17 @@ async def micro_respond(
         if _vllm is None:
             raise RuntimeError("no inference client for micro_respond")
 
-        from nls.runtime.inference_compat import micro_inference_extra_body
+        from nls.runtime.inference_compat import prepare_micro_inference
 
-        _upstream = getattr(_vllm, "base_url", "") or ""
+        _micro_msgs, _micro_body = prepare_micro_inference(
+            msgs, vllm_client=_vllm, adapter_name=_adapter,
+        )
         result = await _vllm.generate(
             adapter_name=_adapter,
-            messages=msgs,
+            messages=_micro_msgs,
             max_tokens=200,
             temperature=0.6,
-            extra_body=micro_inference_extra_body(_upstream, thinking=False),
+            extra_body=_micro_body,
         )
         text = (
             result.text if hasattr(result, "text") else str(result or "")

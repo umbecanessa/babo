@@ -276,6 +276,7 @@ class AgentRuntime:
         self._last_thinking = ""
         self._last_interaction: float | None = None
         self._last_agentic_abort_ts: float = 0.0
+        self._last_agentic_stall_ts: float = 0.0
         self._dn_manager: Any | None = None
         self._taxonomy: Any | None = None
         self._dream_findings: list = []
@@ -447,7 +448,7 @@ class AgentRuntime:
             return True
 
         try:
-            from nls.runtime.inference_compat import micro_inference_extra_body
+            from nls.runtime.inference_compat import prepare_micro_inference
 
             msgs: list[dict] = [
                 {"role": "system", "content": _THINKING_CLASSIFY_PROMPT},
@@ -460,13 +461,15 @@ class AgentRuntime:
                         msgs.append({"role": role, "content": content[:300]})
             msgs.append({"role": "user", "content": user_input})
 
-            _upstream = getattr(_vllm, "base_url", "") or ""
+            _micro_msgs, _micro_body = prepare_micro_inference(
+                msgs, vllm_client=_vllm, adapter_name=_adapter,
+            )
             result = await _vllm.generate(
                 adapter_name=_adapter,
-                messages=msgs,
+                messages=_micro_msgs,
                 max_tokens=64,
                 temperature=0.0,
-                extra_body=micro_inference_extra_body(_upstream, thinking=False),
+                extra_body=_micro_body,
             )
             raw = (
                 result.text if hasattr(result, "text") else str(result or "")
@@ -592,6 +595,17 @@ class AgentRuntime:
         pre_scaffold_parts: list[str] = []
         post_scaffold_parts: list[str] = []
         scaffold_positions: list[int] | None = None
+
+        from nls.identity.agent_identity import (
+            detect_name_from_user_input,
+            naming_turn_user_prefix,
+        )
+
+        _assigned_name = detect_name_from_user_input(user_input)
+        if _assigned_name:
+            pre_scaffold_parts.append(
+                naming_turn_user_prefix(_assigned_name),
+            )
 
         if not _has_real_facts:
             _n_facts = 0
@@ -1118,6 +1132,7 @@ class AgentRuntime:
             self._restore_adapter_tools()
             self._populate_skills_ring()
             self._populate_channels_ring()
+            self._wire_bash_process_tracking()
             logger.info(
                 "[Agent] agent=%s: initialized %d tools (%d openai schemas)",
                 self.agent_id,
@@ -3202,6 +3217,8 @@ class AgentRuntime:
         memory_test_mode: bool = False,
         no_deltanet: bool = False,
         include_tools: bool = True,
+        orchestration_profile: str | None = None,
+        tool_hints: list[str] | None = None,
     ) -> AsyncIterator[str | tuple[str, str]]:
         """Streaming variant — yields tokens (str or thinking tuples), then does post-process.
 
@@ -3223,6 +3240,11 @@ class AgentRuntime:
             sending to vLLM.  Used to isolate expert-only recall.
         include_tools
             When False, omit tools (e.g. birth greeting — not an agentic turn).
+        orchestration_profile
+            When set with ``include_tools``, filter schemas to this profile's
+            allowed tool surface (conversational / solo / orchestrated).
+        tool_hints
+            Structured triage hints (e.g. ``forbid:tools``) applied on top.
         """
         self._foreground_processing += 1
         self._foreground_source = "user"
@@ -3275,14 +3297,22 @@ class AgentRuntime:
                     user_input, history, model_override=model_override,
                 )
 
+            self._maybe_apply_user_assigned_name(user_input)
+
             messages, scaffold_positions = self.format_prompt(
                 user_input, history, memory_test_mode=memory_test_mode,
             )
 
+            _stream_tools = self._openai_tools_for_turn(
+                include_tools=include_tools,
+                orchestration_profile=orchestration_profile,
+                tool_hints=tool_hints,
+                memory_test_mode=memory_test_mode,
+            )
             async for token in self.generate_stream_async(
                 messages, xargs, scaffold_positions,
                 thinking_mode=thinking_mode,
-                tools=self._openai_tools if (include_tools and not memory_test_mode) else None,
+                tools=_stream_tools,
                 model_override=model_override,
             ):
                 yield token
@@ -3437,6 +3467,25 @@ class AgentRuntime:
 
         self._team_manager.set_dispatch_drain(_drain_dispatch)
 
+        def _has_dispatch_prefix(prefix: str) -> bool:
+            try:
+                from server.main import app as _app
+
+                cs = getattr(_app.state, "consciousness_scheduler", None)
+                if cs is None:
+                    return False
+                il = cs.get_inner_loop(self.agent_id)
+                if il is None:
+                    return False
+                return any(
+                    s.startswith(prefix)
+                    for _, s in getattr(il, "_pending_dispatches", [])
+                )
+            except Exception:
+                return False
+
+        self._team_manager.set_dispatch_has_prefix(_has_dispatch_prefix)
+
         def _schedule_orchestration_wake(prompt: str, source: str) -> None:
             try:
                 from server.main import app as _app
@@ -3446,10 +3495,15 @@ class AgentRuntime:
                     return
                 il = cs.get_inner_loop(self.agent_id)
                 if il is None:
+                    logger.warning(
+                        "Agent %s: orchestration wake not enqueued — "
+                        "no inner loop (source=%s)",
+                        self.agent_id, source,
+                    )
                     return
                 il.enqueue_autonomous_dispatch(prompt, source)
             except Exception:
-                logger.debug(
+                logger.warning(
                     "Agent %s: enqueue orchestration wake failed (source=%s)",
                     self.agent_id, source, exc_info=True,
                 )
@@ -3461,6 +3515,21 @@ class AgentRuntime:
     # ------------------------------------------------------------------
     # 5c. Agentic Loop — tool-use with cognitive hooks (M-016)
     # ------------------------------------------------------------------
+
+    def _clear_agentic_stall_suppression(self) -> None:
+        """Reset stall timestamps so background drives resume after user input."""
+        self._last_agentic_stall_ts = 0.0
+        try:
+            from server.main import app as _app
+
+            cs = getattr(_app.state, "consciousness_scheduler", None)
+            if cs is None:
+                return
+            il = cs.get_inner_loop(self.agent_id)
+            if il is not None:
+                il._last_agentic_stall_ts = 0.0
+        except Exception:
+            pass
 
     async def process_message_agentic_async(
         self,
@@ -3503,6 +3572,10 @@ class AgentRuntime:
             _deep_ctx = _DeepContext(_deep_slot, source=source)
         else:
             _deep_ctx = self._slot_manager.acquire_deep(source=source)
+
+        from nls.runtime.dispatch_sources import is_orchestration_dispatch_source
+        if not is_orchestration_dispatch_source(source):
+            self._clear_agentic_stall_suppression()
 
         async with _deep_ctx:
             return await self._run_agentic_locked(
@@ -3575,6 +3648,7 @@ class AgentRuntime:
             for tool in self._agent_tools:
                 if isinstance(tool, BashTool):
                     tool._on_output = on_bash_output
+                    tool._on_processes_changed = self._emit_project_processes_changed
                     break
             try:
                 from nls.tools.agent_tools.browser_adapter import BrowserAdapterTool
@@ -3864,7 +3938,9 @@ class AgentRuntime:
                                 self.agent_id, _unlaunched,
                             )
                         _pending_reviews = (
-                            self._team_manager.reconcile_pending_completion_reviews()
+                            self._team_manager.reconcile_pending_completion_reviews(
+                                current_dispatch_source=source,
+                            )
                         )
                         if _pending_reviews:
                             logger.info(
@@ -4202,7 +4278,66 @@ class AgentRuntime:
         """Post-construction hook (called by AgentManager)."""
         if self._agent_tools is None:
             self._initialize_tools()
+        else:
+            self._wire_bash_process_tracking()
         logger.info("[Agent] agent=%s: initialized", self.agent_id)
+
+    def _get_bash_tool(self) -> Any | None:
+        from nls.tools.agent_tools.bash import BashTool
+
+        for tool in self._agent_tools or []:
+            if isinstance(tool, BashTool):
+                return tool
+        return None
+
+    def _wire_bash_process_tracking(self) -> None:
+        bash = self._get_bash_tool()
+        if bash is None:
+            return
+        bash._on_processes_changed = self._emit_project_processes_changed
+
+    def _get_connection_manager(self) -> Any | None:
+        """Resolve WS broadcast manager (desktop may not import server.main)."""
+        tm = getattr(self, "_team_manager", None)
+        if tm is not None:
+            cm = getattr(tm, "_connection_manager", None)
+            if cm is not None:
+                return cm
+        try:
+            from server.main import app as _app
+
+            return getattr(_app.state, "connection_manager", None)
+        except Exception:
+            return None
+
+    async def _emit_project_processes_changed(self) -> None:
+        processes = self.list_project_processes()
+        cm = self._get_connection_manager()
+        if cm is None:
+            return
+        try:
+            await cm.broadcast(self.agent_id, {
+                "type": "project_processes_changed",
+                "processes": processes,
+            })
+        except Exception:
+            logger.debug(
+                "[Agent] agent=%s: project_processes broadcast failed",
+                self.agent_id,
+                exc_info=True,
+            )
+
+    def list_project_processes(self) -> list[dict[str, Any]]:
+        bash = self._get_bash_tool()
+        if bash is None:
+            return []
+        return bash.list_detached_processes()
+
+    async def kill_project_process(self, pid: int) -> bool:
+        bash = self._get_bash_tool()
+        if bash is None:
+            return False
+        return await bash.kill_detached(pid)
 
     async def shutdown_async(self) -> None:
         """Graceful cleanup — save state, close resources, kill child processes."""
@@ -4357,6 +4492,28 @@ class AgentRuntime:
         from nls.runtime.session import save_autonomous_history
         save_autonomous_history(self.agent_dir, history, max_turns)
 
+    def _maybe_apply_user_assigned_name(self, user_input: str) -> str | None:
+        """Apply a user-assigned name before prompt build (avoids re-greet)."""
+        from nls.identity.agent_identity import (
+            detect_name_from_user_input,
+            save_agent_name,
+            sync_identity_name_in_working_memory,
+        )
+
+        name = detect_name_from_user_input(user_input)
+        if not name:
+            return None
+        if self.agent_name and self.agent_name.lower() == name.lower():
+            return name
+        self.agent_name = name
+        save_agent_name(self.agent_dir, name, self.agent_id)
+        sync_identity_name_in_working_memory(self.working_memory, name)
+        logger.info(
+            "Agent %s: applied user-assigned name '%s' before generation",
+            self.agent_id, name,
+        )
+        return name
+
     def _save_agent_name(self, name: str) -> None:
         from nls.runtime.session import save_agent_name
         save_agent_name(self.agent_dir, name)
@@ -4404,6 +4561,7 @@ class AgentRuntime:
         try:
             triage = await triage_turn(
                 _vllm, user_input, history=history, adapter_name=_adapter,
+                tool_catalog=self._tool_catalog_for_triage(),
             )
         except Exception:
             logger.warning(
@@ -4411,6 +4569,11 @@ class AgentRuntime:
             )
             triage = _heuristic_triage(user_input)
 
+        from nls.agentic.profile_guard_policy import boost_triage_for_work_continuation
+
+        boost_triage_for_work_continuation(
+            triage, user_input, history=history,
+        )
         self._apply_triage_to_working_memory(triage)
         logger.info(
             "Agent %s: triage intent=%s profile=%s thinking=%s goals=%s hints=%s",
@@ -4422,6 +4585,53 @@ class AgentRuntime:
             triage.hints,
         )
         return triage
+
+    def _tool_catalog_for_triage(self) -> str:
+        """Compact AVAILABLE TOOLS block for the turn triage classifier."""
+        from nls.agentic.goals import summarize_tools_for_triage
+
+        if not self._agent_tools:
+            try:
+                self._initialize_tools()
+            except Exception:
+                pass
+        return summarize_tools_for_triage(self._agent_tools)
+
+    def _openai_tools_for_turn(
+        self,
+        *,
+        include_tools: bool,
+        orchestration_profile: str | None,
+        tool_hints: list[str] | None,
+        memory_test_mode: bool,
+    ) -> list[dict] | None:
+        """Resolve OpenAI tool schemas for a chat stream turn."""
+        if memory_test_mode or not self._openai_tools:
+            return None
+        if not include_tools:
+            return None
+        if not orchestration_profile:
+            return self._openai_tools
+        from nls.agentic.orchestration_profile_spec import (
+            apply_tool_deny,
+            normalize_profile,
+        )
+        from nls.agentic.profile_guard_policy import tools_denied_by_hints
+
+        names = frozenset(
+            schema.get("function", {}).get("name", "")
+            for schema in self._openai_tools
+            if schema.get("function", {}).get("name")
+        )
+        allowed = apply_tool_deny(names, normalize_profile(orchestration_profile))
+        allowed = allowed - tools_denied_by_hints(tool_hints)
+        if not allowed:
+            return None
+        filtered = [
+            schema for schema in self._openai_tools
+            if schema.get("function", {}).get("name", "") in allowed
+        ]
+        return filtered or None
 
     def _apply_triage_to_working_memory(self, triage: Any) -> None:
         goals = getattr(triage, "goals", None) or []

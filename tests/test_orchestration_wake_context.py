@@ -60,5 +60,5 @@ def test_build_evaluating_action_breadcrumb_without_plan():
         dispatch_source="team_completion_review:team_x",
     )
     assert "EVALUATING" in msg
-    assert "team(intervene" in msg
-    assert "team(inspect)" in msg
+    assert "team(intervene" in msg or "spot-check" in msg.lower()
+    assert "BREADCRUMB" in msg

@@ -48,7 +48,21 @@ _TOOL_PREDICT_PATTERNS: list[tuple[re.Pattern[str], set[str]]] = [
     (re.compile(r"\b(browse|open\s+url|visit\s+(https?|www)|go\s+to\s+the\s+(page|site|website))\b", re.I), {"browser"}),
     (re.compile(r"\b(team|delegate|sub.?agent|wave|concurrent)\b", re.I), {"delegate", "team"}),
     (re.compile(r"\b(reach\s+out|contact\s+someone)\b", re.I), {"reach_out"}),
-    (re.compile(r"\b(skill|configure\s+skill)\b", re.I), {"skill_configure"}),
+    (
+        re.compile(
+            r"\b(configure|setup|set\s*up)\s+(?:the\s+)?"
+            r"(?:skill|integration|channel|bot)\b",
+            re.I,
+        ),
+        {"skill_configure"},
+    ),
+    (
+        re.compile(
+            r"\bskill_configure\s*\(\s*skill_name\s*=",
+            re.I,
+        ),
+        {"skill_configure"},
+    ),
     (re.compile(r"\b(schedul|cron|every\s+\d+|interval)\b", re.I), {"scheduler"}),
     (re.compile(r"\b(screenshot|capture\s+screen|eyes)\b", re.I), {"screenshot", "eyes"}),
     (re.compile(r"\b(download|offer_download)\b", re.I), {"offer_download"}),

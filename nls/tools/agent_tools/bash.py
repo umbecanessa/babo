@@ -28,6 +28,8 @@ import logging
 import os
 import re
 import signal as _signal_mod
+import time
+from dataclasses import dataclass, field
 import subprocess
 import sys
 import tempfile
@@ -40,6 +42,19 @@ from .base import (
     ToolResult,
     format_size,
     truncate_tail,
+)
+from .install_policy import SERVER_INSTALL_BLOCKED_MSG, plan_blocks_server_install
+from .gh_auth_hints import (
+    detect_shell_syntax_issue,
+    format_gh_auth_required_hint,
+)
+from .shell_hints import format_shell_error_hints, preflight_bash_command
+from nls.platform_shell import (
+    build_powershell_subprocess_argv,
+    looks_like_http_api_shell_failure,
+    looks_like_shell_command_failure,
+    normalize_powershell_command_names,
+    resolve_powershell_executable,
 )
 
 logger = logging.getLogger(__name__)
@@ -119,6 +134,11 @@ _PIP_INSTALL_RE = re.compile(r"\bpip3?\s+install\b", re.IGNORECASE)
 # Detect `python -m pip install` / `py -m pip install`.
 _PY_PIP_INSTALL_RE = re.compile(
     r"(?:^|[\s;&|])(?:python|python3|py)\s+-m\s+pip\s+install\b",
+    re.IGNORECASE,
+)
+# npm / pnpm / yarn install — routed to project_install when in project scope.
+_NPM_INSTALL_RE = re.compile(
+    r"\b(?:npm|pnpm|yarn)\s+(?:install|add|i)\b",
     re.IGNORECASE,
 )
 
@@ -206,7 +226,6 @@ def _kill_process_tree(pid: int) -> None:
             )
         else:
             os.killpg(os.getpgid(pid), _signal_mod.SIGTERM)
-            import time
             time.sleep(0.5)
             try:
                 os.killpg(os.getpgid(pid), _signal_mod.SIGKILL)
@@ -214,6 +233,97 @@ def _kill_process_tree(pid: int) -> None:
                 pass
     except Exception as e:
         logger.debug("Process tree kill for pid %d: %s", pid, e)
+
+
+# Node prints ``(node:12345)`` on stderr when the real server PID differs from
+# the npm/powershell wrapper we spawned (common on Windows).
+_NODE_CHILD_PID_RE = re.compile(r"\(node:(\d+)\)", re.IGNORECASE)
+_PYTHON_CHILD_PID_RE = re.compile(
+    r"(?:^|\n)\s*(?:INFO|DEBUG)?:?\s*Started server process \[(\d+)\]",
+    re.IGNORECASE,
+)
+
+
+def _process_is_alive(pid: int) -> bool:
+    """Return True if *pid* still exists (best-effort, cross-platform)."""
+    if not pid or pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError:
+        return False
+    return True
+
+
+def _extract_tracked_pid(output: str, wrapper_pid: int) -> int:
+    """Prefer the real server child PID when logs expose it (Windows/npm)."""
+    if not output:
+        return wrapper_pid
+    for pat in (_NODE_CHILD_PID_RE, _PYTHON_CHILD_PID_RE):
+        match = pat.search(output)
+        if match:
+            try:
+                child = int(match.group(1))
+                if child > 0 and child != wrapper_pid:
+                    return child
+            except ValueError:
+                pass
+    return wrapper_pid
+
+
+@dataclass
+class _DetachedProcessRecord:
+    proc: asyncio.subprocess.Process
+    command: str
+    cwd: str
+    kind: str
+    label: str
+    tracked_pid: int = 0
+    started_at: float = field(default_factory=time.time)
+
+    @property
+    def display_pid(self) -> int:
+        return self.tracked_pid or self.proc.pid or 0
+
+
+def _infer_process_label(command: str, output: str, kind: str) -> tuple[str, str]:
+    """Return (kind, human label) for a detached server/process."""
+    cmd_lower = command.lower()
+    if kind == "interactive":
+        return "interactive", "Interactive task"
+    resolved_kind = kind
+    if resolved_kind == "server":
+        if any(x in cmd_lower for x in ("uvicorn", "gunicorn", "fastapi", "flask", "django")):
+            resolved_kind = "backend"
+        elif any(
+            x in cmd_lower
+            for x in ("vite", "npm run dev", "next dev", "webpack", "ng serve", "yarn dev")
+        ):
+            resolved_kind = "frontend"
+
+    combined = f"{command}\n{output}"
+    for pat in (
+        r"Uvicorn running on (?:https?://)?[\d.]+:(\d+)",
+        r"Local:\s+https?://[^\s:]+:(\d+)",
+        r"Application is running on(?:\s+a\s+port)?\s*:?\s*(\d+)",
+        r"listening on (?:port\s+)?(\d+)",
+        r"ready on (?:https?://)?localhost:(\d+)",
+        r":(\d{4,5})\b",
+    ):
+        match = re.search(pat, combined, re.IGNORECASE)
+        if match:
+            port = match.group(1)
+            prefix = "Backend" if resolved_kind == "backend" else (
+                "Frontend" if resolved_kind == "frontend" else "Server"
+            )
+            return resolved_kind, f"{prefix} :{port}"
+
+    short_cmd = command.strip().replace("\n", " ")[:72]
+    return resolved_kind, short_cmd or resolved_kind.title()
 
 
 def _read_gh_token(hosts_path: Path) -> str:
@@ -323,26 +433,46 @@ class BashTool:
         blocked_patterns: list[str] | None = None,
         on_output: Any | None = None,
         shared_cwd: Any | None = None,
+        file_state_cache: object | None = None,
     ) -> None:
         self._cwd = cwd
         self._workspace_root = cwd
         self._shared_cwd = shared_cwd
+        self._file_state_cache = file_state_cache
         self._default_timeout = default_timeout
         self._max_lines = max_lines
         self._max_bytes = max_bytes
         self._blocked = blocked_patterns or []
         self._on_output = on_output
-        # Processes detached after interactive-prompt detection.  Kept here
-        # so they aren't garbage-collected (which could close pipes / send
-        # signals) before they finish their work (e.g. OAuth token exchange).
-        self._detached_procs: list[asyncio.subprocess.Process] = []
+        self._on_processes_changed: Any | None = None
+        # Processes detached after daemon/interactive detection.
+        self._detached_records: list[_DetachedProcessRecord] = []
         # Per-project venv cache: None = not resolved yet, "" = failed
         self._project_venv_bin: str | None = None
         self._plan_project_dir_fn: Callable[[], str] | None = None
+        self._plan_blocks_server_install_fn: Callable[[], bool] | None = None
         self._isolated_env = self._build_isolated_env(cwd)
+        self._project_install: Any | None = None
+        self._server_install: Any | None = None
+
+    def set_install_tools(
+        self,
+        *,
+        project_install: Any | None = None,
+        server_install: Any | None = None,
+    ) -> None:
+        """Wire install tools for auto-routing pip/npm bash commands."""
+        self._project_install = project_install
+        self._server_install = server_install
 
     def set_plan_project_dir_fn(self, fn: Callable[[], str] | None) -> None:
         self._plan_project_dir_fn = fn
+
+    def set_plan_blocks_server_install_fn(
+        self,
+        fn: Callable[[], bool] | None,
+    ) -> None:
+        self._plan_blocks_server_install_fn = fn
 
     def _plan_project_dir(self) -> str:
         if self._plan_project_dir_fn is None:
@@ -352,11 +482,82 @@ class BashTool:
         except Exception:
             return ""
 
+    def _record_is_alive(self, rec: _DetachedProcessRecord) -> bool:
+        """True while the detached server (or wrapper) is still running."""
+        pid = rec.display_pid
+        if not pid:
+            return False
+        if rec.proc.returncode is None:
+            return _process_is_alive(pid)
+        # Wrapper exited (npm.cmd on Windows) but node child may still serve.
+        return _process_is_alive(pid)
+
     def _reap_finished_procs(self) -> None:
-        """Remove already-exited processes from _detached_procs."""
-        self._detached_procs = [
-            p for p in self._detached_procs if p.returncode is None
+        """Remove already-exited processes from detached tracking."""
+        self._detached_records = [
+            rec for rec in self._detached_records
+            if self._record_is_alive(rec)
         ]
+
+    async def _notify_processes_changed(self) -> None:
+        cb = self._on_processes_changed
+        if cb is None:
+            return
+        try:
+            result = cb()
+            if asyncio.iscoroutine(result):
+                await result
+        except Exception:
+            logger.debug("BashTool: process-change notify failed", exc_info=True)
+
+    async def _register_detached(
+        self,
+        proc: asyncio.subprocess.Process,
+        command: str,
+        output: str,
+        kind: str,
+    ) -> None:
+        resolved_kind, label = _infer_process_label(command, output, kind)
+        wrapper_pid = proc.pid or 0
+        tracked_pid = _extract_tracked_pid(output, wrapper_pid)
+        self._detached_records.append(_DetachedProcessRecord(
+            proc=proc,
+            command=command.strip().replace("\n", " ")[:500],
+            cwd=self._cwd,
+            kind=resolved_kind,
+            label=label,
+            tracked_pid=tracked_pid,
+        ))
+        self._reap_finished_procs()
+        await self._notify_processes_changed()
+
+    def list_detached_processes(self) -> list[dict[str, Any]]:
+        """Return live detached project processes for UI / API."""
+        self._reap_finished_procs()
+        return [
+            {
+                "pid": rec.display_pid,
+                "kind": rec.kind,
+                "label": rec.label,
+                "command": rec.command,
+                "cwd": rec.cwd,
+                "started_at": rec.started_at,
+            }
+            for rec in self._detached_records
+            if self._record_is_alive(rec) and rec.display_pid
+        ]
+
+    async def kill_detached(self, pid: int) -> bool:
+        """Kill a tracked detached process by PID. Returns True if found."""
+        self._reap_finished_procs()
+        for idx, rec in enumerate(self._detached_records):
+            if rec.display_pid != pid:
+                continue
+            _kill_process_tree(rec.display_pid)
+            self._detached_records.pop(idx)
+            await self._notify_processes_changed()
+            return True
+        return False
 
     def cleanup(self) -> None:
         """Force-kill all tracked detached processes.
@@ -365,9 +566,10 @@ class BashTool:
         by long-running child processes (dev servers, bundlers, etc.).
         """
         self._reap_finished_procs()
-        for proc in self._detached_procs:
-            _kill_process_tree(proc.pid)
-        self._detached_procs.clear()
+        for rec in self._detached_records:
+            if rec.display_pid:
+                _kill_process_tree(rec.display_pid)
+        self._detached_records.clear()
 
     def _resolve_project_root(self) -> str | None:
         from .project_runtime import resolve_project_root
@@ -691,8 +893,9 @@ class BashTool:
 
         import re
 
-        # curl → curl.exe (PowerShell aliases curl to Invoke-WebRequest)
-        cmd = re.sub(r'\bcurl\b', 'curl.exe', cmd)
+        # curl → curl.exe (PowerShell aliases curl to Invoke-WebRequest).
+        # Skip when already curl.exe — \bcurl\b matches the "curl" prefix otherwise.
+        cmd = re.sub(r'\bcurl(?!\.exe)\b', 'curl.exe', cmd)
 
         # wget → Invoke-WebRequest or wget.exe if available
         cmd = re.sub(r'\bwget\b', 'curl.exe', cmd)
@@ -819,12 +1022,13 @@ class BashTool:
         if _ps1_m:
             _script = _ps1_m.group(1)
             _rest = _ps1_m.group(2)
+            _ps_exe = resolve_powershell_executable()
             cmd = (
-                f'powershell -ExecutionPolicy Bypass '
+                f'& "{_ps_exe}" -ExecutionPolicy Bypass '
                 f'-File "{_script}"{_rest}'
             )
 
-        return cmd
+        return normalize_powershell_command_names(cmd)
 
     _ENV_PROTECTED_KEYS = frozenset({
         "PATH", "HOME", "USERPROFILE", "VIRTUAL_ENV", "SYSTEMROOT",
@@ -1055,6 +1259,102 @@ class BashTool:
                 Path(_proj_venv).parent
             )
 
+    async def _try_install_redirect(
+        self,
+        command: str,
+        signal: asyncio.Event | None,
+    ) -> ToolResult | None:
+        """Auto-route pip/npm install to project_install or server_install."""
+        is_pip = bool(
+            _PIP_INSTALL_RE.search(command) or _PY_PIP_INSTALL_RE.search(command)
+        )
+        is_npm = bool(_NPM_INSTALL_RE.search(command))
+        if not is_pip and not is_npm:
+            return None
+
+        in_project = bool(self._resolve_project_root())
+        plan_blocks = plan_blocks_server_install(self._plan_blocks_server_install_fn)
+
+        if is_npm:
+            if not in_project:
+                return ToolResult(
+                    content=(
+                        "npm/pnpm/yarn install must run in the project directory. "
+                        "Your CWD is already the project folder when scoped — "
+                        "use project_install() instead of bash:\n\n"
+                        "  project_install()  # installs from package.json lockfile"
+                    ),
+                    is_error=True,
+                )
+            if self._project_install is None:
+                return ToolResult(
+                    content=(
+                        "Use project_install() for Node dependencies in this project "
+                        "(not bash npm install)."
+                    ),
+                    is_error=True,
+                )
+            result = await self._project_install.execute({}, signal)
+            prefix = "[Routed: npm/pnpm/yarn install → project_install]\n"
+            return ToolResult(
+                content=prefix + (result.content or ""),
+                is_error=result.is_error,
+                details=getattr(result, "details", None),
+            )
+
+        # pip — project venv when inside a project OR during an active plan
+        route_to_project = in_project or plan_blocks
+        if route_to_project:
+            if self._project_install is None:
+                return ToolResult(
+                    content=_project_install_redirect_hint(command),
+                    is_error=True,
+                )
+            params: dict[str, Any] = {}
+            req_file = _extract_pip_requirements_file(command)
+            if req_file:
+                params["requirements_file"] = req_file
+            else:
+                pkg = _extract_pip_package_spec(command)
+                if pkg:
+                    params["package"] = pkg
+            result = await self._project_install.execute(params, signal)
+            if plan_blocks and not in_project:
+                prefix = "[Routed: pip install → project_install (active plan)]\n"
+            else:
+                prefix = "[Routed: pip install → project_install]\n"
+            return ToolResult(
+                content=prefix + (result.content or ""),
+                is_error=result.is_error,
+                details=getattr(result, "details", None),
+            )
+
+        pkg = _extract_pip_package_spec(command)
+        if self._server_install is None:
+            return ToolResult(
+                content=(
+                    "pip is not available in bash. Use server_install for "
+                    "Babo agent-runtime Python packages:\n\n"
+                    f"  server_install(package={repr(pkg)})"
+                ),
+                is_error=True,
+            )
+        if not pkg:
+            return ToolResult(
+                content=(
+                    "pip install outside a project requires an explicit package. "
+                    "Use server_install(package='...') for Babo's runtime."
+                ),
+                is_error=True,
+            )
+        result = await self._server_install.execute({"package": pkg}, signal)
+        prefix = "[Routed: pip install → server_install (Babo agent runtime)]\n"
+        return ToolResult(
+            content=prefix + (result.content or ""),
+            is_error=result.is_error,
+            details=getattr(result, "details", None),
+        )
+
     async def execute(
         self,
         params: dict[str, Any],
@@ -1073,6 +1373,14 @@ class BashTool:
 
         if not command:
             return ToolResult(content="Error: 'command' is required.", is_error=True)
+
+        _syntax_issue = detect_shell_syntax_issue(command)
+        if _syntax_issue:
+            return ToolResult(content=_syntax_issue, is_error=True)
+
+        _preflight = preflight_bash_command(command, self._cwd)
+        if _preflight:
+            return ToolResult(content=_preflight, is_error=True)
 
         # Block dangerous commands
         for pattern in self._blocked:
@@ -1117,36 +1425,15 @@ class BashTool:
                 is_error=True,
             )
 
-        # Redirect pip install to project_install (project .venv) or server_install.
-        if _PIP_INSTALL_RE.search(command) or _PY_PIP_INSTALL_RE.search(command):
-            _install_hint = _project_install_redirect_hint(command)
-            _proj = self._resolve_project_root()
-            if _proj:
-                return ToolResult(
-                    content=(
-                        "pip is not available in bash. For PROJECT dependencies "
-                        "use project_install (installs into project/.venv — "
-                        "the same python bash uses here):\n\n"
-                        f"{_install_hint}\n\n"
-                        "Use server_install ONLY when YOU need a package in "
-                        "Babo's agent runtime (not the app being built)."
-                    ),
-                    is_error=True,
-                )
-            _pip_pkg = _extract_pip_package_spec(command)
-            return ToolResult(
-                content=(
-                    "pip is not available in bash. Use server_install for "
-                    "agent-runtime Python packages:\n\n"
-                    f"  server_install(package={repr(_pip_pkg)})"
-                ),
-                is_error=True,
-            )
+        # Auto-route pip/npm to project_install (project) or server_install (agent).
+        _install_redirect = await self._try_install_redirect(command, signal)
+        if _install_redirect is not None:
+            return _install_redirect
 
         if self._is_self_destructive(command):
             daemon_pids = [
-                str(p.pid) for p in self._detached_procs
-                if p.returncode is None
+                str(rec.proc.pid) for rec in self._detached_records
+                if rec.proc.returncode is None and rec.proc.pid
             ]
             hint = ""
             if daemon_pids:
@@ -1177,7 +1464,21 @@ class BashTool:
             )
 
         try:
+            import time as _time
+            from .bash_path_tracking import record_bash_paths
+
+            _started_at = _time.time()
             _result = await self._run_command(command, timeout, signal)
+            if not _result.is_error and self._file_state_cache is not None:
+                try:
+                    record_bash_paths(
+                        self._file_state_cache,
+                        command,
+                        self._cwd,
+                        started_at=_started_at,
+                    )
+                except Exception:
+                    logger.debug("bash path cache record failed", exc_info=True)
             if _server_warn and _result.content:
                 _result = ToolResult(
                     content=_server_warn + _result.content,
@@ -1260,11 +1561,7 @@ class BashTool:
             )
 
         if _IS_WINDOWS:
-            shell_cmd = [
-                "powershell", "-NoProfile", "-NonInteractive",
-                "-ExecutionPolicy", "Bypass",
-                "-Command", command,
-            ]
+            shell_cmd = build_powershell_subprocess_argv(command)
         elif sys.platform == "darwin" and os.path.isdir("/opt/homebrew"):
             shell_cmd = ["/usr/bin/arch", "-arm64", "/bin/bash", "-c", command]
         else:
@@ -1340,10 +1637,10 @@ class BashTool:
                         await t
                     except (asyncio.CancelledError, Exception):
                         pass
-                self._detached_procs.append(proc)
                 self._reap_finished_procs()
 
                 partial = b"".join(output_chunks).decode("utf-8", errors="replace")
+                await self._register_detached(proc, command, partial, "interactive")
                 return ToolResult(
                     content=(
                         "[INTERACTIVE PROMPT DETECTED — command is waiting "
@@ -1382,10 +1679,10 @@ class BashTool:
                         await t
                     except (asyncio.CancelledError, Exception):
                         pass
-                self._detached_procs.append(proc)
                 self._reap_finished_procs()
 
                 partial = b"".join(output_chunks).decode("utf-8", errors="replace")
+                await self._register_detached(proc, command, partial, "server")
                 return ToolResult(
                     content=(
                         "[SERVER/DAEMON STARTED — process detached to "
@@ -1552,6 +1849,11 @@ class BashTool:
             _path_hint = self._suggest_path_fix(truncated_text, command)
             if _path_hint:
                 result_text += f"\n{_path_hint}"
+            _shell_hints = format_shell_error_hints(
+                truncated_text, command, self._cwd,
+            )
+            if _shell_hints:
+                result_text += f"\n{_shell_hints}"
 
         # gh often exits 0 while printing "run gh auth login" — treat as failure.
         if not is_error and truncated_text and _GH_BIN_RE.search(command):
@@ -1563,19 +1865,17 @@ class BashTool:
                 "authentication failed",
             )):
                 is_error = True
-                result_text += (
-                    "\n\n[GITHUB AUTH REQUIRED]\n"
-                    "gh is not authenticated for this agent workspace.\n"
-                    "Fix (in order):\n"
-                    "1. Token from task/user: "
-                    "bash('echo TOKEN | gh auth login --with-token')\n"
-                    "2. WM credential: wm(action='borrow', "
-                    "domain='Project.Credential.GitHub')\n"
-                    "3. Search skills: clawhub(action='search', "
-                    "query='github') or discover_tools(query='github')\n"
-                    "Do NOT repeat gh repo create until auth succeeds "
-                    "(verify with bash('gh auth status'))."
+                result_text += format_gh_auth_required_hint()
+
+        # PowerShell Invoke-RestMethod often exits 0 while printing JSON errors.
+        if not is_error and truncated_text:
+            if looks_like_shell_command_failure(truncated_text, command):
+                is_error = True
+                _api_hints = format_shell_error_hints(
+                    truncated_text, command, self._cwd,
                 )
+                if _api_hints:
+                    result_text += f"\n{_api_hints}"
 
         # Annotate successful commands that produce deprecation/warning
         # output — prevents the agent from misinterpreting noisy-but-ok
@@ -1612,6 +1912,7 @@ def create_bash_tool(
     blocked_patterns: list[str] | None = None,
     on_output: Any | None = None,
     shared_cwd: Any | None = None,
+    file_state_cache: object | None = None,
 ) -> BashTool:
     """Factory: create a bash tool configured for a working directory."""
     return BashTool(
@@ -1622,4 +1923,5 @@ def create_bash_tool(
         blocked_patterns=blocked_patterns,
         on_output=on_output,
         shared_cwd=shared_cwd,
+        file_state_cache=file_state_cache,
     )

@@ -639,6 +639,18 @@ class WorkingMemory:
             member_idx=member_idx,
         )
 
+    def orch_prune_stale_escalations(
+        self,
+        member_terminal: Callable[[str, int], bool],
+    ) -> int:
+        """Drop WM escalation slots whose member is already terminal."""
+        before = len(self._orch_escalations)
+        self._orch_escalations = [
+            e for e in self._orch_escalations
+            if not member_terminal(e.team_id, e.member_idx)
+        ]
+        return before - len(self._orch_escalations)
+
     def orch_get_active_teams(self) -> list[OrchTeamState]:
         """Return teams not in a terminal state."""
         return [
@@ -1578,6 +1590,11 @@ class DualWorkingMemory:
     def orch_resolve_escalation(self, team_id: str, member_idx: int,
                                 outcome: str) -> None:
         self.active.orch_resolve_escalation(team_id, member_idx, outcome)
+
+    def orch_prune_stale_escalations(
+        self, member_terminal: Callable[[str, int], bool],
+    ) -> int:
+        return self.active.orch_prune_stale_escalations(member_terminal)
 
     def orch_get_active_teams(self) -> list[OrchTeamState]:
         return self.active.orch_get_active_teams()

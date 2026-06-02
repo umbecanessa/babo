@@ -2,6 +2,7 @@ import type { WorkbenchEntry } from './chat-workbench.service';
 import {
   escalateHintForEntry,
   extractEntryErrorText,
+  extractEntryOutputText,
   shouldShowErrorDetail,
 } from './workbench-error.util';
 
@@ -18,13 +19,14 @@ function errEntry(partial: Partial<WorkbenchEntry>): WorkbenchEntry {
 }
 
 describe('workbench-error.util', () => {
-  it('prefers Error chip over subtitle and detail', () => {
+  it('reads output from Preview chip for failed tools', () => {
     const entry = errEntry({
-      chips: [{ label: 'Error', value: 'chip error', variant: 'block' }],
+      chips: [{ label: 'Preview', value: 'tool output', variant: 'block' }],
       subtitle: 'subtitle error',
       detail: 'detail error',
     });
-    expect(extractEntryErrorText(entry)).toBe('chip error');
+    expect(extractEntryOutputText(entry)).toBe('tool output');
+    expect(extractEntryErrorText(entry)).toBe('tool output');
   });
 
   it('hides full output when it duplicates inline error', () => {

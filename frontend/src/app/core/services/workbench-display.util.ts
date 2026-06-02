@@ -10,7 +10,7 @@ export type WorkbenchDisplayGroup = {
   lane: WorkbenchEntry['lane'];
   delegateNumber?: number;
   ts: number;
-  status: 'running' | 'ok' | 'error';
+  status: 'running' | 'ok' | 'warn' | 'error';
 };
 export type WorkbenchDisplayItem = WorkbenchDisplaySingle | WorkbenchDisplayGroup;
 
@@ -63,7 +63,9 @@ export function groupWorkbenchEntries(
       ? 'error'
       : sorted.some((e) => e.status === 'running')
         ? 'running'
-        : 'ok';
+        : sorted.some((e) => e.status === 'warn')
+          ? 'warn'
+          : 'ok';
     ranked.push({
       ts: Math.max(...sorted.map((e) => e.ts)),
       item: {
@@ -84,7 +86,7 @@ export function groupWorkbenchEntries(
 export type WorkbenchToolBucket = {
   toolLabel: string;
   entries: WorkbenchEntry[];
-  status: 'running' | 'ok' | 'error';
+  status: 'running' | 'ok' | 'warn' | 'error';
 };
 
 /** Group parallel tool rows by badge (Write, Read, …) for compact UI. */
@@ -107,7 +109,9 @@ export function bucketsForParallelGroup(
       ? 'error'
       : bucket.some((e) => e.status === 'running')
         ? 'running'
-        : 'ok';
+        : bucket.some((e) => e.status === 'warn')
+          ? 'warn'
+          : 'ok';
     return { toolLabel, entries: bucket, status };
   });
 }

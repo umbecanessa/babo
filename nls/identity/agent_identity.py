@@ -29,6 +29,22 @@ _NAMING_PATTERNS = [
 ]
 
 
+def detect_name_from_user_input(user_input: str) -> str | None:
+    """Return a name the user explicitly assigned this turn, if any."""
+    if not (user_input or "").strip():
+        return None
+    for pattern in _NAMING_PATTERNS:
+        m = re.search(pattern, user_input, re.IGNORECASE)
+        if not m:
+            continue
+        for g in m.groups():
+            if g:
+                name = g.strip("\"' ").strip()
+                if len(name) >= 2:
+                    return name
+    return None
+
+
 def detect_name_from_signals(
     signals: list,
     user_input: str,
@@ -42,16 +58,7 @@ def detect_name_from_signals(
     Returns the detected name string, or None.
     """
     # Step 1: User's explicit naming
-    user_named: str | None = None
-    for pattern in _NAMING_PATTERNS:
-        m = re.search(pattern, user_input, re.IGNORECASE)
-        if m:
-            for g in m.groups():
-                if g:
-                    user_named = g.strip("\"' ")
-                    break
-            if user_named:
-                break
+    user_named = detect_name_from_user_input(user_input)
 
     # Step 2: LEARN signals for Agent.*.Name
     signal_name: str | None = None
@@ -105,6 +112,54 @@ def _extract_name(content: str) -> str | None:
     if not name[0].isupper():
         return None
     return name
+
+
+def naming_turn_user_prefix(assigned_name: str) -> str:
+    """Steer the model away from repeating the birth greeting after naming."""
+    return (
+        f"[User assigned your name: {assigned_name}]\n"
+        "Reply in one or two short sentences only: thank them, confirm you "
+        f"are {assigned_name}, and offer to help.\n"
+        "Do NOT repeat your initialization or \"just came online\" greeting.\n"
+        "Do NOT say you have no name or ask what to call you.\n\n"
+    )
+
+
+def sync_identity_name_in_working_memory(
+    working_memory: Any | None,
+    name: str,
+) -> None:
+    """Update Cryptex identity ring when the user names the agent mid-chat."""
+    if working_memory is None or not name:
+        return
+    try:
+        from datetime import datetime
+
+        from nls.brain.identity_renderer import DOMAIN_UNNAMED_BLOCK
+
+        if hasattr(working_memory, "populate_genesis_identity"):
+            working_memory.populate_genesis_identity(
+                agent_name=name,
+                today_date=datetime.now().strftime("%A, %B %d, %Y"),
+            )
+            return
+        ring = getattr(working_memory, "_rings", {}).get("identity")
+        if ring is not None:
+            ring.upsert_slot(
+                domain="name",
+                content=name,
+                slot_type="identity",
+                salience=1.0,
+                source="user",
+                access="malleable",
+            )
+            ring.remove_by_domain(DOMAIN_UNNAMED_BLOCK)
+    except Exception:
+        logger.debug(
+            "sync_identity_name_in_working_memory failed for %r",
+            name,
+            exc_info=True,
+        )
 
 
 def save_agent_name(agent_dir: Path, name: str, agent_id: str = "") -> None:

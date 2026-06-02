@@ -16,6 +16,7 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from nls.runtime.dispatch_sources import is_orchestration_dispatch_source
+from nls.tools.agent_tools.gh_auth_hints import format_gh_auth_recipe_hint
 
 from .coordinator_guard import hook_suppresses_raw_delegate
 from .types import AgentMode, LoopState, get_allowed_tools
@@ -61,8 +62,20 @@ _COORDINATOR_ONLY_MODES = frozenset({
 def block_mode_switch_for_profile(
     target_mode: AgentMode,
     profile: str,
+    *,
+    is_coordinator: bool = False,
+    delegates_active: bool = False,
+    must_await_delegates: bool = False,
+    dispatch_source: str = "",
 ) -> str | None:
     """Block EM mode switches when turn triage did not request orchestration."""
+    if is_coordinator or delegates_active or must_await_delegates:
+        profile = "orchestrated"
+    elif (dispatch_source or "").startswith((
+        "team_completion_review:",
+        "team_wave_complete:",
+    )):
+        profile = "orchestrated"
     if get_profile_spec(profile).allow_coordinator_modes:
         return None
     if target_mode not in _COORDINATOR_ONLY_MODES:
@@ -138,14 +151,27 @@ POST_LAUNCH_TOOLS = frozenset({
     "communicate", "await_delegates", "switch_mode",
 })
 
+# Tools allowed during partial completion review (some members still running).
+PARTIAL_COMPLETION_REVIEW_TOOLS = frozenset({
+    "team", "await_delegates", "communicate", "switch_mode",
+    "delegate_status", "scheduler", "read", "list_dir", "glob",
+    "grep", "file_history", "plan",
+})
+
 # Babysitting-only tools (used for idle/burn detection).
 _BABYSIT_TOOLS = frozenset({"wait", "team", "delegate_status"})
 
 # Tools that must not run while delegates are active (hard block).
 _FORBIDDEN_WHILE_DELEGATES = frozenset({
     "write", "edit", "delete_file", "move_file", "bash", "server_install",
-    "plan", "todo", "read", "list_dir", "grep", "glob", "semantic_search",
-    "web_search", "web_fetch", "delegate", "task_complete",
+    "project_install", "plan", "todo", "read", "list_dir", "grep", "glob",
+    "semantic_search", "web_search", "web_fetch", "delegate", "task_complete",
+})
+
+# IC tools blocked for EM while ANY delegate is running (all coordinator modes).
+_IMPL_BLOCKED_WHILE_DELEGATES_ACTIVE = frozenset({
+    "write", "edit", "delete_file", "move_file", "bash",
+    "server_install", "project_install",
 })
 
 # Team actions allowed while delegates run without escalation pending.
@@ -168,6 +194,16 @@ def delegates_running(delegate_manager: Any | None) -> bool:
         return False
 
 
+def orchestrator_may_impl_while_recovery(
+    state: LoopState,
+    delegate_manager: Any | None,
+) -> bool:
+    """Recovery allows EM IC work only when no delegate is actively running."""
+    if not getattr(state, "orchestrator_recovery", False):
+        return False
+    return not delegates_running(delegate_manager)
+
+
 @dataclass(frozen=True)
 class ToolPolicyInputs:
     """Snapshot of everything that affects the effective tool allowlist."""
@@ -179,6 +215,7 @@ class ToolPolicyInputs:
     is_coordinator: bool
     all_unlocked: frozenset[str]
     orchestration_profile: str = "solo_structured"
+    evaluating_wave_delivery: bool = False
 
 
 def build_tool_policy_inputs(
@@ -196,6 +233,10 @@ def build_tool_policy_inputs(
         is_coordinator=bool(state.coordinator_mode),
         all_unlocked=frozenset(all_unlocked),
         orchestration_profile=getattr(state, "orchestration_profile", "") or "solo_structured",
+        evaluating_wave_delivery=(
+            getattr(state, "coordinator_phase", "") == PHASE_EVALUATING_WAVE
+            and not delegates_running(delegate_manager)
+        ),
     )
 
 
@@ -207,6 +248,7 @@ def compute_tool_policy_fingerprint(inputs: ToolPolicyInputs) -> str:
         "1" if inputs.delegates_active else "0",
         "1" if inputs.suppress_raw_delegate else "0",
         "1" if inputs.is_coordinator else "0",
+        "1" if inputs.evaluating_wave_delivery else "0",
         inputs.orchestration_profile,
         ",".join(sorted(inputs.all_unlocked)),
     ))
@@ -227,6 +269,10 @@ def resolve_allowed_tools(inputs: ToolPolicyInputs) -> frozenset[str]:
     allowed = _base_tools_for_mode(inputs.mode, inputs.all_unlocked)
 
     if not inputs.is_coordinator:
+        # EXECUTING is the full IC surface; conversational profile caps apply
+        # in CHAT mode only (loop sets CHAT when profile is conversational).
+        if inputs.mode == AgentMode.EXECUTING:
+            return allowed
         return _apply_profile_cap(
             allowed,
             _effective_orchestration_profile(inputs),
@@ -236,6 +282,17 @@ def resolve_allowed_tools(inputs: ToolPolicyInputs) -> frozenset[str]:
 
     if inputs.must_await_delegates:
         allowed = POST_LAUNCH_TOOLS
+    elif (
+        inputs.delegates_active
+        and inputs.mode == AgentMode.EVALUATING
+        and inputs.evaluating_wave_delivery
+    ):
+        allowed = get_allowed_tools(AgentMode.EVALUATING)
+    elif (
+        inputs.delegates_active
+        and inputs.mode == AgentMode.EVALUATING
+    ):
+        allowed = PARTIAL_COMPLETION_REVIEW_TOOLS
     elif inputs.delegates_active and inputs.mode in (
         AgentMode.MONITORING,
         AgentMode.DELEGATING,
@@ -297,6 +354,10 @@ def apply_runtime_tool_filter(
         is_coordinator=bool(state.coordinator_mode),
         all_unlocked=frozenset(all_unlocked),
         orchestration_profile=getattr(state, "orchestration_profile", "") or "solo_structured",
+        evaluating_wave_delivery=(
+            getattr(state, "coordinator_phase", "") == PHASE_EVALUATING_WAVE
+            and not delegates_running(delegate_manager)
+        ),
     )
     allowed = resolve_allowed_tools(inputs)
     from nls.agentic.profile_guard_policy import tools_denied_by_hints
@@ -344,7 +405,16 @@ def tool_not_allowed_message(
     tool_name: str,
     mode: AgentMode,
     allowed: frozenset[str],
+    *,
+    orchestration_profile: str = "",
 ) -> str:
+    _profile = (orchestration_profile or "").strip().lower()
+    if mode == AgentMode.EXECUTING and _profile == "conversational":
+        return (
+            f"BLOCKED: tool '{tool_name}' is not available in conversational "
+            f"depth. Call switch_mode(mode='executing') to unlock bash, write, "
+            f"and file tools, or ask the user to rephrase as an explicit task."
+        )
     if mode == AgentMode.EXECUTING:
         return (
             f"BLOCKED: tool '{tool_name}' is not registered for this agent."
@@ -374,8 +444,25 @@ def block_tool_call(
     # Orchestration guards only apply in coordinator modes (not chat/executing).
     if mode in _ASSISTANT_FREEFORM_MODES or not state.coordinator_mode:
         _allowed = resolve_allowed_tools(_inputs)
-        if tool_name not in _allowed and tool_name not in ("get_tool_schema",):
-            return tool_not_allowed_message(tool_name, mode, _allowed)
+        if tool_name not in _allowed and tool_name not in (
+            "get_tool_schema",
+            "adopt_orchestration_profile",
+        ):
+            _msg = tool_not_allowed_message(
+                tool_name,
+                mode,
+                _allowed,
+                orchestration_profile=getattr(state, "orchestration_profile", "") or "",
+            )
+            from nls.agentic.profile_depth_policy import enrich_profile_blocked_message
+
+            return enrich_profile_blocked_message(
+                tool_name,
+                _msg,
+                state,
+                mode=mode,
+                all_unlocked=frozenset(_unlocked),
+            )
         return None
 
     if getattr(state, "must_await_delegates", False):
@@ -389,9 +476,33 @@ def block_tool_call(
                 "escalations, wave completion, or scheduled review."
             )
 
+    if mode == AgentMode.EVALUATING and tool_name == "wait":
+        seconds = args.get("seconds", 0)
+        try:
+            sec = int(seconds)
+        except (TypeError, ValueError):
+            sec = 60
+        if sec > 15:
+            return (
+                f"BLOCKED: wait({sec}s) during completion review — not EM oversight.\n"
+                "If one member finished: team(intervene, decision='approve') for them.\n"
+                "If others still run: await_delegates(summary='...') — you will wake "
+                "when the wave is quiet."
+            )
+
     running = _inputs.delegates_active
     if not running:
         return None
+
+    if tool_name in _IMPL_BLOCKED_WHILE_DELEGATES_ACTIVE:
+        if not orchestrator_may_impl_while_recovery(state, delegate_manager):
+            return (
+                f"BLOCKED: Delegate(s) still running — '{tool_name}' is IC work. "
+                "The orchestrator must not edit project files while the wave "
+                "is active.\n"
+                "Use team(inspect/hint/intervene) or await_delegates(summary='...'). "
+                "After the wave lands, switch_mode(evaluating) to review."
+            )
 
     if mode in (AgentMode.MONITORING, AgentMode.DELEGATING):
         if tool_name in _FORBIDDEN_WHILE_DELEGATES:
@@ -678,9 +789,13 @@ def should_force_coordinator_yield(
     delegate_manager: Any | None,
     *,
     dispatch_source: str = "",
+    has_pending_completion_reviews: bool = False,
 ) -> tuple[bool, str]:
     """Return (True, reason) when loop must exit to background."""
     if not delegates_running(delegate_manager):
+        return False, ""
+
+    if has_pending_completion_reviews:
         return False, ""
 
     _src = dispatch_source or getattr(state, "dispatch_source", "") or ""
@@ -828,6 +943,12 @@ def build_plan_wake_breadcrumbs(
             "[BREADCRUMB] switch_mode(evaluating) → verify artifacts → "
             "team(advance) or delegate the next step. No idle status text."
         )
+    else:
+        lines.append(
+            "[BREADCRUMB] All plan steps appear done. Spot-check with "
+            "read/list_dir, then plan(action='verify') → "
+            "plan(action='complete') → task_complete(summary='...')."
+        )
     return lines
 
 
@@ -843,10 +964,13 @@ def build_evaluating_action_breadcrumb(
     ]
     src = dispatch_source or ""
     if src.startswith("team_completion_review:"):
+        from nls.agentic.verification_hints import completion_review_verify_breadcrumb
+
         lines.append(
-            "Pending delegate completion reviews — call team(inspect) once, "
-            "then team(intervene, decision='approve') for each waiting member."
+            "Pending delegate completion reviews — spot-check deliverables "
+            "(read/list_dir/file_history), then team(intervene) per member."
         )
+        lines.append(completion_review_verify_breadcrumb())
     elif src.startswith("team_wave_complete:"):
         lines.append(
             "Wave landed — inspect deliverables, then team(advance) or "
@@ -855,19 +979,44 @@ def build_evaluating_action_breadcrumb(
 
     audit_issues: list[str] = []
     incomplete: list[str] = []
+    _active_plan = None
     if plan_tool is not None and hasattr(plan_tool, "_store"):
         try:
-            plan = plan_tool._store.find_active()
-            if plan is not None:
-                if plan.audit and plan.audit.issues:
-                    audit_issues = list(plan.audit.issues)
+            _active_plan = plan_tool._store.find_active()
+            if _active_plan is not None:
+                if _active_plan.audit and _active_plan.audit.issues:
+                    audit_issues = list(_active_plan.audit.issues)
                 incomplete = [
                     f"[{s.id}] {s.label} ({s.status})"
-                    for s in plan.steps
+                    for s in _active_plan.steps
                     if s.status not in ("done", "skipped")
                 ]
         except Exception:
             pass
+
+    if _active_plan is not None and not incomplete:
+        from nls.agentic.plan_work import can_complete_plan, format_plan_closure_nudge
+
+        _tm = getattr(plan_tool, "_team_manager", None)
+        if can_complete_plan(_active_plan, _tm):
+            lines.append(format_plan_closure_nudge(_active_plan.id))
+            return "\n".join(lines)
+        if not audit_issues:
+            from nls.agentic.plan_work import plan_open_step_count
+
+            if plan_open_step_count(_active_plan) == 0:
+                lines.append(
+                    "[BREADCRUMB] All steps done but verify/team gates remain. "
+                    f"Run plan(action='verify', plan_id='{_active_plan.id}') "
+                    "then plan(action='complete')."
+                )
+                lines.extend(
+                    build_plan_wake_breadcrumbs(
+                        audit_issues=audit_issues,
+                        incomplete_steps=incomplete,
+                    ),
+                )
+                return "\n".join(lines)
 
     lines.extend(
         build_plan_wake_breadcrumbs(
@@ -892,6 +1041,7 @@ def build_orchestration_wake_message(
     coordinator_phase: str = "",
     plan_audit_issues: list[str] | None = None,
     plan_incomplete_steps: list[str] | None = None,
+    board_snapshot_lines: list[str] | None = None,
 ) -> str:
     """Compact system message for orchestration wake-ups."""
     lines = [
@@ -900,6 +1050,9 @@ def build_orchestration_wake_message(
         "in the background.",
         "Act when there is a management decision: escalation, stuck member, "
         "wave landed, or acceptance review.",
+        "Every wake: glance at the board snapshot below; if master todo or "
+        "plan closure is pending, todo(list) + plan(read) before re-reviewing "
+        "a finalized wave.",
         "Do NOT idle-poll with wait(60+) or repeated inspect loops — "
         "Cryptex WM holds continuity.",
     ]
@@ -909,6 +1062,8 @@ def build_orchestration_wake_message(
         lines.append(f"Plan: {plan_progress}")
     if delegate_summary:
         lines.append(f"Delegates: {delegate_summary}")
+    if board_snapshot_lines:
+        lines.extend(board_snapshot_lines)
     if dual_wm is not None:
         try:
             for line in dual_wm.get_orchestration_wake_lines():
@@ -917,14 +1072,30 @@ def build_orchestration_wake_message(
             pass
     src = dispatch_source or "orchestration"
     lines.append(f"Wake source: {src}")
+    if src.startswith("board_reconcile:"):
+        lines.append(
+            "Board reconcile — wave review was redundant. Check Kanban + plan "
+            "closure (verify → complete → communicate). Do NOT team(advance)."
+        )
+        lines.extend(
+            build_plan_wake_breadcrumbs(
+                audit_issues=plan_audit_issues,
+                incomplete_steps=plan_incomplete_steps,
+            ),
+        )
+        return "\n".join(lines)
     if src.startswith("team_completion_review:"):
+        from nls.agentic.verification_hints import completion_review_verify_breadcrumb
+
         lines.append(
             "MANDATORY ACTION: One or more delegates are in completion review "
             "(batched below). Work the list once."
         )
+        lines.append(completion_review_verify_breadcrumb())
         lines.append(
-            "team(inspect) only if needed, then team(intervene, decision='approve') "
-            "per waiting member. Do NOT approve members already done."
+            "team(inspect) + read/list_dir key outputs, then "
+            "team(intervene, decision='approve') per waiting member only "
+            "after spot-check. Use decision='hint' to send incomplete work back."
         )
         lines.append(
             "See [WAKE ATTENTION] in working memory for the pending list. "
@@ -951,8 +1122,7 @@ def build_orchestration_wake_message(
         )
         lines.append(
             "If blocked on GitHub/gh: hint them to run "
-            "bash('echo TOKEN | gh auth login --with-token') with the user's "
-            "token, or search clawhub(action='search', query='github'). "
+            f"{format_gh_auth_recipe_hint()} "
             "You may also clawhub/discover_tools yourself before hinting."
         )
         return "\n".join(lines)

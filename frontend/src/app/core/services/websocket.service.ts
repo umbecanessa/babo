@@ -151,13 +151,15 @@ export interface ChatMessage {
     callId: string;
     arguments?: any;
     isError?: boolean;
+    /** Successful tool with policy warning (e.g. repeated write) — not a hard failure */
+    isWarning?: boolean;
     resultPreview?: string;
     done?: boolean;
     iteration?: number;
     output?: string;
     details?: Record<string, any>;
     groupCount?: number;
-    groupItems?: { label: string; isError: boolean }[];
+    groupItems?: { label: string; isError: boolean; isWarning?: boolean }[];
     groupExpanded?: boolean;
   };
   /** Agentic plan checklist */

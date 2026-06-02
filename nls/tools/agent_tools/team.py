@@ -33,6 +33,27 @@ class TeamTool:
     def __init__(self, team_manager: Any) -> None:
         self._tm = team_manager
 
+    def _approve_followup(
+        self,
+        team_id: str,
+        *,
+        team: Any,
+        approved_delegate_number: int | None = None,
+    ) -> tuple[str, str]:
+        """Tool-result suffix and breadcrumb text after approve (wave-aware)."""
+        self._tm.reconcile_with_delegates(team_id=team_id, persist=True)
+        team = self._tm._teams.get(team_id) or team
+        from nls.agentic.verification_hints import post_approve_advance_nudge
+
+        extra = post_approve_advance_nudge(
+            team_id=team_id,
+            team=team,
+            team_manager=self._tm,
+            approved_delegate_number=approved_delegate_number,
+        )
+        breadcrumb = extra.strip()
+        return extra, breadcrumb
+
     @property
     def name(self) -> str:
         return "team"
@@ -46,7 +67,9 @@ class TeamTool:
             "2) plan(action='add_step', plan_id=..., label='task', "
             "delegatable=true) for each task, "
             "3) team(action='create', plan_id=..., wave=0, name='...'), "
-            "4) team(action='launch', team_id=...). "
+            "4) plan(action='update', step_id=..., owned_paths=['frontend/']) "
+            "for each member — directory patterns cover all nested files, "
+            "5) team(action='launch', team_id=...). "
             "Steps with no depends_on form wave 0. "
             "Actions: create, list, inspect, launch, advance, hint, "
             "brief, pause, resume, disband, intervene, rewake, grant_paths.\n"
@@ -187,6 +210,7 @@ class TeamTool:
                 "disband": self._disband,
                 "rewake": self._rewake,
                 "grant_paths": self._grant_paths,
+                "update": self._update_redirect,
             }.get(action)
             if handler is None:
                 return ToolResult(
@@ -201,6 +225,19 @@ class TeamTool:
     # ------------------------------------------------------------------
     # Actions
     # ------------------------------------------------------------------
+
+    async def _update_redirect(self, params: dict[str, Any]) -> ToolResult:
+        step_id = (params.get("step_id") or "").strip() or "step-N"
+        return ToolResult(
+            content=(
+                "owned_paths, output_files, and step status belong on the plan, "
+                "not the team tool.\n"
+                f"Use plan(action='update', step_id='{step_id}', "
+                "owned_paths=['backend/app/models/'], status='in_progress')."
+            ),
+            is_error=True,
+            details={"redirect": "plan", "action": "update"},
+        )
 
     async def _create(self, params: dict[str, Any]) -> ToolResult:
         plan_id = (params.get("plan_id") or "").strip()
@@ -360,6 +397,19 @@ class TeamTool:
             if team.supersedes_team_id:
                 _attempt_note += f" (after {team.supersedes_team_id})"
 
+        _paths_note = ""
+        _step_ids = [m.step_id for m in team.members if getattr(m, "step_id", "")]
+        if _step_ids:
+            from nls.agentic.wave_coordination import (
+                format_owned_paths_assignment_reminder,
+            )
+
+            _paths_note = format_owned_paths_assignment_reminder(
+                _plan, _step_ids, plan_id=plan_id,
+            )
+            if _paths_note:
+                _paths_note = "\n\n" + _paths_note
+
         return ToolResult(
             content=(
                 f"Team created: {team.name} [{team.id}]\n"
@@ -370,6 +420,7 @@ class TeamTool:
                     for i, m in enumerate(team.members)
                 )
                 + _batch_note
+                + _paths_note
             ),
             details={"team_id": team.id, "action": "create"},
         )
@@ -419,11 +470,26 @@ class TeamTool:
             )
             summary += _hint
 
+        _pending_cr = getattr(self._tm, "_pending_completion_reviews", {}) or {}
+        _has_cr = (
+            not team.completion_reported
+            and any(
+                info.get("team_id") == team_id
+                for info in _pending_cr.values()
+            )
+        )
+        if _has_cr:
+            from nls.agentic.verification_hints import completion_review_verify_breadcrumb
+
+            summary += "\n\n" + completion_review_verify_breadcrumb(team_id=team_id)
+
         _details: dict[str, Any] = {
             "team_id": team.id,
             "action": "inspect",
             "status": team.status,
         }
+        if _has_cr:
+            _details["pending_completion_review"] = True
         if team.is_terminal and not team.completion_reported:
             _details["needs_advance"] = True
         if team.completion_reported:
@@ -512,6 +578,23 @@ class TeamTool:
         # Delegate spawning requires run_delegate_fn which only the
         # executor has.  Signal back via details so the executor can
         # handle the actual spawn + scheduler wiring.
+        _paths_note = ""
+        if team.plan_id and self._tm._plan_store is not None:
+            _plan = self._tm._plan_store.load(team.plan_id)
+            if _plan is not None:
+                from nls.agentic.wave_coordination import (
+                    format_owned_paths_assignment_reminder,
+                )
+
+                _step_ids = [
+                    m.step_id for m in team.members if getattr(m, "step_id", "")
+                ]
+                _paths_note = format_owned_paths_assignment_reminder(
+                    _plan, _step_ids, plan_id=team.plan_id,
+                )
+                if _paths_note:
+                    _paths_note = "\n\n" + _paths_note
+
         return ToolResult(
             content=(
                 f"Team {team.name} [{team.id}] queued for launch.\n"
@@ -527,6 +610,7 @@ class TeamTool:
                 f"- Do NOT create new plans — add steps to the existing one\n"
                 f"- When all members finish, use team(action='advance') "
                 f"to check results and launch the next wave"
+                + _paths_note
             ),
             details={
                 "team_id": team.id,
@@ -594,7 +678,16 @@ class TeamTool:
                             "reconciled": True,
                         },
                     )
-            return ToolResult(content=str(e), is_error=True)
+            from nls.agentic.team_advance_hints import format_advance_blocked_message
+
+            _team = self._tm.load(team_id)
+            msg = format_advance_blocked_message(
+                team_id,
+                reason=str(e),
+                team=_team,
+                team_manager=self._tm,
+            )
+            return ToolResult(content=msg, is_error=True)
         if result is None:
             _t = self._tm._teams.get(team_id)
             if _t is None:
@@ -650,6 +743,19 @@ class TeamTool:
                 if s.status not in ("done", "skipped")
             ]
 
+        from nls.agentic.plan_work import format_plan_closure_nudge
+
+        _plan_ready = (
+            not _remaining
+            and _outcome == "completed"
+            and _plan is not None
+        )
+        _closure_block = ""
+        if _plan_ready:
+            _closure_block = (
+                "\n\n" + format_plan_closure_nudge(_plan.id)
+            )
+
         _guidance = {
             "completed": (
                 "ALL members succeeded."
@@ -697,6 +803,7 @@ class TeamTool:
                 f"If the user asked for updates, send ONE concise message now.\n\n"
                 f"Member results:\n{_member_lines}\n\n"
                 f"ACTION REQUIRED: {_guidance}"
+                f"{_closure_block}"
             ),
             details={
                 "team_id": team_id,
@@ -704,6 +811,8 @@ class TeamTool:
                 "next_team": False,
                 "outcome": _outcome,
                 "wave": getattr(result, "wave_index", None),
+                "plan_id": getattr(result, "plan_id", "") or "",
+                "plan_ready_to_close": _plan_ready,
             },
         )
 
@@ -745,6 +854,33 @@ class TeamTool:
             return ToolResult(content="member index is required.", is_error=True)
         if not message:
             return ToolResult(content="message is required.", is_error=True)
+
+        team = self._tm._teams.get(team_id)
+        if team is None:
+            return ToolResult(content=f"Team '{team_id}' not found.", is_error=True)
+        if int(member_idx) < 0 or int(member_idx) >= len(team.members):
+            return ToolResult(
+                content=f"Invalid member index {member_idx}.",
+                is_error=True,
+            )
+        self._tm.reconcile_with_delegates(team_id=team_id, persist=True)
+        team = self._tm._teams.get(team_id)
+        if team is None:
+            return ToolResult(content=f"Team '{team_id}' not found.", is_error=True)
+        member = team.members[int(member_idx)]
+        if member.status in ("done", "failed", "cancelled"):
+            from nls.agentic.team_advance_hints import format_intervene_terminal_member_block
+
+            return ToolResult(
+                content=format_intervene_terminal_member_block(
+                    team_id,
+                    int(member_idx),
+                    member,
+                    team=team,
+                    decision="hint",
+                ),
+                is_error=True,
+            )
 
         ok = await self._tm.hint_member_async(
             team_id, int(member_idx), message,
@@ -832,14 +968,48 @@ class TeamTool:
             return ToolResult(content=f"Team '{team_id}' not found.", is_error=True)
         member = team.members[idx]
 
-        if member.status == "done" and decision == "approve":
-            return ToolResult(
-                content=(
-                    f"Member #{idx} (delegate #{member.delegate_number}) "
-                    "already completed. Call team(action='advance', "
-                    f"team_id='{team_id}') to close the wave."
-                ),
-            )
+        if member.status in ("done", "failed", "cancelled"):
+            if decision == "approve":
+                if team.completion_reported:
+                    return ToolResult(
+                        content=(
+                            f"Member #{idx} (delegate #{member.delegate_number}) "
+                            f"already completed and wave {team_id} is closed. "
+                            "Inspect the active plan for next work — do not "
+                            "team(advance) this wave again."
+                        ),
+                    )
+                _extra, _bc = self._approve_followup(
+                    team_id,
+                    team=team,
+                    approved_delegate_number=member.delegate_number,
+                )
+                return ToolResult(
+                    content=(
+                        f"Member #{idx} (delegate #{member.delegate_number}) "
+                        f"already completed.{_extra}"
+                    ),
+                    details={
+                        "team_id": team_id,
+                        "action": "intervene",
+                        "decision": "approve",
+                        "member_idx": idx,
+                        "approve_breadcrumb": _bc,
+                    },
+                )
+            if decision in ("hint", "extend", "terminate"):
+                from nls.agentic.team_advance_hints import format_intervene_terminal_member_block
+
+                return ToolResult(
+                    content=format_intervene_terminal_member_block(
+                        team_id,
+                        idx,
+                        member,
+                        team=team,
+                        decision=decision,
+                    ),
+                    is_error=True,
+                )
 
         dm = self._tm._delegate_manager
         if dm is None:
@@ -893,12 +1063,23 @@ class TeamTool:
                 member = team.members[idx] if team else member
                 if member.status == "done":
                     if decision == "approve":
+                        _extra, _bc = self._approve_followup(
+                            team_id,
+                            team=team,
+                            approved_delegate_number=member.delegate_number,
+                        )
                         return ToolResult(
                             content=(
                                 f"Member #{idx} (delegate #{member.delegate_number}) "
-                                "already finished — synced to done. "
-                                f"Call team(action='advance', team_id='{team_id}')."
+                                f"already finished — synced to done.{_extra}"
                             ),
+                            details={
+                                "team_id": team_id,
+                                "action": "intervene",
+                                "decision": "approve",
+                                "member_idx": idx,
+                                "approve_breadcrumb": _bc,
+                            },
                         )
                     return ToolResult(
                         content=(
@@ -951,12 +1132,38 @@ class TeamTool:
                     member_idx=idx,
                 )
 
+        _extra = ""
+        _approve_bc = ""
+        if decision == "approve":
+            _extra, _approve_bc = self._approve_followup(
+                team_id,
+                team=team,
+                approved_delegate_number=member.delegate_number,
+            )
+        elif decision == "hint":
+            _extra = (
+                "\n[BREADCRUMB] Sent work back to delegate — "
+                "wait for completion review again before approve."
+            )
+
         return ToolResult(
             content=(
                 f"Intervention sent to {team.name} member #{idx} "
                 f"(delegate #{member.delegate_number}): {action_desc}."
                 + (f"\nMessage: {message}" if message else "")
+                + _extra
             ),
+            details={
+                "team_id": team_id,
+                "action": "intervene",
+                "decision": decision,
+                "member_idx": idx,
+                **(
+                    {"approve_breadcrumb": _approve_bc}
+                    if decision == "approve" and _approve_bc
+                    else {}
+                ),
+            },
         )
 
     async def _rewake(self, params: dict[str, Any]) -> ToolResult:

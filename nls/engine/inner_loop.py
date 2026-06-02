@@ -170,6 +170,7 @@ class InnerLoop:
         # Set by the ws_handler after a foreground task completes so the
         # inner loop suppresses drive evaluation briefly.
         self._last_foreground_completion_ts: float = 0.0
+        self._last_agentic_stall_ts: float = 0.0
 
         # ── Event queue (Phase 0 — additive, unused by dispatch yet) ──
         # All event sources push typed AgentEvents here.  Phase 2 will
@@ -553,19 +554,35 @@ class InnerLoop:
             and self._pending_dispatches
             and self._can_dispatch_v2(rt)
         ):
-            prompt, source = self._pending_dispatches.pop(0)
-            logger.info(
-                "Agent %s: dispatching pending autonomous task "
-                "(source=%s, remaining=%d)",
-                agent_id, source, len(self._pending_dispatches),
+            from nls.agentic.wake_coordination import (
+                should_skip_stale_orchestration_wake,
             )
-            try:
-                await self._dispatch_autonomous_v2(rt, prompt, source=source)
-            except Exception:
-                logger.warning(
-                    "Agent %s: pending autonomous dispatch failed",
-                    agent_id, exc_info=True,
+
+            prompt, source = "", ""
+            while self._pending_dispatches:
+                prompt, source = self._pending_dispatches.pop(0)
+                _tm = getattr(rt, "_team_manager", None)
+                if _tm is not None and should_skip_stale_orchestration_wake(
+                    _tm,
+                    source,
+                    context=f"dispatch:{source}",
+                ):
+                    prompt, source = "", ""
+                    continue
+                break
+            if prompt and source:
+                logger.info(
+                    "Agent %s: dispatching pending autonomous task "
+                    "(source=%s, remaining=%d)",
+                    agent_id, source, len(self._pending_dispatches),
                 )
+                try:
+                    await self._dispatch_autonomous_v2(rt, prompt, source=source)
+                except Exception:
+                    logger.warning(
+                        "Agent %s: pending autonomous dispatch failed",
+                        agent_id, exc_info=True,
+                    )
 
         # --- Proactive initiative check ---
         if self.connection_manager is not None:
@@ -1221,15 +1238,19 @@ class InnerLoop:
             if _vllm is None:
                 return ("chat", "")
 
-            from nls.runtime.inference_compat import micro_inference_extra_body
+            from nls.runtime.inference_compat import prepare_micro_inference
 
-            _upstream = getattr(_vllm, "base_url", "") or ""
+            _micro_msgs, _micro_body = prepare_micro_inference(
+                [{"role": "user", "content": prompt}],
+                vllm_client=_vllm,
+                adapter_name=_adapter,
+            )
             response = await _vllm.generate(
                 adapter_name=_adapter,
-                messages=[{"role": "user", "content": prompt}],
+                messages=_micro_msgs,
                 max_tokens=20,
                 temperature=0.1,
-                extra_body=micro_inference_extra_body(_upstream, thinking=False),
+                extra_body=_micro_body,
             )
             _text = response.text if hasattr(response, "text") else str(response or "")
             choice = _text.strip().lower().split()[0] if _text else "chat"
@@ -1566,6 +1587,17 @@ class InnerLoop:
                     continue
 
                 source = event.source
+                from nls.agentic.wake_coordination import (
+                    should_skip_stale_orchestration_wake,
+                )
+                _tm = getattr(rt, "_team_manager", None)
+                if _tm is not None and should_skip_stale_orchestration_wake(
+                    _tm,
+                    source,
+                    context=f"event:{source}",
+                ):
+                    self._processed_event_ids.add(event.event_id)
+                    continue
                 try:
                     await self._dispatch_autonomous_v2(
                         rt, prompt, source=source,
@@ -1680,6 +1712,10 @@ class InnerLoop:
                     and isinstance(m.get("content"), str)
                     and not m.get("metadata", {}).get("autonomous")
                     and not _NAMING_RE.match(m.get("content", ""))
+                    and not any(
+                        m.get("content", "").startswith(p)
+                        for p in InnerLoop._STALL_NUDGE_PREFIXES
+                    )
                 ][-3:]
                 if user_msgs:
                     parts.append("Your current user directives (most recent conversation):")
@@ -1826,6 +1862,16 @@ class InnerLoop:
         failure/abort).
         """
         agent_id = rt.agent_id
+        from nls.agentic.wake_coordination import (
+            should_skip_stale_orchestration_wake,
+        )
+        _tm = getattr(rt, "_team_manager", None)
+        if _tm is not None and should_skip_stale_orchestration_wake(
+            _tm,
+            source,
+            context=f"run:{source}",
+        ):
+            return ""
         self._autonomous_executing = True
         _cm = self.connection_manager
         _t0 = time.time()
@@ -1900,6 +1946,26 @@ class InnerLoop:
                             "user_facing": True,
                             "source": source,
                         })
+                elif etype == "ask_user":
+                    await _cm.broadcast(agent_id, {
+                        "type": "ask_user",
+                        "question": data.get("question", ""),
+                        "request_id": (
+                            data.get("request_id")
+                            or data.get("tool_call_id")
+                            or ""
+                        ),
+                        "iteration": data.get("iteration", 0),
+                        "autonomous": True,
+                        "source": source,
+                    })
+                elif etype == "user_answer":
+                    await _cm.broadcast(agent_id, {
+                        "type": "user_answer",
+                        "content": data.get("answer", ""),
+                        "autonomous": True,
+                        "source": source,
+                    })
                 elif etype in _FORWARDED:
                     await _cm.broadcast(agent_id, {
                         **data, "autonomous": True,
@@ -1982,13 +2048,18 @@ class InnerLoop:
             if _mission_preamble:
                 prompt = _mission_preamble + "\n\n" + prompt
 
-            # Wire a copilot_queue so the wait tool can be interrupted by
-            # team-member escalations.  Mirror what ws_handler does: create a
-            # queue, set it on the TeamManager, and pass it to the loop.
-            _auto_copilot_queue: asyncio.Queue | None = None
+            # Wire a copilot_queue so ask_user / wait can receive user input.
+            # Mirror ws_handler: create a queue, set it on TeamManager, register
+            # for WS user_answer routing, and pass it to the loop.
+            from nls.skills.channel_processing import (
+                register_autonomous_copilot_queue,
+                unregister_autonomous_copilot_queue,
+            )
+
+            _auto_copilot_queue = asyncio.Queue()
+            register_autonomous_copilot_queue(agent_id, _auto_copilot_queue)
             _tm = getattr(rt, "_team_manager", None)
             if _tm is not None:
-                _auto_copilot_queue = asyncio.Queue()
                 _tm._copilot_queue = _auto_copilot_queue
 
             try:
@@ -2002,6 +2073,7 @@ class InnerLoop:
                     copilot_queue=_auto_copilot_queue,
                 )
             finally:
+                unregister_autonomous_copilot_queue(agent_id)
                 abort.set()
                 watch_task.cancel()
                 try:
@@ -2184,6 +2256,54 @@ class InnerLoop:
                 f"would be most valuable to explore next."
             )
 
+    _AUTONOMOUS_DRIVE_NAMES = frozenset({
+        "homeostasis", "curiosity", "competence", "social",
+        "self_direction", "disconfirmation",
+        # legacy / alias names still seen in older state
+        "epistemic", "wonder", "dmn",
+    })
+
+    _STALL_NUDGE_PREFIXES = (
+        "You appear to be stuck",
+        "[Loop stopped: stalled",
+    )
+
+    _POST_STALL_DRIVE_SUPPRESS_S = 1800.0
+
+    def _should_skip_autonomous_drive(
+        self,
+        rt: Any,
+        drive_name: str,
+        action_type: str,
+    ) -> bool:
+        """Pause background drives while the user has an active task."""
+        if drive_name not in self._AUTONOMOUS_DRIVE_NAMES:
+            return False
+        if action_type in ("notify", "deliver"):
+            return False
+        _stall_ts = max(
+            float(getattr(rt, "_last_agentic_stall_ts", 0.0) or 0.0),
+            float(self._last_agentic_stall_ts or 0.0),
+        )
+        if _stall_ts and (time.time() - _stall_ts) < self._POST_STALL_DRIVE_SUPPRESS_S:
+            return True
+        _user_busy = getattr(rt, "is_user_busy", getattr(rt, "is_busy", False))
+        if _user_busy:
+            return True
+        _wm = getattr(rt, "dual_wm", None) or getattr(rt, "working_memory", None)
+        if _wm is None:
+            return False
+        try:
+            return any(
+                getattr(g, "level", "") == "tactical"
+                and getattr(g, "source", "") in (
+                    "task_extract", "todo-list", "user",
+                )
+                for g in _wm.get_goals()
+            )
+        except Exception:
+            return False
+
     async def _dispatch_drive_goal(self, rt: Any, goal: Any) -> bool:
         """Dispatch a drive goal through the v2 agentic loop.
 
@@ -2195,25 +2315,12 @@ class InnerLoop:
 
         drive_name = getattr(goal, "drive_name", "unknown")
         action_type = getattr(goal, "action_type", "reflect")
-        if drive_name == "homeostasis" and action_type == "reflect":
-            _user_busy = getattr(rt, "is_user_busy", getattr(rt, "is_busy", False))
-            _wm = getattr(rt, "working_memory", None)
-            _pending_build = False
-            if _wm is not None:
-                try:
-                    _pending_build = any(
-                        getattr(g, "level", "") == "tactical"
-                        and getattr(g, "source", "") in ("task_extract", "todo-list", "user")
-                        for g in _wm.get_goals()
-                    )
-                except Exception:
-                    pass
-            if _user_busy or _pending_build:
-                logger.info(
-                    "Agent %s: skip homeostasis reflect — user/build task active",
-                    rt.agent_id,
-                )
-                return True
+        if self._should_skip_autonomous_drive(rt, drive_name, action_type):
+            logger.info(
+                "Agent %s: skip drive %s/%s — user task active",
+                rt.agent_id, drive_name, action_type,
+            )
+            return True
 
         prompt = self._drive_goal_to_prompt(goal, rt)
 
@@ -3054,6 +3161,17 @@ class InnerLoop:
                 "handle via delegate_status.",
                 getattr(rt, "agent_id", "?"), source,
             )
+            return
+
+        from nls.agentic.wake_coordination import (
+            should_skip_stale_orchestration_wake,
+        )
+        _tm = getattr(rt, "_team_manager", None)
+        if _tm is not None and should_skip_stale_orchestration_wake(
+            _tm,
+            source,
+            context=f"enqueue:{source}",
+        ):
             return
 
         # If an active dream is running, cancel it so the agentic lock is

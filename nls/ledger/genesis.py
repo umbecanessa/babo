@@ -83,7 +83,7 @@ import logging
 import os
 import shutil
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -850,7 +850,7 @@ def create_agent_from_genesis(
         "agent_name": agent_name or "",
         "genesis_version": genesis_version,
         "base_model": manifest.base_model,
-        "created_at": datetime.utcnow().isoformat(),
+        "created_at": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
         "sovereignty_mode": state.sovereignty_mode.value,
         "soul_wish": soul_wish or "",
         "memory_slot": None,

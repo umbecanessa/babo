@@ -36,6 +36,25 @@ _INTERRUPTED_MEMBER_SUMMARY = (
     "Re-launch the wave with team(action='launch') if work should continue."
 )
 
+_GRANT_PATHS_NO_REPEAT = (
+    "The delegate's file_access wait was released. "
+    "Do NOT call grant_paths or team(intervene, decision='extend') "
+    "again for the same paths."
+)
+
+
+def _paths_from_escalation_context(reason: str, context_summary: str) -> list[str]:
+    """Parse paths_requested lines from delegate file_access escalation context."""
+    del reason  # reserved for escalate:file_access:... prefixes
+    paths: list[str] = []
+    for line in (context_summary or "").splitlines():
+        low = line.strip().lower()
+        if low.startswith("paths_requested:"):
+            tail = line.split(":", 1)[1].strip()
+            paths = [p.strip() for p in tail.split(",") if p.strip()]
+            break
+    return paths
+
 
 @dataclass(frozen=True)
 class PendingAutoLaunch:
@@ -393,6 +412,8 @@ def _member_launch_preamble(
     project_dir_block: str = "",
 ) -> list[str]:
     """Build per-delegate preamble: peer awareness + wave context, not full specs."""
+    from nls.agentic.delegate_verification import format_delegate_verification_block
+
     parts: list[str] = []
     peer = _peer_awareness_block(team, member_idx)
     if peer:
@@ -408,6 +429,7 @@ def _member_launch_preamble(
         parts.append(uploads_block)
     if project_dir_block:
         parts.append(project_dir_block)
+    parts.append(format_delegate_verification_block())
     return parts
 
 
@@ -444,6 +466,7 @@ class TeamManager:
         self._escalation_counts: dict[int, int] = {}
         self._last_create_error: str = ""
         self._dispatch_drain: Callable[[str], int] | None = None
+        self._dispatch_has_prefix: Callable[[str], bool] | None = None
         self._schedule_orchestration_wake: Callable[[str, str], None] | None = None
         # delegate_number → pending EM completion review (delegate blocked)
         self._pending_completion_reviews: dict[int, dict[str, Any]] = {}
@@ -472,6 +495,12 @@ class TeamManager:
     ) -> None:
         """Drain inner-loop pending dispatches (source_exact e.g. team_checkback:team_x)."""
         self._dispatch_drain = fn
+
+    def set_dispatch_has_prefix(
+        self, fn: Callable[[str], bool] | None,
+    ) -> None:
+        """Return True if inner-loop queue has a dispatch with source prefix."""
+        self._dispatch_has_prefix = fn
 
     def set_schedule_orchestration_wake(
         self, fn: Callable[[str, str], None] | None,
@@ -750,26 +779,45 @@ class TeamManager:
                 "plan(accept_partial) if needed, then launch "
                 "next wave or patch gaps."
             )
-        from nls.agentic.plan_work import format_recovery_wake
+        from nls.agentic.plan_work import (
+            format_recovery_wake,
+            format_wave_complete_wake,
+            plan_open_step_count,
+        )
 
         _failed = [
             m.step_id for m in team.members
             if m.status in ("failed", "cancelled")
         ]
-        _base = format_recovery_wake(
-            plan_id=team.plan_id,
-            team_id=team.id,
-            failed_step_ids=_failed,
-        )
+        _fail_count = len(_failed)
+        if _outcome == "completed" and _fail_count == 0:
+            _pending = None
+            if team.plan_id and self._plan_store is not None:
+                try:
+                    _plan = self._plan_store.load(team.plan_id)
+                    if _plan is not None:
+                        _pending = plan_open_step_count(_plan)
+                except Exception:
+                    pass
+            _base = format_wave_complete_wake(
+                plan_id=team.plan_id,
+                team_id=team.id,
+                team_name=team.name,
+                outcome=_outcome,
+                ok_count=_ok,
+                fail_count=_fail,
+                pending_step_count=_pending,
+            )
+        else:
+            _base = format_recovery_wake(
+                plan_id=team.plan_id,
+                team_id=team.id,
+                failed_step_ids=_failed,
+            )
         return (
             f"{_base}\n"
-            f"[WAVE FINISHED — EM REVIEW REQUIRED]\n"
-            f"Team: {team.name} [{team.id}]\n"
-            f"Outcome: {_outcome.upper()} ({_ok} done, {_fail} failed)\n"
-            f"7) team(advance, team_id='{team.id}') after steps are resolved\n"
-            "8) Update Kanban. Stakeholder: communicate() ONLY if something "
-            "noteworthy (blocker, failed delegate, surprise). On routine "
-            "all-success waves stay silent — the UI shows wave progress."
+            "Stakeholder: communicate() ONLY for blockers or surprises — "
+            "routine success is shown in the UI."
         )
 
     def _notify_wave_review_required(self, team: Team) -> bool:
@@ -834,6 +882,16 @@ class TeamManager:
                 "TeamManager: scheduled EM review wake for %s (source=%s, wake=%d/%d)",
                 team.id, source, team.wave_review_wakes, WAVE_REVIEW_MAX_WAKES,
             )
+            if self._hooks is not None:
+                _absorb = getattr(self._hooks, "wm_absorb_wave_review", None)
+                if _absorb is not None:
+                    try:
+                        _absorb(team)
+                    except Exception:
+                        logger.debug(
+                            "TeamManager: wm_absorb_wave_review failed for %s",
+                            team.id, exc_info=True,
+                        )
             return True
         except Exception:
             logger.debug(
@@ -862,6 +920,12 @@ class TeamManager:
             sync_wake_attention_board(self)
         except Exception:
             pass
+
+    def clear_completion_reviews_for_team(self, team_id: str) -> None:
+        """Drop pending reviews when a wave is advanced or finalized."""
+        for delegate_num, info in list(self._pending_completion_reviews.items()):
+            if info.get("team_id") == team_id:
+                self.clear_completion_review(delegate_num)
 
     def has_pending_completion_reviews(self) -> bool:
         return bool(self._pending_completion_reviews)
@@ -892,25 +956,51 @@ class TeamManager:
         )
         return "\n".join(lines)
 
-    def reconcile_pending_completion_reviews(self) -> int:
+    def reconcile_pending_completion_reviews(
+        self,
+        current_dispatch_source: str = "",
+    ) -> int:
         """Re-enqueue one batched EM wake per team with pending reviews."""
         if not self._pending_completion_reviews or self._delegate_manager is None:
             return 0
+        from nls.agentic.wake_coordination import (
+            parse_completion_review_team_id,
+            pending_completion_review_count,
+        )
+
+        active_cr_team = parse_completion_review_team_id(current_dispatch_source)
         teams_touched: set[str] = set()
         for delegate_num, info in list(self._pending_completion_reviews.items()):
+            team = self._teams.get(info.get("team_id", ""))
+            if team is not None:
+                member_idx = int(info.get("member_idx", 0))
+                if 0 <= member_idx < len(team.members):
+                    if team.members[member_idx].status in (
+                        "done", "failed", "cancelled",
+                    ):
+                        self.clear_completion_review(delegate_num)
+                        continue
             ds = self._delegate_manager._delegates.get(delegate_num)
             if ds is None or ds.state != "running":
                 self.clear_completion_review(delegate_num)
                 continue
-            team = self._teams.get(info.get("team_id", ""))
-            if team is None or team.is_terminal:
+            if team is None or team.is_terminal or team.completion_reported:
                 self.clear_completion_review(delegate_num)
                 continue
             teams_touched.add(team.id)
         n = 0
         for team_id in teams_touched:
+            if active_cr_team and team_id == active_cr_team:
+                logger.debug(
+                    "TeamManager: skip completion-review reminder for %s — "
+                    "already handling in current loop (%s)",
+                    team_id, current_dispatch_source,
+                )
+                continue
             team = self._teams.get(team_id)
-            if team is None:
+            if team is None or team.completion_reported:
+                continue
+            if pending_completion_review_count(self, team_id) == 0:
                 continue
             if self._notify_completion_review_required(team, is_reminder=True):
                 n += 1
@@ -943,6 +1033,38 @@ class TeamManager:
                     )
         except Exception:
             pass
+        return removed
+
+    def _drain_member_escalation_dispatch(
+        self, team_id: str, delegate_number: int,
+    ) -> int:
+        """Remove queued proactive-escalation wake for one delegate."""
+        from nls.agentic.wake_coordination import member_escalation_source
+
+        source = member_escalation_source(team_id, delegate_number)
+        removed = 0
+        if self._dispatch_drain is not None:
+            try:
+                removed += self._dispatch_drain(source_exact=source)
+            except Exception:
+                logger.debug(
+                    "TeamManager: member-escalation drain failed", exc_info=True,
+                )
+        try:
+            from server.main import app as _app
+
+            cs = getattr(_app.state, "consciousness_scheduler", None)
+            if cs is not None:
+                il = cs.get_inner_loop(self._agent_id)
+                if il is not None:
+                    removed += il.drain_pending_dispatches(source_exact=source)
+        except Exception:
+            pass
+        if removed:
+            logger.info(
+                "TeamManager: drained %d stale escalation dispatch(es) for %s #%d",
+                removed, team_id, delegate_number,
+            )
         return removed
 
     def _notify_completion_review_required(
@@ -1498,17 +1620,10 @@ class TeamManager:
 
             _project_dir_block = ""
             if _project_dir:
-                _project_dir_block = (
-                    f"[PROJECT DIRECTORY — CRITICAL]\n"
-                    f"Your CWD (for bash AND file tools) is ALREADY set to {_project_dir}/.\n"
-                    f"Do NOT `cd {_project_dir}` — you are already inside it.\n"
-                    f"- bash: run commands directly (e.g. `mkdir -p backend/models`). "
-                    f"Do NOT prefix with `cd {_project_dir} &&`.\n"
-                    f"- read/write/glob: use paths relative to {_project_dir}/, "
-                    f"e.g. write(path=\"backend/main.py\").\n"
-                    f"Do NOT prepend '{_project_dir}/' to paths — it will double-nest.\n"
-                    f"NEVER create new top-level project directories."
+                from nls.agentic.delegate_verification import (
+                    format_project_directory_block,
                 )
+                _project_dir_block = format_project_directory_block(_project_dir)
             _step = (
                 _plan_for_wave.get_step(member.step_id)
                 if _plan_for_wave and member.step_id
@@ -1687,6 +1802,7 @@ class TeamManager:
         team.status = _outcome
         team.completed_at = time.time()
         team.completion_reported = True
+        self.clear_completion_reviews_for_team(team_id)
         self._clear_wave_ownership(team)
 
         if team.checkback_job and self._scheduler_manager is not None:
@@ -1832,11 +1948,10 @@ class TeamManager:
         if not raw_paths:
             return False, "paths must be a non-empty array of path patterns."
 
-        added_to_plan = False
-        granted: list[str] = []
+        newly_granted: list[str] = []
         if self._file_ledger is not None:
             try:
-                granted = self._file_ledger.grant_delegate_paths(
+                newly_granted = self._file_ledger.grant_delegate_paths(
                     team.wave_index,
                     member.delegate_number,
                     raw_paths,
@@ -1844,6 +1959,7 @@ class TeamManager:
             except Exception:
                 logger.debug("grant_member_paths ledger failed", exc_info=True)
 
+        added_to_plan = False
         if self._plan_store is not None and team.plan_id and member.step_id:
             try:
                 from .wave_coordination import resolve_step_owned_paths
@@ -1856,40 +1972,121 @@ class TeamManager:
                         if p not in existing:
                             existing.append(p)
                             added_to_plan = True
-                    step.owned_paths = existing
-                    self._plan_store.save(plan)
-                    if self._file_ledger is not None:
-                        resolved = resolve_step_owned_paths(
-                            step,
-                            project_dir=plan.project_dir,
-                            wave_index=team.wave_index,
-                        )
-                        self._file_ledger.set_delegate_paths(
-                            team.wave_index,
-                            member.delegate_number,
-                            resolved,
-                        )
-                        granted = resolved
+                    if added_to_plan:
+                        step.owned_paths = existing
+                        self._plan_store.save(plan)
+                        if self._file_ledger is not None:
+                            resolved = resolve_step_owned_paths(
+                                step,
+                                project_dir=plan.project_dir,
+                                wave_index=team.wave_index,
+                            )
+                            self._file_ledger.set_delegate_paths(
+                                team.wave_index,
+                                member.delegate_number,
+                                resolved,
+                            )
             except Exception:
                 logger.debug("grant_member_paths plan sync failed", exc_info=True)
 
-        if not granted and not added_to_plan:
+        already_in_scope = (
+            self._file_ledger is not None
+            and self._file_ledger.delegate_covers_paths(
+                team.wave_index, member.delegate_number, raw_paths,
+            )
+        )
+
+        if not newly_granted and not added_to_plan:
+            if already_in_scope:
+                hint = (
+                    "[PATH ACCESS] These paths are already in your assignment. "
+                    "Proceed with write/edit — do not escalate file_access again "
+                    "for the same paths."
+                )
+                if message:
+                    hint += f"\n\n{message.strip()}"
+                await self._unblock_delegate_file_access(
+                    member.delegate_number, hint,
+                )
+                self._finalize_file_access_grant(
+                    team.id, member_idx, member.delegate_number,
+                )
+                paths_label = ", ".join(raw_paths[:6])
+                return True, (
+                    f"Paths already granted for member #{member_idx} "
+                    f"(delegate #{member.delegate_number}): {paths_label}. "
+                    "Delegate was notified to continue. "
+                    + _GRANT_PATHS_NO_REPEAT
+                )
             return False, "No new paths granted (already in scope or invalid)."
 
+        paths_label = ", ".join(newly_granted[:8] or raw_paths[:8])
         hint = (
-            f"[PATH ACCESS GRANTED] You may now write/edit: "
-            + ", ".join(granted[:8])
-            + (f" (+{len(granted) - 8} more)" if len(granted) > 8 else "")
+            f"[PATH ACCESS GRANTED] You may now write/edit: {paths_label}"
+            + (
+                f" (+{len(newly_granted) - 8} more)"
+                if len(newly_granted) > 8
+                else ""
+            )
         )
         if message:
             hint += f"\n\n{message.strip()}"
-        await self.hint_member_async(team_id, member_idx, hint)
+        await self._unblock_delegate_file_access(member.delegate_number, hint)
+        self._finalize_file_access_grant(
+            team.id, member_idx, member.delegate_number,
+        )
         return True, (
             f"Granted paths to member #{member_idx} "
-            f"(delegate #{member.delegate_number}): "
-            + ", ".join(granted[:6])
-            + (f" (+{len(granted) - 6} more)" if len(granted) > 6 else "")
+            f"(delegate #{member.delegate_number}): {paths_label}. "
+            + _GRANT_PATHS_NO_REPEAT
         )
+
+    def _finalize_file_access_grant(
+        self,
+        team_id: str,
+        member_idx: int,
+        delegate_number: int,
+    ) -> None:
+        """Drop duplicate escalation wakes after a grant_paths decision."""
+        if self._hooks is not None:
+            resolve = getattr(self._hooks, "wm_orch_resolve_escalation", None)
+            if resolve is not None:
+                try:
+                    resolve(team_id, member_idx, "grant_paths")
+                except Exception:
+                    pass
+        self._drain_member_escalation_dispatch(team_id, delegate_number)
+        try:
+            from nls.agentic.wake_coordination import sync_wake_attention_board
+            sync_wake_attention_board(self)
+        except Exception:
+            pass
+
+    async def _unblock_delegate_file_access(
+        self,
+        delegate_number: int,
+        message: str,
+    ) -> None:
+        """Release a delegate blocked on file_access escalation (hint_queue wait)."""
+        if self._delegate_manager is None or not message.strip():
+            return
+        try:
+            result = await self._delegate_manager.intervene(
+                delegate_number,
+                action="hint",
+                message=message.strip(),
+                extra_iterations=0,
+            )
+            if result is not True:
+                logger.debug(
+                    "TeamManager: file_access unblock for #%d: %s",
+                    delegate_number, result,
+                )
+        except Exception:
+            logger.debug(
+                "TeamManager: file_access unblock failed for #%d",
+                delegate_number, exc_info=True,
+            )
 
     def sync_step_owned_paths_to_wave(
         self,
@@ -1983,6 +2180,53 @@ class TeamManager:
 
         member_idx = team.members.index(member)
 
+        self.reconcile_with_delegates(team_id=team.id, persist=False)
+        member = team.members[member_idx]
+
+        _requested_paths = _paths_from_escalation_context(reason, context_summary)
+        if (
+            _requested_paths
+            and self._file_ledger is not None
+            and (
+                "file_access" in reason
+                or reason.startswith("escalate:file_access")
+            )
+            and self._file_ledger.delegate_covers_paths(
+                team.wave_index, member.delegate_number, _requested_paths,
+            )
+        ):
+            await self._unblock_delegate_file_access(
+                member.delegate_number,
+                (
+                    "[PATH ACCESS] These paths are already in your assignment. "
+                    "Continue with write/edit — do not escalate file_access again."
+                ),
+            )
+            logger.info(
+                "TeamManager: auto-resolved file_access for delegate #%d "
+                "(paths already in scope: %s)",
+                delegate_number, ", ".join(_requested_paths[:4]),
+            )
+            return
+
+        if member.status in ("done", "failed", "cancelled"):
+            logger.info(
+                "TeamManager: ignore escalation for terminal member #%d "
+                "(delegate #%d, status=%s, reason=%s)",
+                member_idx, delegate_number, member.status, reason,
+            )
+            if self._hooks is not None:
+                resolve = getattr(self._hooks, "wm_orch_resolve_escalation", None)
+                if resolve is not None:
+                    try:
+                        resolve(team.id, member_idx, "member_already_terminal")
+                    except Exception:
+                        pass
+            self.clear_completion_review(delegate_number)
+            self._drain_member_escalation_dispatch(team.id, delegate_number)
+            self._drain_completion_review_dispatches(team.id)
+            return
+
         # Completion reviews don't count toward the regular escalation counter
         # so the first real stall/limit escalation still gets auto-extended.
         if reason != "completion_review":
@@ -2075,10 +2319,22 @@ class TeamManager:
                     "VERIFY: list_dir or read the key files before approving.\n\n"
                 )
             review_msg += (
-                "BEFORE deciding, you MUST verify the delegate's work:\n"
-                "  1. list_dir the relevant directory to check file structure\n"
-                "  2. Compare deliverables against the original task requirements\n"
-                "  3. Only APPROVE if the core deliverables exist (not just config files)\n\n"
+                "PRODUCTION REVIEW — before approve, confirm release-ready work:\n"
+                "  1. read/list_dir output paths; open the main service/route/component\n"
+                "  2. Match the original task — runnable behavior, not stubs/TODO-only\n"
+                "  3. Full-stack: UI calls must hit real backend routes you can find on disk\n"
+                "  4. Integrations: dep installed in the right package + smoke test evidence\n"
+                "  5. REJECT thin deliverables (config-only, client-only, zero writes)\n"
+                "  6. FastAPI projects: entrypoint backend/app/main.py, models under "
+                "backend/app/models/ — reject duplicate flat backend/models/ trees\n\n"
+                "[BREADCRUMB] You are the ORCHESTRATOR reviewing delegate #"
+                f"{member.delegate_number} — NOT that delegate. "
+                "Do NOT switch_mode(executing) or wait() for siblings to finish.\n"
+                "If this member is done: team(intervene, approve). "
+                "If others still run: approve this one, then await_delegates.\n"
+                "[BREADCRUMB] Approve = you accept production quality. "
+                "hint/rewake if incomplete. Do NOT team(advance) while other "
+                "members still run — inspect or await_delegates first.\n\n"
                 "The delegate is WAITING for your decision. You MUST respond:\n"
                 f"  APPROVE: team(action='intervene', team_id='{team.id}', "
                 f"member={member_idx}, decision='approve')\n"
@@ -2187,10 +2443,13 @@ class TeamManager:
             _file_access_hint = ""
             if "file_access" in reason or "paths_requested:" in (context_summary or ""):
                 _file_access_hint = (
-                    "\n\nFILE ACCESS REQUEST — prefer: team(action='grant_paths', "
+                    "\n\nFILE ACCESS REQUEST — call team(action='grant_paths', "
                     f"team_id='{team.id}', member={member_idx}, "
-                    "paths=['.gitignore', ...], message='approved — proceed'). "
-                    "Deny with a hint naming an alternative path if you refuse."
+                    "paths=[...], message='approved — proceed') ONCE. "
+                    "grant_paths unblocks the delegate automatically — "
+                    "do NOT also use team(intervene, decision='extend'). "
+                    "If the tool says paths are already granted, stop — do not repeat. "
+                    "Deny with team(intervene, decision='hint') only if you refuse."
                 )
             help_msg = (
                 f"[TEAM MEMBER HELP REQUEST — PROACTIVE]\n"
@@ -2638,17 +2897,10 @@ class TeamManager:
         _file_manifest: list[str] = []
         _project_dir_block = ""
         if _project_dir:
-            _project_dir_block = (
-                f"[PROJECT DIRECTORY — CRITICAL]\n"
-                f"Your CWD (for bash AND file tools) is ALREADY set to {_project_dir}/.\n"
-                f"Do NOT `cd {_project_dir}` — you are already inside it.\n"
-                f"- bash: run commands directly (e.g. `mkdir -p backend/models`). "
-                f"Do NOT prefix with `cd {_project_dir} &&`.\n"
-                f"- read/write/glob: use paths relative to {_project_dir}/, "
-                f"e.g. write(path=\"backend/main.py\").\n"
-                f"Do NOT prepend '{_project_dir}/' to paths — it will double-nest.\n"
-                f"NEVER create new top-level project directories."
+            from nls.agentic.delegate_verification import (
+                format_project_directory_block,
             )
+            _project_dir_block = format_project_directory_block(_project_dir)
             # Snapshot existing files for later SubCryptex manifest.
             _ws = self._agent_dir / "workspace" / _project_dir
             if _ws.is_dir():

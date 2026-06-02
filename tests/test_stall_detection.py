@@ -60,3 +60,24 @@ def test_identical_failed_bash_still_stalls():
         state.record_tool("bash", ToolResult(content="err", is_error=True), sig)
 
     assert detect_stall(state, cfg) is not None
+
+
+def test_diverse_bash_setup_not_stalled():
+    """Instruction-skill setup: varied bash commands must not trigger bash→bash cycle."""
+    state = LoopState()
+    state.hints = ["setup:instruction_skill"]
+    cfg = LoopConfig(max_iterations=50, enable_delegation=True)
+    sigs = [
+        'bash:{"command": "wsl --list"}',
+        'bash:{"command": "Invoke-RestMethod users/@me"}',
+        'bash:{"command": "winget install jq"}',
+        'bash:{"command": "Invoke-RestMethod guilds/123/channels"}',
+        'bash:{"command": "Invoke-RestMethod guilds/123/roles"}',
+        'bash:{"command": "wsl apt install jq"}',
+    ]
+    for sig in sigs:
+        state.tool_call_signatures.append(sig)
+        state.tool_history.append(("bash", False))
+        state.tool_successes["bash"] = state.tool_successes.get("bash", 0) + 1
+
+    assert detect_stall(state, cfg) is None

@@ -106,6 +106,9 @@ class ReadTool:
         max_bytes: int = DEFAULT_MAX_BYTES,
         shared_cwd: object | None = None,
         file_state_cache: object | None = None,
+        read_index: object | None = None,
+        reader_label: str = "agent",
+        loop_id: str = "",
     ) -> None:
         self._cwd = cwd
         self._workspace_root = cwd
@@ -113,6 +116,9 @@ class ReadTool:
         self._max_lines = max_lines
         self._max_bytes = max_bytes
         self._file_state_cache = file_state_cache
+        self._read_index = read_index
+        self._reader_label = reader_label
+        self._loop_id = loop_id
 
     @property
     def _effective_cwd(self) -> str:
@@ -164,6 +170,13 @@ class ReadTool:
                         "Example: max_chars=50000 for a ~50KB file."
                     ),
                 },
+                "force": {
+                    "type": "boolean",
+                    "description": (
+                        "Bypass read cache and reload from disk. Use when you "
+                        "suspect stale cached metadata or need a fresh read."
+                    ),
+                },
             },
             "required": ["path"],
         }
@@ -176,6 +189,14 @@ class ReadTool:
         path_str = params.get("path", "")
         if not path_str:
             return ToolResult(content="Error: 'path' is required.", is_error=True)
+
+        from .tool_path_args import normalize_tool_path_arg
+
+        path_str, path_err = normalize_tool_path_arg(
+            path_str, cwd=self._effective_cwd, key="path",
+        )
+        if path_err:
+            return ToolResult(content=path_err, is_error=True)
 
         path = _resolve_path(path_str, self._effective_cwd)
 
@@ -690,6 +711,82 @@ class ReadTool:
         self, path: Path, params: dict[str, Any],
     ) -> ToolResult:
         """Read a text file with offset/limit and truncation."""
+        force = bool(params.get("force"))
+        offset = params.get("offset")
+        start = 0
+        if offset is not None:
+            start = max(0, int(offset) - 1)
+        limit = params.get("limit")
+        _max_chars = params.get("max_chars")
+        if _max_chars is not None:
+            _max_chars = min(max(1000, int(_max_chars)), 100_000)
+
+        version = None
+        if self._read_index is not None:
+            from .read_index import tier1_eligible
+
+            version = self._read_index.content_version(path)
+            if version is not None and not force and _max_chars is None:
+                mtime, size = version
+                from .file_ledger import normalize_ledger_path
+
+                norm = normalize_ledger_path(str(path))
+                # Tier 2: serve slice from content cache when continuing
+                if start > 0 or limit is not None:
+                    cached_slice = self._read_index.get_cached_slice(
+                        norm,
+                        mtime=mtime,
+                        size=size,
+                        offset=start + 1,
+                        limit=int(limit) if limit is not None else None,
+                    )
+                    if cached_slice is not None:
+                        from nls.tools.agent_tools import bump_read_cache_hit
+                        bump_read_cache_hit()
+                        return ToolResult(
+                            content=(
+                                f"[CACHE SLICE — {norm}]\n{cached_slice}\n\n"
+                                f"[From content cache. Use read(path, force=true) "
+                                f"to reload from disk.]"
+                            ),
+                            details={"read_cache": "tier2_slice", "cache_key": self._read_index.make_cache_key(norm, mtime, size)},
+                        )
+                # Tier 1: short response when same version already read
+                if tier1_eligible(size):
+                    prior = self._read_index.lookup(
+                        norm,
+                        mtime=mtime,
+                        size=size,
+                        offset=start + 1,
+                        limit=int(limit) if limit is not None else None,
+                        max_chars=_max_chars,
+                    )
+                    if prior is not None:
+                        preview = None
+                        line_count = prior.lines
+                        try:
+                            raw_peek = path.read_text(encoding="utf-8", errors="replace")
+                            line_count = len(raw_peek.split("\n"))
+                            preview_lines = raw_peek.split("\n")[:40]
+                            preview = [
+                                f"{i+1:6d}|{ln}" for i, ln in enumerate(preview_lines)
+                            ]
+                        except Exception:
+                            pass
+                        from nls.tools.agent_tools import bump_read_cache_hit
+                        bump_read_cache_hit()
+                        return ToolResult(
+                            content=self._read_index.format_cache_hit(
+                                prior,
+                                current_lines=line_count,
+                                preview_lines=preview,
+                            ),
+                            details={
+                                "read_cache": "tier1_hit",
+                                "cache_key": prior.cache_key,
+                            },
+                        )
+
         try:
             raw = path.read_text(encoding="utf-8", errors="replace")
         except Exception as e:
@@ -698,29 +795,16 @@ class ReadTool:
         all_lines = raw.split("\n")
         total_lines = len(all_lines)
 
-        # Parse offset (1-indexed)
-        offset = params.get("offset")
-        start = 0
-        if offset is not None:
-            start = max(0, int(offset) - 1)
-            if start >= total_lines:
-                return ToolResult(
-                    content=f"Error: Offset {offset} is beyond end of file ({total_lines} lines total).",
-                    is_error=True,
-                )
+        if offset is not None and start >= total_lines:
+            return ToolResult(
+                content=f"Error: Offset {offset} is beyond end of file ({total_lines} lines total).",
+                is_error=True,
+            )
 
-        # Parse limit
-        limit = params.get("limit")
         if limit is not None:
             end = min(start + int(limit), total_lines)
         else:
             end = total_lines
-
-        # Agent-requested max_chars override (capped at 100K hard ceiling)
-        _HARD_CEILING = 100_000
-        _max_chars = params.get("max_chars")
-        if _max_chars is not None:
-            _max_chars = min(max(1000, int(_max_chars)), _HARD_CEILING)
 
         selected = all_lines[start:end]
         start_display = start + 1  # 1-indexed for display
@@ -731,15 +815,12 @@ class ReadTool:
             numbered.append(f"{i:6d}|{line}")
         content = "\n".join(numbered)
 
-        # When agent requests max_chars, use that as the byte limit
-        # instead of the default tool truncation.
         _eff_max_lines = self._max_lines
         _eff_max_bytes = self._max_bytes
         if _max_chars is not None:
             _eff_max_bytes = _max_chars
             _eff_max_lines = max(self._max_lines, _max_chars // 40)
 
-        # Truncation
         truncated_content, was_truncated, trunc_details = truncate_head(
             content, _eff_max_lines, _eff_max_bytes,
         )
@@ -757,12 +838,12 @@ class ReadTool:
                 f"Use offset={next_offset} to continue.]"
             )
             _details["truncation"] = trunc_details
+            self._record_read_index(path, raw, total_lines, start + 1, limit, _max_chars)
             return ToolResult(
                 content=truncated_content,
                 details=_details,
             )
 
-        # User-limited but more content exists
         if limit is not None and end < total_lines:
             remaining = total_lines - end
             next_offset = end + 1
@@ -770,7 +851,46 @@ class ReadTool:
                 f"\n\n[{remaining} more lines. Use offset={next_offset} to continue.]"
             )
 
+        self._record_read_index(path, raw, total_lines, start + 1, limit, _max_chars)
         return ToolResult(content=content, details=_details)
+
+    def _record_read_index(
+        self,
+        path: Path,
+        raw: str,
+        total_lines: int,
+        offset: int,
+        limit: int | None,
+        max_chars: int | None,
+    ) -> None:
+        if self._read_index is None:
+            return
+        version = self._read_index.content_version(path)
+        if version is None:
+            return
+        mtime, size = version
+        from .file_ledger import normalize_ledger_path
+
+        norm = normalize_ledger_path(str(path))
+        try:
+            entry = self._read_index.record_read(
+                norm,
+                mtime=mtime,
+                size=size,
+                lines=total_lines,
+                reader=self._reader_label,
+                loop_id=self._loop_id,
+                offset=offset,
+                limit=int(limit) if limit is not None else None,
+                max_chars=max_chars,
+                full_text=raw if size >= 8_192 else None,
+            )
+            logger.debug(
+                "ReadIndex recorded %s cache_key=%s reader=%s",
+                norm, entry.cache_key, self._reader_label,
+            )
+        except Exception:
+            logger.debug("ReadIndex record failed for %s", path, exc_info=True)
 
 
 def create_read_tool(
@@ -779,7 +899,15 @@ def create_read_tool(
     max_bytes: int = DEFAULT_MAX_BYTES,
     shared_cwd: object | None = None,
     file_state_cache: object | None = None,
+    read_index: object | None = None,
+    reader_label: str = "agent",
+    loop_id: str = "",
 ) -> ReadTool:
     """Factory: create a read tool configured for a working directory."""
-    return ReadTool(cwd, max_lines, max_bytes, shared_cwd=shared_cwd,
-                    file_state_cache=file_state_cache)
+    return ReadTool(
+        cwd, max_lines, max_bytes, shared_cwd=shared_cwd,
+        file_state_cache=file_state_cache,
+        read_index=read_index,
+        reader_label=reader_label,
+        loop_id=loop_id,
+    )

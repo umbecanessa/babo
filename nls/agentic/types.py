@@ -934,13 +934,59 @@ def virtual_tool_schemas_for_loop(
             _SWITCH_MODE_TOOL_SCHEMA,
         ])
     else:
-        schemas.append(_ESCALATE_TOOL_SCHEMA)
+        schemas.extend([_ESCALATE_TOOL_SCHEMA, _ASK_USER_TOOL_SCHEMA])
     if enable_delegation and enable_detached_delegates and delegate_manager is not None:
         schemas.append(_DELEGATE_STATUS_TOOL_SCHEMA)
         schemas.append(_WAIT_TOOL_SCHEMA)
         schemas.append(_AWAIT_DELEGATES_TOOL_SCHEMA)
+    schemas.append(_ADOPT_ORCHESTRATION_PROFILE_TOOL_SCHEMA)
     return schemas
 
+
+def virtual_tool_names_for_loop(
+    *,
+    enable_delegation: bool,
+    enable_detached_delegates: bool = False,
+    delegate_manager: Any | None = None,
+) -> frozenset[str]:
+    """Tool names from virtual_tool_schemas_for_loop (for unlocked_tools)."""
+    return frozenset(
+        name
+        for s in virtual_tool_schemas_for_loop(
+            enable_delegation=enable_delegation,
+            enable_detached_delegates=enable_detached_delegates,
+            delegate_manager=delegate_manager,
+        )
+        if (name := (s.get("function") or {}).get("name", ""))
+    )
+
+
+_ADOPT_ORCHESTRATION_PROFILE_TOOL_SCHEMA = {
+    "type": "function",
+    "function": {
+        "name": "adopt_orchestration_profile",
+        "description": (
+            "Commit a mid-loop orchestration depth change. Use when advisory "
+            "nudges recommend solo_structured (plan/todo/bash work) or "
+            "orchestrated (team waves). Refreshes tool policy immediately."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "profile": {
+                    "type": "string",
+                    "enum": ["solo_structured", "orchestrated"],
+                    "description": "Target orchestration depth.",
+                },
+                "reason": {
+                    "type": "string",
+                    "description": "Why you are adopting this depth.",
+                },
+            },
+            "required": ["profile"],
+        },
+    },
+}
 
 _SWITCH_MODE_TOOL_SCHEMA = {
     "type": "function",
@@ -1192,6 +1238,8 @@ _TOOL_FORCING_PREAMBLE = (
 
 import sys as _sys
 
+from nls.platform_shell import WINDOWS_INSTRUCTION_SKILLS_ENV_PROMPT
+
 _V5_AGENTIC_SUPPLEMENT = (
     "TASK FOCUS: You are an autonomous agent. "
     "You MUST use your tools to complete tasks — never give instructions "
@@ -1208,6 +1256,7 @@ _V5_AGENTIC_SUPPLEMENT = (
         "To persist environment variables across commands, write a .env file "
         "in your workspace root (KEY=VALUE per line) — it is auto-loaded "
         "before every bash call.\n\n"
+        + WINDOWS_INSTRUCTION_SKILLS_ENV_PROMPT
         if _sys.platform == "win32" else
         "ENVIRONMENT: You have bash with internet access, git, gh CLI, curl, "
         "python, node, pip, npm. "
@@ -1862,20 +1911,30 @@ _SUB_AGENT_SUPPLEMENT = (
     "write(path='backend/main.py'), NOT write(path='project-name/backend/main.py'). "
     "Never write files to the workspace root.\n\n"
 
-    "LOCAL VERIFICATION: Before task_complete or declaring your step done, "
-    "run project-local tests (pytest, npm test, or equivalent) via bash in "
-    "the project directory. Record pass/fail in your summary. Do not skip "
-    "tests — the orchestrator plan verify checks for test evidence.\n\n"
+    "PRODUCTION BAR (release-ready, not demo-ready):\n"
+    "- Your step is DONE only when the feature RUNS end-to-end in this repo: "
+    "real routes/services/components wired, not placeholders or comments alone.\n"
+    "- API/integration steps: install deps in the correct package (your CWD or "
+    "project_install(install_dir=...)); smoke-test (import, curl, or minimal test).\n"
+    "- Never hardcode API keys — use process.env / os.environ + .env.example.\n"
+    "- Frontend-only client code without matching backend routes is NOT complete "
+    "unless your task is explicitly frontend-only.\n\n"
+
+    "LOCAL VERIFICATION: Before task_complete, prove it works:\n"
+    "1) read back the main files you wrote\n"
+    "2) bash: run tests if present (pytest, npm test) OR a smoke command "
+    "(start server briefly, curl endpoint, node -e import)\n"
+    "3) Put pass/fail and what you ran in your task_complete summary\n"
+    "Do not call task_complete after only creating package.json or stub files.\n\n"
 
     "DEPENDENCIES: Two install tools — do not mix them.\n"
     "- project_install(package=...): libraries for the APP you are building "
-    "(Python → project/.venv, same python bash uses; Node → npm/pnpm/yarn).\n"
+    "(Python → project/.venv; Node → nearest package.json from CWD, or "
+    "install_dir=<folder> when multiple packages exist).\n"
     "- server_install(package=...): Babo agent runtime only (your own tools).\n"
-    "Run project_install ONLY after scaffolding exists (package.json, "
-    "requirements.txt, or pyproject.toml in your project dir). "
-    "Never call project_install with empty args.\n"
-    "After project_install succeeds, verify with bash `python -c \"import ...\"` "
-    "in the project — do NOT use server_install for app libraries.\n\n"
+    "Run project_install ONLY after scaffolding exists. "
+    "AssemblyAI npm package is assemblyai (not @assemblyai/assemblyai).\n"
+    "After project_install succeeds, verify with import/curl — not server_install.\n\n"
 
     + (
         "ENVIRONMENT: Your shell is PowerShell on Windows.\n"
@@ -1890,6 +1949,7 @@ _SUB_AGENT_SUPPLEMENT = (
         "WRONG (these WILL fail): mkdir -p, rm -rf, ls -la, cat file, "
         "head, tail, export VAR=, source, chmod, ||, >>, ~/\n"
         "Use relative paths.\n\n"
+        + WINDOWS_INSTRUCTION_SKILLS_ENV_PROMPT
         if _sys.platform == "win32" else
         "ENVIRONMENT: You have bash. Use standard bash syntax. "
         "Use relative paths.\n\n"
@@ -1950,6 +2010,7 @@ class LoopConfig:
     reserve_tokens: int = 6_144
     compaction_trigger_ratio: float = 0.85
     keep_recent_tokens: int = 40_000
+    delegate_keep_recent_tokens: int = 20_000
     digest_threshold: int = 2_000
     result_max_chars: int = 20_000
     # Anchor large read/web_fetch results in context after LLM digest (not bash).
@@ -1975,6 +2036,13 @@ class LoopConfig:
     enable_verification: bool = False
     enable_delegation: bool = True
     enable_detached_delegates: bool = False
+    enable_context_supersession: bool = True
+    enable_read_index: bool = True
+
+    def effective_keep_recent_tokens(self, is_delegate_loop: bool) -> int:
+        if is_delegate_loop and self.delegate_keep_recent_tokens > 0:
+            return self.delegate_keep_recent_tokens
+        return self.keep_recent_tokens
 
     # --- Thalamic routing ---
     vllm_xargs: dict[str, Any] | None = None
@@ -2044,6 +2112,9 @@ class LoopState:
     goals: list[str] = field(default_factory=list)
     hints: list[str] = field(default_factory=list)
     orchestration_profile: str = "solo_structured"
+    profile_depth_nudges_given: set[str] = field(default_factory=set)
+    profile_depth_adopted_this_loop: bool = False
+    pending_profile_anchor: str = ""
     goal_block_count: int = 0
     last_pending_indices: list[int] | None = None
     cumulative_actions: list[str] = field(default_factory=list)
@@ -2119,6 +2190,13 @@ class LoopState:
     # Cap guard-driven iteration extensions (audit loops without teams).
     guard_iteration_extensions: int = 0
 
+    # Context supersession + read cache metrics (per loop)
+    supersession_stubs_applied: int = 0
+    supersession_tokens_saved: int = 0
+    read_cache_hits: int = 0
+    # msg_index → effective error (includes bash soft-fail detection)
+    tool_msg_is_error: dict[int, bool] = field(default_factory=dict)
+
     # Six-mode orchestration: active operational mode.
     active_mode: "AgentMode" = field(default_factory=lambda: AgentMode.EXECUTING)
     _mode_schemas_applied: bool = False
@@ -2182,7 +2260,10 @@ class LoopState:
     verification_gate_passed: bool = False
 
     def record_tool(self, name: str, result: ToolResult, args_fingerprint: str = "") -> None:
-        from nls.agentic.tool_result_semantics import effective_tool_error
+        from nls.agentic.tool_result_semantics import (
+            counts_toward_error_budget,
+            effective_tool_error,
+        )
 
         _args: dict | None = None
         if name == "bash" and args_fingerprint:
@@ -2196,14 +2277,18 @@ class LoopState:
         _is_err = effective_tool_error(name, result, args=_args)
         if name == "bash" and _is_err and not result.is_error:
             result.is_error = True
+        _budget_err = counts_toward_error_budget(name, result, args=_args)
+        _hist_err = getattr(result, "is_error", False) or _is_err
 
-        self.tool_history.append((name, _is_err))
+        self.tool_history.append((name, _hist_err))
         sig = f"{name}:{args_fingerprint}" if args_fingerprint else name
         self.tool_call_signatures.append(sig)
-        if _is_err:
+        if _budget_err:
             self.tool_errors[name] = self.tool_errors.get(name, 0) + 1
             self.consecutive_errors += 1
             self.last_turn_had_errors = True
+            self.last_error_preview = (result.content or "")[:200]
+        elif _hist_err:
             self.last_error_preview = (result.content or "")[:200]
         else:
             self.tool_successes[name] = self.tool_successes.get(name, 0) + 1

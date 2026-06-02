@@ -21,10 +21,18 @@ _INLINE_JSON_TOOLCALL_RE = re.compile(
     re.DOTALL,
 )
 
+# Pseudo tool calls the model emits as prose instead of API tool_calls.
+_PSEUDO_TOOL_CALL_RE = re.compile(
+    r"\b(?:clawhub|discover_tools|skill_configure|crystallize_skill|mcp_manage|"
+    r"web_search|web_fetch|browser)\(\s*action\s*=",
+    re.IGNORECASE,
+)
+
 _CHAT_TOOLCALL_NUDGE = (
-    "[System: Your previous response was a raw tool call, but this is "
-    "a chat conversation — no tools are available here. Respond with "
-    "natural language only. Be warm and conversational.]"
+    "[System: Your previous response looked like a raw tool call in plain text. "
+    "Use the tool API (structured tool_calls), not prose syntax like "
+    "toolname(action='...'). If you already have the answer, reply in natural "
+    "language.]"
 )
 
 _SIGNAL_TAG_RE = re.compile(r"\[([A-Za-z_]+)(?:[:.]([^\]]*))?\]")
@@ -59,6 +67,16 @@ _INTENT_PATTERNS = re.compile(
     r"(please|pls)\b.{5,}|"
     r"(i\s+wish\s+i\s+could|if\s+only\s+i\s+could)\b"
     r")",
+    re.IGNORECASE,
+)
+
+# Task cues anywhere in the message (compound turns: greeting + real ask).
+_COMPOUND_TASK_RE = re.compile(
+    r"\b("
+    r"help me|how can we|how do we|how can i|how do i|how can you|"
+    r"give you access|admin access|set it up|set up|created a|"
+    r"discord server|discord bot|install a skill|search clawhub"
+    r")\b",
     re.IGNORECASE,
 )
 
@@ -242,13 +260,21 @@ def _is_task_message(text: str) -> bool:
     if not text or len(text.strip()) < 5:
         return False
     stripped = text.strip()
-    if _CONVERSATIONAL_PATTERNS.match(stripped):
-        return False
+    # Task/intent markers win over a conversational opener ("Hi! Your name is X — set up Y").
     if _TASK_PATTERNS.search(stripped):
         return True
     if _INTENT_PATTERNS.search(stripped):
         return True
+    if _COMPOUND_TASK_RE.search(stripped):
+        return True
+    if _CONVERSATIONAL_PATTERNS.match(stripped):
+        return False
     return False
+
+
+def response_has_pseudo_tool_call(text: str) -> bool:
+    """True when the model wrote a tool invocation as prose instead of API tool_calls."""
+    return bool(_PSEUDO_TOOL_CALL_RE.search(text or ""))
 
 
 def _message_implies_agentic_work(text: str) -> bool:
@@ -299,12 +325,17 @@ async def _classify_intent(
                         "content": content[:300],
                     })
         msgs.append({"role": "user", "content": message})
+        from nls.runtime.inference_compat import prepare_micro_inference
+
+        _micro_msgs, _micro_body = prepare_micro_inference(
+            msgs, vllm_client=vllm_client, adapter_name=adapter_name,
+        )
         result = await vllm_client.generate(
             adapter_name=adapter_name,
-            messages=msgs,
+            messages=_micro_msgs,
             max_tokens=64,
             temperature=0.0,
-            extra_body={"chat_template_kwargs": {"enable_thinking": False}},
+            extra_body=_micro_body,
         )
         raw = (result.text if hasattr(result, "text") else str(result or "")).upper().strip()
         for label in ("TASK_THINK", "TASK_NOTHINK", "CHAT_THINK", "CHAT_NOTHINK"):

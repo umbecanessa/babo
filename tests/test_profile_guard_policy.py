@@ -12,6 +12,7 @@ from nls.agentic.goals import TurnTriage
 from nls.agentic.profile_guard_policy import (
     apply_structured_hint_caps,
     em_pre_delegate_blocks_enabled,
+    enrich_instruction_skill_hints,
     inject_prompt_structured_hints,
     normalize_goals_for_profile,
     normalize_profile,
@@ -160,12 +161,63 @@ def test_solo_todo_no_breadcrumb_when_plan_unlocked():
     assert engine.evaluate(ctx) is None
 
 
-def test_direct_tool_lookup_breadcrumb():
+def test_solo_plan_create_breadcrumb():
+    engine = BreadcrumbEngine()
+    ctx = BreadcrumbContext(
+        tool_name="plan",
+        action="create",
+        unlocked_tools=frozenset({"plan", "write", "bash", "todo"}),
+        orchestration_profile="solo_structured",
+        result_details={
+            "plan_id": "plan_abc123",
+            "steps": [{"label": "Scaffold monorepo"}],
+        },
+    )
+    hint = engine.evaluate(ctx)
+    assert hint is not None
+    assert "SOLO workflow" in hint
+    assert "no team" in hint.lower()
+    assert "plan_abc123" in hint
+    assert "switch_mode(mode='executing')" in hint
+
+
+def test_solo_plan_create_skipped_on_error():
+    engine = BreadcrumbEngine()
+    ctx = BreadcrumbContext(
+        tool_name="plan",
+        action="create",
+        is_error=True,
+        unlocked_tools=frozenset({"plan"}),
+        orchestration_profile="solo_structured",
+        result_details={"plan_id": "plan_x"},
+    )
+    assert engine.evaluate(ctx) is None
+
+
+def test_forbid_tools_hint_denies_lookup_tools():
+    denied = tools_denied_by_hints(["forbid:tools"])
+    assert "web_search" in denied
+    assert "clawhub" in denied
+    assert "communicate" not in denied
+
+
+def test_cap_profile_from_hints_keeps_goals_on_forbid_tools():
+    triage = TurnTriage(
+        profile="solo_structured",
+        goals=["Draft landlord email"],
+        hints=["forbid:tools"],
+    )
+    triage.cap_profile_from_hints()
+    assert triage.profile == "conversational"
+    assert triage.goals == ["Draft landlord email"]
+
+
+def test_conversational_lookup_breadcrumb():
     engine = BreadcrumbEngine()
     ctx = BreadcrumbContext(
         tool_name="web_search",
         action="search",
-        orchestration_profile="direct_tool",
+        orchestration_profile="conversational",
     )
     hint = engine.evaluate(ctx)
     assert hint is not None
@@ -213,6 +265,21 @@ def test_skill_discovery_boost_skipped_for_solo():
     assert _Hooks._loop_state_ref == {}
 
 
+def test_rewrite_blocked_breadcrumb():
+    engine = BreadcrumbEngine()
+    ctx = BreadcrumbContext(
+        tool_name="write",
+        action="",
+        is_error=True,
+        result_details={"rewrite_blocked": True, "path": "backend/main.py"},
+        orchestration_profile="solo_structured",
+    )
+    hint = engine.evaluate(ctx)
+    assert hint is not None
+    assert "delete_file" in hint
+    assert "edit()" in hint
+
+
 def test_forbid_plan_hint_from_delegate_only_prompt():
     hints: list[str] = []
     inject_prompt_structured_hints(
@@ -222,3 +289,20 @@ def test_forbid_plan_hint_from_delegate_only_prompt():
     )
     assert "forbid:plan" in hints
     assert tools_denied_by_hints(hints) == frozenset({"plan", "todo"})
+
+
+def test_enrich_instruction_skill_setup_hint():
+    hints: list[str] = []
+    enrich_instruction_skill_hints(
+        "Here is the bot token — configure the integration",
+        ["Configure bot with provided credentials"],
+        hints,
+    )
+    assert "setup:instruction_skill" in hints
+    assert any("skill_configure" in h.lower() for h in hints)
+
+
+def test_enrich_instruction_skill_skips_duplicate():
+    hints = ["setup:instruction_skill"]
+    enrich_instruction_skill_hints("configure bot", ["Configure bot"], hints)
+    assert hints.count("setup:instruction_skill") == 1

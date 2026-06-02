@@ -2166,6 +2166,9 @@ $indigo-light: var(--accent-primary);
   &.error {
     border-color: rgba(248, 113, 113, 0.15);
   }
+  &.warn {
+    border-color: rgba(251, 191, 36, 0.2);
+  }
 }
 
 .tool-group-card {

@@ -23,6 +23,9 @@ logger = logging.getLogger(__name__)
 # Key: (agent_id, session_key) → asyncio.Queue
 _pending_queues: dict[tuple[str, str], asyncio.Queue] = {}
 
+# Background autonomous dispatches use a separate queue (not tied to a WS session).
+_autonomous_copilot_queues: dict[str, asyncio.Queue] = {}
+
 _TASK_PATTERNS = re.compile(
     r"\b(search|find|look\s*up|fetch|get|open|go\s+to|navigate|browse|run|execute|"
     r"create|make|build|write|generate|deploy|install|set\s*up|configure|"
@@ -254,6 +257,34 @@ async def _handle_voice_attachments(
     return "\n".join(voice_parts), remaining
 
 
+def register_autonomous_copilot_queue(
+    agent_id: str, queue: asyncio.Queue,
+) -> None:
+    """Register the copilot queue for a background autonomous dispatch."""
+    _autonomous_copilot_queues[agent_id] = queue
+
+
+def unregister_autonomous_copilot_queue(agent_id: str) -> None:
+    """Remove a background autonomous copilot queue when dispatch ends."""
+    _autonomous_copilot_queues.pop(agent_id, None)
+
+
+def try_feed_autonomous_answer(agent_id: str, text: str) -> bool:
+    """Route a user answer to a background autonomous ask_user wait."""
+    q = _autonomous_copilot_queues.get(agent_id)
+    if q is None:
+        return False
+    try:
+        q.put_nowait(text)
+        logger.info(
+            "Agent %s: routed message as autonomous ask_user answer",
+            agent_id,
+        )
+        return True
+    except Exception:
+        return False
+
+
 def try_feed_pending_answer(
     agent_id: str, session_key: str, text: str,
 ) -> bool:
@@ -262,6 +293,9 @@ def try_feed_pending_answer(
     Returns True if the message was consumed as an answer (caller should
     NOT start a new processing pipeline).
     """
+    if try_feed_autonomous_answer(agent_id, text):
+        return True
+
     key = (agent_id, session_key)
     q = _pending_queues.get(key)
     if q is not None:

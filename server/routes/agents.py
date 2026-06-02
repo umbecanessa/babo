@@ -187,6 +187,40 @@ async def get_agent(agent_id: str, request: Request):
     return request.app.state.agent_manager.get_agent_status(agent_id)
 
 
+@router.get("/{agent_id}/processes")
+async def list_project_processes(agent_id: str, request: Request):
+    """List detached project dev servers tracked by the agent bash tool."""
+    agent_dir = request.app.state.settings.agents_dir / agent_id
+    if not agent_dir.exists():
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    runtime = request.app.state.agent_manager.get_runtime(agent_id)
+    if runtime is None:
+        return {"processes": []}
+    return {"processes": runtime.list_project_processes()}
+
+
+@router.delete("/{agent_id}/processes/{pid}")
+async def kill_project_process(agent_id: str, pid: int, request: Request):
+    """Stop a detached project process started by the agent."""
+    agent_dir = request.app.state.settings.agents_dir / agent_id
+    if not agent_dir.exists():
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    runtime = request.app.state.agent_manager.get_runtime(agent_id)
+    if runtime is None:
+        raise HTTPException(status_code=404, detail="Agent runtime not loaded")
+
+    if not await runtime.kill_project_process(pid):
+        raise HTTPException(status_code=404, detail=f"Process {pid} not found")
+
+    return {
+        "ok": True,
+        "pid": pid,
+        "processes": runtime.list_project_processes(),
+    }
+
+
 @router.delete("/{agent_id}")
 async def delete_agent(agent_id: str, request: Request):
     """Delete an agent (evict from VRAM + remove from disk)."""

@@ -4,6 +4,11 @@ Each ``OrchestrationProfile`` maps to a ``ProfileOrchestrationSpec`` that
 drives tool gating, Cryptex ring/behavioral composition, plan semantics,
 guard strictness, and evaluator completion rules.  Downstream modules read
 the spec instead of scattering ``if profile ==`` checks.
+
+Profiles (3):
+  conversational — chat + quick lookup/discovery tools; no plan/team/bash/write
+  solo_structured — solo IC execution with plan/todo/file tools
+  orchestrated — full engineering-manager stack with teams and delegates
 """
 
 from __future__ import annotations
@@ -17,7 +22,7 @@ if TYPE_CHECKING:
     from nls.agentic.types import LoopState
 
 _VALID_PROFILES = frozenset({
-    "conversational", "direct_tool", "solo_structured", "orchestrated",
+    "conversational", "solo_structured", "orchestrated",
 })
 
 _DEFAULT_PROFILE: OrchestrationProfile = "solo_structured"
@@ -35,6 +40,13 @@ _EM_ONLY_BEHAVIORAL_DOMAINS = frozenset({
     "autonomous_updates",
     "dmn_discipline",
     "ooda_assessment",
+    "em_completion_review",
+})
+
+# Conversational / direct-tool rules — only when profile is conversational.
+_CONVERSATIONAL_ONLY_BEHAVIORAL_DOMAINS = frozenset({
+    "answer_in_prose",
+    "direct_tool_answer",
 })
 
 # Plan-linked instruction domains in RING_INSTRUCTIONS.
@@ -50,6 +62,8 @@ _TOOL_GROUP_PLANNING = "planning"
 
 def normalize_profile(profile: str | None) -> OrchestrationProfile:
     p = (profile or _DEFAULT_PROFILE).strip().lower()
+    if p == "direct_tool":
+        p = "conversational"
     if p in _VALID_PROFILES:
         return p  # type: ignore[return-value]
     return _DEFAULT_PROFILE
@@ -125,56 +139,17 @@ class ProfileOrchestrationSpec:
 
 
 def _spec_conversational() -> ProfileOrchestrationSpec:
+    """Chat + quick tools (lookup, discovery). No plan/team/bash/write."""
     return ProfileOrchestrationSpec(
         profile="conversational",
         tool_deny=frozenset({
             "team", "plan", "todo", "delegate", "bash", "write", "edit",
-            "delete_file", "move_file", "web_search", "web_fetch", "browser",
-            "read", "list_dir", "grep", "glob", "semantic_search",
-            "server_install", "await_delegates", "delegate_status",
-            "scheduler", "switch_mode",
+            "delete_file", "move_file", "server_install", "project_install",
+            "await_delegates", "delegate_status", "scheduler",
+            # switch_mode kept available so chat-depth turns can reach executing.
         }),
         behavioral_domains=frozenset({
             "answer_in_prose",
-            "communication_discipline",
-            "contacts_hygiene",
-            "deferred_channel_delivery",
-            "deferred_work",
-            "credentials_handling",
-            "escalate_to_user",
-            "credential_hygiene",
-        }),
-        rings_visible=frozenset({
-            "identity", "user_model", "consolidation", "emotional",
-            "behavioral", "environment", "channels",
-        }),
-        rings_when_plan_active=frozenset(),
-        tool_groups_hidden=frozenset({_TOOL_GROUP_PLANNING}),
-        auto_mark_delegatable_multi_step=False,
-        default_step_delegatable=False,
-        inject_tech_stack_block=False,
-        allow_coordinator_modes=False,
-        em_pre_delegate_blocks=False,
-        em_cold_start_goal_blocks=False,
-        em_static_tool_hints=False,
-        solo_static_tool_hints=False,
-        skill_discovery_on_stall=False,
-        em_assessment_loop=False,
-        complete_on_prose=True,
-        complete_on_implicit_delivery=True,
-        complete_on_plan_artifacts=False,
-        complete_on_plan_step_started=False,
-    )
-
-
-def _spec_direct_tool() -> ProfileOrchestrationSpec:
-    return ProfileOrchestrationSpec(
-        profile="direct_tool",
-        tool_deny=frozenset({
-            "team", "plan", "todo", "delegate", "await_delegates",
-            "delegate_status", "scheduler", "switch_mode",
-        }),
-        behavioral_domains=frozenset({
             "task_focus",
             "tool_best_practices",
             "direct_tool_answer",
@@ -182,14 +157,16 @@ def _spec_direct_tool() -> ProfileOrchestrationSpec:
             "communication_discipline",
             "contacts_hygiene",
             "deferred_channel_delivery",
+            "deferred_work",
             "credentials_handling",
             "escalate_to_user",
             "credential_hygiene",
+            "orchestration_depth",
         }),
         rings_visible=frozenset({
             "identity", "user_model", "consolidation", "emotional",
             "behavioral", "environment", "channels", "tools_mcp",
-            "project_facts", "instructions", "tactical_goals",
+            "skills", "project_facts", "instructions", "tactical_goals",
         }),
         rings_when_plan_active=frozenset(),
         tool_groups_hidden=frozenset({_TOOL_GROUP_PLANNING}),
@@ -273,7 +250,6 @@ def _spec_orchestrated() -> ProfileOrchestrationSpec:
 
 _SPECS: dict[str, ProfileOrchestrationSpec] = {
     "conversational": _spec_conversational(),
-    "direct_tool": _spec_direct_tool(),
     "solo_structured": _spec_solo_structured(),
     "orchestrated": _spec_orchestrated(),
 }
@@ -281,6 +257,13 @@ _SPECS: dict[str, ProfileOrchestrationSpec] = {
 
 def get_profile_spec(profile: str | None) -> ProfileOrchestrationSpec:
     return _SPECS[normalize_profile(profile)]
+
+
+_PROFILE_META_TOOLS = frozenset({
+    "adopt_orchestration_profile",
+    "get_tool_schema",
+    "switch_mode",
+})
 
 
 def apply_tool_deny(allowed: frozenset[str], profile: str | None) -> frozenset[str]:
@@ -291,14 +274,11 @@ def apply_tool_deny(allowed: frozenset[str], profile: str | None) -> frozenset[s
     filtered = allowed - spec.tool_deny
     if "communicate" in allowed:
         filtered = filtered | frozenset({"communicate"})
-    if spec.profile == "conversational":
-        return frozenset({"communicate"}) if "communicate" in allowed else filtered
-    return filtered
+    return filtered | (_PROFILE_META_TOOLS & allowed)
 
 
 def is_light_orchestration_profile(profile: str | None) -> bool:
-    p = normalize_profile(profile)
-    return p in ("conversational", "direct_tool")
+    return normalize_profile(profile) == "conversational"
 
 
 def behavioral_domain_visible_for_profile(domain: str, profile: str | None) -> bool:
@@ -306,9 +286,14 @@ def behavioral_domain_visible_for_profile(domain: str, profile: str | None) -> b
     spec = get_profile_spec(profile)
     if spec.behavioral_domains is not None:
         return spec.behavioral_domain_visible(domain)
+    p = spec.profile
+    if domain in _CONVERSATIONAL_ONLY_BEHAVIORAL_DOMAINS and p != "conversational":
+        return False
     # solo_structured: all except EM-only domains
-    if spec.profile == "solo_structured":
+    if p == "solo_structured":
         return domain not in _EM_ONLY_BEHAVIORAL_DOMAINS
+    if p == "orchestrated":
+        return domain not in _CONVERSATIONAL_ONLY_BEHAVIORAL_DOMAINS
     return True
 
 
@@ -317,18 +302,14 @@ def cap_profile_for_tool_surface(profile: str, allowed_tools: frozenset[str]) ->
     p = normalize_profile(profile)
     if p == "orchestrated" and "team" not in allowed_tools:
         p = "solo_structured"
-    effective = apply_tool_deny(allowed_tools, p)
-    if p in ("solo_structured", "orchestrated"):
+    if p == "solo_structured":
+        effective = apply_tool_deny(allowed_tools, p)
         if "plan" in allowed_tools and "plan" not in effective:
-            if any(t in effective for t in ("web_search", "web_fetch", "read", "browser")):
-                return "direct_tool"
-            return "conversational"
-    if p == "direct_tool":
-        if not any(
-            t in effective
-            for t in ("web_search", "web_fetch", "read", "browser", "list_dir")
-        ):
-            return "conversational"
+            if any(
+                t in effective
+                for t in ("web_search", "web_fetch", "read", "browser", "clawhub")
+            ):
+                return "conversational"
     return p
 
 
@@ -346,12 +327,9 @@ def profile_anchor_message(profile: str | None) -> str:
     spec = get_profile_spec(profile)
     anchors = {
         "conversational": (
-            "[ORCHESTRATION DEPTH: conversational] Answer in clear prose. "
-            "No plans, todos, teams, delegates, or file/shell tools."
-        ),
-        "direct_tool": (
-            "[ORCHESTRATION DEPTH: direct_tool] Use lookup tools, then answer "
-            "in chat. No plan, team, todo, or delegate."
+            "[ORCHESTRATION DEPTH: conversational] Answer in chat. Use lookup "
+            "and discovery tools (web_search, browser, clawhub) when helpful. "
+            "No plan, team, todo, delegate, bash, or file writes."
         ),
         "solo_structured": (
             "[ORCHESTRATION DEPTH: solo_structured] Execute yourself with "

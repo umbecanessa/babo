@@ -45,6 +45,7 @@ from .helpers import (
     _dedup_signal_tags,
     _message_implies_agentic_work,
     _runtime_uses_local_vllm,
+    response_has_pseudo_tool_call,
 )
 from .history import (
     _salvage_agentic_context,
@@ -341,6 +342,34 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                 )
                 continue
 
+            if msg.get("type") == "user_answer":
+                answer = msg.get("content", "").strip()
+                if answer:
+                    from nls.skills.channel_processing import (
+                        try_feed_autonomous_answer,
+                    )
+
+                    fed = try_feed_autonomous_answer(agent_id, answer)
+                    if not fed:
+                        try:
+                            copilot_queue.put_nowait(answer)
+                            fed = True
+                        except Exception:
+                            pass
+                    if fed:
+                        try:
+                            await websocket.send_json({
+                                "type": "user_answer",
+                                "content": answer,
+                            })
+                        except Exception:
+                            pass
+                        logger.info(
+                            "Agent %s: user_answer received (main loop): %.80s",
+                            agent_id, answer,
+                        )
+                continue
+
             _ch_type = msg.get("channel_type", "")
             if _ch_type:
                 runtime._channel_type = _ch_type
@@ -572,18 +601,13 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                         agent_id, exc_info=True,
                     )
 
-                _conversational_turn = (
+                _light_turn = (
                     _turn_triage is not None
                     and _turn_triage.is_conversational
-                ) or (
-                    _turn_triage is None
-                    and not _pre_goals
-                    and not _message_implies_agentic_work(user_input)
-                    and "[the user attached" not in user_input.lower()
                 )
                 if _turn_triage is not None:
                     needs_thinking = _turn_triage.thinking
-                elif _conversational_turn:
+                elif _light_turn or not _message_implies_agentic_work(user_input):
                     needs_thinking = await runtime.classify_thinking_need(
                         user_input, history,
                         model_override=_request_model,
@@ -614,6 +638,15 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                 _initial_thinking = ""
                 _SIGNAL_STARTS = ("```tool_call", "<tool_call>")
                 _aborted = False
+                _stream_profile = (
+                    getattr(_turn_triage, "profile", None)
+                    if _turn_triage is not None
+                    else (
+                        "solo_structured"
+                        if _message_implies_agentic_work(user_input)
+                        else "conversational"
+                    )
+                )
                 try:
                     async with listen_for_generation_abort(
                         websocket, agent_id, generation_abort,
@@ -623,7 +656,9 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                             history=history,
                             model_override=_request_model,
                             force_thinking=needs_thinking,
-                            include_tools=not _conversational_turn,
+                            include_tools=True,
+                            orchestration_profile=_stream_profile,
+                            tool_hints=_pre_hints,
                         ):
                             if generation_abort.is_set():
                                 _aborted = True
@@ -764,6 +799,9 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                 first_response_has_tools = (
                     has_tool_calls(full_response) or bool(stream_tool_calls)
                 )
+                _pseudo_tool_call = response_has_pseudo_tool_call(
+                    full_response or _visible,
+                )
 
                 # Safety net: hallucinated tool call as text
                 _hallucinated_tc = (
@@ -847,12 +885,13 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                 )
                 _force_agentic = not first_response_has_tools and (
                     (_pre_goals and not _visible_answer)
+                    or _pseudo_tool_call
                     or (
                         _needs_agentic_tools
                         and not _substantial
                         and (
                             _profile in (
-                                "direct_tool", "solo_structured", "orchestrated",
+                                "solo_structured", "orchestrated",
                             )
                             or (
                                 _profile is None
@@ -861,6 +900,12 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                         )
                     )
                 )
+                if _pseudo_tool_call and _force_agentic:
+                    logger.info(
+                        "Agent %s: pseudo tool call in chat response — "
+                        "forcing agentic loop",
+                        agent_id,
+                    )
                 if _force_agentic:
                     logger.info(
                         "Agent %s: forcing agentic loop — goals=%d "
@@ -1284,6 +1329,14 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
 
                         if agentic_result.aborted:
                             runtime._last_agentic_abort_ts = time.time()
+
+                        _exit = getattr(agentic_result, "exit_reason", "") or ""
+                        if _exit == "stalled":
+                            _stall_now = time.time()
+                            runtime._last_agentic_stall_ts = _stall_now
+                            runtime._last_agentic_abort_ts = _stall_now
+                            if _il is not None:
+                                _il._last_agentic_stall_ts = _stall_now
 
                         logger.info(
                             "Agent %s: agentic COMPLETED -- saving "

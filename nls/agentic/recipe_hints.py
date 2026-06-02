@@ -61,14 +61,10 @@ def match_recipe_hints(text: str) -> str | None:
         gh_path = str(_RECIPES_ROOT / "devops" / "github_repo.json")
         recipe = _load_recipe(gh_path)
         if recipe:
+            from nls.tools.agent_tools.gh_auth_hints import format_gh_auth_recipe_hint
+
             hints.append(_format_recipe_hint(recipe))
-            hints.append(
-                "GitHub auth: if gh says 'auth login', use "
-                "bash('echo TOKEN | gh auth login --with-token') with the "
-                "user's token, or wm(action='borrow', domain='Project.Credential.GitHub'). "
-                "If stuck, clawhub(action='search', query='github') or "
-                "discover_tools(query='github')."
-            )
+            hints.append(format_gh_auth_recipe_hint())
 
     if not hints:
         return None

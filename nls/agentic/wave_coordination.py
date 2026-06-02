@@ -299,6 +299,55 @@ def resolve_step_owned_paths(
     return patterns
 
 
+def steps_missing_owned_paths(
+    plan: Any,
+    step_ids: list[str],
+) -> list[tuple[str, str]]:
+    """Return (step_id, label) for wave members with no path assignment yet."""
+    missing: list[tuple[str, str]] = []
+    get_step = getattr(plan, "get_step", None)
+    if not get_step:
+        return missing
+    for sid in step_ids:
+        if not sid:
+            continue
+        step = get_step(sid)
+        if step is None:
+            continue
+        if getattr(step, "owned_paths", None) or getattr(step, "output_files", None):
+            continue
+        label = (getattr(step, "label", "") or sid).strip()
+        missing.append((sid, label))
+    return missing
+
+
+def format_owned_paths_assignment_reminder(
+    plan: Any,
+    step_ids: list[str],
+    *,
+    plan_id: str = "",
+) -> str:
+    """Orchestrator guidance to assign directory scopes before launch."""
+    pid = plan_id or getattr(plan, "id", "") or "<plan_id>"
+    missing = steps_missing_owned_paths(plan, step_ids)
+    if not missing:
+        return ""
+    lines = [
+        "⚠ PATH ASSIGNMENT — before launch, set owned_paths on each step "
+        "(directory patterns cover everything inside, e.g. frontend/):",
+    ]
+    for sid, label in missing[:6]:
+        lines.append(
+            f'  plan(action="update", plan_id="{pid}", step_id="{sid}", '
+            f'owned_paths=["…/"])  # {label[:60]}'
+        )
+    lines.append(
+        "If you skip this, delegates may still write unclaimed paths "
+        "(first write() wins), but scoped dirs prevent cross-teammate edits."
+    )
+    return "\n".join(lines)
+
+
 def derive_shared_paths(project_root: "Path") -> list[str]:
     """Project-relative integration files parallel delegates must not edit."""
     from pathlib import Path
@@ -354,9 +403,17 @@ def build_file_ownership_block(
         "Scratch files are OK outside exclusive teammate scopes (tmp_*.json, temp/).",
     ]
     if owned_patterns:
-        lines.append("\nYour paths (exclusive):")
+        lines.append("\nYour paths (exclusive — directory patterns include all nested files):")
         for p in owned_patterns[:12]:
             lines.append(f"  - {p}")
+    else:
+        lines.append(
+            "\nYour paths: not assigned yet — you may write() unclaimed files "
+            "(first write claims them). bash/npx may create files before write(); "
+            "those stay unclaimed until you write() them. For directory scope, "
+            "the orchestrator should assign owned_paths (e.g. frontend/) via "
+            "plan(action='update') before launch."
+        )
     if peer_lines:
         lines.append("\nTeammates (do not edit their files):")
         lines.extend(peer_lines[:8])
@@ -435,10 +492,34 @@ def _npm_dep_present(root: "Path", dep: str) -> bool:
     return False
 
 
+def _python_dep_manifest_paths(root: "Path") -> list["Path"]:
+    """Manifest files that may declare Python deps (monorepo-aware)."""
+    from pathlib import Path
+
+    names = ("requirements.txt", "pyproject.toml", "Pipfile")
+    paths: list[Path] = []
+    for name in names:
+        paths.append(root / name)
+    for sub in ("backend", "server", "api", "packages"):
+        subroot = root / sub
+        if not subroot.is_dir():
+            continue
+        for name in names:
+            paths.append(subroot / name)
+        if sub == "packages":
+            try:
+                for child in subroot.iterdir():
+                    if child.is_dir():
+                        for name in names:
+                            paths.append(child / name)
+            except OSError:
+                pass
+    return paths
+
+
 def _python_dep_present(root: "Path", pkg_name: str) -> bool:
     needle = pkg_name.lower()
-    for name in ("requirements.txt", "pyproject.toml", "Pipfile"):
-        path = root / name
+    for path in _python_dep_manifest_paths(root):
         if not path.is_file():
             continue
         try:

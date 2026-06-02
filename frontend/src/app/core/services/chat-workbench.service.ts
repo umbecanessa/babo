@@ -23,6 +23,7 @@ import {
   toolWorkbenchEndTitle,
   toolWorkbenchTitle,
 } from './workbench-labels.util';
+import { resolveToolDisplayOutcome } from './workbench-tool-outcome.util';
 
 import {
   filterWorkbenchEntries,
@@ -34,6 +35,8 @@ export type WorkbenchEntryKind = 'agentic' | 'tool' | 'activity';
 /** Chat thread task vs autonomous / memory-background work */
 export type WorkbenchLane = 'chat' | 'background';
 
+export type WorkbenchEntryStatus = 'running' | 'ok' | 'warn' | 'error';
+
 export interface WorkbenchEntry {
   id: string;
   ts: number;
@@ -41,7 +44,7 @@ export interface WorkbenchEntry {
   lane: WorkbenchLane;
   title: string;
   subtitle?: string;
-  status?: 'running' | 'ok' | 'error';
+  status?: WorkbenchEntryStatus;
   correlationKey?: string;
   detail?: string;
   delegateNumber?: number;
@@ -287,7 +290,11 @@ export class ChatWorkbenchService {
     return this._streamOutputKey ? `out-${this._streamOutputKey}` : null;
   }
 
-  private _mergeStreamOutput(toolName: string, chunk: string): void {
+  private _mergeStreamOutput(
+    toolName: string,
+    chunk: string,
+    delegateNumber?: number,
+  ): void {
     if (!this._streamOutputKey) {
       this._streamOutputKey = `orphan-${toolName}-${Date.now()}`;
     }
@@ -299,16 +306,21 @@ export class ChatWorkbenchService {
     this._outputBuffers.set(corr, acc);
     const tail = acc.slice(-320).trim();
     const detail = acc.slice(-DETAIL_KEEP);
+    const title =
+      delegateNumber != null && delegateNumber >= 0
+        ? `Shell output (sub-agent #${delegateNumber})`
+        : 'Shell output';
 
     this._upsert(corr, {
       lane: this._streamLane,
       kind: 'tool',
-      title: `Shell output`,
+      title,
       subtitle: tail || '(streaming…)',
       detail,
       status: 'running',
       toolLabel: 'Bash',
       correlationKey: corr,
+      delegateNumber,
     });
   }
 
@@ -528,9 +540,12 @@ export class ChatWorkbenchService {
         if (!isSubAgent) {
           this._finalizeActiveOutput(false);
         }
-        if (toolName === 'bash' && !isSubAgent) {
-          this._streamOutputKey = callId || `bash-${Date.now()}`;
-          this._streamLane = lane;
+        if (toolName === 'bash') {
+          const streamId = callId || `bash-${Date.now()}`;
+          this._streamOutputKey = isSubAgent
+            ? `sa${dlgNum || 0}-${streamId}`
+            : streamId;
+          this._streamLane = isSubAgent ? 'background' : lane;
         } else if (!isSubAgent) {
           this._streamOutputKey = null;
           this._streamLane = 'chat';
@@ -579,13 +594,19 @@ export class ChatWorkbenchService {
 
       case 'tool_execution_end': {
         const toolName = msg.tool_name || '';
-        const isError = msg.is_error || false;
         const rawPreview = (msg.result_preview || '').slice(0, 400);
         const preview = cleanToolResultPreview(toolName, rawPreview);
+        const outcome = resolveToolDisplayOutcome(
+          !!msg.is_error,
+          rawPreview,
+          toolName,
+        );
+        const isError = outcome === 'error';
+        const isWarn = outcome === 'warn';
         const callId = msg.call_id || '';
         const corr = `${corrNs}${callId || toolName}`;
         this._maybeTagPendingToolEnd(callId, dlgNum);
-        if (toolName === 'bash' && !isSubAgent) {
+        if (toolName === 'bash') {
           this._finalizeActiveOutput(isError);
           break;
         }
@@ -595,7 +616,7 @@ export class ChatWorkbenchService {
           || 'Tool';
         this._toolStartTitles.delete(corr);
         const endTitle = this._stripSubAgentTitlePrefix(
-          toolWorkbenchEndTitle(toolName, isError, startTitle),
+          toolWorkbenchEndTitle(toolName, isError, startTitle, isWarn),
         );
         const endArgs = normalizeToolArguments(msg.arguments || {});
         let filePaths = collectFilePaths(
@@ -649,7 +670,7 @@ export class ChatWorkbenchService {
             ...(filePaths.length
               ? { filePaths, filePath: filePaths[0] }
               : {}),
-            status: isError ? 'error' : 'ok',
+            status: isError ? 'error' : isWarn ? 'warn' : 'ok',
             ...(isError && rawPreview
               ? { detail: rawPreview.slice(0, DETAIL_KEEP) }
               : {}),
@@ -665,7 +686,7 @@ export class ChatWorkbenchService {
             ...(filePaths.length
               ? { filePaths, filePath: filePaths[0] }
               : {}),
-            status: isError ? 'error' : 'ok',
+            status: isError ? 'error' : isWarn ? 'warn' : 'ok',
           });
           break;
         } else if (preview) {
@@ -677,17 +698,6 @@ export class ChatWorkbenchService {
         const subtitleBody = chips?.length
           ? undefined
           : stripPathFromPreview(preview, filePaths[0]) || undefined;
-        if (isError && preview) {
-          chips = [
-            ...(chips ?? []),
-            {
-              label: 'Error',
-              value: preview.slice(0, 2400),
-              tone: 'warn' as const,
-              variant: 'block' as const,
-            },
-          ];
-        }
         this._upsert(corr, {
           title:
             toolName === 'switch_mode'
@@ -704,7 +714,7 @@ export class ChatWorkbenchService {
           ...(filePaths.length
             ? { filePaths, filePath: filePaths[0] }
             : {}),
-          status: isError ? 'error' : 'ok',
+          status: isError ? 'error' : isWarn ? 'warn' : 'ok',
           ...(isError && rawPreview
             ? { detail: rawPreview.slice(0, DETAIL_KEEP) }
             : {}),
@@ -714,13 +724,18 @@ export class ChatWorkbenchService {
 
       case 'tool_output_chunk': {
         const chunk = msg.chunk || '';
-        if (!chunk || isSubAgent) break;
+        if (!chunk) break;
         const toolName = (msg.tool_name || 'bash').toString();
+        if (isSubAgent && toolName !== 'bash') break;
         if (!this._streamOutputKey) {
-          this._streamOutputKey = `orphan-${toolName}-${Date.now()}`;
-          this._streamLane = msg.autonomous === true ? 'background' : 'chat';
+          const orphanId = isSubAgent
+            ? `sa${dlgNum || 0}-orphan-${toolName}-${Date.now()}`
+            : `orphan-${toolName}-${Date.now()}`;
+          this._streamOutputKey = orphanId;
+          this._streamLane =
+            isSubAgent || msg.autonomous === true ? 'background' : 'chat';
         }
-        this._mergeStreamOutput(toolName, chunk);
+        this._mergeStreamOutput(toolName, chunk, isSubAgent ? dlgNum : undefined);
         break;
       }
 

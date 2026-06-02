@@ -12,9 +12,14 @@ import importlib
 import logging
 import subprocess
 import sys
-from typing import Any
+from typing import Any, Callable
 
 from .base import AgentTool, ToolResult
+from .install_policy import (
+    SERVER_INSTALL_BLOCKED_MSG,
+    plan_blocks_server_install,
+    should_block_server_install,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +49,16 @@ _CLI_NOT_PYTHON: dict[str, str] = {
 class ServerInstallTool:
     """Install a Python package into the server's own runtime."""
 
+    def __init__(self) -> None:
+        self._plan_blocks_server_install_fn: Callable[[], bool] | None = None
+
+    def set_plan_blocks_server_install_fn(
+        self,
+        fn: Callable[[], bool] | None,
+    ) -> None:
+        """Wire plan-store lookup (active plan with tech_stack → block)."""
+        self._plan_blocks_server_install_fn = fn
+
     @property
     def name(self) -> str:
         return "server_install"
@@ -55,11 +70,12 @@ class ServerInstallTool:
             "venv) — expands what the agent itself can do (tools, skills, "
             "optional imports in agent code). NOT for dependencies of the app "
             "you are building; use project_install for those.\n"
+            "Disabled while an active plan with a tech stack is in progress "
+            "(use project_install for the app). To extend Babo's own capabilities "
+            "during a plan, pass for_agent_runtime=True.\n"
             "Use instead of 'bash pip install'. After install the package is "
             "importable in the server process immediately.\n"
-            "Do NOT use for CLI tools ('gh', 'docker', 'kubectl') — use bash. "
-            "For libraries your generated project needs (assemblyai, fastapi, "
-            "etc.) use project_install."
+            "Do NOT use for CLI tools ('gh', 'docker', 'kubectl') — use bash."
         )
 
     @property
@@ -74,6 +90,14 @@ class ServerInstallTool:
                         "'python-docx'). Supports pip syntax."
                     ),
                 },
+                "for_agent_runtime": {
+                    "type": "boolean",
+                    "description": (
+                        "Set true ONLY when installing a library for Babo's agent "
+                        "runtime (new tool/skill capability), NOT for the app "
+                        "being built. Required to bypass the active-plan gate."
+                    ),
+                },
             },
             "required": ["package"],
         }
@@ -84,6 +108,7 @@ class ServerInstallTool:
         signal: asyncio.Event | None = None,
     ) -> ToolResult:
         package = (params.get("package") or "").strip()
+        for_agent_runtime = bool(params.get("for_agent_runtime", False))
         if not package:
             return ToolResult(
                 content="Error: 'package' is required.",
@@ -107,6 +132,13 @@ class ServerInstallTool:
                 ),
                 is_error=True,
             )
+
+        blocked = should_block_server_install(
+            plan_blocks_server_install(self._plan_blocks_server_install_fn),
+            for_agent_runtime=for_agent_runtime,
+        )
+        if blocked:
+            return ToolResult(content=SERVER_INSTALL_BLOCKED_MSG, is_error=True)
 
         logger.info("server_install: installing '%s' via %s", package, sys.executable)
 
@@ -140,6 +172,10 @@ class ServerInstallTool:
                 or ln.startswith("Requirement already satisfied")
             ]
             summary = installed_lines[0] if installed_lines else f"Installed {package}"
+            if for_agent_runtime:
+                summary = (
+                    f"[Agent runtime capability] {summary}"
+                )
             logger.info("server_install: %s", summary)
             return ToolResult(content=summary)
 

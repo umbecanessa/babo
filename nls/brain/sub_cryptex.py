@@ -681,12 +681,41 @@ class SubCryptex:
             if tool_name == "read" and result_str and path:
                 file_pos = _file_to_position(path)
                 self._rings[SUB_RING_KNOWLEDGE].rotate(file_pos)
-                # Store a richer preview for the active position
                 preview = result_str[:500]
                 self._rings[SUB_RING_KNOWLEDGE].upsert_slot(
                     domain="file_content",
                     content=f"Read {path}: {preview}",
                     salience=0.85,
+                    source="tool",
+                    position=file_pos,
+                )
+                # Metadata index — not full body (chat or read cache holds content)
+                meta_line = result_str.split("\n", 1)[0][:80]
+                if "[CACHED READ" in result_str:
+                    meta_line = result_str.split("\n", 2)[1][:120] if "\n" in result_str else meta_line
+                total_hint = ""
+                for line in result_str.split("\n"):
+                    if "lines" in line and "bytes" in line:
+                        total_hint = line.strip()[:100]
+                        break
+                    if "Showing lines" in line or "more lines" in line:
+                        total_hint = line.strip()[:100]
+                body = f"Read {path}"
+                if total_hint:
+                    body += f" — {total_hint}"
+                elif meta_line:
+                    body += f" — {meta_line}"
+                cache_m = None
+                for line in result_str.split("\n"):
+                    if line.startswith("cache_key="):
+                        cache_m = line.split("=", 1)[-1].strip()
+                        break
+                if cache_m:
+                    body += f" [{cache_m}]"
+                self._rings[SUB_RING_KNOWLEDGE].upsert_slot(
+                    domain=f"FileReadIndex:{path[-40:]}",
+                    content=body,
+                    salience=0.9,
                     source="tool",
                     position=file_pos,
                 )
@@ -713,7 +742,25 @@ class SubCryptex:
                     source="tool",
                 )
             elif not is_error:
+                self._rings[SUB_RING_PROGRESS].upsert_slot(
+                    domain=f"ResolvedAttempt:{cmd[:40]}",
+                    content=f"bash ok: `{cmd[:80]}`",
+                    salience=0.75,
+                    source="tool",
+                )
                 self._update_progress()
+
+        from nls.brain.cryptex_tool_absorption import absorb_delegate_tool_result
+
+        absorb_delegate_tool_result(
+            self,
+            tool_name,
+            args,
+            result_str,
+            is_error,
+            guardrails_registry=getattr(self, "_guardrails_registry", None),
+            delegate_number=int(getattr(self, "_delegate_number", 0) or 0),
+        )
 
     @property
     def _all_files_touched(self) -> list[str]:
@@ -819,6 +866,22 @@ class SubCryptex:
                 domain="KeyDecisions",
                 content="Decisions: " + " | ".join(decisions[-5:]),
                 salience=0.8,
+                source="compaction",
+            )
+        superseded = getattr(anchor, "superseded_attempts", [])
+        if superseded:
+            self._rings[SUB_RING_PROGRESS].upsert_slot(
+                domain="SupersededAttempts",
+                content="Superseded: " + " | ".join(superseded[-8:]),
+                salience=0.7,
+                source="compaction",
+            )
+        blockers = getattr(anchor, "open_blockers", [])
+        if blockers:
+            self._rings[SUB_RING_KNOWLEDGE].upsert_slot(
+                domain="OpenBlockers",
+                content="Blockers: " + " | ".join(blockers[-5:]),
+                salience=0.95,
                 source="compaction",
             )
 

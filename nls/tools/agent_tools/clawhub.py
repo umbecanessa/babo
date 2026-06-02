@@ -138,7 +138,8 @@ class ClawHubTool:
                         f"This is an INSTRUCTION skill. Its instructions "
                         f"are now in your system prompt under <available_skills>. "
                         f"Follow them using bash(), read(), write() — "
-                        f"do NOT call '{slug}' as a tool.\n"
+                        f"do NOT call '{slug}' as a tool and do NOT use "
+                        f"skill_configure (that is for bundled NLS skills only).\n"
                     )
                 self._upsert_skill_wm(slug, activation or msg)
                 return ToolResult(content=msg)
@@ -160,9 +161,9 @@ class ClawHubTool:
                 else:
                     msg += (
                         f"This is an INSTRUCTION skill — do NOT call "
-                        f"'{slug}' as a tool. Check <available_skills> "
-                        f"in your system prompt and follow the instructions "
-                        f"using bash(), read(), write()."
+                        f"'{slug}' as a tool and do NOT use skill_configure. "
+                        f"Check <available_skills> in your system prompt and "
+                        f"follow the instructions using bash(), read(), write()."
                     )
                 return ToolResult(content=msg)
             return ToolResult(content=f"ClawHub install failed: {exc}", is_error=True)
@@ -222,15 +223,24 @@ class ClawHubTool:
     def _upsert_skill_wm(self, slug: str, description: str) -> None:
         """Store a brief skill summary in working memory."""
         try:
+            from nls.skills_setup_policy import resolve_data_skills_dir, skill_md_path
+
             runtime = self._get_runtime()
             if runtime and hasattr(runtime, "dual_wm") and runtime.dual_wm:
+                md = skill_md_path(slug)
+                base = resolve_data_skills_dir()
+                path_hint = ""
+                if md is not None:
+                    path_hint = f" SKILL.md: {md}."
+                elif base is not None:
+                    path_hint = f" Skills dir: {base / slug}."
                 summary = description[:300].strip()
                 runtime.dual_wm.upsert_fact(
                     domain=f"Skill.{slug}",
                     content=(
-                        f"Installed skill '{slug}'. {summary} "
-                        f"This is an INSTRUCTION skill — follow instructions "
-                        f"using bash/read/write, do NOT call as a tool."
+                        f"Installed skill '{slug}'. {summary}{path_hint} "
+                        f"This is an INSTRUCTION skill — read SKILL.md and use "
+                        f"bash/read/write; do NOT use skill_configure."
                     ),
                     source="clawhub",
                     salience=0.8,

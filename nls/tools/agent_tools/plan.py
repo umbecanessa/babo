@@ -286,14 +286,18 @@ class PlanTool:
         labels = " ".join(s.label.lower() for s in plan.steps)
         notes = " ".join((s.notes or "").lower() for s in plan.steps)
         combined = labels + " " + notes
-        has_test_step = any(
-            kw in labels
-            for kw in ("local test", "local verify", "run tests", "pytest", "npm test")
+        _test_step_kw = (
+            "local test", "local verify", "run tests", "pytest", "npm test",
+            "typecheck", "tsc", "build check", "smoke test", "node --check",
         )
-        ran_tests = any(
-            tok in combined
-            for tok in ("pytest", "npm test", "npm run test", "vitest", "jest")
+        _ran_test_tokens = (
+            "pytest", "npm test", "npm run test", "vitest", "jest",
+            "tsc --noemit", "tsc -b", "npx tsc", "node --check",
+            "vite build", "npm run build", "pnpm test", "pnpm run test",
+            "exit code 0", "passed typecheck", "typecheck passed",
         )
+        has_test_step = any(kw in labels for kw in _test_step_kw)
+        ran_tests = any(tok in combined for tok in _ran_test_tokens)
         if not ran_tests:
             root = self._project_root(plan)
             if root is not None:
@@ -317,8 +321,9 @@ class PlanTool:
             )
         elif not ran_tests:
             issues.append(
-                "Local tests not recorded in step notes — run pytest or "
-                "npm test in the project and note results before completing."
+                "Local tests not recorded in step notes — run pytest, "
+                "npm test, tsc --noEmit, or node --check in the project "
+                "and note results (with exit code) before completing."
             )
         return issues
 
@@ -878,6 +883,19 @@ class PlanTool:
                 "plan(action='set_requirements', requirements='...').\n"
             )
 
+        _layout_note = ""
+        _ts = plan.tech_stack or {}
+        _bf = str(_ts.get("backend_framework", "") or "").lower()
+        if "fastapi" in _bf or _ts.get("backend_language") == "python":
+            _layout_note = (
+                "\n\nBackend layout (mandatory — use in briefings and steps):\n"
+                "  backend/app/main.py — FastAPI entrypoint\n"
+                "  backend/app/models/ — SQLAlchemy models\n"
+                "  backend/app/api/ — routers\n"
+                "  backend/app/db/ — engine/session\n"
+                "Do NOT scaffold flat backend/models/ or backend/main.py at repo root.\n"
+            )
+
         # Shift the orchestrator's CWD into the project folder so that
         # bash / write / edit all resolve relative paths inside the
         # project, preventing stray files at the workspace root.
@@ -1015,6 +1033,7 @@ class PlanTool:
                 + _todo_note
                 + _dep_note
                 + _stack_warning
+                + _layout_note
                 + _path_note
                 + _shallow_warning
             ),
@@ -1581,6 +1600,20 @@ class PlanTool:
                 is_error=True,
             )
 
+        if step.status == "done":
+            return ToolResult(
+                content=(
+                    f"Step '{step.id}' is already done — accept_partial is not needed.\n"
+                    "If closing the plan:\n"
+                    f"  plan(action='verify', plan_id='{plan.id}')\n"
+                    f"  plan(action='complete', plan_id='{plan.id}')\n"
+                    "If verify complains about missing test evidence, update step notes:\n"
+                    f"  plan(action='update', plan_id='{plan.id}', "
+                    f"step_id='{step.id}', notes='tsc --noEmit exit 0; ...')"
+                ),
+                is_error=True,
+            )
+
         has_failed = self._step_has_failed_delegate(plan, step)
         member = self._step_delegate_member(plan, step)
         verified, vdetail = self._verify_step_artifacts(plan, step)
@@ -1812,6 +1845,17 @@ class PlanTool:
         if new_step.depends_on:
             dep_note = f"\nDepends on: {', '.join(new_step.depends_on)}"
 
+        _verify_nudge = ""
+        if any(
+            kw in label_lower
+            for kw in ("local verify", "local test", "verification", "typecheck")
+        ):
+            _verify_nudge = (
+                "\n\n[NEXT] After recording test output in step notes, call "
+                f"plan(action='verify', plan_id='{plan.id}') before "
+                "plan(action='complete')."
+            )
+
         return ToolResult(
             content=(
                 f"Added step '{step_id}': {label}\n"
@@ -1819,11 +1863,13 @@ class PlanTool:
                 f"Plan '{plan.id}' now has {len(plan.steps)} step(s):\n"
                 f"{step_lines}"
                 + _path_note
+                + _verify_nudge
             ),
             details={
                 "plan_id": plan.id,
                 "step_id": step_id,
                 "action": "add_step",
+                "nudge_verify": bool(_verify_nudge),
             },
         )
 
@@ -2021,7 +2067,10 @@ class PlanTool:
         plan.audit.all_criteria_met = len(issues) == 0
         self._store.save(plan)
 
-        parts = [f"VERIFICATION AUDIT for plan {plan.id}: {plan.title}\n"]
+        from nls.agentic.verification_hints import pre_plan_verify_reminder
+
+        parts = [pre_plan_verify_reminder()]
+        parts.append(f"VERIFICATION AUDIT for plan {plan.id}: {plan.title}\n")
 
         if plan.acceptance_criteria:
             parts.append("Acceptance Criteria to check:")

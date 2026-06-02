@@ -26,8 +26,46 @@ import os
 import subprocess
 import sys
 import time
+import re
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+_NAIVE_ISO_RE = re.compile(
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$"
+)
+
+
+def _utc_iso(value: float | None = None) -> str:
+    """UTC ISO-8601 with Z suffix (JS-friendly)."""
+    if value is None:
+        dt = datetime.now(timezone.utc)
+    else:
+        dt = datetime.fromtimestamp(float(value), tz=timezone.utc)
+    return dt.isoformat().replace("+00:00", "Z")
+
+
+def _iso_timestamp(value: Any) -> str | None:
+    """Normalize unix seconds or ISO strings to UTC ISO datetime."""
+    if value is None or value == "":
+        return None
+    if isinstance(value, (int, float)):
+        try:
+            return _utc_iso(float(value))
+        except (OSError, OverflowError, ValueError):
+            return None
+    if isinstance(value, str):
+        try:
+            numeric = float(value)
+            if numeric > 1e9:
+                return _utc_iso(numeric)
+        except ValueError:
+            pass
+        trimmed = value.strip()
+        if _NAIVE_ISO_RE.match(trimmed):
+            return f"{trimmed}Z"
+        return trimmed
+    return None
 
 from nls.models import AgentStatus
 
@@ -419,6 +457,26 @@ class AgentManager:
                 agent_id, exc,
             )
 
+    def _ensure_agent_meta(self, agent_id: str) -> dict[str, Any]:
+        """Return cached agent metadata, loading from disk when needed."""
+        if agent_id not in self._meta:
+            agent_dir = self.agents_dir / agent_id
+            if agent_dir.is_dir():
+                self._load_agent_meta(agent_id, agent_dir)
+        return self._meta.get(agent_id, {})
+
+    def _read_disk_last_interaction(self, agent_id: str) -> str | None:
+        """Read persisted last_interaction for agents not currently loaded."""
+        session_path = self.agents_dir / agent_id / "session_meta.json"
+        if not session_path.exists():
+            return None
+        try:
+            with open(session_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return _iso_timestamp(data.get("last_interaction"))
+        except (json.JSONDecodeError, OSError):
+            return None
+
     def update_agent_name(self, agent_id: str, name: str) -> None:
         """Update the cached agent name after in-conversation naming.
 
@@ -563,10 +621,18 @@ class AgentManager:
         if runtime is not None:
             result.update(runtime.get_status())
 
-        meta = self._meta.get(agent_id, {})
+        meta = self._ensure_agent_meta(agent_id)
         if meta:
             result["name"] = meta.get("name", "")
             result["genesis_version"] = meta.get("genesis_version", "")
+            created = _iso_timestamp(meta.get("created_at"))
+            if created:
+                result["created_at"] = created
+
+        if not result.get("last_interaction"):
+            last = self._read_disk_last_interaction(agent_id)
+            if last:
+                result["last_interaction"] = last
 
         cs = getattr(self, "consciousness_scheduler", None)
         if cs is not None:

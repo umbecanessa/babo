@@ -557,42 +557,16 @@ class SkillLoader:
     def get_activation_steps(self, slug: str) -> str:
         """Generate a structured activation checklist for a skill.
 
-        Returns human-readable steps derived from the skill's metadata
-        (``requires_bins``, ``install_instructions``, setup section).
+        Returns human-readable steps derived from skill metadata, SKILL.md
+        Quick Start, and install path (scalable for any AgentSkill/ClawHub pkg).
         """
-        import platform as _plat
+        from nls.skills_setup_policy import format_activation_steps
 
         sk = self._skills.get(slug)
         if not sk or not sk.meta:
             return ""
 
-        meta = sk.meta
-        steps: list[str] = []
-        step_num = 1
-
-        if meta.requires_bins:
-            primary = meta.requires_bins[0]
-            steps.append(
-                f"{step_num}. Check binary: {primary}(command='--help')"
-            )
-            step_num += 1
-
-            install_cmd = self._best_install_command(meta, _plat.system().lower())
-            if install_cmd:
-                steps.append(
-                    f"{step_num}. If missing, install: bash(command='{install_cmd}')"
-                )
-                step_num += 1
-
-        setup_notes = self._extract_setup_section(meta.instructions or "")
-        if setup_notes:
-            first_line = setup_notes.strip().split("\n")[0][:120]
-            steps.append(f"{step_num}. Auth/setup: {first_line}")
-            step_num += 1
-
-        steps.append(f"{step_num}. Verify with a quick test command")
-
-        return "\n".join(steps)
+        return format_activation_steps(sk.meta, slug, sk.path)
 
     @staticmethod
     def _extract_setup_section(instructions: str) -> str:

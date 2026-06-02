@@ -26,6 +26,13 @@ from nls.tools.agent_tools.base import AgentTool, tool_to_openai_schema
 from .bridge import LoopHooks
 from .breadcrumbs import BreadcrumbContext, BreadcrumbEngine
 from .compactor import CompactionAnchor, compact, should_compact
+from .context_supersession import (
+    apply_supersession_with_cache_refs,
+    register_tool_msg_outcome,
+    resolve_deliverable_paths,
+    resolve_supersession_policy,
+    sync_open_blockers,
+)
 from .orchestration_policy import (
     build_evaluating_action_breadcrumb,
     build_orchestration_wake_message,
@@ -88,6 +95,7 @@ from .types import (
     _get_plan_position,
     _select_thinking_mode,
     virtual_tool_schemas_for_loop,
+    virtual_tool_names_for_loop,
 )
 from nls.brain.thinking import assess_coherence, extract_trajectory
 
@@ -111,6 +119,77 @@ def _parse_tool_args_safe(raw: str) -> dict:
         return v if isinstance(v, dict) else {}
     except Exception:
         return {}
+
+
+def _apply_context_supersession_pass(
+    context: list[dict],
+    *,
+    config: LoopConfig,
+    state: LoopState,
+    anchor: CompactionAnchor,
+    is_delegate_loop: bool,
+    dispatch_source: str,
+    team_manager: Any | None,
+    tools: dict[str, AgentTool],
+    start_index: int,
+    cwd: str = "",
+    plan_tool: Any | None = None,
+) -> None:
+    if not getattr(config, "enable_context_supersession", True):
+        return
+    pending_cr = False
+    if team_manager is not None:
+        try:
+            pending_cr = bool(team_manager.has_pending_completion_reviews())
+        except Exception:
+            pass
+    sync_open_blockers(anchor, state=state, team_manager=team_manager)
+    policy = resolve_supersession_policy(
+        enabled=config.enable_context_supersession,
+        is_delegate_loop=is_delegate_loop,
+        dispatch_source=dispatch_source or state.dispatch_source,
+        has_pending_completion_reviews=pending_cr,
+        active_mode=state.active_mode,
+        coordinator_mode=state.coordinator_mode,
+    )
+    read_tool = tools.get("read")
+    read_index = None
+    if getattr(config, "enable_read_index", True) and read_tool is not None:
+        read_index = getattr(read_tool, "_read_index", None)
+    deliverable_paths = resolve_deliverable_paths(plan_tool)
+    apply_supersession_with_cache_refs(
+        context,
+        policy=policy,
+        state=state,
+        anchor=anchor,
+        start_index=start_index,
+        cwd=cwd,
+        read_index=read_index,
+        deliverable_paths=deliverable_paths,
+    )
+    try:
+        from nls.tools.agent_tools import get_loop_metrics
+
+        metrics = get_loop_metrics()
+        if metrics is not None:
+            state.read_cache_hits = metrics.get("read_cache_hits", 0)
+    except Exception:
+        pass
+
+
+def _register_appended_tool_outcome(
+    state: LoopState,
+    context: list[dict],
+    tool_name: str,
+    result: "ToolResult",
+    args_raw: str,
+) -> None:
+    """Track effective tool error by context message index for supersession."""
+    msg_index = len(context) - 1
+    if msg_index < 0 or context[msg_index].get("role") != "tool":
+        return
+    args = _parse_tool_args_safe(args_raw if isinstance(args_raw, str) else "")
+    register_tool_msg_outcome(state, msg_index, tool_name, result, args=args)
 
 
 # ---------------------------------------------------------------------------
@@ -170,8 +249,14 @@ def _journal_write(path: str, iteration: int, context: list[dict]) -> None:
             "n_messages": len(context),
             "messages": context,
         }
+        from nls.security.secret_redact import redact_context_for_log, redact_secrets
+
+        safe_entry = dict(entry)
+        safe_entry["messages"] = redact_context_for_log(context)
+        payload = json.dumps(safe_entry, default=str, ensure_ascii=False)
+        payload = redact_secrets(payload)[0]
         with open(tmp, "w", encoding="utf-8") as f:
-            f.write(json.dumps(entry, default=str, ensure_ascii=False) + "\n")
+            f.write(payload + "\n")
         os.replace(tmp, path)
     except Exception:
         try:
@@ -718,6 +803,9 @@ async def run_loop(
     """
 
     state = LoopState(user_input=user_input, start_time=time.time())
+    from nls.tools.agent_tools import enter_file_cache_scope, enter_loop_metrics_scope
+    enter_file_cache_scope(state.loop_id)
+    enter_loop_metrics_scope()
     state.dispatch_source = dispatch_source or ""
     if state_holder is not None:
         state_holder.append(state)
@@ -813,6 +901,13 @@ async def run_loop(
         enable_detached_delegates=config.enable_detached_delegates,
         delegate_manager=delegate_manager,
     )
+    state.unlocked_tools.update(
+        virtual_tool_names_for_loop(
+            enable_delegation=config.enable_delegation,
+            enable_detached_delegates=config.enable_detached_delegates,
+            delegate_manager=delegate_manager,
+        )
+    )
     for _tool_name, _tool_obj in tools.items():
         if isinstance(_tool_obj, AgentTool):
             if active_tool_names is not None and _tool_name not in active_tool_names:
@@ -843,6 +938,59 @@ async def run_loop(
 
     from nls.tools.agent_tools.plan import PlanReadOnlyTool as _PlanRO
     _is_delegate_loop = isinstance(_plan_tool, _PlanRO)
+    _supersession_cwd = ""
+    _bash_for_cwd = tools.get("bash")
+    if _bash_for_cwd is not None:
+        _supersession_cwd = getattr(_bash_for_cwd, "_cwd", "") or ""
+    elif tools.get("read") is not None:
+        _supersession_cwd = getattr(tools.get("read"), "_cwd", "") or ""
+
+    _stale_board_msg: str | None = None
+    if (
+        config.enable_delegation
+        and not _is_delegate_loop
+        and dispatch_source.startswith("team_wave_complete:")
+        and _cached_team_manager is not None
+    ):
+        from nls.agentic.plan_work import apply_stale_wave_wake_redirect
+
+        dispatch_source, _stale_board_msg, _stale_exit = (
+            apply_stale_wave_wake_redirect(
+                dispatch_source,
+                team_manager=_cached_team_manager,
+                plan_tool=_plan_tool,
+                todo_tool=tools.get("todo"),
+            )
+        )
+        if _stale_exit:
+            logger.info(
+                "[LOOP:%s] stale wave-complete wake — no board work (%s)",
+                state.loop_id, _stale_exit,
+            )
+            return LoopResult(
+                final_response="",
+                exit_reason=_stale_exit,
+                iterations=0,
+                total_tool_calls=0,
+            )
+        if _stale_board_msg and hooks.wm_refresh_todo_board:
+            try:
+                hooks.wm_refresh_todo_board()
+            except Exception:
+                pass
+
+    _gr_boot = getattr(hooks, "guardrails_registry", None)
+    if _gr_boot is not None:
+        _cryptex_boot = getattr(hooks, "_accumulator_wm_target", None)
+        if _cryptex_boot is not None:
+            try:
+                _cryptex_boot._guardrails_registry = _gr_boot  # type: ignore[attr-defined]
+                from nls.tools.agent_tools.guardrails_registry import (
+                    inject_guardrails_into_cryptex,
+                )
+                inject_guardrails_into_cryptex(_cryptex_boot, _gr_boot)
+            except Exception:
+                pass
 
     # Orchestration wake: trim history and inject compact WM packet
     _dual_wm = getattr(hooks, "_accumulator_wm_target", None)
@@ -880,6 +1028,7 @@ async def run_loop(
             _plan_progress = ""
             _plan_audit_issues: list[str] = []
             _plan_incomplete_steps: list[str] = []
+            _plan_board_lines: list[str] = []
             if _plan_tool is not None and hasattr(_plan_tool, "_store"):
                 try:
                     _ap = _plan_tool._store.find_active()
@@ -892,6 +1041,16 @@ async def run_loop(
                             for s in _ap.steps
                             if s.status not in ("done", "skipped")
                         ][:6]
+                        from nls.agentic.plan_work import build_board_snapshot_lines
+
+                        _todo_store = getattr(
+                            tools.get("todo"), "_store", None,
+                        )
+                        _plan_board_lines = build_board_snapshot_lines(
+                            _ap,
+                            todo_store=_todo_store,
+                            team_manager=_cached_team_manager,
+                        )
                 except Exception:
                     pass
             context.append({
@@ -904,13 +1063,21 @@ async def run_loop(
                     coordinator_phase=getattr(state, "coordinator_phase", ""),
                     plan_audit_issues=_plan_audit_issues,
                     plan_incomplete_steps=_plan_incomplete_steps,
+                    board_snapshot_lines=_plan_board_lines,
                 ),
             })
             state.orch_wake_injected = True
 
+    if _stale_board_msg:
+        context.append({
+            "role": "system",
+            "content": _stale_board_msg,
+        })
+
     if (
         dispatch_source.startswith("team_wave_complete:")
         or dispatch_source.startswith("team_completion_review:")
+        or dispatch_source.startswith("board_reconcile:")
     ):
         state.active_mode = AgentMode.EVALUATING
         invalidate_tool_policy_cache(state)
@@ -979,6 +1146,7 @@ async def run_loop(
         )
         if not isinstance(pre_triage, TurnTriage):
             _pt.cap_profile_from_hints()
+            _pt.reconcile_orchestration_depth()
         cap_triage_profile_for_tools(
             _pt, frozenset(state.unlocked_tools or ()),
         )
@@ -1040,6 +1208,8 @@ async def run_loop(
 
     from nls.agentic.profile_guard_policy import inject_prompt_structured_hints
     inject_prompt_structured_hints(user_input, state.hints)
+    from nls.agentic.profile_guard_policy import enrich_instruction_skill_hints
+    enrich_instruction_skill_hints(user_input, state.goals, state.hints)
 
     if _deferred_actions:
         from .goals import deferred_actions_to_goal_strings
@@ -1048,23 +1218,108 @@ async def run_loop(
             if _dg not in state.goals:
                 state.goals.append(_dg)
 
+    _is_user_dispatch = (dispatch_source or "user") == "user"
     _wm_goals_fn = getattr(hooks, "wm_get_tactical_goals", None)
-    sync_goals_from_wm(state, _wm_goals_fn)
+    if not (_is_user_dispatch and state.goals):
+        sync_goals_from_wm(state, _wm_goals_fn)
     if state.goals:
         state.goals = filter_stale_tactical_goals(
             state.goals, _active_plan_for_goals,
         )
 
     _profile = state.orchestration_profile or "solo_structured"
+    if _profile == "conversational" and not state.coordinator_mode:
+        from nls.agentic.profile_guard_policy import conversational_tool_surface
+
+        _triage_intent = (
+            getattr(pre_triage, "intent", "") if pre_triage is not None else ""
+        )
+        _hist_for_surface: list[dict] = []
+        for _m in context[-10:]:
+            if _m.get("role") in ("user", "assistant"):
+                _hist_for_surface.append(_m)
+        if (
+            conversational_tool_surface(
+                user_input,
+                history=_hist_for_surface or None,
+                intent=_triage_intent,
+            )
+            == "executing"
+        ):
+            if state.active_mode != AgentMode.EXECUTING:
+                state.active_mode = AgentMode.EXECUTING
+                invalidate_tool_policy_cache(state)
+        elif state.active_mode == AgentMode.EXECUTING:
+            state.active_mode = AgentMode.CHAT
+            invalidate_tool_policy_cache(state)
     if state.goals:
         from nls.agentic.profile_guard_policy import normalize_goals_for_profile
 
         state.goals = normalize_goals_for_profile(state.goals, _profile)
+
+    # Push fresh task goals/instructions into WM (clears stale slots).
+    _wm_push_task_goals = getattr(hooks, "wm_push_task_goals", None)
+    if hooks.wm_push_instructions and (state.goals or state.hints):
+        try:
+            _instr_items: list[str] = []
+            for g in state.goals:
+                _instr_items.append(g)
+            for h in state.hints:
+                if h not in _instr_items and not _CREDENTIAL_RE.search(h):
+                    _instr_items.append(h)
+            if _instr_items:
+                hooks.wm_push_instructions(_instr_items)
+        except Exception:
+            pass
+    if _wm_push_task_goals and state.goals and _is_user_dispatch:
+        try:
+            _wm_push_task_goals(list(state.goals))
+        except Exception:
+            pass
+
     from nls.agentic.orchestration_profile_spec import profile_anchor_message
 
+    _skip_profile_anchor = (
+        config.enable_delegation
+        and (
+            state.coordinator_mode
+            or is_orchestration_dispatch_source(dispatch_source)
+            or state.active_mode in (
+                AgentMode.MONITORING,
+                AgentMode.DELEGATING,
+                AgentMode.EVALUATING,
+            )
+        )
+    )
     _anchor = profile_anchor_message(_profile)
-    if _anchor:
+    if _anchor and not _skip_profile_anchor:
         context.append({"role": "system", "content": _anchor})
+
+    _hint_tokens = {h.strip().lower() for h in state.hints if h and h.strip()}
+    if "setup:instruction_skill" in _hint_tokens:
+        try:
+            from nls.skills_setup_policy import resolve_data_skills_dir
+
+            _skills_base = resolve_data_skills_dir()
+            if _skills_base is not None:
+                from nls.skills_setup_policy import build_instruction_skill_setup_lines
+
+                _read_tool = tools.get("read") if tools else None
+                _read_index = (
+                    getattr(_read_tool, "_read_index", None)
+                    if _read_tool is not None
+                    else None
+                )
+                _setup_lines = build_instruction_skill_setup_lines(
+                    _skills_base,
+                    read_index=_read_index,
+                )
+                context.append({
+                    "role": "system",
+                    "content": "\n".join(_setup_lines),
+                })
+        except Exception:
+            pass
 
     # Inject [CHANNEL ROUTING] system message when deferred external channels
     if _deferred_actions:
@@ -1091,24 +1346,6 @@ async def run_loop(
                 "[LOOP:%s] Injected CHANNEL ROUTING system message for: %s",
                 state.loop_id, _ch_list,
             )
-
-    # --- Populate Instructions + Orchestration rings ---
-    # Push extracted goals/hints as task instructions into the Cryptex
-    # instructions ring so the ring shows data in the UI from iteration 1.
-    # Credential-bearing hints are excluded — they are already routed to the
-    # secure credentials ring by the hint extraction hooks.
-    if hooks.wm_push_instructions and (state.goals or state.hints):
-        try:
-            _instr_items: list[str] = []
-            for g in state.goals:
-                _instr_items.append(g)
-            for h in state.hints:
-                if h not in _instr_items and not _CREDENTIAL_RE.search(h):
-                    _instr_items.append(h)
-            if _instr_items:
-                hooks.wm_push_instructions(_instr_items)
-        except Exception:
-            pass
 
     # --- Sub-agent coordinator guard ---
     # Sub-agents (enable_delegation=False) must NEVER enter coordinator
@@ -1328,7 +1565,8 @@ async def run_loop(
                         "criteria, patch small gaps, update plan/Kanban.\n"
                         "Use plan(accept_partial) if delegates failed but "
                         "artifacts exist. Then team(advance) or launch next wave.\n"
-                        "When ALL plan steps are verified, task_complete."
+                        "When ALL plan steps are done: plan(verify) → "
+                        "plan(complete) → task_complete."
                     )})
             except Exception:
                 pass
@@ -1406,6 +1644,7 @@ async def run_loop(
             "coordinator_phase": state.coordinator_phase,
             "pending_completion_reviews": _pending_cr,
             "iteration": state.iteration,
+            "delegate_count": state.delegate_count,
             "orchestration_profile": state.orchestration_profile or "solo_structured",
             "has_active_plan": _has_plan_now,
             "last_tool": "",
@@ -1494,7 +1733,17 @@ async def run_loop(
             enable_detached_delegates=config.enable_detached_delegates,
             delegate_manager=delegate_manager,
         )
-        _exec_unlocked2: set[str] = set()
+        _exec_unlocked2: set[str] = set(
+            virtual_tool_names_for_loop(
+                enable_delegation=config.enable_delegation,
+                enable_detached_delegates=config.enable_detached_delegates,
+                delegate_manager=delegate_manager,
+            )
+        )
+        for _s2 in _all_schemas:
+            _sn2 = (_s2.get("function") or {}).get("name", "")
+            if _sn2:
+                _exec_unlocked2.add(_sn2)
         for _en2, _eo2 in tools.items():
             if isinstance(_eo2, AgentTool):
                 try:
@@ -1551,6 +1800,9 @@ async def run_loop(
                 _pre_args = tc.get("function", {}).get("arguments", "")
                 _pre_fp = _pre_args[:200] if isinstance(_pre_args, str) else str(_pre_args)[:200]
                 state.record_tool(_pre_name, result, args_fingerprint=_pre_fp)
+                _register_appended_tool_outcome(
+                    state, context, _pre_name, result, _pre_args,
+                )
 
                 if not result.is_error:
                     _pbc_hint = _breadcrumb_engine.evaluate(
@@ -1558,6 +1810,20 @@ async def run_loop(
                     )
                     if _pbc_hint:
                         context.append({"role": "system", "content": _pbc_hint})
+
+            _apply_context_supersession_pass(
+                context,
+                config=config,
+                state=state,
+                anchor=anchor,
+                is_delegate_loop=_is_delegate_loop,
+                dispatch_source=dispatch_source,
+                team_manager=_cached_team_manager,
+                tools=tools,
+                start_index=_loop_start_idx,
+                cwd=_supersession_cwd,
+                plan_tool=_plan_tool,
+            )
 
             # Plan event bridge for pre-loop tool calls (iter=0).
             # If a plan was created/updated before the main loop starts, emit
@@ -1597,30 +1863,22 @@ async def run_loop(
 
         if _lstate_ref is not None:
             _lstate_ref["iteration"] = state.iteration
+            _dc = state.delegate_count
+            if delegate_manager is not None:
+                try:
+                    _running = delegate_manager.running_count()
+                    if _running:
+                        _dc = max(_dc, _running)
+                        state.delegate_count = _dc
+                except Exception:
+                    pass
+            _lstate_ref["delegate_count"] = _dc
+            _lstate_ref["coordinator_mode"] = state.coordinator_mode
+            _lstate_ref["active_mode"] = state.active_mode.value
             from nls.agentic.skill_discovery_boost import (
                 sync_skill_discovery_boost_flag,
             )
             sync_skill_discovery_boost_flag(_lstate_ref, state.iteration)
-
-        if (
-            state.iteration == 1
-            and dispatch_source.startswith("team_wave_complete:")
-            and _cached_team_manager is not None
-        ):
-            _review_team_id = dispatch_source.split(":", 1)[1]
-            _stale_wake = _cached_team_manager.stale_wave_review_wake_reason(
-                _review_team_id,
-            )
-            if _stale_wake:
-                _cached_team_manager._drain_wave_complete_dispatch(
-                    _review_team_id,
-                )
-                state.exit_reason = "stale_wave_review_wake"
-                logger.info(
-                    "[LOOP:%s] skipping redundant wave-complete wake for %s (%s)",
-                    state.loop_id, _review_team_id, _stale_wake,
-                )
-                break
 
         # Tombstone cleanup: remove partial messages from failed streams
         _pre_tomb = len(context)
@@ -2052,6 +2310,22 @@ async def run_loop(
             except Exception:
                 pass
 
+        # B-pre. Supersede stale tool results (safety net before WM transform).
+        # Primary pass also runs immediately after each tool batch append.
+        _apply_context_supersession_pass(
+            context,
+            config=config,
+            state=state,
+            anchor=anchor,
+            is_delegate_loop=_is_delegate_loop,
+            dispatch_source=state.dispatch_source or dispatch_source,
+            team_manager=_cached_team_manager,
+            tools=tools,
+            start_index=_loop_start_idx,
+            cwd=_supersession_cwd,
+            plan_tool=_plan_tool,
+        )
+
         # B. Context transform (WM injection) — runs from iteration 1 so
         # the Cryptex compose_context replaces the static bootstrap on the
         # very first LLM call, not just from the second onwards.
@@ -2083,6 +2357,7 @@ async def run_loop(
                 context, anchor, config, vllm_client,
                 iteration=state.iteration,
                 adapter_name=adapter_name,
+                is_delegate_loop=_is_delegate_loop,
             )
             if hooks.on_compaction:
                 try:
@@ -2171,6 +2446,7 @@ async def run_loop(
                 context, anchor, config, vllm_client,
                 iteration=state.iteration,
                 adapter_name=adapter_name,
+                is_delegate_loop=_is_delegate_loop,
             )
             if hooks.on_compaction:
                 try:
@@ -2291,6 +2567,7 @@ async def run_loop(
                     context, anchor, config, vllm_client,
                     force=True, iteration=state.iteration,
                     adapter_name=adapter_name,
+                    is_delegate_loop=_is_delegate_loop,
                 )
                 if hooks.on_compaction:
                     try:
@@ -2405,6 +2682,24 @@ async def run_loop(
                 _args_fp = _args_raw[:200] if isinstance(_args_raw, str) else str(_args_raw)[:200]
                 state.total_tool_calls += 1
                 state.record_tool(_tool_name, result, args_fingerprint=_args_fp)
+                _gr = getattr(hooks, "guardrails_registry", None)
+                if _gr is not None and getattr(result, "is_error", False):
+                    from nls.tools.agent_tools.guardrails_registry import (
+                        record_tool_contract_guardrail,
+                    )
+                    _cryptex_gr = getattr(
+                        hooks, "_accumulator_wm_target", None,
+                    )
+                    record_tool_contract_guardrail(
+                        _gr,
+                        tool_name=_tool_name,
+                        content=result.content or "",
+                        delegate_number=0,
+                        cryptex=_cryptex_gr,
+                    )
+                _register_appended_tool_outcome(
+                    state, context, _tool_name, result, _args_raw,
+                )
                 _status_tag = "OK" if not result.is_error else "FAIL"
                 _action_hint = ""
                 try:
@@ -2438,6 +2733,7 @@ async def run_loop(
                     _lstate_ref["iteration"] = state.iteration
                     _lstate_ref["coordinator_mode"] = state.coordinator_mode
                     _lstate_ref["active_mode"] = state.active_mode.value
+                    _lstate_ref["delegate_count"] = state.delegate_count
                     _lstate_ref["orchestration_profile"] = (
                         state.orchestration_profile or "solo_structured"
                     )
@@ -2480,6 +2776,9 @@ async def run_loop(
                 _iter_tool_results.append({
                     "success": not result.is_error,
                 })
+                from nls.security.secret_redact import redact_secrets
+
+                _preview = redact_secrets((result.content or "")[:300])[0]
                 _slog(_session_log_path, {
                     "event": "tool_result",
                     "loop_id": state.loop_id,
@@ -2487,7 +2786,7 @@ async def run_loop(
                     "tool": _tool_name,
                     "success": not result.is_error,
                     "content_len": len(result.content or ""),
-                    "content_preview": (result.content or "")[:300],
+                    "content_preview": _preview,
                 })
 
                 # --- Context-aware breadcrumb hints ---
@@ -2497,7 +2796,7 @@ async def run_loop(
                 if not result.is_error or (
                     _tool_name == "team"
                     and _bc_ctx.result_details.get("wave_needs_advance")
-                ):
+                ) or bool(result.details.get("rewrite_blocked")):
                     _bc_hint = _breadcrumb_engine.evaluate(_bc_ctx)
                 else:
                     _bc_hint = None
@@ -2510,6 +2809,84 @@ async def run_loop(
                         "trigger_tool": _tool_name,
                         "hint_preview": _bc_hint[:200],
                     })
+
+                if _tool_name == "read" and not result.is_error:
+                    _read_path = str(_iter_args.get("path", "") or "")
+                    if _read_path.lower().endswith("skill.md"):
+                        try:
+                            from nls.skills_setup_policy import (
+                                instruction_skill_post_read_nudge,
+                            )
+
+                            _skill_nudge = instruction_skill_post_read_nudge(
+                                _read_path,
+                            )
+                            if _skill_nudge:
+                                context.append({
+                                    "role": "system",
+                                    "content": _skill_nudge,
+                                })
+                        except Exception:
+                            pass
+
+                from nls.agentic.profile_depth_policy import (
+                    evaluate_after_tool,
+                    evaluate_wm_profile_mismatch,
+                    journal_depth_event,
+                )
+
+                _depth_nudge = evaluate_after_tool(
+                    state,
+                    _tool_name,
+                    _iter_args,
+                    result,
+                    mode=state.active_mode,
+                    enable_delegation=config.enable_delegation,
+                )
+                if _depth_nudge:
+                    context.append({
+                        "role": "system",
+                        "content": _depth_nudge.message,
+                    })
+                    _slog(_session_log_path, journal_depth_event(
+                        "depth_nudge",
+                        loop_id=state.loop_id,
+                        trigger_id=_depth_nudge.trigger_id,
+                        profile_from=state.orchestration_profile or "",
+                        profile_to=_depth_nudge.suggested_profile,
+                    ))
+
+                if _tool_name == "adopt_orchestration_profile" and not result.is_error:
+                    _adopt_details = getattr(result, "details", None) or {}
+                    if _adopt_details.get("adopted_profile"):
+                        invalidate_tool_policy_cache(state)
+                        state._mode_schemas_applied = False
+                        if state.pending_profile_anchor:
+                            context.append({
+                                "role": "system",
+                                "content": state.pending_profile_anchor,
+                            })
+                            state.pending_profile_anchor = ""
+                        if not _is_delegate_loop:
+                            _base_schemas, state.unlocked_tools, _ = refresh_tool_schemas(
+                                state,
+                                _all_schemas,
+                                _all_unlocked,
+                                state.active_mode,
+                                delegate_manager,
+                                hooks,
+                                force=True,
+                            )
+                        if _lstate_ref is not None:
+                            _lstate_ref["orchestration_profile"] = (
+                                _adopt_details["adopted_profile"]
+                            )
+                        _slog(_session_log_path, journal_depth_event(
+                            "profile_adopted",
+                            loop_id=state.loop_id,
+                            profile_from=_adopt_details.get("previous_profile", ""),
+                            profile_to=_adopt_details["adopted_profile"],
+                        ))
 
                 # --- Delegation hallucination guard ---
                 if (
@@ -2598,6 +2975,21 @@ async def run_loop(
                             "wrap-up budget starts",
                             state.loop_id, state.iteration,
                         )
+                    if hooks and hooks.has_active_plan:
+                        try:
+                            if hooks.has_active_plan():
+                                _wm_nudge = evaluate_wm_profile_mismatch(
+                                    state,
+                                    wm_has_strategic_goals=False,
+                                    wm_has_plan_position=True,
+                                )
+                                if _wm_nudge:
+                                    context.append({
+                                        "role": "system",
+                                        "content": _wm_nudge.message,
+                                    })
+                        except Exception:
+                            pass
 
                 if _tool_name == "get_tool_schema" and not result.is_error:
                     _args = tc.get("function", {}).get("arguments", "{}")
@@ -2624,6 +3016,21 @@ async def run_loop(
                         logger.info(
                             "discover_tools unlocked: %s", _newly_unlocked,
                         )
+
+            # Supersede immediately after tool batch — next generate() sees thin context.
+            _apply_context_supersession_pass(
+                context,
+                config=config,
+                state=state,
+                anchor=anchor,
+                is_delegate_loop=_is_delegate_loop,
+                dispatch_source=state.dispatch_source or dispatch_source,
+                team_manager=_cached_team_manager,
+                tools=tools,
+                start_index=_loop_start_idx,
+                cwd=_supersession_cwd,
+                plan_tool=_plan_tool,
+            )
 
             if state.consecutive_errors >= 2:
                 from nls.agentic.evaluator import Directive, get_directive_message
@@ -2729,7 +3136,17 @@ async def run_loop(
                         enable_detached_delegates=config.enable_detached_delegates,
                         delegate_manager=delegate_manager,
                     )
-                    _exec_unlocked: set[str] = set()
+                    _exec_unlocked: set[str] = set(
+                        virtual_tool_names_for_loop(
+                            enable_delegation=config.enable_delegation,
+                            enable_detached_delegates=config.enable_detached_delegates,
+                            delegate_manager=delegate_manager,
+                        )
+                    )
+                    for _s in _all_schemas:
+                        _sn = (_s.get("function") or {}).get("name", "")
+                        if _sn:
+                            _exec_unlocked.add(_sn)
                     for _en, _eo in tools.items():
                         if isinstance(_eo, AgentTool):
                             try:
@@ -3491,10 +3908,17 @@ async def run_loop(
                     state.orchestrator_recovery = True
                     _recovery_note_needed = True
             if _recovery_note_needed and state.orchestrator_recovery:
-                context.append({
-                    "role": "system",
-                    "content": recovery_mode_system_note(),
-                })
+                _delegates_live = state.delegate_count > 0
+                if delegate_manager is not None:
+                    try:
+                        _delegates_live = delegate_manager.has_active_delegates()
+                    except Exception:
+                        pass
+                if not _delegates_live:
+                    context.append({
+                        "role": "system",
+                        "content": recovery_mode_system_note(),
+                    })
 
             if any(r.stop_loop for r in results):
                 _stop_result = next(
@@ -3574,11 +3998,16 @@ async def run_loop(
                     response.tool_calls,
                     delegate_manager,
                 )
+                _tm_yield = getattr(hooks, "_cached_team_manager", None)
                 _force_yield, _yield_reason = should_force_coordinator_yield(
                     state, delegate_manager,
                     dispatch_source=dispatch_source,
+                    has_pending_completion_reviews=(
+                        _tm_yield.has_pending_completion_reviews()
+                        if _tm_yield is not None
+                        else False
+                    ),
                 )
-                _tm_yield = getattr(hooks, "_cached_team_manager", None)
                 if (
                     _force_yield
                     and _tm_yield is not None
@@ -4051,6 +4480,8 @@ async def run_loop(
         "tool_successes": dict(state.tool_successes),
         "tool_errors": dict(state.tool_errors),
         "tool_nudges_given": dict(state.tool_nudges_given),
+        "profile_depth_nudges_given": sorted(state.profile_depth_nudges_given),
+        "profile_depth_adopted": state.profile_depth_adopted_this_loop,
         "duration_s": round(_loop_duration, 1),
         "final_response_len": len(state.final_response or ""),
         "final_response_preview": (state.final_response or "")[:500],
@@ -4060,6 +4491,9 @@ async def run_loop(
         "total_completion_tokens": state.total_completion_tokens,
         "total_tokens": state.total_tokens,
         "iter_token_log": state.iter_token_log,
+        "supersession_stubs_applied": state.supersession_stubs_applied,
+        "supersession_tokens_saved": state.supersession_tokens_saved,
+        "read_cache_hits": state.read_cache_hits,
     })
 
     # Aggregate delegate token usage into parent totals
@@ -4138,7 +4572,7 @@ async def run_loop(
                 )
 
     # Auto-complete active plan + linked todo when loop exits successfully.
-    # The model sometimes delivers a final text answer without explicitly
+    # The model sometimes delivers a final answer without explicitly
     # calling plan(action='complete'), leaving Kanban items stuck.
     # Skip for delegate loops and when there are active teams/delegates.
     _has_running_team = False
@@ -4150,36 +4584,42 @@ async def run_loop(
             except Exception:
                 pass
 
+    _PLAN_AUTO_COMPLETE_EXITS = frozenset({
+        "task_complete",
+        "complete",
+    })
+
     if _is_delegate_loop:
         logger.debug("[LOOP] skipped plan auto-complete — delegate loop")
-    elif state.exit_reason == "task_complete" and _plan_tool is not None and not _has_running_team:
+    elif (
+        state.exit_reason in _PLAN_AUTO_COMPLETE_EXITS
+        and _plan_tool is not None
+        and not _has_running_team
+    ):
         try:
-            from nls.agentic.plan_work import can_complete_plan
+            from nls.agentic.plan_work import auto_complete_active_plan_if_ready
 
-            _store = _plan_tool.get_store() if hasattr(_plan_tool, "get_store") else None
-            _tm = _cached_team_manager
-            _active = (
-                _store.resolve_work_plan("", _tm, reopen=False)
-                if _store
-                else None
+            _completed_id = await auto_complete_active_plan_if_ready(
+                _plan_tool, _tm,
             )
-            if (
-                _active
-                and _active.status not in ("done", "archived")
-                and can_complete_plan(_active, _tm)
-            ):
-                await _plan_tool.execute(
-                    {"action": "complete", "plan_id": _active.id},
-                )
+            if _completed_id:
                 logger.info(
-                    "[LOOP] auto-completed plan %s + linked todo on task_complete",
-                    _active.id,
+                    "[LOOP] auto-completed plan %s on exit (%s)",
+                    _completed_id, state.exit_reason,
                 )
-            elif _active and _active.status not in ("done", "archived"):
-                logger.info(
-                    "[LOOP] skipped plan auto-complete for %s — completion gate not met",
-                    _active.id,
+            elif _plan_tool is not None:
+                _store = (
+                    _plan_tool.get_store()
+                    if hasattr(_plan_tool, "get_store")
+                    else None
                 )
+                _active = _store.find_active() if _store else None
+                if _active and _active.status not in ("done", "archived"):
+                    logger.info(
+                        "[LOOP] skipped plan auto-complete for %s — "
+                        "completion gate not met (exit=%s)",
+                        _active.id, state.exit_reason,
+                    )
         except Exception:
             logger.debug("Post-loop plan auto-complete failed", exc_info=True)
     elif _has_running_team:
@@ -4267,6 +4707,51 @@ async def run_loop(
 
     # Clean loop completion — remove the crash-recovery journal
     _journal_delete(_journal)
+
+    if (
+        not _is_delegate_loop
+        and _plan_tool is not None
+        and hasattr(_plan_tool, "_store")
+    ):
+        try:
+            from nls.agentic.plan_work import (
+                plan_closure_blocked_summary,
+                should_emit_closure_blocked_communicate,
+            )
+
+            from nls.agentic.plan_work import resolve_work_plan
+
+            _store_comm = (
+                _plan_tool.get_store()
+                if hasattr(_plan_tool, "get_store")
+                else getattr(_plan_tool, "_store", None)
+            )
+            _active_for_comm = (
+                resolve_work_plan(
+                    _store_comm, "", _cached_team_manager, reopen=False,
+                )
+                if _store_comm is not None
+                else _plan_tool._store.find_active()
+            )
+            if should_emit_closure_blocked_communicate(
+                _active_for_comm,
+                exit_reason=state.exit_reason,
+                tool_successes=dict(state.tool_successes),
+                is_delegate_loop=_is_delegate_loop,
+            ) and _active_for_comm is not None:
+                _comm_msg = plan_closure_blocked_summary(_active_for_comm)
+                from nls.agentic.executor import _handle_communicate
+
+                await _handle_communicate(
+                    {"message": _comm_msg},
+                    on_event,
+                    state.iteration,
+                )
+                state.tool_successes["communicate"] = (
+                    state.tool_successes.get("communicate", 0) + 1
+                )
+        except Exception:
+            logger.debug("closure-blocked communicate failed", exc_info=True)
 
     result = state.to_result()
     result.total_duration_ms = (time.time() - state.start_time) * 1000

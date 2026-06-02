@@ -14,6 +14,32 @@ _SKILL_ONBOARDING_RE = re.compile(
     re.DOTALL,
 )
 
+# Loop-control / stall nudges — omit from persisted conversation history.
+_HISTORY_INTERNAL_MARKERS = (
+    "[REMEMBERED",
+    "Review: did you complete ALL parts",
+    "[SKILL ONBOARDING",
+    "[VISUAL FEEDBACK]",
+    "[RELEVANT KNOWLEDGE]",
+    "[PLAN POSITION",
+    "Reminder: after completing a step",
+    "You have been on this step for",
+    "DIAGNOSE: Read the error output above",
+    "PIVOT: Your current approach is not working",
+    "The tool returned a result. If this answers",
+    "You have not taken any action yet. Use a tool call NOW",
+    "VERIFY: You just took an action",
+    "[DELEGATE CHECK-BACK]",
+    "[AGENT_MSG|",
+    "[PAGE after ",
+    "Your last responses were text, not tool calls",
+    "Your last responses were text-only",
+    "Now communicate your findings to the user",
+    "You appear to be stuck",
+    "[Loop stopped: stalled",
+    "[SYSTEM — Mission Context]",
+)
+
 
 def _strip_internal_blocks(text: str) -> str:
     """Remove injected system blocks before persisting to history."""
@@ -117,28 +143,6 @@ def _salvage_agentic_context(
     history.append({"role": "user", "content": _strip_internal_blocks(user_input)})
 
     loop_msgs = shared_context[first_tool_idx:]
-    _INTERNAL_MARKERS = (
-        "[REMEMBERED",
-        "Review: did you complete ALL parts",
-        "[SKILL ONBOARDING",
-        "[VISUAL FEEDBACK]",
-        "[RELEVANT KNOWLEDGE]",
-        "[PLAN POSITION",
-        "Reminder: after completing a step",
-        "You have been on this step for",
-        "DIAGNOSE: Read the error output above",
-        "PIVOT: Your current approach is not working",
-        "The tool returned a result. If this answers",
-        "You have not taken any action yet. Use a tool call NOW",
-        "VERIFY: You just took an action",
-        "[DELEGATE CHECK-BACK]",
-        "[AGENT_MSG|",
-        "[PAGE after ",
-        "Your last responses were text, not tool calls",
-        "Your last responses were text-only",
-        "Now communicate your findings to the user",
-        "[SYSTEM — Mission Context]",
-    )
     for msg in loop_msgs:
         entry = dict(msg)
         if entry.get("role") == "tool":
@@ -149,7 +153,7 @@ def _salvage_agentic_context(
             content = entry.get("content") or ""
             if isinstance(content, list):
                 continue
-            if any(marker in content for marker in _INTERNAL_MARKERS):
+            if any(marker in content for marker in _HISTORY_INTERNAL_MARKERS):
                 continue
         history.append(entry)
 
@@ -234,28 +238,6 @@ def _save_agentic_history_v2(
         len(loop_messages), _loop_roles,
     )
 
-    _INTERNAL_MARKERS = (
-        "[REMEMBERED",
-        "Review: did you complete ALL parts",
-        "[SKILL ONBOARDING",
-        "[VISUAL FEEDBACK]",
-        "[RELEVANT KNOWLEDGE]",
-        "[PLAN POSITION",
-        "Reminder: after completing a step",
-        "You have been on this step for",
-        "DIAGNOSE: Read the error output above",
-        "PIVOT: Your current approach is not working",
-        "The tool returned a result. If this answers",
-        "You have not taken any action yet. Use a tool call NOW",
-        "VERIFY: You just took an action",
-        "[DELEGATE CHECK-BACK]",
-        "[AGENT_MSG|",
-        "[PAGE after ",
-        "Your last responses were text, not tool calls",
-        "Your last responses were text-only",
-        "Now communicate your findings to the user",
-        "[SYSTEM — Mission Context]",
-    )
     _last_content_assistant = None
     for msg in loop_messages:
         if msg.get("role") == "tool":
@@ -266,7 +248,7 @@ def _save_agentic_history_v2(
             content = msg.get("content") or ""
             if isinstance(content, list):
                 continue
-            if any(marker in content for marker in _INTERNAL_MARKERS):
+            if any(marker in content for marker in _HISTORY_INTERNAL_MARKERS):
                 continue
         history.append(msg)
         if msg.get("role") == "assistant" and msg.get("content"):

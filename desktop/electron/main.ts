@@ -58,6 +58,7 @@ let venvManager: VenvManager | null = null;
 let configManager: ConfigManager | null = null;
 let permissionManager: PermissionManager | null = null;
 let updateManager: UpdateManager | null = null;
+let isQuitting = false;
 
 const isDev = process.env['NODE_ENV'] === 'development';
 const ANGULAR_DEV_URL = 'http://localhost:4200';
@@ -256,6 +257,7 @@ app.whenReady().then(async () => {
   permissionManager = new PermissionManager();
   runtimeManager = new RuntimeManager(configManager, venvManager);
   updateManager = new UpdateManager(runtimeManager, configManager);
+  runtimeManager.setShouldAutoRestart(() => !isQuitting);
 
   // Register IPC handlers
   registerIpcHandlers(permissionManager, runtimeManager, venvManager, configManager, updateManager);
@@ -284,7 +286,6 @@ app.on('window-all-closed', () => {
   }
 });
 
-let isQuitting = false;
 app.on('before-quit', (event) => {
   if (isQuitting || !runtimeManager) return;
 

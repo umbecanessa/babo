@@ -99,6 +99,19 @@ class MoveFileTool:
         if not dest_str:
             return ToolResult(content="Error: 'destination' is required.", is_error=True)
 
+        from .tool_path_args import normalize_tool_path_arg
+
+        source_str, src_err = normalize_tool_path_arg(
+            source_str, cwd=self._effective_cwd, key="source",
+        )
+        if src_err:
+            return ToolResult(content=src_err, is_error=True)
+        dest_str, dst_err = normalize_tool_path_arg(
+            dest_str, cwd=self._effective_cwd, key="destination",
+        )
+        if dst_err:
+            return ToolResult(content=dst_err, is_error=True)
+
         source = _resolve_path(source_str, self._effective_cwd)
         dest = _resolve_path(dest_str, self._effective_cwd)
 

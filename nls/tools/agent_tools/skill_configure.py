@@ -12,6 +12,11 @@ import json
 import logging
 from typing import Any
 
+from nls.skills_setup_policy import (
+    instruction_skill_setup_hint,
+    is_instruction_only_skill,
+)
+
 from .base import AgentTool, ToolResult
 
 logger = logging.getLogger(__name__)
@@ -30,9 +35,12 @@ class SkillConfigureTool:
     @property
     def description(self) -> str:
         return (
-            "Inspect or update a skill's configuration. "
-            "Call with only skill_name to see required/missing fields. "
-            "Call with skill_name + config to set values."
+            "Inspect or update bundled NLS skills that declare config_schema "
+            "(e.g. telegram-channel, whatsapp-channel, email-channel). "
+            "Call with only skill_name to see required/missing fields; "
+            "call with skill_name + config to set values. "
+            "ClawHub/AgentSkill instruction packages (installed via clawhub) "
+            "do NOT use this tool — read their SKILL.md and follow with bash()."
         )
 
     @property
@@ -88,6 +96,11 @@ class SkillConfigureTool:
         ctx = sk.context
 
         if not schema:
+            if is_instruction_only_skill(meta):
+                return ToolResult(
+                    content=instruction_skill_setup_hint(skill_name, sk.path),
+                    is_error=True,
+                )
             if config_patch and ctx:
                 current = ctx.load_config(agent_id=self._agent_id)
                 current.update(config_patch)
@@ -95,7 +108,11 @@ class SkillConfigureTool:
                 self._reload_adapter(sk)
                 return ToolResult(content=f"Config saved for '{skill_name}' (no schema declared).")
             return ToolResult(
-                content=f"Skill '{skill_name}' has no config_schema declared.",
+                content=(
+                    f"Skill '{skill_name}' has no config_schema declared. "
+                    f"Only bundled NLS channel/integration skills support skill_configure."
+                ),
+                is_error=True,
             )
 
         if config_patch is None:

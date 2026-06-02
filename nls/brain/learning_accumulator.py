@@ -165,11 +165,16 @@ class LearningAccumulator:
         self._total_flushes: int = 0
         self._compress_in_flight: bool = False
 
-    def _micro_extra_body(self) -> dict[str, Any]:
-        from nls.runtime.inference_compat import micro_inference_extra_body
+    def _prepare_micro(
+        self, messages: list[dict[str, Any]],
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        from nls.runtime.inference_compat import prepare_micro_inference
 
-        base = getattr(self._vllm_client, "base_url", "") or ""
-        return micro_inference_extra_body(base, thinking=False)
+        return prepare_micro_inference(
+            messages,
+            vllm_client=self._vllm_client,
+            adapter_name=self._adapter_name,
+        )
 
     # ------------------------------------------------------------------
     # Public API: ingest
@@ -440,15 +445,16 @@ class LearningAccumulator:
                 return
 
             system_msg = _COMPOUND_PROMPT.format(target=_COMPOUND_TARGET)
+            _micro_msgs, _micro_body = self._prepare_micro([
+                {"role": "system", "content": system_msg},
+                {"role": "user", "content": existing[:6000]},
+            ])
             result = await self._vllm_client.generate(
                 adapter_name=self._adapter_name,
-                messages=[
-                    {"role": "system", "content": system_msg},
-                    {"role": "user", "content": existing[:6000]},
-                ],
+                messages=_micro_msgs,
                 max_tokens=800,
                 temperature=0.3,
-                extra_body=self._micro_extra_body(),
+                extra_body=_micro_body,
             )
             compounded = (
                 result.text if hasattr(result, "text") else str(result or "")
@@ -526,15 +532,16 @@ class LearningAccumulator:
         system_msg = _COMPRESS_PROMPT.format(target=_COMPRESSED_TARGET)
         user_msg = f"Buffer: {buffer_name}\n\n{text}"
 
+        _micro_msgs, _micro_body = self._prepare_micro([
+            {"role": "system", "content": system_msg},
+            {"role": "user", "content": user_msg[:4000]},
+        ])
         result = await self._vllm_client.generate(
             adapter_name=self._adapter_name,
-            messages=[
-                {"role": "system", "content": system_msg},
-                {"role": "user", "content": user_msg[:4000]},
-            ],
+            messages=_micro_msgs,
             max_tokens=400,
             temperature=0.3,
-            extra_body=self._micro_extra_body(),
+            extra_body=_micro_body,
         )
         out = (
             result.text if hasattr(result, "text") else str(result or "")

@@ -106,6 +106,10 @@ _INAPP_ACTIONS = frozenset({
     "scroll", "press", "wait_for", "close",
 })
 
+_LOCAL_DEV_HOST_MARKERS = (
+    "localhost", "127.0.0.1", "0.0.0.0",
+)
+
 _PRESS_KEY_MAP = {
     "enter": "{ENTER}",
     "return": "{ENTER}",
@@ -849,6 +853,13 @@ class BrowserAdapterTool:
             "required": ["action"],
         }
 
+    @staticmethod
+    def _is_local_dev_url(url: str) -> bool:
+        u = (url or "").strip().lower()
+        if not u.startswith(("http://", "https://")):
+            return False
+        return any(m in u for m in _LOCAL_DEV_HOST_MARKERS)
+
     async def execute(
         self,
         params: dict[str, Any],
@@ -857,6 +868,23 @@ class BrowserAdapterTool:
         action = params.get("action", "").strip()
         if not action:
             return ToolResult(content="Error: 'action' is required.", is_error=True)
+
+        if (
+            not self._prefer_inapp()
+            and action == "navigate"
+            and self._is_local_dev_url(str(params.get("url") or ""))
+        ):
+            return ToolResult(
+                content=(
+                    "Error: In-app browser is not connected — cannot open a "
+                    "localhost dev server in an external Chromium window.\n"
+                    "Use web_fetch(url) or bash curl for HTTP checks while "
+                    "delegates run in the background.\n"
+                    "When the orchestrator has an active chat session, "
+                    "browser(navigate) uses the embedded in-app webview."
+                ),
+                is_error=True,
+            )
 
         if self._prefer_inapp() and action in _INAPP_ACTIONS:
             try:

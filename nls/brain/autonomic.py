@@ -42,11 +42,19 @@ from .circadian import CircadianClock, CircadianConfig, load_circadian_config
 logger = logging.getLogger(__name__)
 
 
-def _micro_extra_body(vllm_client: Any) -> dict[str, Any]:
-    from nls.runtime.inference_compat import micro_inference_extra_body
+def _prepare_micro_inference(
+    messages: list[dict],
+    vllm_client: Any,
+    *,
+    adapter_name: str | None = None,
+) -> tuple[list[dict], dict[str, Any]]:
+    from nls.runtime.inference_compat import prepare_micro_inference
 
-    base = getattr(vllm_client, "base_url", "") or ""
-    return micro_inference_extra_body(base, thinking=False)
+    return prepare_micro_inference(
+        messages,
+        vllm_client=vllm_client,
+        adapter_name=adapter_name,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1720,8 +1728,8 @@ class AutonomicNervousSystem:
             f"Result: {result[:1200]}"
         )
 
-        raw = await vllm_client.generate(
-            messages=[
+        _micro_msgs, _micro_body = _prepare_micro_inference(
+            [
                 {"role": "system", "content": (
                     "You extract key facts from tool outputs. Be concise. "
                     "Extract paths, configs, names, contacts, dates, "
@@ -1733,10 +1741,15 @@ class AutonomicNervousSystem:
                 )},
                 {"role": "user", "content": prompt_text},
             ],
+            vllm_client,
+            adapter_name=adapter_name,
+        )
+        raw = await vllm_client.generate(
+            messages=_micro_msgs,
             max_tokens=250,
             temperature=0.0,
             adapter_name=adapter_name,
-            extra_body=_micro_extra_body(vllm_client),
+            extra_body=_micro_body,
         )
 
         text = (raw.text if hasattr(raw, "text") else str(raw)).strip()
@@ -2883,8 +2896,8 @@ class AutonomicNervousSystem:
             f"--- Conversation ---\n{conversation_window}\n--- End ---"
         )
 
-        raw = await vllm_client.generate(
-            messages=[
+        _micro_msgs, _micro_body = _prepare_micro_inference(
+            [
                 {"role": "system", "content": (
                     "You extract concrete, durable facts from conversations. "
                     "Extract EVERY personal detail, preference, correction, "
@@ -2914,10 +2927,15 @@ class AutonomicNervousSystem:
                 )},
                 {"role": "user", "content": prompt_text},
             ],
+            vllm_client,
+            adapter_name=adapter_name,
+        )
+        raw = await vllm_client.generate(
+            messages=_micro_msgs,
             max_tokens=900,
             temperature=0.0,
             adapter_name=adapter_name,
-            extra_body=_micro_extra_body(vllm_client),
+            extra_body=_micro_body,
         )
 
         text = (raw.text if hasattr(raw, "text") else str(raw)).strip()
@@ -3078,8 +3096,8 @@ class AutonomicNervousSystem:
         )
 
         try:
-            raw = await vllm_client.generate(
-                messages=[
+            _micro_msgs, _micro_body = _prepare_micro_inference(
+                [
                     {"role": "system", "content": (
                         "You detect emotional and cognitive states in "
                         "conversations. Reply ONLY with CATEGORY_NAME:intensity "
@@ -3092,10 +3110,15 @@ class AutonomicNervousSystem:
                     )},
                     {"role": "user", "content": prompt_text},
                 ],
+                vllm_client,
+                adapter_name=adapter_name,
+            )
+            raw = await vllm_client.generate(
+                messages=_micro_msgs,
                 max_tokens=120,
                 temperature=0.0,
                 adapter_name=adapter_name,
-                extra_body=_micro_extra_body(vllm_client),
+                extra_body=_micro_body,
             )
         except Exception as e:
             logger.warning("Emotional sensing LLM call failed: %s", e)

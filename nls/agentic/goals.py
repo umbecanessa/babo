@@ -15,14 +15,14 @@ from typing import Any, Literal
 logger = logging.getLogger(__name__)
 
 OrchestrationProfile = Literal[
-    "conversational", "direct_tool", "solo_structured", "orchestrated",
+    "conversational", "solo_structured", "orchestrated",
 ]
 IntentLabel = Literal[
     "CHAT_NOTHINK", "CHAT_THINK", "TASK_NOTHINK", "TASK_THINK",
 ]
 
 _VALID_PROFILES = frozenset({
-    "conversational", "direct_tool", "solo_structured", "orchestrated",
+    "conversational", "solo_structured", "orchestrated",
 })
 _VALID_INTENTS = frozenset({
     "CHAT_NOTHINK", "CHAT_THINK", "TASK_NOTHINK", "TASK_THINK",
@@ -48,6 +48,9 @@ class TurnTriage:
 
     @property
     def needs_tools(self) -> bool:
+        """True when the turn should enter the agentic loop."""
+        if (self.intent or "").upper().startswith("TASK"):
+            return True
         return self.profile != "conversational"
 
     @property
@@ -64,14 +67,25 @@ class TurnTriage:
         tokens = {h.strip().lower() for h in self.hints if h and h.strip()}
         if tokens & HINT_FORBID_TOOLS:
             self.profile = "conversational"
-            self.goals = []
             return
         capped = apply_structured_hint_caps(self.profile, self.hints)
-        if capped == "conversational":
-            self.profile = "conversational"
-            self.goals = []
-        else:
+        if capped != self.profile:
             self.profile = capped
+
+    def reconcile_orchestration_depth(self) -> None:
+        """Resolve contradictory profile/goals/hints from the classifier."""
+        from nls.agentic.profile_guard_policy import (
+            reconcile_triage_orchestration_depth,
+        )
+
+        profile, hints = reconcile_triage_orchestration_depth(
+            profile=self.profile,
+            goals=self.goals,
+            hints=self.hints,
+            intent=self.intent,
+        )
+        self.profile = profile
+        self.hints = hints
 
 _THINKING_BLOCK_RE = re.compile(
     r"<think>.*?</think>",
@@ -140,11 +154,15 @@ _TASK_EXTRACT_SYSTEM = (
     'Output: {"goals": [], "hints": [], "deferred": []}\n'
 )
 
-_TURN_TRIAGE_SYSTEM = (
+_TURN_TRIAGE_TOOL_CATALOG_PLACEHOLDER = "{tool_catalog}"
+
+_TURN_TRIAGE_SYSTEM_BASE = (
     "Classify the user's LATEST message and extract task structure.\n"
     "Return ONE JSON object with these fields:\n"
     '  {"intent": "...", "thinking": true|false, "profile": "...", '
     '"goals": [...], "hints": [...], "deferred": [...]}\n\n'
+    + _TURN_TRIAGE_TOOL_CATALOG_PLACEHOLDER
+    + "\n\n"
     "INTENT (exactly one):\n"
     "  CHAT_NOTHINK — greeting, thanks, name-setting, casual chat, "
     "confirmations, NO action needed.\n"
@@ -153,59 +171,144 @@ _TURN_TRIAGE_SYSTEM = (
     "  TASK_NOTHINK — simple DO action: lookup URL, search online, "
     "open page, quick fetch, one command.\n"
     "  TASK_THINK — complex multi-step work: build, architect, deep "
-    "research report, end-to-end project.\n\n"
+    "research report, end-to-end project, repo creation, deployment.\n\n"
     "THINKING: true for CHAT_THINK and TASK_THINK; false for *_NOTHINK.\n\n"
     "PROFILE (orchestration depth — how much machinery to use):\n"
-    "  conversational — answer in prose only; goals=[]; no plan/team/todo.\n"
-    "  direct_tool — 1-3 tools max (web_search, browser, read); NO "
-    "plan, team, todo, delegate.\n"
+    "  conversational — chat + quick tools (web_search, browser, read, "
+    "clawhub, discover_tools). Answer in chat when possible; no plan, "
+    "team, todo, delegate, bash, or file writes.\n"
     "  solo_structured — you execute (write/bash/plan/todo); NO team waves.\n"
-    "  orchestrated — full EM stack allowed (plan + team + delegates).\n\n"
+    "  orchestrated — full EM stack (plan + team + delegates). DEFAULT for "
+    "multi-phase builds (monorepo, backend+frontend+deploy, PRD implementation).\n"
+    "  Triage profile is the starting depth only. Mid-loop, the agent may call "
+    "adopt_orchestration_profile(profile='solo_structured'|orchestrated') when "
+    "plan/todo/team/bash work needs deeper machinery — do not auto-bump profile "
+    "on switch_mode(executing) alone.\n\n"
     "GOALS: short imperative phrases (<15 words). Empty [] for chat/recap "
-    "('what did you find?', 'list again'). Group related steps into one goal.\n"
-    "HINTS: methodology permissions — NOT goals. Prefer machine-readable tokens "
-    "when constraints are clear:\n"
-    "  forbid:team — user forbids teams/sub-agents/delegates (any language)\n"
-    "  forbid:tools — user wants prose only, no tools\n"
-    "  orchestration:solo — execute solo, no wave orchestration\n"
+    "('what did you find?', 'list again') and for pure CHAT_* intents with "
+    "no action. For solo_structured/orchestrated TASK intents, goals MUST "
+    "be non-empty.\n\n"
+    "TOOL GATING (read AVAILABLE TOOLS above before choosing profile/hints):\n"
+    "- conversational ALWAYS has lookup and discovery tools — use them for "
+    "quick searches, fetches, and ClawHub skill discovery.\n"
+    "- profile conversational + hint forbid:tools ONLY when the user "
+    "explicitly wants prose-only with zero tool use.\n"
+    "- When unsure between conversational and solo_structured, prefer "
+    "conversational for single lookups and solo_structured for builds.\n"
+    "- Match profile to depth: quick lookup / casual ask → conversational; "
+    "single-step execution (files, shell) → solo_structured; PRD/platform/"
+    "monorepo/deploy/multi-service → orchestrated.\n\n"
+    "HINTS: methodology permissions — NOT goals. Machine-readable tokens ONLY "
+    "when clearly applicable:\n"
+    "  forbid:team — ONLY when the user's message explicitly forbids "
+    "teams/sub-agents/delegates (quote their constraint). NEVER infer from "
+    "task size or 'build it yourself' wording.\n"
+    "  forbid:tools — prose-only answer; strip tool access via hint (keep profile)\n"
+    "  orchestration:solo — user explicitly says work solo, no wave orchestration\n"
+    "  setup:instruction_skill — configuring an installed ClawHub/AgentSkill "
+    "(SKILL.md + bash; NOT skill_configure)\n"
     "Also plain-language hints are allowed ('be thorough', etc.).\n"
     "DEFERRED: post-task channel delivery "
     '{"channel":"whatsapp|telegram|email|chat","instruction":"..."}.\n\n'
-    "Rules:\n"
-    "- 'Plan my week' / 'help dad think through careers' → conversational "
-    "or solo_structured, NOT orchestrated (no team).\n"
-    "- 'Check Wikipedia for X' / 'price of Y online' → direct_tool.\n"
-    "- 'Build ICF end-to-end' / monorepo / waves → orchestrated.\n"
-    "- User forbids teams/sub-agents/delegates (any language) → solo_structured "
-    "or direct_tool, NEVER orchestrated; add hint forbid:team.\n"
-    "- User forbids tools / wants chat only (any language) → conversational; "
-    "add hint forbid:tools.\n"
-    "- Multi-step solo task (git repo, file write, todos): ONE coarse goal, "
-    "profile solo_structured — do NOT split into 3+ micro-goals.\n"
-    "- Recap/clarification of prior assistant output → goals=[].\n"
-    "- User sharing credentials to USE → TASK, not CHAT.\n\n"
+    "When conversational profile IS allowed:\n"
+    "- CHAT_* intents, recap questions, advice, quick lookups.\n"
+    "- TASK_NOTHINK: search online, open page, ClawHub search, one fetch.\n"
+    "- TASK_THINK where the deliverable is prose in chat AND no file/shell "
+    "work is needed (e.g. 'brainstorm names here', 'draft this paragraph').\n\n"
+    "When conversational profile is FORBIDDEN (use solo_structured or orchestrated):\n"
+    "- Attached PRD/spec + build, implement, create, deploy, scaffold, ship.\n"
+    "- End-to-end platform, production app, monorepo, multi-service, repo + deploy.\n"
+    "- Any request where available tools like read, write, bash, plan, team, "
+    "browser, or web_search would help — including 'do it yourself' builds.\n"
+    "Extract 2-5 coarse goals. NEVER forbid:tools or conversational for these.\n\n"
+    "Other rules:\n"
+    "- Never emit orchestration:solo or forbid:team unless the user explicitly "
+    "forbids sub-agents or teams in their message.\n"
+    "- PRD/spec + end-to-end build → orchestrated, hints=[], NEVER forbid:team.\n"
+    "- Credentials/API keys in the message are for USE in the task → TASK, not CHAT.\n"
+    "- Configuring/setup of an installed ClawHub or AgentSkill package "
+    "(bot token, env vars, running SKILL.md scripts) → solo_structured, "
+    "hint setup:instruction_skill; goals mention read SKILL.md + verify, "
+    "NOT skill_configure.\n\n"
+    "Profile selection:\n"
+    "- 'Plan my week' / career advice → conversational.\n"
+    "- 'Check Wikipedia for X' / 'search ClawHub for Discord' / quick lookup "
+    "→ conversational (web_search/browser/clawhub).\n"
+    "- Single-step execution (one file, one command, setup task) → solo_structured.\n"
+    "- Recap/clarification of prior assistant output → CHAT, goals=[].\n"
+    "- User starts conversational but will need SKILL.md + bash setup → conversational "
+    "with hint setup:instruction_skill; agent may adopt solo_structured mid-loop.\n\n"
     "Examples:\n"
     'User: "Hey, how are you?"\n'
     '{"intent":"CHAT_NOTHINK","thinking":false,"profile":"conversational",'
     '"goals":[],"hints":[],"deferred":[]}\n\n'
-    'User: "Check Wikipedia — what year was the Eiffel Tower built?"\n'
-    '{"intent":"TASK_NOTHINK","thinking":false,"profile":"direct_tool",'
+    'User: "Check Wikipedia — what year was the Eiffel Tower built?" '
+    '(web_search available)\n'
+    '{"intent":"TASK_NOTHINK","thinking":false,"profile":"conversational",'
     '"goals":["Look up Eiffel Tower construction year on Wikipedia"],'
     '"hints":[],"deferred":[]}\n\n'
-    'User: "Draft a short email to my landlord about the leak"\n'
-    '{"intent":"CHAT_THINK","thinking":true,"profile":"conversational",'
-    '"goals":[],"hints":[],"deferred":[]}\n\n'
+    'User: "Draft a short email to my landlord — just write it here, no commands"\n'
+    '(no tool needed — answer is prose in chat)\n'
+    '{"intent":"TASK_THINK","thinking":true,"profile":"conversational",'
+    '"goals":["Draft landlord email about the leak"],'
+    '"hints":["forbid:tools"],"deferred":[]}\n\n'
+    'User: "[The user attached 1 file(s): prd.md ...] Read the PRD, create GitHub '
+    'repo ICF-BenchBabo, build the full platform end-to-end (monorepo, Railway deploy)"\n'
+    '(read, write, bash, plan, team available)\n'
+    '{"intent":"TASK_THINK","thinking":true,"profile":"orchestrated",'
+    '"goals":["Read PRD and extract requirements","Create GitHub repo and scaffold",'
+    '"Build and deploy platform end-to-end"],'
+    '"hints":[],"deferred":[]}\n\n'
     'User: "Deep relocation research — send report on WhatsApp when done"\n'
+    '(web_search/browser available)\n'
     '{"intent":"TASK_THINK","thinking":true,"profile":"solo_structured",'
     '"goals":["Research relocation options and compile report"],'
     '"hints":[],"deferred":[{"channel":"whatsapp",'
     '"instruction":"Send full relocation research report"}]}\n\n'
-    'User: "Build the ICF platform end-to-end with teams"\n'
-    '{"intent":"TASK_THINK","thinking":true,"profile":"orchestrated",'
+    'User: "Build the ICF platform end-to-end but no sub-agents"\n'
+    '{"intent":"TASK_THINK","thinking":true,"profile":"solo_structured",'
     '"goals":["Build ICF platform end-to-end"],'
-    '"hints":["May use teams for parallel work"],"deferred":[]}\n\n'
-    "Return ONLY the JSON object. No markdown fences or explanation.\n"
+    '"hints":["forbid:team","orchestration:solo"],"deferred":[]}\n\n'
+    'User: "[attached prd.md] Read PRD, create repo, build full platform end-to-end"\n'
+    'WRONG (do not output): profile solo_structured or hints forbid:team.\n'
+    'RIGHT:\n'
+    '{"intent":"TASK_THINK","thinking":true,"profile":"orchestrated",'
+    '"goals":["Read PRD and extract requirements","Scaffold repo and monorepo",'
+    '"Build and deploy platform end-to-end"],"hints":[],"deferred":[]}\n\n'
+    "Return ONLY the JSON object. No markdown fences, no thinking, no explanation.\n"
 )
+
+
+def summarize_tools_for_triage(tools: list[Any] | None) -> str:
+    """Compact tool list for the triage classifier."""
+    if not tools:
+        return (
+            "AVAILABLE TOOLS: (not loaded — assume read, write, bash, web_search, "
+            "browser, plan, team, and related tools may exist.)"
+        )
+    lines: list[str] = ["AVAILABLE TOOLS (agent may call any that help):"]
+    for tool in tools:
+        name = (getattr(tool, "name", None) or "").strip()
+        if not name:
+            continue
+        desc = (getattr(tool, "description", None) or "").strip().replace("\n", " ")
+        if len(desc) > 100:
+            desc = desc[:97] + "..."
+        lines.append(f"- {name}: {desc}" if desc else f"- {name}")
+        if len(lines) > 55:
+            lines.append(f"- ... (+{len(tools) - 54} more tools)")
+            break
+    return "\n".join(lines)
+
+
+def build_triage_system_prompt(*, tool_catalog: str | None = None) -> str:
+    catalog = tool_catalog or summarize_tools_for_triage(None)
+    return _TURN_TRIAGE_SYSTEM_BASE.replace(
+        _TURN_TRIAGE_TOOL_CATALOG_PLACEHOLDER, catalog,
+    )
+
+
+_TURN_TRIAGE_SYSTEM = build_triage_system_prompt()
 
 _GOAL_EVAL_SYSTEM = (
     "You evaluate which sub-tasks from a task list have been completed "
@@ -243,19 +346,19 @@ def _heuristic_task_goals(user_input: str) -> list[str]:
         return ["Complete the user's request"]
     if len(user_input.strip()) < 20:
         return []
+    task_markers = (
+        "build", "create", "deploy", "implement", "monorepo", "github",
+        "install", "set up", "setup", "analyze", "refactor", "write",
+        "run ", "execute", "scaffold", "migration", "end-to-end",
+        "platform", "repository", "repo ", "discord", "admin access",
+    )
+    if any(m in low for m in task_markers):
+        return ["Complete the user's request"]
     if re.match(
         r"^\s*(hi|hello|hey|thanks|thank you|your name is|good morning)\b",
         low,
     ):
         return []
-    task_markers = (
-        "build", "create", "deploy", "implement", "monorepo", "github",
-        "install", "set up", "setup", "analyze", "refactor", "write",
-        "run ", "execute", "scaffold", "migration", "end-to-end",
-        "platform", "repository", "repo ",
-    )
-    if any(m in low for m in task_markers):
-        return ["Complete the user's request"]
     return []
 
 
@@ -267,7 +370,7 @@ def _heuristic_triage(user_input: str) -> TurnTriage:
         return TurnTriage(
             intent="TASK_THINK",
             thinking=True,
-            profile="direct_tool",
+            profile="conversational",
             goals=["Complete the user's request"],
         )
     if not goals and len(user_input.strip()) < 25:
@@ -300,7 +403,7 @@ def _heuristic_triage(user_input: str) -> TurnTriage:
         return TurnTriage(
             intent="TASK_NOTHINK",
             thinking=False,
-            profile="direct_tool",
+            profile="conversational",
             goals=goals or ["Look up the requested information"],
         )
     if goals:
@@ -332,6 +435,8 @@ def _parse_triage_dict(parsed: dict) -> TurnTriage:
         thinking = intent.endswith("THINK") and "NOTHINK" not in intent
 
     profile = str(parsed.get("profile", "solo_structured")).strip().lower()
+    if profile == "direct_tool":
+        profile = "conversational"
     if profile not in _VALID_PROFILES:
         profile = "solo_structured"
 
@@ -359,6 +464,7 @@ def _parse_triage_dict(parsed: dict) -> TurnTriage:
         deferred=deferred,
     )
     triage.cap_profile_from_hints()
+    triage.reconcile_orchestration_depth()
     return triage
 
 
@@ -403,6 +509,7 @@ async def triage_turn(
     *,
     history: list[dict] | None = None,
     adapter_name: str | None = None,
+    tool_catalog: str | None = None,
 ) -> TurnTriage:
     """Single micro-inference: intent, thinking, profile, goals, hints, deferred."""
     if not (user_input or "").strip():
@@ -412,8 +519,9 @@ async def triage_turn(
             profile="conversational",
         )
     try:
+        _system = build_triage_system_prompt(tool_catalog=tool_catalog)
         msgs: list[dict] = [
-            {"role": "system", "content": _TURN_TRIAGE_SYSTEM},
+            {"role": "system", "content": _system},
         ]
         if history:
             for turn in history[-6:]:
@@ -422,14 +530,17 @@ async def triage_turn(
                 if role in ("user", "assistant") and content:
                     msgs.append({"role": role, "content": content[:300]})
         msgs.append({"role": "user", "content": user_input})
+        _micro_msgs, _micro_body = _prepare_micro_inference(
+            msgs, vllm_client, adapter_name=adapter_name,
+        )
 
         result = await asyncio.wait_for(
             vllm_client.generate(
-                messages=msgs,
+                messages=_micro_msgs,
                 adapter_name=adapter_name,
                 max_tokens=384,
                 temperature=0.1,
-                extra_body=_micro_extra_body(vllm_client),
+                extra_body=_micro_body,
             ),
             timeout=15,
         )
@@ -484,11 +595,19 @@ def deferred_actions_to_goal_strings(deferred: list[dict]) -> list[str]:
     return out
 
 
-def _micro_extra_body(vllm_client: Any) -> dict[str, Any]:
-    from nls.runtime.inference_compat import micro_inference_extra_body
+def _prepare_micro_inference(
+    messages: list[dict],
+    vllm_client: Any,
+    *,
+    adapter_name: str | None = None,
+) -> tuple[list[dict], dict[str, Any]]:
+    from nls.runtime.inference_compat import prepare_micro_inference
 
-    base = getattr(vllm_client, "base_url", "") or ""
-    return micro_inference_extra_body(base, thinking=False)
+    return prepare_micro_inference(
+        messages,
+        vllm_client=vllm_client,
+        adapter_name=adapter_name,
+    )
 
 
 async def extract_goals(
@@ -537,16 +656,21 @@ async def evaluate_goals(
     )
     for attempt in range(2):
         try:
+            _eval_msgs, _eval_body = _prepare_micro_inference(
+                [
+                    {"role": "system", "content": _GOAL_EVAL_SYSTEM},
+                    {"role": "user", "content": prompt},
+                ],
+                vllm_client,
+                adapter_name=adapter_name,
+            )
             result = await asyncio.wait_for(
                 vllm_client.generate(
-                    messages=[
-                        {"role": "system", "content": _GOAL_EVAL_SYSTEM},
-                        {"role": "user", "content": prompt},
-                    ],
+                    messages=_eval_msgs,
                     adapter_name=adapter_name,
                     max_tokens=128,
                     temperature=0.1,
-                    extra_body=_micro_extra_body(vllm_client),
+                    extra_body=_eval_body,
                 ),
                 timeout=15,
             )

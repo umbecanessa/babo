@@ -37,22 +37,26 @@ async def _summarize_consolidation(
         f"{joined}"
     )
     try:
-        from nls.runtime.inference_compat import micro_inference_extra_body
+        from nls.runtime.inference_compat import prepare_micro_inference
 
-        _upstream = getattr(vllm_client, "base_url", "") or ""
-        result = await vllm_client.generate(
-            adapter_name=adapter_name,
-            messages=[
+        _micro_msgs, _micro_body = prepare_micro_inference(
+            [
                 {
                     "role": "system",
                     "content": "You write concise memory consolidation summaries.",
                 },
                 {"role": "user", "content": prompt},
             ],
+            vllm_client=vllm_client,
+            adapter_name=adapter_name,
+        )
+        result = await vllm_client.generate(
+            adapter_name=adapter_name,
+            messages=_micro_msgs,
             max_tokens=256,
             temperature=0.3,
             top_p=0.9,
-            extra_body=micro_inference_extra_body(_upstream, thinking=False),
+            extra_body=_micro_body,
         )
         text = result.text if hasattr(result, "text") else str(result)
         return text.strip() or None

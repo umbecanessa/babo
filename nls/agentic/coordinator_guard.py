@@ -201,6 +201,35 @@ def must_delegate_before_impl(
     ) is not None
 
 
+def block_em_executing_during_review(
+    target_mode: AgentMode,
+    *,
+    active_mode: AgentMode,
+    dispatch_source: str = "",
+    has_pending_completion_reviews: bool = False,
+    enable_delegation: bool,
+    is_delegate_loop: bool,
+) -> str | None:
+    """Block orchestrator from switching to IC executing during EM review."""
+    if not enable_delegation or is_delegate_loop:
+        return None
+    if target_mode != AgentMode.EXECUTING:
+        return None
+    src = (dispatch_source or "").strip()
+    if (
+        src.startswith("team_completion_review:")
+        or has_pending_completion_reviews
+    ):
+        return (
+            "Blocked: switch_mode(mode='executing') — you are the engineering "
+            "manager reviewing delegate output, not a delegate.\n"
+            "Stay in evaluating: read/list_dir their deliverables, then "
+            "team(intervene, decision='approve'|'hint'). "
+            "Do NOT switch to executing to do their step yourself."
+        )
+    return None
+
+
 def block_executing_mode_escape(
     target_mode: AgentMode,
     *,
@@ -251,7 +280,9 @@ def pre_delegate_block_message(
     orchestration_profile: str | None = None,
 ) -> str | None:
     """Return a block message, or None if the tool call is allowed."""
-    if orchestrator_recovery or active_mode in _EXECUTING_ESCAPE_OK_MODES:
+    if active_mode in _EXECUTING_ESCAPE_OK_MODES:
+        return None
+    if orchestrator_recovery:
         return None
     profile = normalize_profile(orchestration_profile)
     if block_reason == "team_plan" and profile != "orchestrated":
@@ -300,10 +331,11 @@ def recovery_mode_system_note() -> str:
     return (
         "[ORCHESTRATOR RECOVERY] Wave failed, disbanded, or accept_partial "
         "applied — you may write/edit/bash in executing or evaluating mode "
-        "to close small gaps. PREFER team(create/launch) for large delegatable "
-        "steps; do NOT plan(create) from scratch if artifacts exist on disk. "
+        "to close small gaps ONLY when no delegates are actively running on "
+        "that wave. PREFER team(create/launch) for large delegatable steps; "
+        "do NOT plan(create) from scratch if artifacts exist on disk. "
         "After accept_partial, call team(advance) if the wave is still open. "
-        "When delegates are actually running, await_delegates(summary='...') — "
+        "When delegates are running, await_delegates(summary='...') — "
         "not task_complete."
     )
 

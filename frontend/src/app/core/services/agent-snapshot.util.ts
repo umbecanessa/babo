@@ -95,15 +95,39 @@ function shortModelId(model: string | null | undefined): string | null {
   return tail.replace(/^models\//, '');
 }
 
-function formatRelativeTime(iso: string | undefined): string | null {
-  if (!iso) return null;
-  const ts = Date.parse(iso);
-  if (Number.isNaN(ts)) return null;
+export function parseAgentTimestamp(value: string | undefined): number | null {
+  if (!value) return null;
+  const trimmed = value.trim();
+  if (/^\d+(\.\d+)?$/.test(trimmed)) {
+    const numeric = Number(trimmed);
+    const ms = numeric < 1e12 ? numeric * 1000 : numeric;
+    return ms;
+  }
+  // Python utcnow().isoformat() has no offset — treat as UTC, not local.
+  const naiveIso =
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?$/.test(trimmed);
+  const normalized = naiveIso ? `${trimmed}Z` : trimmed;
+  const ts = Date.parse(normalized);
+  return Number.isNaN(ts) ? null : ts;
+}
+
+export function formatRelativeTime(iso: string | undefined): string | null {
+  const ts = parseAgentTimestamp(iso);
+  if (ts == null) return null;
   const deltaSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
   if (deltaSec < 60) return 'just now';
   if (deltaSec < 3600) return `${Math.floor(deltaSec / 60)}m ago`;
   if (deltaSec < 86400) return `${Math.floor(deltaSec / 3600)}h ago`;
   return `${Math.floor(deltaSec / 86400)}d ago`;
+}
+
+export function formatAbsoluteTime(iso: string | undefined): string | null {
+  const ts = parseAgentTimestamp(iso);
+  if (ts == null) return null;
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(ts);
 }
 
 function networkLabelFromHeartbeat(hb: HeartbeatStatus | undefined): string | null {
@@ -321,7 +345,6 @@ export function buildAgentSnapshot(agent: Agent): AgentSnapshot {
   const modelLabel =
     shortModelId(rt?.orchestrator_model)
     || shortModelId(activity?.orchestrator_model);
-  const lastActiveLabel = formatRelativeTime(rt?.last_interaction);
   const energyPercent = energyPercentFromHeartbeat(hb);
 
   const agentStatus = (agent.runtime?.status || agent.status || 'offline').toLowerCase();
@@ -431,14 +454,6 @@ export function buildAgentSnapshot(agent: Agent): AgentSnapshot {
       label: 'Energy',
       value: `${energyPercent}%`,
       tone: 'energy',
-    });
-  }
-  if (lastActiveLabel) {
-    vitals.push({
-      key: 'time',
-      label: 'Active',
-      value: lastActiveLabel,
-      tone: 'time',
     });
   }
 

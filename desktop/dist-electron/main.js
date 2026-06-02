@@ -79,6 +79,7 @@ let venvManager = null;
 let configManager = null;
 let permissionManager = null;
 let updateManager = null;
+let isQuitting = false;
 const isDev = process.env['NODE_ENV'] === 'development';
 const ANGULAR_DEV_URL = 'http://localhost:4200';
 const CDP_PORT = 9245;
@@ -255,6 +256,7 @@ electron_1.app.whenReady().then(async () => {
     permissionManager = new permission_manager_1.PermissionManager();
     runtimeManager = new runtime_manager_1.RuntimeManager(configManager, venvManager);
     updateManager = new update_manager_1.UpdateManager(runtimeManager, configManager);
+    runtimeManager.setShouldAutoRestart(() => !isQuitting);
     // Register IPC handlers
     (0, ipc_handlers_1.registerIpcHandlers)(permissionManager, runtimeManager, venvManager, configManager, updateManager);
     buildAppMenu();
@@ -276,7 +278,6 @@ electron_1.app.on('window-all-closed', () => {
         electron_1.app.quit();
     }
 });
-let isQuitting = false;
 electron_1.app.on('before-quit', (event) => {
     if (isQuitting || !runtimeManager)
         return;

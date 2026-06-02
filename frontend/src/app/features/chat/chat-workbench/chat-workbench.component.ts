@@ -23,6 +23,7 @@ import {
 import {
   escalateHintForEntry,
   extractEntryErrorText,
+  extractEntryOutputText,
   shouldShowErrorDetail,
 } from '../../../core/services/workbench-error.util';
 import { AnsiPipe } from '../../../shared/pipes/ansi.pipe';
@@ -157,6 +158,10 @@ export class ChatWorkbenchComponent {
     return null;
   }
 
+  entryOutputText(e: WorkbenchEntry): string | null {
+    return extractEntryOutputText(e);
+  }
+
   entryErrorText(e: WorkbenchEntry): string | null {
     return extractEntryErrorText(e);
   }
@@ -202,18 +207,25 @@ export class ChatWorkbenchComponent {
     );
   }
 
-  /** Code preview, hint body, long results. */
+  /** Tool output body (shell-style gray block) — success, warning, or failure. */
   bodyBlocks(e: WorkbenchEntry): ActivityChip[] {
     const blocks = (e.chips ?? []).filter(
       (c) =>
-        c.label !== 'Error'
-        && (
-          c.variant === 'block'
-          || c.label === 'Preview'
-          || (c.label === 'Result' && (c.value?.length ?? 0) > 96)
-        ),
+        c.variant === 'block'
+        || c.label === 'Preview'
+        || c.label === 'Output'
+        || c.label === 'Error'
+        || c.label === 'Warning'
+        || (c.label === 'Result' && (c.value?.length ?? 0) > 96),
     );
-    return blocks;
+    const seen = new Set<string>();
+    return blocks.filter((c) => {
+      const v = (c.value || '').trim();
+      if (!v) return false;
+      if (seen.has(v)) return false;
+      seen.add(v);
+      return true;
+    });
   }
 
   showCardTitle(e: WorkbenchEntry): boolean {
@@ -250,6 +262,7 @@ export class ChatWorkbenchComponent {
 
   statusLabel(e: WorkbenchEntry): string | null {
     if (e.status === 'running') return 'Running';
+    if (e.status === 'warn') return 'Warning';
     if (e.status === 'error') return 'Failed';
     return null;
   }
@@ -318,6 +331,7 @@ export class ChatWorkbenchComponent {
     if (label === 'write' || label === 'edit') return 'wb-tag--write';
     if (label === 'delegate') return 'wb-tag--delegate';
     if (e.status === 'error') return 'wb-tag--err';
+    if (e.status === 'warn') return 'wb-tag--warn';
     return 'wb-tag--tool';
   }
 

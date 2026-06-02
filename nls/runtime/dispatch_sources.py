@@ -19,6 +19,7 @@ _ORCHESTRATION_PREFIXES = (
     "team_completion_review:",
     "team_member_escalation:",
     "pending_wave_launch:",
+    "board_reconcile:",
     "check_back",
 )
 

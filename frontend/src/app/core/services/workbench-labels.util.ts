@@ -204,9 +204,13 @@ export function toolWorkbenchEndTitle(
   toolName: string,
   isError: boolean,
   startTitle: string,
+  isWarn = false,
 ): string {
   if (isError) {
     return `${startTitle} — failed`;
+  }
+  if (isWarn) {
+    return startTitle;
   }
   if (
     toolName === 'switch_mode'

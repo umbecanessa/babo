@@ -389,6 +389,7 @@ def error_tracker(
     state: LoopState,
 ) -> None:
     """Update consecutive error tracking and soft-error detection."""
+    from nls.agentic.tool_result_semantics import counts_toward_error_budget
 
     _is_cli = tool_name == "bash" or "[Auto-redirected:" in result.content
 
@@ -403,12 +404,16 @@ def error_tracker(
             "commandnotfoundexception",
         ))
 
-    if is_error:
+    budget_error = counts_toward_error_budget(tool_name, result) if is_error else False
+
+    if budget_error:
         state.consecutive_errors += 1
         state.total_errors += 1
         state.consecutive_same_tool[tool_name] = (
             state.consecutive_same_tool.get(tool_name, 0) + 1
         )
+    elif is_error:
+        state.last_error_preview = (result.content or "")[:200]
     else:
         _was_recovering = state.consecutive_errors > 0
         state.consecutive_errors = 0
@@ -419,11 +424,6 @@ def error_tracker(
                 state.on_recovery()
             except Exception:
                 pass
-
-    if tool_name in ("read", "read_file", "write", "write_file") and not is_error:
-        fpath = _tool_path_from_args(args)
-        if fpath:
-            state.files_read.add(fpath)
 
     if tool_name == "clawhub" and not is_error:
         for slug in list(state.not_found_tools):

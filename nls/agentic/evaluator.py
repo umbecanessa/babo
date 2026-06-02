@@ -37,6 +37,35 @@ LOOKUP_TOOLS = frozenset({
     "plan",
 })
 
+# Discovery / identity tools — do not count as task delivery for implicit exit.
+NON_SUBSTANTIVE_TOOLS = LOOKUP_TOOLS | frozenset({
+    "contacts", "list_dir", "glob", "grep", "semantic_search",
+    "discover_tools", "file_history",
+})
+
+
+def has_substantive_tool_success(state: LoopState) -> bool:
+    """True when at least one successful tool call actually changed state."""
+    for name, count in (state.tool_successes or {}).items():
+        if count > 0 and name not in NON_SUBSTANTIVE_TOOLS:
+            return True
+    return False
+
+
+def requires_substantive_delivery(state: LoopState) -> bool:
+    """Tasks that must run bash/write/etc. before prose-only loop exit."""
+    hints = {h.strip().lower() for h in (state.hints or []) if h and h.strip()}
+    if "setup:instruction_skill" in hints:
+        return True
+    goals = " ".join(g or "" for g in (state.goals or [])).lower()
+    return any(
+        tok in goals
+        for tok in (
+            "install", "configure", "deploy", "build", "setup",
+            "verify bot", "connect",
+        )
+    )
+
 _FAILURE_PATTERNS = (
     "not logged in", "not found", "command not found",
     "permission denied", "error:", "failed",
@@ -258,14 +287,14 @@ async def should_complete(
         return True
 
     if (
-        _spec.profile == "direct_tool"
+        _spec.profile == "conversational"
         and _spec.complete_on_prose
         and state.total_tool_calls > 0
         and state.consecutive_text_only >= 1
         and len(_last_text) > 80
     ):
         logger.info(
-            "[EVAL] -> COMPLETE (direct_tool profile after lookup tools)"
+            "[EVAL] -> COMPLETE (conversational profile after lookup tools)"
         )
         return True
 
@@ -320,9 +349,14 @@ async def should_complete(
                     state.consecutive_text_only == 1
                     and state.total_tool_calls > 0
                     and state.total_tool_calls <= 5
-                    and not state.coordinator_mode
                     and len(_last_text) > 100
                     and "?" in _last_text[-500:]
+                    and (
+                        not state.coordinator_mode
+                        or not _delegates_in_background(
+                            state, delegate_manager,
+                        )
+                    )
                 )
                 if _asking_user:
                     logger.info(
@@ -433,10 +467,25 @@ async def should_complete(
     _last_text_len = len(getattr(state, "_last_iter_text", "") or "")
     _implicit_min_chars = 100
     if (
-        _spec.profile in ("direct_tool", "solo_structured")
+        _spec.profile in ("conversational", "solo_structured")
         and state.total_tool_calls <= 5
     ):
         _implicit_min_chars = 25
+    if (
+        state.consecutive_text_only >= 1
+        and len(state.final_response or state.user_input) > 0
+        and not _has_deferred_goals
+        and not state.coordinator_mode
+        and _spec.complete_on_implicit_delivery
+        and _last_text_len >= _implicit_min_chars
+        and _instruction_skill_setup_in_progress(state)
+        and (state.goals or requires_substantive_delivery(state))
+    ):
+        logger.info(
+            "[EVAL] -> CONTINUE (instruction-skill setup: call task_complete "
+            "after verify — prose-only exit blocked)",
+        )
+        return False
     if (
         state.consecutive_text_only >= 1
         and state.total_tool_calls > 0
@@ -445,6 +494,10 @@ async def should_complete(
         and not state.coordinator_mode
         and _spec.complete_on_implicit_delivery
         and _last_text_len >= _implicit_min_chars
+        and (
+            has_substantive_tool_success(state)
+            or not requires_substantive_delivery(state)
+        )
     ):
         logger.info(
             "[EVAL] -> COMPLETE (tool + prose delivery, text_len=%d, "
@@ -452,11 +505,22 @@ async def should_complete(
             _last_text_len, state.total_tool_calls,
         )
         return True
+    if (
+        state.consecutive_text_only >= 1
+        and requires_substantive_delivery(state)
+        and not has_substantive_tool_success(state)
+        and _spec.complete_on_implicit_delivery
+    ):
+        logger.info(
+            "[EVAL] -> CONTINUE (lookup-only tools so far; "
+            "setup/install task needs bash or write)",
+        )
+        return False
 
     if state.goals:
         if (
             state.total_tool_calls == 0
-            and _profile in ("conversational", "direct_tool")
+            and _profile == "conversational"
             and state.consecutive_text_only >= 1
             and len(_last_text) > 80
         ):
@@ -490,6 +554,15 @@ async def should_complete(
                     logger.info("[EVAL] -> CONTINUE (pending goals)")
                     return False
         else:
+            if (
+                requires_substantive_delivery(state)
+                and not has_substantive_tool_success(state)
+            ):
+                logger.info(
+                    "[EVAL] -> CONTINUE (goals exist, no vllm_client, "
+                    "lookup-only — need substantive tools)",
+                )
+                return False
             logger.info("[EVAL] -> COMPLETE (goals exist, no vllm_client)")
             return True
 
@@ -706,8 +779,12 @@ def _stall_nudge_for_state(state: "LoopState", em_message: str, solo_message: st
 
     profile = normalize_profile(getattr(state, "orchestration_profile", None))
     if profile == "orchestrated":
-        return em_message
-    return solo_message
+        msg = em_message
+    else:
+        msg = solo_message
+    from nls.agentic.profile_depth_policy import append_depth_to_stall_message
+
+    return append_depth_to_stall_message(state, msg)
 
 
 def _stall_context_suffix(state: "LoopState") -> str:
@@ -835,6 +912,19 @@ def _is_orchestrator_monitoring_cycle(names: list[str]) -> bool:
     ):
         return True
     return False
+
+
+def _instruction_skill_setup_in_progress(state: "LoopState") -> bool:
+    hints = {h.strip().lower() for h in (state.hints or []) if h and h.strip()}
+    return "setup:instruction_skill" in hints
+
+
+def _diverse_bash_signatures(state: "LoopState", window: int) -> bool:
+    sigs = getattr(state, "tool_call_signatures", [])[-window:]
+    bash_sigs = [s for s in sigs if s.startswith("bash:")]
+    if len(bash_sigs) < 4:
+        return False
+    return len(set(bash_sigs)) >= 3
 
 
 def _detect_assessment_loop(state: "LoopState") -> str | None:
@@ -1057,6 +1147,17 @@ def detect_stall(state: "LoopState", config: "LoopConfig") -> str | None:
                         logger.debug(
                             "[STALL] name cycle detected (%s) but signatures "
                             "are diverse — likely productive scaffolding",
+                            " → ".join(chunks[0]),
+                        )
+                        continue
+                    if (
+                        set(chunks[0]) == {"bash"}
+                        and _instruction_skill_setup_in_progress(state)
+                        and _diverse_bash_signatures(state, cycle_len * 3)
+                    ):
+                        logger.debug(
+                            "[STALL] bash-only instruction-skill setup (%s) — "
+                            "diverse commands, skipping cycle stall",
                             " → ".join(chunks[0]),
                         )
                         continue

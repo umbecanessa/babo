@@ -77,15 +77,29 @@
     </div>
   }
 
-  <div class="card-meta">
-    <span class="meta-item">{{ snapshot.statsLine }}</span>
-    @if (agent.genesisVersion) {
-      <span class="meta-item meta-muted">{{ agent.genesisVersion }}</span>
-    }
-  </div>
+  <div class="card-footer">
+    <div class="card-meta">
+      <div class="meta-primary">
+        <span class="meta-stats">{{ snapshot.statsLine }}</span>
+        @if (agent.genesisVersion) {
+          <span class="meta-genesis">{{ agent.genesisVersion }}</span>
+        }
+      </div>
+      @if (createdLabel || lastActiveLabel) {
+        <div class="meta-times">
+          @if (createdLabel) {
+            <span [title]="createdTitle || ''">Created {{ createdLabel }}</span>
+          }
+          @if (lastActiveLabel) {
+            <span [title]="lastActiveTitle || ''">Last active {{ lastActiveLabel }}</span>
+          }
+        </div>
+      }
+    </div>
 
-  <a [routerLink]="['/chat', agent.id]" class="chat-btn">
-    <span class="chat-dot"></span>
-    Open Chat
-  </a>
+    <a [routerLink]="['/chat', agent.id]" class="chat-btn">
+      <span class="chat-dot"></span>
+      Open Chat
+    </a>
+  </div>
 </div>

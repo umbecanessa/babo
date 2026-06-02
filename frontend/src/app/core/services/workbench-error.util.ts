@@ -4,13 +4,22 @@ import type { WorkbenchEntry } from './chat-workbench.service';
 const FILE_SCOPE_ESCALATE_RE =
   /PATH NOT IN YOUR ASSIGNMENT|FILE LOCKED:|FILE OWNED BY TEAMMATE|outside your wave-\d+ file scope/i;
 
-export function extractEntryErrorText(e: WorkbenchEntry): string | null {
-  if (e.status !== 'error') return null;
-  const block = (e.chips ?? []).find((c) => c.label === 'Error' && c.value);
-  if (block?.value) return block.value;
+const _OUTPUT_CHIP_LABELS = ['Preview', 'Output', 'Result', 'Error', 'Warning'] as const;
+
+/** Tool result body for display / escalate hints (neutral, not the red error panel). */
+export function extractEntryOutputText(e: WorkbenchEntry): string | null {
+  for (const label of _OUTPUT_CHIP_LABELS) {
+    const block = (e.chips ?? []).find((c) => c.label === label && c.value);
+    if (block?.value) return block.value;
+  }
   if (e.subtitle?.trim()) return e.subtitle.trim();
   if (e.detail?.trim()) return e.detail.trim();
   return null;
+}
+
+export function extractEntryErrorText(e: WorkbenchEntry): string | null {
+  if (e.status !== 'error' && e.status !== 'warn') return null;
+  return extractEntryOutputText(e);
 }
 
 /** Hide "Full output" when it repeats the inline error body. */

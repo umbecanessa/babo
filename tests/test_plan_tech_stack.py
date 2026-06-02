@@ -70,5 +70,6 @@ def test_create_plan_step_owned_paths(tmp_path: Path):
 
 
 def test_owned_paths_no_heuristic_fallback():
-    paths = resolve_step_owned_paths(None)
-    assert paths == []
+    assert resolve_step_owned_paths(None) == []
+    step = PlanStep(label="Frontend Development")
+    assert resolve_step_owned_paths(step) == []

@@ -8,6 +8,7 @@ from nls.agentic.wake_coordination import (
     is_member_escalation_source,
     member_escalation_source,
     parse_completion_review_team_id,
+    parse_member_escalation_source,
 )
 
 
@@ -28,3 +29,12 @@ def test_parse_completion_review_team_id_legacy_and_batched():
     assert parse_completion_review_team_id(
         "team_completion_review:team_95c4fabe",
     ) == "team_95c4fabe"
+
+
+def test_parse_member_escalation_source():
+    assert parse_member_escalation_source(
+        "team_member_escalation:team_95c4fabe:3",
+    ) == ("team_95c4fabe", 3)
+    assert parse_member_escalation_source(
+        "team_member_escalation:team_95c4fabe:0",
+    ) == ("team_95c4fabe", 0)

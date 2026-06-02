@@ -91,6 +91,38 @@ def normalize_ledger_path(path_str: str) -> str:
     return p
 
 
+def strip_redundant_project_prefix(path_str: str, cwd: str) -> str:
+    """Drop leading project_dir when CWD is already inside the project folder."""
+    p = normalize_ledger_path(path_str)
+    if not p or not cwd:
+        return p
+    from pathlib import Path
+
+    parts = Path(p).parts
+    if len(parts) < 2:
+        return p
+    cwd_path = Path(cwd)
+    if parts[0] == cwd_path.name:
+        return Path(*parts[1:]).as_posix()
+    cwd_norm = str(cwd_path).replace("\\", "/").rstrip("/")
+    if cwd_norm.endswith("/" + parts[0]):
+        return Path(*parts[1:]).as_posix()
+    return p
+
+
+_MUST_READ_SCAFFOLD_SUFFIX = (
+    "\nIf bash/npm/pnpm scaffolded this file, read() it once, then write/edit."
+)
+
+
+def append_must_read_scaffold_hint(message: str) -> str:
+    if not message or "MUST READ FIRST" not in message:
+        return message
+    if _MUST_READ_SCAFFOLD_SUFFIX.strip() in message:
+        return message
+    return message + _MUST_READ_SCAFFOLD_SUFFIX
+
+
 @dataclass
 class FileIndexEntry:
     """Derived provenance for one file path."""
@@ -154,6 +186,7 @@ class FileLedger:
         self._path = ledger_path
         self._lock = threading.Lock()
         self._index = FileLedgerIndex()
+        self._read_index: Any | None = None
         self._wave_registry: dict[int, dict[int, list[str]]] = {}
         self._active_wave: int | None = None
         self._shared_paths: set[str] = set(_SHARED_PATHS)
@@ -230,6 +263,27 @@ class FileLedger:
                 seen.add(norm)
                 granted.append(norm)
         return granted
+
+    def delegate_covers_paths(
+        self,
+        wave: int,
+        delegate: int,
+        paths: list[str],
+    ) -> bool:
+        """True when every requested path is already in the delegate's wave scope."""
+        if not paths:
+            return False
+        with self._lock:
+            patterns = self._wave_registry.get(wave, {}).get(delegate, [])
+            if not patterns:
+                return False
+            for raw in paths:
+                norm = normalize_ledger_path(raw)
+                if not norm:
+                    return False
+                if not any(self._path_matches_pattern(norm, p) for p in patterns):
+                    return False
+        return True
 
     def set_delegate_paths(
         self,
@@ -399,7 +453,9 @@ class FileLedger:
                 )
             if is_scratch_path(scope_norm):
                 return None
-            if not file_exists and idx is None:
+            if idx is None:
+                # Unclaimed on the ledger — first write() wins even when bash/npx
+                # created the file on disk before the delegate used write().
                 return None
             if idx is not None and idx.creator_delegate == delegate:
                 return None
@@ -502,8 +558,21 @@ class FileLedger:
                 fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
             with self._lock:
                 self._index.apply_entry(entry)
+            self._invalidate_read_index(norm_path or file_path)
         except Exception:
             logger.debug("FileLedger.record write failed for %s", file_path, exc_info=True)
+
+    def set_read_index(self, read_index: Any | None) -> None:
+        """Optional shared read cache — invalidated on writes."""
+        self._read_index = read_index
+
+    def _invalidate_read_index(self, path: str) -> None:
+        ri = getattr(self, "_read_index", None)
+        if ri is not None and path:
+            try:
+                ri.invalidate_path(path)
+            except Exception:
+                logger.debug("ReadIndex invalidation failed for %s", path, exc_info=True)
 
     # ------------------------------------------------------------------
     # Read path
@@ -626,8 +695,23 @@ class FileHistoryTool:
         → recent changes across all files (default last 10)
     """
 
-    def __init__(self, ledger: FileLedger) -> None:
+    def __init__(
+        self,
+        ledger: FileLedger,
+        file_state_cache: object | None = None,
+        cwd: str = "",
+        shared_cwd: object | None = None,
+    ) -> None:
         self._ledger = ledger
+        self._file_state_cache = file_state_cache
+        self._cwd = cwd
+        self._shared_cwd = shared_cwd
+
+    @property
+    def _effective_cwd(self) -> str:
+        if self._shared_cwd is not None:
+            return str(self._shared_cwd)
+        return self._cwd
 
     @property
     def name(self) -> str:
@@ -679,6 +763,16 @@ class FileHistoryTool:
         path = params.get("path") or None
         detail = bool(params.get("detail", False))
         n = min(int(params.get("n", 10)), 50)
+
+        if path and self._file_state_cache is not None:
+            from .file_ledger import normalize_ledger_path
+            from .write import _resolve_path
+
+            norm = normalize_ledger_path(path) or path
+            resolved = _resolve_path(norm, self._effective_cwd)
+            if resolved.exists():
+                self._file_state_cache.record(str(resolved.resolve()))
+
         return ToolResult(
             content=self._ledger.format_summary(path, detail, n),
             details={"ledger_path": str(self._ledger._path)},

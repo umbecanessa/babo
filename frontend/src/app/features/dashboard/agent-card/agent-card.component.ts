@@ -7,6 +7,8 @@ import {
   AgentSnapshot,
   AgentVital,
   vitalHint,
+  formatRelativeTime,
+  formatAbsoluteTime,
 } from '../../../core/services/agent-snapshot.util';
 
 @Component({
@@ -76,5 +78,21 @@ export class AgentCardComponent {
 
   get displayName(): string {
     return this.agent.name || this.agent.runtimeAgentId?.substring(0, 8) || this.agent.id?.substring(0, 8) || 'Agent';
+  }
+
+  get createdLabel(): string | null {
+    return formatRelativeTime(this.agent.createdAt);
+  }
+
+  get createdTitle(): string | null {
+    return formatAbsoluteTime(this.agent.createdAt);
+  }
+
+  get lastActiveLabel(): string | null {
+    return formatRelativeTime(this.agent.runtime?.last_interaction);
+  }
+
+  get lastActiveTitle(): string | null {
+    return formatAbsoluteTime(this.agent.runtime?.last_interaction);
   }
 }

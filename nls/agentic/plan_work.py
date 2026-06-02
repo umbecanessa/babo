@@ -7,9 +7,13 @@ remains unresolved.
 
 from __future__ import annotations
 
+import logging
+from dataclasses import dataclass
 from typing import Any
 
 from nls.agentic.plan_store import Plan, PlanStep, PlanStore
+
+logger = logging.getLogger(__name__)
 
 ACCEPT_PARTIAL_TAG = "[accept_partial]"
 VERIFIED_ON_DISK_TAG = "[verified_on_disk]"
@@ -264,6 +268,66 @@ def work_plan_has_open_steps(plan: Plan) -> bool:
     )
 
 
+def plan_open_step_count(plan: Plan) -> int:
+    """Steps still blocking closure (excludes skipped)."""
+    return len([
+        s for s in plan.steps
+        if s.status not in ("done", "skipped")
+    ])
+
+
+def format_plan_closure_nudge(plan_id: str) -> str:
+    """Explicit verify → complete → task_complete when all steps are done."""
+    return (
+        f"[PLAN CLOSURE — ALL STEPS DONE]\n"
+        f"plan_id={plan_id}\n"
+        "1) Release check: read key paths; bash tests/smoke (server, build, curl)\n"
+        "2) Confirm frontend ↔ backend contracts before trusting green verify\n"
+        f"3) plan(action='verify', plan_id='{plan_id}')\n"
+        f"4) plan(action='complete', plan_id='{plan_id}')\n"
+        "5) task_complete(summary='...' with what runs and how to test)\n"
+        "Do NOT launch another wave unless verify reports blockers."
+    )
+
+
+def format_wave_complete_wake(
+    *,
+    plan_id: str,
+    team_id: str,
+    team_name: str = "",
+    outcome: str = "completed",
+    ok_count: int = 0,
+    fail_count: int = 0,
+    pending_step_count: int | None = None,
+) -> str:
+    """Healthy wave landed — review path without PLAN RECOVERY alarm."""
+    label = f"{team_name} [{team_id}]" if team_name else team_id
+    lines = [
+        f"[WAVE COMPLETE — REVIEW]",
+        f"Team: {label}",
+        f"Outcome: {outcome.upper()} ({ok_count} done, {fail_count} failed)",
+        f"plan_id={plan_id}",
+        "1) switch_mode(evaluating) if not already",
+        "2) Production spot-check: read routes/services — not config-only",
+        f"3) team(action='inspect', team_id='{team_id}')",
+        "4) team(intervene, decision='approve') only after read/list_dir review",
+        f"5) team(advance) ONLY when no members running and no pending reviews",
+        "[BREADCRUMB] If others still run: await_delegates — not advance.",
+    ]
+    if pending_step_count == 0:
+        lines.append(
+            "6) All plan steps are done — after advance: "
+            "plan(verify) → plan(complete) → task_complete."
+        )
+        lines.append(format_plan_closure_nudge(plan_id))
+    elif pending_step_count is not None and pending_step_count > 0:
+        lines.append(
+            f"6) {pending_step_count} plan step(s) still open after this wave — "
+            "launch the next wave or delegate remaining work after advance."
+        )
+    return "\n".join(lines)
+
+
 def format_recovery_wake(
     *,
     plan_id: str,
@@ -291,6 +355,42 @@ def format_recovery_wake(
     )
 
 
+async def auto_complete_active_plan_if_ready(
+    plan_tool: Any,
+    team_manager: Any | None = None,
+) -> str | None:
+    """Auto-call plan(complete) when the gate passes. Returns plan_id or None."""
+    if plan_tool is None or not hasattr(plan_tool, "execute"):
+        return None
+    store = plan_tool.get_store() if hasattr(plan_tool, "get_store") else None
+    if store is None:
+        return None
+    tm = team_manager if team_manager is not None else getattr(
+        plan_tool, "_team_manager", None,
+    )
+    try:
+        active = resolve_work_plan(store, "", tm, reopen=False)
+    except Exception:
+        try:
+            active = store.find_active()
+        except Exception:
+            active = None
+    if active is None or active.status in ("done", "archived"):
+        return None
+    if not can_complete_plan(active, tm):
+        return None
+    try:
+        result = await plan_tool.execute(
+            {"action": "complete", "plan_id": active.id},
+        )
+    except Exception:
+        logger.debug("auto_complete_active_plan failed", exc_info=True)
+        return None
+    if getattr(result, "is_error", False):
+        return None
+    return active.id
+
+
 def runtime_has_open_plan_work(runtime: Any) -> bool:
     """True when the agent has an orchestration plan or todo still in flight.
 
@@ -304,7 +404,7 @@ def runtime_has_open_plan_work(runtime: Any) -> bool:
         if hasattr(tool, "get_store") and getattr(tool, "name", "") == "plan":
             try:
                 store = tool.get_store()
-                work = resolve_work_plan("", team_manager, reopen=False)
+                work = resolve_work_plan(store, "", team_manager, reopen=False)
                 if work is None:
                     continue
                 if work_plan_has_open_steps(work):
@@ -326,3 +426,235 @@ def runtime_has_open_plan_work(runtime: Any) -> bool:
                 pass
 
     return False
+
+
+@dataclass(frozen=True)
+class BoardReconcileContext:
+    """When a stale wave wake should pivot to plan/todo board hygiene."""
+
+    plan_id: str
+    message: str
+    reason: str
+
+
+def _master_todo_status(plan: Plan, todo_store: Any | None) -> tuple[str, str]:
+    if todo_store is None or not plan.todo_id:
+        return "", ""
+    try:
+        item = todo_store.get(plan.todo_id)
+        if item is None:
+            return plan.todo_id, "missing"
+        return plan.todo_id, str(getattr(item, "status", "") or "")
+    except Exception:
+        return plan.todo_id, ""
+
+
+def build_board_snapshot_lines(
+    plan: Plan | None,
+    *,
+    todo_store: Any | None = None,
+    team_manager: Any | None = None,
+) -> list[str]:
+    """Compact board state for every orchestration wake."""
+    if plan is None:
+        return []
+    lines = [f"[BOARD SNAPSHOT] plan_id={plan.id} status={plan.status}"]
+    done = sum(1 for s in plan.steps if s.status == "done")
+    skipped = sum(1 for s in plan.steps if s.status == "skipped")
+    open_n = plan_open_step_count(plan)
+    lines.append(
+        f"Steps: {done} done, {skipped} skipped, {open_n} blocking closure "
+        f"({len(plan.steps)} total)"
+    )
+    _todo_id, _todo_st = _master_todo_status(plan, todo_store)
+    if _todo_id:
+        lines.append(f"Master todo: {_todo_id} — {_todo_st or 'unknown'}")
+    if plan.audit and plan.audit.issues:
+        lines.append(f"Verify issues ({len(plan.audit.issues)}):")
+        for issue in plan.audit.issues[:3]:
+            lines.append(f"  - {issue[:120]}")
+    if open_n == 0 and plan.status not in ("done", "archived"):
+        lines.append(
+            "All steps done — next: plan(verify) → plan(complete) → "
+            "communicate(summary) → todo complete if master card still open."
+        )
+    elif plan_needs_recovery(plan, team_manager):
+        lines.append("Plan needs recovery — read plan + team(inspect) before advancing.")
+    return lines
+
+
+def needs_board_reconcile(
+    plan: Plan,
+    *,
+    todo_store: Any | None = None,
+    team_manager: Any | None = None,
+) -> bool:
+    """True when plan/todo closure work remains despite finalized waves."""
+    if plan.status in ("done", "archived"):
+        return False
+    if plan_open_step_count(plan) > 0:
+        return True
+    if plan_needs_recovery(plan, team_manager):
+        return True
+    if plan.audit and plan.audit.issues:
+        return True
+    if plan.audit and not plan.audit.all_criteria_met:
+        return True
+    _tid, _tst = _master_todo_status(plan, todo_store)
+    if _tid and _tst in ("in_progress", "queued", "inbox"):
+        return True
+    if completion_gate_message(plan, team_manager) is not None:
+        return True
+    return False
+
+
+def format_stale_wave_board_redirect(
+    *,
+    plan: Plan,
+    team_id: str,
+    stale_reason: str,
+    todo_store: Any | None = None,
+    team_manager: Any | None = None,
+) -> str:
+    _tid, _tst = _master_todo_status(plan, todo_store)
+    lines = [
+        "[STALE WAVE WAKE — REDIRECTED TO BOARD CHECK]",
+        f"Suppressed redundant review for team {team_id} ({stale_reason}).",
+        "The wave is already finalized — do NOT team(inspect/advance) again.",
+        "",
+        "MANDATORY this turn:",
+        "1) todo(action='list') — confirm master Kanban card status",
+        f"2) plan(action='read', plan_id='{plan.id}')",
+    ]
+    if _tid:
+        lines.append(f"   Master todo {_tid}: {_tst or 'unknown'}")
+    if plan_open_step_count(plan) == 0:
+        lines.append(format_plan_closure_nudge(plan.id))
+        lines.append(
+            "3) communicate(message=...) — brief stakeholder update on "
+            "completion or what blocks verify/complete."
+        )
+    else:
+        lines.append(
+            "3) Resolve open steps or recovery, then verify → complete."
+        )
+    lines.extend(build_board_snapshot_lines(
+        plan, todo_store=todo_store, team_manager=team_manager,
+    ))
+    return "\n".join(lines)
+
+
+def apply_stale_wave_wake_redirect(
+    dispatch_source: str,
+    *,
+    team_manager: Any,
+    plan_tool: Any | None,
+    todo_tool: Any | None = None,
+) -> tuple[str, str | None, str | None]:
+    """Rewrite stale ``team_wave_complete`` wakes to board reconcile or no-op.
+
+    Returns ``(dispatch_source, extra_system_message, early_exit_reason)``.
+    """
+    if not (dispatch_source or "").startswith("team_wave_complete:"):
+        return dispatch_source, None, None
+    team_id = dispatch_source.split(":", 1)[1]
+    stale_reason = team_manager.stale_wave_review_wake_reason(team_id)
+    if not stale_reason:
+        return dispatch_source, None, None
+    team_manager._drain_wave_complete_dispatch(team_id)
+    board = resolve_board_reconcile_wake(
+        plan_tool=plan_tool,
+        team_manager=team_manager,
+        todo_tool=todo_tool,
+        stale_reason=stale_reason,
+        team_id=team_id,
+    )
+    if board is not None:
+        return f"board_reconcile:{board.plan_id}", board.message, None
+    return dispatch_source, None, "stale_wave_review_wake"
+
+
+def resolve_board_reconcile_wake(
+    *,
+    plan_tool: Any | None,
+    team_manager: Any | None,
+    todo_tool: Any | None = None,
+    stale_reason: str = "",
+    team_id: str = "",
+) -> BoardReconcileContext | None:
+    if plan_tool is None:
+        return None
+    store = plan_tool.get_store() if hasattr(plan_tool, "get_store") else getattr(
+        plan_tool, "_store", None,
+    )
+    if store is None:
+        return None
+    tm = team_manager if team_manager is not None else getattr(
+        plan_tool, "_team_manager", None,
+    )
+    try:
+        plan = resolve_work_plan(store, "", tm, reopen=False)
+    except Exception:
+        plan = store.find_active()
+    if plan is None:
+        return None
+    todo_store = getattr(todo_tool, "_store", None) if todo_tool else None
+    if not needs_board_reconcile(plan, todo_store=todo_store, team_manager=tm):
+        return None
+    msg = format_stale_wave_board_redirect(
+        plan=plan,
+        team_id=team_id,
+        stale_reason=stale_reason or "wave_already_finalized",
+        todo_store=todo_store,
+        team_manager=tm,
+    )
+    return BoardReconcileContext(
+        plan_id=plan.id,
+        message=msg,
+        reason=stale_reason or "board_reconcile",
+    )
+
+
+def plan_closure_blocked_summary(plan: Plan) -> str:
+    """User-facing summary when the loop exits on stall near completion."""
+    issues: list[str] = []
+    if plan.audit and plan.audit.issues:
+        issues = [str(i) for i in plan.audit.issues[:5]]
+    gate = completion_gate_message(plan, None) or ""
+    parts = [
+        f"Plan `{plan.id}` is not closed yet (status={plan.status}).",
+    ]
+    if issues:
+        parts.append("Verify blockers:")
+        parts.extend(f"- {i[:200]}" for i in issues)
+    elif gate:
+        parts.append(gate[:400])
+    else:
+        parts.append(
+            "All steps appear done — run plan(verify) then plan(complete)."
+        )
+    parts.append(
+        "I hit a tool loop limit before finishing closure; "
+        "the build artifacts may still be ready to test."
+    )
+    return "\n".join(parts)
+
+
+def should_emit_closure_blocked_communicate(
+    plan: Plan | None,
+    *,
+    exit_reason: str,
+    tool_successes: dict[str, int],
+    is_delegate_loop: bool,
+) -> bool:
+    if is_delegate_loop or plan is None:
+        return False
+    if exit_reason not in ("stalled", "consecutive_errors"):
+        return False
+    if plan.status in ("done", "archived"):
+        return False
+    if plan_open_step_count(plan) > 0:
+        return False
+    if tool_successes.get("communicate", 0) > 0:
+        return False
+    return True

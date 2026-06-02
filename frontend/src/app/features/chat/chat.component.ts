@@ -4,7 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
 import { ActivatedRoute, NavigationEnd, Router } from '@angular/router';
 import { filter } from 'rxjs/operators';
-import { Subscription } from 'rxjs';
+import { Subscription, firstValueFrom } from 'rxjs';
 import { WebSocketService, ChatMessage } from '../../core/services/websocket.service';
 import { ChatUiSnapshotService } from '../../core/services/chat-ui-snapshot.service';
 import { ChatWorkbenchService } from '../../core/services/chat-workbench.service';
@@ -15,7 +15,11 @@ import {
   parseAgentMessageText,
 } from '../../core/services/activity-format.util';
 import { toolWorkbenchTitle } from '../../core/services/workbench-labels.util';
-import { ApiService, FileAttachment } from '../../core/services/api.service';
+import {
+  resolveToolDisplayOutcome,
+  toolDoneLabel,
+} from '../../core/services/workbench-tool-outcome.util';
+import { ApiService, FileAttachment, ProjectProcess } from '../../core/services/api.service';
 import { PlatformService } from '../../core/services/platform.service';
 import { VoiceRecorderService } from '../../core/services/voice-recorder.service';
 import { ToastService } from '../../shared/toast/toast.service';
@@ -102,6 +106,9 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
   agenticStep = signal(0);
   agenticMaxSteps = signal(0);
   activityStatus = signal('');
+  projectProcesses = signal<ProjectProcess[]>([]);
+  projectProcessesOpen = signal(false);
+  private projectProcessesPoll: ReturnType<typeof setInterval> | null = null;
   agenticStopping = signal(false);
   generationStopping = signal(false);
   lastAgenticResult = signal<{ steps: number; tools: number; durationMs: number; aborted: boolean } | null>(null);
@@ -302,6 +309,8 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       this.handleRuntimeMessage(msg);
     });
 
+    this.startProjectProcessesPoll();
+
     // Prefill from query param (used by skill escalation)
     const prefill = this.route.snapshot.queryParams['prefill'];
     if (prefill) {
@@ -334,6 +343,8 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     this.agentId = nextId;
     this._seenLearningKeys.clear();
     this.awaitingResponse.set(false);
+    this.projectProcesses.set([]);
+    this.projectProcessesOpen.set(false);
     this.agentModels.bindAgent(nextId);
     this.workbench.bindAgent(nextId);
     this.runView.bindAgent(nextId);
@@ -352,6 +363,63 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     this.sub = this.ws.onMessage(nextId).subscribe((msg) => {
       this.handleRuntimeMessage(msg);
     });
+
+    this.startProjectProcessesPoll();
+  }
+
+  private startProjectProcessesPoll(): void {
+    this.stopProjectProcessesPoll();
+    void this.refreshProjectProcesses();
+    this.projectProcessesPoll = setInterval(() => {
+      void this.refreshProjectProcesses();
+    }, 8000);
+  }
+
+  private stopProjectProcessesPoll(): void {
+    if (this.projectProcessesPoll) {
+      clearInterval(this.projectProcessesPoll);
+      this.projectProcessesPoll = null;
+    }
+  }
+
+  async refreshProjectProcesses(): Promise<void> {
+    if (!this.agentId) return;
+    try {
+      const processes = await firstValueFrom(
+        this.api.listProjectProcesses(this.agentId),
+      );
+      this.projectProcesses.set(processes);
+    } catch {
+      // Runtime may be down or agent evicted from VRAM.
+    }
+  }
+
+  toggleProjectProcessesMenu(event: MouseEvent): void {
+    event.stopPropagation();
+    this.projectProcessesOpen.update(v => !v);
+  }
+
+  killProjectProcess(pid: number, event?: MouseEvent): void {
+    event?.stopPropagation();
+    if (!this.agentId) return;
+    this.api.killProjectProcess(this.agentId, pid).subscribe({
+      next: (processes) => {
+        this.projectProcesses.set(processes);
+        if (processes.length === 0) {
+          this.projectProcessesOpen.set(false);
+        }
+      },
+      error: () => void this.refreshProjectProcesses(),
+    });
+  }
+
+  projectProcessKindLabel(kind: string): string {
+    switch (kind) {
+      case 'backend': return 'Backend';
+      case 'frontend': return 'Frontend';
+      case 'interactive': return 'Interactive';
+      default: return 'Server';
+    }
   }
 
   ngAfterViewInit(): void {
@@ -394,6 +462,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
   ngOnDestroy() {
     this.persistChatUiSnapshot();
+    this.stopProjectProcessesPoll();
     this.sub?.unsubscribe();
     this.routerSub?.unsubscribe();
     this.paramSub?.unsubscribe();
@@ -1740,6 +1809,15 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         break;
       }
 
+      case 'project_processes_changed': {
+        if (Array.isArray(msg.processes)) {
+          this.projectProcesses.set(msg.processes);
+        } else {
+          void this.refreshProjectProcesses();
+        }
+        break;
+      }
+
       case 'delegate_start': {
         const dlgTask = msg.delegate_task || 'Sub-task';
         this.activityStatus.set(`Delegating: ${dlgTask.slice(0, 80)}`);
@@ -2273,8 +2351,15 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         }
         const callId = msg.call_id || '';
         const toolName = msg.tool_name || '';
-        const isError = msg.is_error || false;
         const details = msg.details || null;
+        const preview = msg.result_preview || '';
+        const outcome = resolveToolDisplayOutcome(
+          !!msg.is_error,
+          preview,
+          toolName,
+        );
+        const isError = outcome === 'error';
+        const isWarning = outcome === 'warn';
         const subAgent = msg.sub_agent === true;
         const dlgNum: number = msg.delegate_number ?? -1;
 
@@ -2286,29 +2371,9 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
           break;
         }
 
-        let doneLabel = toolName;
-        if (toolName === 'write' || toolName === 'write_file' || toolName === 'create_file') {
-          doneLabel = isError ? `Failed to write file` : `File written`;
-        } else if (toolName === 'bash') {
-          doneLabel = isError ? `Command failed` : `Command completed`;
-        } else if (toolName === 'read' || toolName === 'read_file') {
-          doneLabel = isError ? `Failed to read file` : `File read`;
-        } else if (toolName === 'edit') {
-          doneLabel = isError ? `Edit failed` : `File edited`;
-        } else if (toolName === 'offer_download') {
-          doneLabel = isError ? `Download failed` : `File ready`;
-        } else if (toolName === 'team') {
-          doneLabel = isError ? `Team action failed` : `Team updated`;
-        } else if (toolName === 'plan') {
-          doneLabel = isError ? `Plan action failed` : `Plan updated`;
-        } else if (toolName === 'todo') {
-          doneLabel = isError ? `Todo failed` : `Todo updated`;
-        } else if (toolName === 'delegate') {
-          doneLabel = isError ? `Delegation failed` : `Task delegated`;
-        } else if (toolName === 'scheduler') {
-          doneLabel = isError ? `Scheduler failed` : `Scheduled`;
-        } else {
-          doneLabel = isError ? `${toolName} failed` : `${toolName} done`;
+        let doneLabel = toolDoneLabel(toolName, outcome);
+        if (toolName === 'bash' && !isError && details?.daemon && details?.pid) {
+          void this.refreshProjectProcesses();
         }
 
         const endArgs = normalizeToolArguments(msg.arguments || {});
@@ -2343,6 +2408,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
                   arguments: { ...m.toolProgress?.arguments, ...endArgs },
                   done: true,
                   isError,
+                  isWarning,
                   ...(mergedPaths.length ? { filePaths: mergedPaths } : {}),
                   ...(details ? { details } : {}),
                 },
@@ -2363,7 +2429,10 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
                 && prev?.toolProgress?.toolName === toolName
               ) {
                 const existingItems = prev.toolProgress.groupItems || [{ label: prev.content, isError: prev.toolProgress.isError }];
-                const newItems = [...existingItems, { label: doneLabel, isError }];
+                const newItems = [
+                  ...existingItems,
+                  { label: doneLabel, isError, isWarning },
+                ];
                 const count = newItems.length;
                 const groupLabel = toolName === 'todo' ? `${count} Todos updated`
                   : toolName === 'plan' ? `${count} Plans updated`
@@ -2377,6 +2446,9 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
                     groupCount: count,
                     groupItems: newItems,
                     isError: newItems.some((it: any) => it.isError),
+                    isWarning: newItems.some(
+                      (it: any) => it.isWarning && !it.isError,
+                    ),
                   },
                 };
                 updated.splice(matchIdx, 1);

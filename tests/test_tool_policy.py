@@ -71,6 +71,51 @@ def test_delegating_shrinks_while_wave_runs():
     assert "team" in allowed
 
 
+def test_evaluating_wave_delivery_keeps_review_tools_while_delegate_finishes():
+    """Completion-review wake must allow bash/read, not only monitoring tools."""
+    allowed = resolve_allowed_tools(_inputs(
+        mode=AgentMode.EVALUATING,
+        delegates_active=True,
+        is_coordinator=True,
+        evaluating_wave_delivery=True,
+    ))
+    assert "bash" in allowed
+    assert "read" in allowed
+    assert "team" in allowed
+
+
+def test_worker_escalate_allowed_when_unlocked():
+    allowed = resolve_allowed_tools(_inputs(
+        mode=AgentMode.EXECUTING,
+        is_coordinator=False,
+        all_unlocked=frozenset({"bash", "read", "escalate", "task_complete"}),
+    ))
+    assert "escalate" in allowed
+
+
+def test_block_mode_switch_coordinator_allows_evaluating():
+    from nls.agentic.orchestration_policy import block_mode_switch_for_profile
+
+    msg = block_mode_switch_for_profile(
+        AgentMode.EVALUATING,
+        "solo_structured",
+        is_coordinator=True,
+    )
+    assert msg is None
+
+
+def test_block_mode_switch_solo_ic_blocks_delegating():
+    from nls.agentic.orchestration_policy import block_mode_switch_for_profile
+
+    msg = block_mode_switch_for_profile(
+        AgentMode.DELEGATING,
+        "solo_structured",
+        is_coordinator=False,
+    )
+    assert msg is not None
+    assert "solo_structured" in msg
+
+
 def test_fingerprint_stable_across_identical_inputs():
     a = compute_tool_policy_fingerprint(_inputs())
     b = compute_tool_policy_fingerprint(_inputs())
@@ -142,6 +187,14 @@ def test_block_tool_call_suppresses_read_while_wave_runs():
     )
     assert msg is not None
     assert "IC work" in msg or "not available" in msg
+
+
+def test_worker_virtual_tools_include_escalate_and_ask_user():
+    from nls.agentic.types import virtual_tool_names_for_loop
+
+    names = virtual_tool_names_for_loop(enable_delegation=False)
+    assert "escalate" in names
+    assert "ask_user" in names
 
 
 def test_apply_runtime_filter_uses_resolve():

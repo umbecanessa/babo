@@ -20,6 +20,7 @@ from nls.tools.agent_tools.base import ToolResult
 from .bridge import LoopHooks
 from .delegate_manager import DelegateManager, DelegateSpec, DELEGATE_DEFAULT_MAX_STEPS
 from .coordinator_guard import (
+    block_em_executing_during_review,
     block_executing_mode_escape,
     monitoring_advance_block_message,
     pre_delegate_block_message,
@@ -32,6 +33,7 @@ from .orchestration_policy import (
     on_evaluating_wave,
     on_team_launched,
 )
+from .orchestration_profile_spec import normalize_profile
 from .outbound_notify import OUTBOUND_TOOLS, strip_outbound_control_args
 from .events import AgentEvent, EventType, emit
 from .types import (
@@ -41,6 +43,21 @@ from .types import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_delegate_project_abs(workspace_root: str, project_dir: str) -> str:
+    """Resolve delegate CWD without double-nesting when already inside project."""
+    from pathlib import Path
+
+    if not project_dir:
+        return workspace_root
+    ws = Path(workspace_root)
+    if ws.name == project_dir:
+        return str(ws)
+    ws_norm = str(ws).replace("\\", "/").rstrip("/")
+    if ws_norm.endswith(f"/{project_dir}"):
+        return str(ws)
+    return str(ws / project_dir)
 
 
 def _merge_recipe_preflight(facts: str, task: str, user_task: str = "") -> str:
@@ -104,40 +121,29 @@ def _parse_tool_args(args_str: str | dict) -> dict:
             if cleaned != v:
                 args[k] = cleaned
 
-    # Fix double-wrapped path: LLM sometimes emits path='{"path":"real/file"}'
-    # instead of path='real/file'. The braces cause WinError 123 on Windows.
-    # Also repairs truncated JSON (missing closing '}').
-    for k in ("path", "source", "destination", "target"):
+    # Fix double-wrapped path and other path keys (shared normalizer).
+    from nls.tools.agent_tools.tool_path_args import (
+        PATH_ARG_KEYS,
+        normalize_path_fields_in_args,
+        unwrap_embedded_json_path,
+    )
+
+    for k in PATH_ARG_KEYS:
         v = args.get(k)
         if not isinstance(v, str):
             continue
         sv = v.strip()
         if not sv.startswith("{"):
             continue
-        _unwrapped = False
-        for _candidate in (sv, sv + "}", sv + '"}'):
-            try:
-                inner = json.loads(_candidate)
-                if isinstance(inner, dict) and k in inner:
-                    logger.warning(
-                        "_parse_tool_args: unwrapped double-JSON %s: %s -> %s",
-                        k, v[:80], inner[k],
-                    )
-                    args[k] = inner[k]
-                    _unwrapped = True
-                    break
-            except (json.JSONDecodeError, TypeError):
-                continue
-        if not _unwrapped and sv.startswith('{"') and k in sv:
-            # Last-resort regex extraction for badly truncated JSON
-            import re as _re
-            _m = _re.search(r'"' + _re.escape(k) + r'"\s*:\s*"([^"]+)"', sv)
-            if _m:
-                logger.warning(
-                    "_parse_tool_args: regex-extracted double-JSON %s: %s -> %s",
-                    k, v[:80], _m.group(1),
-                )
-                args[k] = _m.group(1)
+        embedded = unwrap_embedded_json_path(sv, k)
+        if embedded is not None:
+            logger.warning(
+                "_parse_tool_args: unwrapped double-JSON %s: %s -> %s",
+                k, v[:80], embedded,
+            )
+            args[k] = embedded
+
+    normalize_path_fields_in_args(args)
 
     # Fix JSON-encoded arrays/objects passed as strings.
     # LLM sometimes emits steps='[{"label":"..."}]' or
@@ -560,7 +566,7 @@ async def _handle_delegate(
         import copy as _copy
         from pathlib import Path as _Path
         from nls.tools.agent_tools import SharedCWD as _SharedCWD
-        _pd_abs = str(_Path(_workspace_root) / _pd)
+        _pd_abs = _resolve_delegate_project_abs(_workspace_root, _pd)
         _pd_path = _Path(_pd_abs)
         if not _pd_path.exists():
             try:
@@ -582,6 +588,12 @@ async def _handle_delegate(
                     _cloned._project_venv_bin = None
                     if hasattr(_cloned, "_isolated_env"):
                         _cloned._isolated_env = dict(_cloned._isolated_env)
+                    # Share detached-process registry + UI callback with orchestrator bash.
+                    _cloned._detached_records = _orig._detached_records
+                    _cloned._on_processes_changed = getattr(
+                        _orig, "_on_processes_changed", None,
+                    )
+                    _cloned._on_output = getattr(_orig, "_on_output", None)
                 # Tag write/edit clones with delegate authorship for the ledger.
                 if _tname in ("write", "edit") and hasattr(_cloned, "_ledger_meta"):
                     _cloned._ledger_meta = dict(_cloned._ledger_meta)
@@ -593,6 +605,8 @@ async def _handle_delegate(
                 if _tname == "write":
                     _cloned._write_counts = {}
                     _cloned._block_full_rewrite_after_first = True
+                if _tname == "read":
+                    _cloned._reader_label = f"delegate #{delegate_number}"
                 sub_tools[_tname] = _cloned
             except Exception:
                 pass
@@ -624,16 +638,16 @@ async def _handle_delegate(
 
     _project_dir_info = ""
     if _pd:
+        from nls.agentic.delegate_verification import (
+            format_delegate_verification_block,
+            format_project_directory_block,
+        )
         _project_dir_info = (
-            f"\nPROJECT DIRECTORY — CRITICAL: {_pd}/\n"
-            f"Your CWD (for bash AND file tools) is ALREADY set to {_pd}/.\n"
-            f"Do NOT `cd {_pd}` — you are already inside it.\n"
-            f"- bash: run commands directly (e.g. `mkdir -p backend/models`). "
-            f"Do NOT prefix with `cd {_pd} &&`.\n"
-            f"- read/write/glob: use paths relative to {_pd}/, "
-            f"e.g. write(path=\"backend/main.py\").\n"
-            f"Do NOT prepend the project folder name to paths.\n"
-            f"NEVER create new top-level project directories.\n"
+            "\n"
+            + format_project_directory_block(_pd)
+            + "\n"
+            + format_delegate_verification_block()
+            + "\n"
         )
 
     # Build SubCryptex for this delegate — replaces the old static
@@ -695,6 +709,19 @@ async def _handle_delegate(
         file_ownership_block=_file_ownership_block,
         file_ledger=_file_ledger_ref,
     )
+    _gr = getattr(hooks, "guardrails_registry", None)
+    if _gr is not None:
+        from nls.tools.agent_tools.guardrails_registry import (
+            inject_guardrails_into_cryptex,
+            inject_guardrails_into_sub_cryptex,
+        )
+        inject_guardrails_into_sub_cryptex(_sub_cryptex, _gr)
+        if _parent_cryptex is not None:
+            _parent_cryptex._guardrails_registry = _gr  # type: ignore[attr-defined]
+            inject_guardrails_into_cryptex(_parent_cryptex, _gr)
+    _sub_cryptex._guardrails_registry = _gr  # type: ignore[attr-defined]
+    if delegate_number is not None:
+        _sub_cryptex._delegate_number = delegate_number  # type: ignore[attr-defined]
 
     # The initial system message is composed by SubCryptex; it guarantees
     # the task is always pinned at the top and never lost to overflow.
@@ -1150,6 +1177,15 @@ async def _execute_single(
         all_unlocked=set(tools.keys()) | set(state.unlocked_tools),
     )
     if _orch_block:
+        from nls.agentic.profile_depth_policy import enrich_profile_blocked_message
+
+        _orch_block = enrich_profile_blocked_message(
+            name,
+            _orch_block,
+            state,
+            mode=state.active_mode,
+            all_unlocked=frozenset(set(tools.keys()) | set(state.unlocked_tools)),
+        )
         result = ToolResult(
             content=_orch_block,
             is_error=True,
@@ -1220,12 +1256,19 @@ async def _execute_single(
     # Determine the outer timeout for asyncio.wait_for.
     # Some tools need more time than the default 30s:
     #   plan: dependency micro-inference calls vLLM (can take 60-90s for big plans)
+    #   project_install / server_install: pip/npm can take minutes on cold venv
     #   bash: agent can request a custom timeout
     _timeout = config.tool_timeout_seconds
     _PLAN_TIMEOUT = 90
+    _INSTALL_TIMEOUT = 305  # project_install pip -r uses 300s internally
+    _SERVER_INSTALL_TIMEOUT = 185  # server_install pip uses 180s internally
     _BASH_MAX_TIMEOUT = 300
     if name == "plan":
         _timeout = _PLAN_TIMEOUT
+    elif name == "project_install":
+        _timeout = _INSTALL_TIMEOUT
+    elif name == "server_install":
+        _timeout = _SERVER_INSTALL_TIMEOUT
     elif name == "bash":
         _agent_requested = None
         try:
@@ -1310,6 +1353,7 @@ async def _execute_single(
             "is_error": result.is_error,
             "result_preview": result.content[:200],
             "iteration": state.iteration,
+            **({"details": result.details} if result.details else {}),
         },
     ))
 
@@ -1819,7 +1863,7 @@ async def run_delegate_detached(
         import copy as _copy
         from pathlib import Path as _Path
         from nls.tools.agent_tools import SharedCWD as _SharedCWD
-        _pd_abs = str(_Path(_workspace_root) / _pd)
+        _pd_abs = _resolve_delegate_project_abs(_workspace_root, _pd)
         # Ensure the project directory exists before setting it as CWD.
         # Wave-0 delegates whose task is "create project scaffolding" would
         # otherwise fail on every bash call because the CWD doesn't exist yet.
@@ -1849,6 +1893,12 @@ async def run_delegate_detached(
                     # don't bleed into the orchestrator's env.
                     if hasattr(_cloned, "_isolated_env"):
                         _cloned._isolated_env = dict(_cloned._isolated_env)
+                    # Share detached-process registry + UI callback with orchestrator bash.
+                    _cloned._detached_records = _orig._detached_records
+                    _cloned._on_processes_changed = getattr(
+                        _orig, "_on_processes_changed", None,
+                    )
+                    _cloned._on_output = getattr(_orig, "_on_output", None)
                 # Tag write/edit clones with delegate authorship for the ledger.
                 if _tname in ("write", "edit") and hasattr(_cloned, "_ledger_meta"):
                     _cloned._ledger_meta = dict(_cloned._ledger_meta)
@@ -1863,6 +1913,8 @@ async def run_delegate_detached(
                     _cloned._on_repeated_write_escalation = _notify_repeated_write
                 if _tname == "write":
                     _cloned._block_full_rewrite_after_first = True
+                if _tname == "read":
+                    _cloned._reader_label = f"delegate #{spec.delegate_number}"
                 sub_tools[_tname] = _cloned
             except Exception:
                 pass
@@ -1876,6 +1928,9 @@ async def run_delegate_detached(
                 sub_tools["project_install"] = _cloned_pi
             except Exception:
                 pass
+        _parent_browser = tools.get("browser")
+        if _parent_browser is not None:
+            sub_tools["browser"] = _parent_browser
 
     _cwd_info = ""
     if _pd and _workspace_root:
@@ -1886,17 +1941,16 @@ async def run_delegate_detached(
         )
 
     if _pd:
+        from nls.agentic.delegate_verification import (
+            format_delegate_verification_block,
+            format_project_directory_block,
+        )
         _project_dir_info = (
-            f"\nPROJECT DIRECTORY — CRITICAL: {_pd}/\n"
-            f"Your CWD (for bash AND file tools) is ALREADY set to {_pd}/.\n"
-            f"Do NOT `cd {_pd}` — you are already inside it.\n"
-            f"- bash: run commands directly (e.g. `mkdir -p backend/models`). "
-            f"Do NOT prefix with `cd {_pd} &&`.\n"
-            f"- read/write/glob: use paths relative to {_pd}/, "
-            f"e.g. write(path=\"backend/main.py\").\n"
-            f"- mkdir: use NESTED paths like `backend/models`, NOT flat lists "
-            f"like `\"backend\",\"models\"` (that creates sibling dirs).\n"
-            f"NEVER create new top-level project directories.\n"
+            "\n"
+            + format_project_directory_block(_pd)
+            + "\n"
+            + format_delegate_verification_block()
+            + "\n"
         )
 
     # Build SubCryptex for this delegate — replaces old static preset.
@@ -1913,8 +1967,10 @@ async def run_delegate_detached(
     _budget_info = (
         f"\nITERATION BUDGET: {max_steps} tool-call rounds "
         f"(passive limit hit grants +10 more on first escalation).\n"
-        "PRIMARY GOAL: Deliver the full task — required artifacts on disk, "
-        "verified once. Do not rush to exit early to save iterations.\n"
+        "PRIMARY GOAL: Ship-quality deliverables — runnable code wired end-to-end, "
+        "not placeholders. Verify once (read + smoke test) before task_complete.\n"
+        "Do not exit early to save iterations; do not call task_complete with "
+        "only package.json, stubs, or client APIs without backend routes.\n"
         "If stuck, blocked, or running low on budget, call escalate().\n"
     )
 
@@ -1938,6 +1994,20 @@ async def run_delegate_detached(
         tech_stack_block=getattr(spec, "tech_stack_block", "") or "",
         file_ownership_block=getattr(spec, "file_ownership_block", "") or "",
         file_ledger=_file_ledger_ref,
+    )
+    _gr_d = getattr(hooks, "guardrails_registry", None)
+    if _gr_d is not None:
+        from nls.tools.agent_tools.guardrails_registry import (
+            inject_guardrails_into_cryptex,
+            inject_guardrails_into_sub_cryptex,
+        )
+        inject_guardrails_into_sub_cryptex(_sub_cryptex, _gr_d)
+        if _parent_cryptex_d is not None:
+            _parent_cryptex_d._guardrails_registry = _gr_d  # type: ignore[attr-defined]
+            inject_guardrails_into_cryptex(_parent_cryptex_d, _gr_d)
+    _sub_cryptex._guardrails_registry = _gr_d  # type: ignore[attr-defined]
+    _sub_cryptex._delegate_number = getattr(  # type: ignore[attr-defined]
+        spec, "delegate_number", 0,
     )
 
     # Expose SubCryptex to DelegateManager for orchestrator ring access.
@@ -2453,12 +2523,57 @@ async def execute_tools(
             hooks,
         )
         _resolved_allowed = resolve_allowed_tools(_policy_inputs)
-        if name not in _resolved_allowed and name not in ("get_tool_schema",):
-            ordered_results[idx] = ToolResult(
-                content=tool_not_allowed_message(
-                    name, state.active_mode, _resolved_allowed,
+        if name not in _resolved_allowed and name not in (
+            "get_tool_schema",
+            "adopt_orchestration_profile",
+        ):
+            _block_msg = tool_not_allowed_message(
+                name,
+                state.active_mode,
+                _resolved_allowed,
+                orchestration_profile=getattr(
+                    state, "orchestration_profile", "",
+                ) or "",
+            )
+            from nls.agentic.profile_depth_policy import enrich_profile_blocked_message
+
+            _block_msg = enrich_profile_blocked_message(
+                name,
+                _block_msg,
+                state,
+                mode=state.active_mode,
+                all_unlocked=frozenset(
+                    set(tools.keys()) | set(state.unlocked_tools),
                 ),
+            )
+            ordered_results[idx] = ToolResult(
+                content=_block_msg,
                 is_error=True,
+            )
+            continue
+
+        if name == "adopt_orchestration_profile":
+            if not config.enable_delegation:
+                ordered_results[idx] = ToolResult(
+                    content="Sub-agents cannot change orchestration profile.",
+                    is_error=True,
+                )
+                continue
+            from nls.agentic.profile_depth_policy import (
+                apply_orchestration_profile_adoption,
+            )
+
+            _ok, _msg, _details = apply_orchestration_profile_adoption(
+                state,
+                str(args.get("profile", "") or ""),
+                reason=str(args.get("reason", "") or ""),
+                enable_delegation=config.enable_delegation,
+                hooks=hooks,
+            )
+            ordered_results[idx] = ToolResult(
+                content=_msg,
+                is_error=not _ok,
+                details=_details,
             )
             continue
 
@@ -2505,7 +2620,11 @@ async def execute_tools(
             continue
         if name == "ask_user":
             if not config.enable_delegation:
-                question = args.get("question", "What do you need?")
+                question = (
+                    args.get("question")
+                    or args.get("message")
+                    or "What do you need?"
+                )
                 ordered_results[idx] = await _handle_sub_agent_escalation(
                     f"ask_user: {question}",
                     question,
@@ -2566,15 +2685,30 @@ async def execute_tools(
                 )
                 continue
 
-            from nls.agentic.orchestration_policy import block_mode_switch_for_profile
+            from nls.agentic.orchestration_policy import (
+                block_mode_switch_for_profile,
+                delegates_running,
+            )
 
             _profile_block = block_mode_switch_for_profile(
                 _target_mode,
                 getattr(state, "orchestration_profile", "") or "",
+                is_coordinator=bool(state.coordinator_mode),
+                delegates_active=delegates_running(delegate_manager),
+                must_await_delegates=bool(
+                    getattr(state, "must_await_delegates", False)
+                ),
+                dispatch_source=getattr(state, "dispatch_source", "") or "",
             )
             if _profile_block:
+                from nls.agentic.profile_depth_policy import (
+                    enrich_mode_switch_block_message,
+                )
+
                 ordered_results[idx] = ToolResult(
-                    content=_profile_block,
+                    content=enrich_mode_switch_block_message(
+                        _target_mode_str, _profile_block, state,
+                    ),
                     is_error=True,
                     details={"blocked": True, "profile_mode": True},
                 )
@@ -2588,11 +2722,28 @@ async def execute_tools(
                     pass
             _has_team = False
             _tm = getattr(hooks, "_cached_team_manager", None) if hooks else None
+            _pending_cr = False
             if _tm is not None:
                 try:
                     _has_team = _tm.has_orchestrator_blocking_team()
+                    _pending_cr = _tm.has_pending_completion_reviews()
                 except Exception:
                     pass
+            _review_block = block_em_executing_during_review(
+                _target_mode,
+                active_mode=state.active_mode,
+                dispatch_source=getattr(state, "dispatch_source", "") or "",
+                has_pending_completion_reviews=_pending_cr,
+                enable_delegation=config.enable_delegation,
+                is_delegate_loop=not config.enable_delegation,
+            )
+            if _review_block:
+                ordered_results[idx] = ToolResult(
+                    content=_review_block,
+                    is_error=True,
+                    details={"blocked": True, "em_review_mode": True},
+                )
+                continue
             _exec_block = block_executing_mode_escape(
                 _target_mode,
                 active_mode=state.active_mode,
@@ -2641,9 +2792,17 @@ async def execute_tools(
                 AgentMode.PLANNING: (
                     "PLANNING MODE active. You are the architect.\n"
                     "Primary tools: todo, plan, read, research.\n"
-                    "WORKFLOW: OODA → todo(add) → plan(create with ALL "
-                    "steps) → switch_mode(mode='delegating').\n"
-                    "Do NOT use bash, write, team, or delegate in this mode."
+                    + (
+                        "WORKFLOW: OODA → todo(add) → plan(create with ALL "
+                        "steps) → switch_mode(mode='delegating').\n"
+                        "Do NOT use bash, write, team, or delegate in this mode."
+                        if normalize_profile(
+                            getattr(state, "orchestration_profile", None),
+                        ) == "orchestrated"
+                        else "WORKFLOW: todo(add) → plan(create) → execute each "
+                        "step yourself (solo_structured — no team waves).\n"
+                        "Do NOT use team or delegate in this mode."
+                    )
                 ),
                 AgentMode.DELEGATING: (
                     "DELEGATING MODE — engineering manager staffing a wave.\n"
@@ -2671,9 +2830,17 @@ async def execute_tools(
                 ),
                 AgentMode.EXECUTING: (
                     "EXECUTING MODE active. All tools available.\n"
-                    "If a master plan exists, you should be in delegating/monitoring "
-                    "— not self-building wave work.\n"
-                    "Direct execution for simple tasks."
+                    + (
+                        "If a master plan exists with delegatable steps, you should "
+                        "be in delegating/monitoring — not self-building wave work.\n"
+                        "Direct execution for simple tasks."
+                        if normalize_profile(
+                            getattr(state, "orchestration_profile", None),
+                        ) == "orchestrated"
+                        else "SOLO EXECUTION: work through your plan steps yourself. "
+                        "No team waves — use write/bash/edit per step, then "
+                        "plan(action='complete') when done."
+                    )
                 ),
                 AgentMode.RESPONDING: (
                     "RESPONDING MODE active. You can access calendar, email, "

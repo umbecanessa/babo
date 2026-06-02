@@ -48,6 +48,8 @@ const config_manager_1 = require("./config-manager");
 const HEALTH_CHECK_INTERVAL = 5_000;
 const STARTUP_TIMEOUT = 180_000;
 const LEASE_HEARTBEAT_INTERVAL = 60_000;
+const AUTO_RESTART_DELAY_MS = 3_000;
+const MAX_AUTO_RESTARTS = 5;
 // ---------------------------------------------------------------------------
 // RuntimeManager
 // ---------------------------------------------------------------------------
@@ -66,9 +68,16 @@ class RuntimeManager {
     maxLogLines = 500;
     logStream = null;
     activeLeaseAgents = [];
+    _stoppingIntentionally = false;
+    _autoRestartAttempts = 0;
+    shouldAutoRestart = () => true;
     constructor(config, venv) {
         this.config = config;
         this.venv = venv;
+    }
+    /** Gate auto-restart (e.g. skip while the app is quitting). */
+    setShouldAutoRestart(check) {
+        this.shouldAutoRestart = check;
     }
     /**
      * Start the Python agent runtime.
@@ -107,6 +116,10 @@ class RuntimeManager {
             env.NLS_NODE_BIN = nodeBin;
         if (npmBin)
             env.NLS_NPM_BIN = npmBin;
+        // Inject bundled PowerShell 7 on Windows (bash() agent tool)
+        const pwshBin = this.venv.getPwshBin();
+        if (pwshBin)
+            env.NLS_PWSH_BIN = pwshBin;
         // Prevent fork-safety crashes when PyTorch MPS (Metal) is active.
         // Without this, any subprocess fork after MPS init creates zombie
         // processes that spin at 100% CPU on macOS Apple Silicon.
@@ -155,6 +168,7 @@ class RuntimeManager {
             }
             this.broadcastStatus();
             this.broadcastLog('system', `Agent runtime exited (code ${code})`);
+            this.scheduleAutoRestart('Runtime child exited', code ?? null);
         });
         this.process.on('error', (err) => {
             this._running = false;
@@ -166,6 +180,7 @@ class RuntimeManager {
         await this.waitForHealth(cfg.runtimePort);
         this._running = true;
         this._startedAt = Date.now();
+        this._autoRestartAttempts = 0;
         this.startHealthCheck(cfg.runtimePort);
         this.startLeaseHeartbeat();
         this.broadcastStatus();
@@ -174,68 +189,75 @@ class RuntimeManager {
      * Stop the Python agent runtime gracefully.
      */
     async stop() {
+        this._stoppingIntentionally = true;
         this.logShutdownEvent('runtime.stop', this.captureCallerHint());
         this.stopLeaseHeartbeat();
         await this.releaseAllLeases();
         this.stopHealthCheck();
-        if (this.process) {
-            // On Windows, SIGTERM = TerminateProcess() which is instant and skips
-            // Python shutdown hooks.  We must ask the runtime to shut down via
-            // HTTP first and wait for the process to exit gracefully.  Only fall
-            // back to forceful kill if it doesn't exit in time.
-            let exited = false;
-            const exitPromise = new Promise((resolve) => {
-                this.process?.on('exit', () => {
-                    exited = true;
-                    resolve();
+        try {
+            if (this.process) {
+                // On Windows, SIGTERM = TerminateProcess() which is instant and skips
+                // Python shutdown hooks.  We must ask the runtime to shut down via
+                // HTTP first and wait for the process to exit gracefully.  Only fall
+                // back to forceful kill if it doesn't exit in time.
+                let exited = false;
+                const exitPromise = new Promise((resolve) => {
+                    this.process?.on('exit', () => {
+                        exited = true;
+                        resolve();
+                    });
                 });
-            });
+                try {
+                    const port = this.config.get().runtimePort;
+                    await fetch(`http://127.0.0.1:${port}/admin/shutdown`, {
+                        method: 'POST',
+                        signal: AbortSignal.timeout(5_000),
+                    });
+                    // Wait up to 10s for the process to exit after SIGINT
+                    await Promise.race([
+                        exitPromise,
+                        this.sleep(10_000),
+                    ]);
+                }
+                catch {
+                    // Runtime may already be down -- fall through to forceful kill
+                }
+                if (!exited && this.process) {
+                    this.logShutdownEvent('runtime.force_kill', `runtimePid=${this.process.pid ?? 'unknown'}`);
+                    console.log('Runtime did not exit gracefully, force killing...');
+                    if (process.platform === 'win32' && this.process.pid) {
+                        try {
+                            (0, child_process_1.execSync)(`taskkill /F /T /PID ${this.process.pid}`, { timeout: 5_000 });
+                        }
+                        catch { /* process may have already exited */ }
+                    }
+                    else {
+                        this.process.kill('SIGTERM');
+                    }
+                    await Promise.race([exitPromise, this.sleep(3_000)]);
+                }
+                this.process = null;
+            }
+            // Final safety net: kill any bridge still holding port 9223
+            this.killStaleProcess(9223);
+            this._running = false;
+            this._startedAt = 0;
+            this._agentCount = 0;
+            this._agentEnergy = {};
+            // Close log file
             try {
-                const port = this.config.get().runtimePort;
-                await fetch(`http://127.0.0.1:${port}/admin/shutdown`, {
-                    method: 'POST',
-                    signal: AbortSignal.timeout(5_000),
-                });
-                // Wait up to 10s for the process to exit after SIGINT
-                await Promise.race([
-                    exitPromise,
-                    this.sleep(10_000),
-                ]);
+                this.logStream?.end();
+                this.logStream = null;
             }
             catch {
-                // Runtime may already be down -- fall through to forceful kill
+                // best-effort
             }
-            if (!exited && this.process) {
-                this.logShutdownEvent('runtime.force_kill', `runtimePid=${this.process.pid ?? 'unknown'}`);
-                console.log('Runtime did not exit gracefully, force killing...');
-                if (process.platform === 'win32' && this.process.pid) {
-                    try {
-                        (0, child_process_1.execSync)(`taskkill /F /T /PID ${this.process.pid}`, { timeout: 5_000 });
-                    }
-                    catch { /* process may have already exited */ }
-                }
-                else {
-                    this.process.kill('SIGTERM');
-                }
-                await Promise.race([exitPromise, this.sleep(3_000)]);
-            }
-            this.process = null;
+            this.broadcastStatus();
         }
-        // Final safety net: kill any bridge still holding port 9223
-        this.killStaleProcess(9223);
-        this._running = false;
-        this._startedAt = 0;
-        this._agentCount = 0;
-        this._agentEnergy = {};
-        // Close log file
-        try {
-            this.logStream?.end();
-            this.logStream = null;
+        finally {
+            this._stoppingIntentionally = false;
+            this._autoRestartAttempts = 0;
         }
-        catch {
-            // best-effort
-        }
-        this.broadcastStatus();
     }
     /**
      * Restart the runtime (e.g., after config change).
@@ -327,6 +349,9 @@ class RuntimeManager {
                 this._lastError = 'Health check failed';
                 this.broadcastStatus();
                 this.broadcastLog('system', 'Agent runtime health check failed');
+                if (!this.process) {
+                    this.scheduleAutoRestart('Health check failed', null);
+                }
             }
             else if (healthy && !this._running) {
                 this._running = true;
@@ -334,6 +359,45 @@ class RuntimeManager {
                 this.broadcastStatus();
             }
         }, HEALTH_CHECK_INTERVAL);
+    }
+    scheduleAutoRestart(reason, exitCode) {
+        if (this._stoppingIntentionally || !this.shouldAutoRestart()) {
+            return;
+        }
+        if (this._autoRestartAttempts >= MAX_AUTO_RESTARTS) {
+            this._lastError =
+                `Runtime stopped unexpectedly (code ${exitCode ?? 'null'}) ` +
+                    `and auto-restart gave up after ${MAX_AUTO_RESTARTS} attempts`;
+            this.broadcastStatus();
+            this.broadcastLog('system', this._lastError);
+            return;
+        }
+        this._autoRestartAttempts += 1;
+        const attempt = this._autoRestartAttempts;
+        this._lastError =
+            `Runtime stopped unexpectedly (code ${exitCode ?? 'null'}); ` +
+                `restarting (attempt ${attempt}/${MAX_AUTO_RESTARTS})...`;
+        this.logShutdownEvent('runtime.auto_restart_scheduled', `attempt=${attempt} reason=${reason}`);
+        this.broadcastStatus();
+        this.broadcastLog('system', `${reason} — auto-restarting in ${AUTO_RESTART_DELAY_MS / 1000}s (attempt ${attempt})`);
+        setTimeout(() => {
+            if (this.process || this._stoppingIntentionally || !this.shouldAutoRestart()) {
+                return;
+            }
+            this.start()
+                .then(() => {
+                this._autoRestartAttempts = 0;
+                this._lastError = null;
+                this.broadcastLog('system', 'Runtime auto-restart succeeded');
+                this.broadcastStatus();
+            })
+                .catch((err) => {
+                this._lastError = `Auto-restart failed: ${err.message}`;
+                this.broadcastStatus();
+                this.broadcastLog('system', this._lastError);
+                this.scheduleAutoRestart('Retry after failed auto-restart', exitCode);
+            });
+        }, AUTO_RESTART_DELAY_MS);
     }
     stopHealthCheck() {
         if (this.healthTimer) {

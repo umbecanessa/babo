@@ -39,6 +39,8 @@ class CompactionAnchor:
     communications_sent: list[str] = field(default_factory=list)
     next_steps: list[str] = field(default_factory=list)
     available_tools: list[str] = field(default_factory=list)
+    superseded_attempts: list[str] = field(default_factory=list)
+    open_blockers: list[str] = field(default_factory=list)
     iteration_at: int = 0
 
     def to_context_message(self) -> dict:
@@ -79,6 +81,14 @@ class CompactionAnchor:
             parts.append("\n## Next Steps")
             for item in self.next_steps[-5:]:
                 parts.append(f"- {item}")
+        if self.superseded_attempts:
+            parts.append("\n## Superseded Attempts")
+            for item in self.superseded_attempts[-10:]:
+                parts.append(f"- {item}")
+        if self.open_blockers:
+            parts.append("\n## Open Blockers")
+            for item in self.open_blockers[-5:]:
+                parts.append(f"- {item}")
         parts.append("\n[END CONTEXT SUMMARY]")
         return {
             "role": "system",
@@ -113,6 +123,12 @@ class CompactionAnchor:
                 self.communications_sent.append(item)
         if delta.next_steps:
             self.next_steps = delta.next_steps
+        for item in delta.superseded_attempts:
+            if item not in self.superseded_attempts:
+                self.superseded_attempts.append(item)
+        for item in delta.open_blockers:
+            if item not in self.open_blockers:
+                self.open_blockers.append(item)
         self.iteration_at = iteration
 
 
@@ -128,6 +144,8 @@ class CompactionDelta:
     files_modified: list[str] = field(default_factory=list)
     communications_sent: list[str] = field(default_factory=list)
     next_steps: list[str] = field(default_factory=list)
+    superseded_attempts: list[str] = field(default_factory=list)
+    open_blockers: list[str] = field(default_factory=list)
 
 
 # -------------------------------------------------------------------
@@ -512,6 +530,7 @@ async def compact(
     force: bool = False,
     iteration: int = 0,
     adapter_name: str | None = None,
+    is_delegate_loop: bool = False,
 ) -> tuple[list[dict], CompactionAnchor]:
     """Anchored iterative compaction.
 
@@ -523,7 +542,8 @@ async def compact(
 
     Falls back to simple compaction if LLM call fails.
     """
-    keep = config.keep_recent_tokens // 2 if force else config.keep_recent_tokens
+    base_keep = config.effective_keep_recent_tokens(is_delegate_loop)
+    keep = base_keep // 2 if force else base_keep
     cut = _find_cut_point(context, keep)
     if cut <= 1:
         return _simple_compact(context, config, force=force), anchor

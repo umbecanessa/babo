@@ -184,7 +184,12 @@
     border-left: 3px solid var(--accent-success);
   }
   &.wb-err {
-    border-left: 3px solid var(--accent-danger);
+    border-color: color-mix(in srgb, var(--accent-danger) 42%, var(--overlay-2));
+    box-shadow: inset 3px 0 0 var(--accent-danger);
+  }
+  &.wb-warn {
+    border-color: color-mix(in srgb, var(--accent-warn) 42%, var(--overlay-2));
+    box-shadow: inset 3px 0 0 var(--accent-warn);
   }
   &.wb-focus {
     background: var(--accent-primary-glow);
@@ -325,6 +330,7 @@
     font-weight: 600;
   }
   &--warn {
+    background: rgba(251, 191, 36, 0.14);
     border-color: color-mix(in srgb, var(--accent-warn) 40%, transparent);
     color: var(--accent-warn);
     text-transform: none;
@@ -415,6 +421,13 @@
   border: 1px solid var(--overlay-3);
   background: var(--surface-inset);
   overflow: hidden;
+
+  &--shell .wb-preview-body {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 10px;
+    line-height: 1.45;
+    color: var(--text-secondary);
+  }
 
   &--code .wb-preview-body {
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -513,6 +526,10 @@
 
 .wb-tool-bucket--err .wb-tag--mini {
   border-color: color-mix(in srgb, var(--danger, #e55) 40%, transparent);
+}
+
+.wb-tool-bucket--warn .wb-tag--mini {
+  border-color: color-mix(in srgb, var(--accent-warn) 40%, transparent);
 }
 
 .wb-preview--err {

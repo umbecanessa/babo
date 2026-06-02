@@ -160,9 +160,33 @@ def _render_todo_plan(ctx: BreadcrumbContext) -> str:
 def _render_plan_team(ctx: BreadcrumbContext) -> str:
     pid = ctx.result_details.get("plan_id", "???")
     return (
-        f"[BREADCRUMB] NEXT: Create a team to execute delegatable steps -- "
-        f"team(action='create', plan_id='{pid}'). "
-        f"The plan_id parameter is REQUIRED."
+        f"[BREADCRUMB] Plan created — close the planning loop:\n"
+        f"1) switch_mode(mode='delegating') if still in planning\n"
+        f"2) team(action='create', plan_id='{pid}') — plan_id REQUIRED\n"
+        f"3) team(action='launch', team_id=<new_team_id>)\n"
+        f"4) switch_mode(mode='monitoring') → await_delegates(summary='...')\n"
+        f"Do NOT scaffold or write project files yourself — Wave 0 delegates do that."
+    )
+
+
+def _render_plan_execute_solo(ctx: BreadcrumbContext) -> str:
+    pid = ctx.result_details.get("plan_id", "???")
+    steps = ctx.result_details.get("steps", [])
+    first_label = ""
+    if steps and isinstance(steps[0], dict):
+        first_label = str(steps[0].get("label") or steps[0].get("name") or "").strip()
+    step_hint = (
+        f"Start with step 1 ({first_label!r}): "
+        if first_label
+        else "Start with step 1: "
+    )
+    return (
+        f"[BREADCRUMB] Plan {pid} created — SOLO workflow (no team waves):\n"
+        f"1) switch_mode(mode='executing') if still in planning\n"
+        f"2) {step_hint}plan(action='update', step_id=..., status='in_progress'), "
+        f"then do the work yourself (write/bash/edit)\n"
+        f"3) Mark each step done before moving on — do NOT use team or delegate\n"
+        f"4) When all steps finish: plan(action='complete', plan_id='{pid}')"
     )
 
 
@@ -244,6 +268,47 @@ def _render_inspect_needs_advance(ctx: BreadcrumbContext) -> str:
     )
 
 
+def _render_inspect_completion_review(ctx: BreadcrumbContext) -> str:
+    from nls.agentic.verification_hints import completion_review_verify_breadcrumb
+
+    tid = ctx.result_details.get("team_id", "")
+    return completion_review_verify_breadcrumb(team_id=tid or "...")
+
+
+def _render_intervene_approve(ctx: BreadcrumbContext) -> str:
+    """Use wave-aware text from team(intervene) — do not always block advance."""
+    return (ctx.result_details.get("approve_breadcrumb") or "").strip()
+
+
+def _render_advance_blocked(ctx: BreadcrumbContext) -> str:
+    return (
+        "[BREADCRUMB] Advance rejected — running delegates or pending reviews. "
+        "team(inspect) or await_delegates; retry advance only when the wave "
+        "is fully quiet."
+    )
+
+
+def _render_plan_ready_to_close(ctx: BreadcrumbContext) -> str:
+    from nls.agentic.plan_work import format_plan_closure_nudge
+
+    pid = str(ctx.result_details.get("plan_id") or "")
+    if pid:
+        return format_plan_closure_nudge(pid)
+    return (
+        "[BREADCRUMB] All plan steps are done. "
+        "plan(verify) → plan(complete) → task_complete(summary='...')."
+    )
+
+
+def _render_plan_verify_passed(ctx: BreadcrumbContext) -> str:
+    pid = str(ctx.result_details.get("plan_id") or "")
+    return (
+        f"[BREADCRUMB] Verify passed for plan {pid or 'active'}. "
+        f"NEXT: plan(action='complete', plan_id='{pid}') then "
+        "task_complete(summary='...')."
+    )
+
+
 def _render_post_launch_monitor(ctx: BreadcrumbContext) -> str:
     return (
         "[BREADCRUMB] Team launched — delegates are running in the background. "
@@ -283,6 +348,19 @@ def _render_write_then_edit(ctx: BreadcrumbContext) -> str:
     )
 
 
+def _is_rewrite_blocked(ctx: BreadcrumbContext) -> bool:
+    return ctx.is_error and bool(ctx.result_details.get("rewrite_blocked"))
+
+
+def _render_rewrite_blocked(ctx: BreadcrumbContext) -> str:
+    path = str(ctx.result_details.get("path") or "that file").strip()
+    return (
+        f"[BREADCRUMB] Full rewrite of {path} blocked — you already used write() "
+        f"on this path. Prefer read() + edit() for fixes. If you need a fresh "
+        f"from-scratch file, delete_file(path={path!r}) first, then write() again."
+    )
+
+
 def _render_lookup_answer(ctx: BreadcrumbContext) -> str:
     return (
         "[BREADCRUMB] NEXT: answer in chat from the lookup results. "
@@ -292,7 +370,7 @@ def _render_lookup_answer(ctx: BreadcrumbContext) -> str:
 
 _EM_PROFILES = frozenset({"orchestrated"})
 _SOLO_PROFILES = frozenset({"solo_structured"})
-_DIRECT_PROFILES = frozenset({"direct_tool"})
+_DIRECT_PROFILES = frozenset({"conversational"})
 _SOLO_AND_EM_PROFILES = frozenset({"solo_structured", "orchestrated"})
 
 
@@ -311,6 +389,11 @@ DEFAULT_RULES: list[BreadcrumbRule] = [
         requires_tools=frozenset({"write"}),
         condition=lambda ctx: not ctx.is_error,
         render=_render_fetch_then_write,
+    ),
+    BreadcrumbRule(
+        trigger=("write", "*"),
+        condition=_is_rewrite_blocked,
+        render=_render_rewrite_blocked,
     ),
     BreadcrumbRule(
         trigger=("write", "*"),
@@ -354,6 +437,14 @@ DEFAULT_RULES: list[BreadcrumbRule] = [
         condition=_has_delegatable_steps,
         render=_render_plan_team,
     ),
+    # plan(create) on solo profile → execute steps yourself
+    BreadcrumbRule(
+        trigger=("plan", "create"),
+        profiles=_SOLO_PROFILES,
+        requires_tools=frozenset({"plan"}),
+        condition=lambda ctx: not ctx.is_error,
+        render=_render_plan_execute_solo,
+    ),
     # team(create) → team(launch)
     BreadcrumbRule(
         trigger=("team", "create"),
@@ -381,6 +472,34 @@ DEFAULT_RULES: list[BreadcrumbRule] = [
         condition=lambda ctx: bool(ctx.result_details.get("needs_advance")),
         render=_render_inspect_needs_advance,
     ),
+    # team(inspect) while delegate waits in completion review
+    BreadcrumbRule(
+        trigger=("team", "inspect"),
+        profiles=_EM_PROFILES,
+        requires_tools=frozenset({"team", "read"}),
+        condition=lambda ctx: bool(
+            ctx.result_details.get("pending_completion_review")
+        ),
+        render=_render_inspect_completion_review,
+    ),
+    BreadcrumbRule(
+        trigger=("team", "intervene"),
+        profiles=_EM_PROFILES,
+        requires_tools=frozenset({"team"}),
+        condition=lambda ctx: (
+            not ctx.is_error
+            and ctx.result_details.get("decision") == "approve"
+            and bool((ctx.result_details.get("approve_breadcrumb") or "").strip())
+        ),
+        render=_render_intervene_approve,
+    ),
+    BreadcrumbRule(
+        trigger=("team", "advance"),
+        profiles=_EM_PROFILES,
+        requires_tools=frozenset({"team"}),
+        condition=lambda ctx: ctx.is_error,
+        render=_render_advance_blocked,
+    ),
     # team(launch) → yield via await_delegates
     BreadcrumbRule(
         trigger=("team", "launch"),
@@ -399,6 +518,28 @@ DEFAULT_RULES: list[BreadcrumbRule] = [
             and len(_deferred_channels(ctx)) > 0
         ),
         render=_render_plan_notify,
+    ),
+    # team(advance) → all plan steps done — close the plan
+    BreadcrumbRule(
+        trigger=("team", "advance"),
+        profiles=_EM_PROFILES,
+        requires_tools=frozenset({"plan", "task_complete"}),
+        condition=lambda ctx: (
+            not ctx.is_error
+            and ctx.result_details.get("plan_ready_to_close")
+        ),
+        render=_render_plan_ready_to_close,
+    ),
+    # plan(verify) passed — complete the plan
+    BreadcrumbRule(
+        trigger=("plan", "verify"),
+        profiles=_EM_PROFILES,
+        requires_tools=frozenset({"plan", "task_complete"}),
+        condition=lambda ctx: (
+            not ctx.is_error
+            and ctx.result_details.get("all_criteria_met")
+        ),
+        render=_render_plan_verify_passed,
     ),
     # team(advance) → hint to use file_history to review delegate work
     BreadcrumbRule(
@@ -454,9 +595,14 @@ _TOOL_STATIC_HINTS_SOLO: dict[str, str] = {
         "\n\nWORKFLOW: After todo(add), call todo(action='list', title='-') "
         "to show items back when the user asked for a list."
     ),
+    "plan": (
+        "\n\nWORKFLOW (solo): plan(create) → switch_mode(executing) → work each "
+        "step yourself (write/bash/edit). No team waves. plan(complete) when done."
+    ),
     "write": (
         "\n\nWORKFLOW: After the first write() to a path, use edit() for "
-        "targeted changes on that file."
+        "targeted changes. To fully rewrite again, delete_file(path=...) first, "
+        "then write()."
     ),
     "web_fetch": (
         "\n\nWORKFLOW: Use fetched content directly — cite real URLs. "

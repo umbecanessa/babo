@@ -212,8 +212,23 @@ class WriteTool:
         if not path_str:
             return ToolResult(content="Error: 'path' is required.", is_error=True)
 
-        from .file_ledger import normalize_ledger_path
-        path_str = normalize_ledger_path(path_str) or path_str
+        if "content" not in params:
+            return ToolResult(
+                content=(
+                    "Error: 'content' is required for write(). "
+                    "Pass path and content as separate fields — not JSON inside path."
+                ),
+                is_error=True,
+            )
+
+        from .tool_path_args import normalize_tool_path_arg
+        from .file_ledger import append_must_read_scaffold_hint
+
+        path_str, path_err = normalize_tool_path_arg(
+            path_str, cwd=self._effective_cwd, key="path",
+        )
+        if path_err:
+            return ToolResult(content=path_err, is_error=True)
 
         path = _resolve_path(path_str, self._effective_cwd)
 
@@ -253,7 +268,32 @@ class WriteTool:
             if path.exists() and self._file_state_cache is not None:
                 stale_err = self._file_state_cache.check(str(path.resolve()))
                 if stale_err:
-                    return ToolResult(content=stale_err, is_error=True)
+                    return ToolResult(
+                        content=append_must_read_scaffold_hint(stale_err),
+                        is_error=True,
+                    )
+
+            resolved_key = str(path.resolve())
+            prev_count = self._write_counts.get(resolved_key, 0)
+            if prev_count >= 1 and self._block_full_rewrite_after_first:
+                if not path.exists():
+                    self._write_counts.pop(resolved_key, None)
+                    prev_count = 0
+                else:
+                    return ToolResult(
+                        content=(
+                            f"BLOCKED: You already wrote {path_str} once this session. "
+                            f"Delegates get one full write() per path — use read() then "
+                            f"edit() for targeted fixes. If you truly need a from-scratch "
+                            f"rewrite, delete_file(path={path_str!r}) first, then write() "
+                            f"again (deleting resets the limit)."
+                        ),
+                        is_error=True,
+                        details={
+                            "rewrite_blocked": True,
+                            "path": path_str,
+                        },
+                    )
 
             # Safety net: detect destructive overwrites where the new
             # content is dramatically smaller than what already exists.
@@ -274,6 +314,15 @@ class WriteTool:
 
             path.parent.mkdir(parents=True, exist_ok=True)
 
+            if not content and not path.exists():
+                return ToolResult(
+                    content=(
+                        f"Error: refusing empty write to new file {path_str}. "
+                        "Provide non-empty content, or use edit() on an existing file."
+                    ),
+                    is_error=True,
+                )
+
             path.write_text(content, encoding="utf-8")
 
             # Record to ledger after successful write.
@@ -292,8 +341,6 @@ class WriteTool:
             byte_count = len(content.encode("utf-8"))
             msg = f"Successfully wrote {line_count} lines ({byte_count} bytes) to {path_str}."
 
-            resolved_key = str(path.resolve())
-            prev_count = self._write_counts.get(resolved_key, 0)
             self._write_counts[resolved_key] = prev_count + 1
 
             if prev_count == 0:
@@ -316,12 +363,6 @@ class WriteTool:
                     "Repeated write #%d to %s (%d lines, %d bytes)",
                     prev_count + 1, path_str, line_count, byte_count,
                 )
-                if self._block_full_rewrite_after_first:
-                    msg += (
-                        "\n\nBLOCKED: Delegates must not fully rewrite the "
-                        "same file twice. Use read() + edit() for fixes."
-                    )
-                    return ToolResult(content=msg, is_error=True)
                 if prev_count >= 2 and self._on_repeated_write_escalation:
                     _escalation_msg = (
                         "\n\n⚠ Third full rewrite — waiting for orchestrator "

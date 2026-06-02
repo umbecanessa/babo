@@ -1006,6 +1006,13 @@ class CryptexMemory:
         else:
             self.active.orch_resolve_escalation(team_id, member_idx, outcome)
 
+    def orch_prune_stale_escalations(
+        self, member_terminal: Callable[[str, int], bool],
+    ) -> int:
+        if self._active_name == "personal":
+            return self.personal.orch_prune_stale_escalations(member_terminal)
+        return self.active.orch_prune_stale_escalations(member_terminal)
+
     def orch_get_active_teams(self) -> list[OrchTeamState]:
         if self._active_name == "personal":
             return self.personal.orch_get_active_teams()
@@ -1390,14 +1397,15 @@ class CryptexMemory:
                 "coordinator_mode", "team_orchestration", "orchestration_tools",
                 "help_requests", "plan_dependency_example", "repair_budget",
                 "plan_discipline", "mode_awareness", "autonomous_updates",
-                "dmn_discipline",
+                "dmn_discipline", "em_completion_review",
+                "orchestration_depth",
             }),
             "label": "Orchestration & Delegation",
         },
         "planning": {
             "domains": frozenset({
                 "ooda_assessment", "todo_plan_workflow", "procedural_flow",
-                "workspace_discipline", "project_directory",
+                "workspace_discipline", "project_directory", "production_standards",
             }),
             "label": "Planning & Workspace",
         },
@@ -1411,7 +1419,7 @@ class CryptexMemory:
         "execution": {
             "domains": frozenset({
                 "task_focus", "tool_best_practices", "execution_focus",
-                "working_memory_intro", "verification_gate",
+                "working_memory_intro", "verification_gate", "production_standards",
             }),
             "label": "Execution & Tools",
         },
@@ -1433,7 +1441,7 @@ class CryptexMemory:
         "planning":      ["planning", "orchestration", "safety", "communication", "execution"],
         "delegating":    ["orchestration", "planning", "communication", "safety", "execution"],
         "monitoring":    ["orchestration", "communication", "safety", "planning", "execution"],
-        "evaluating":    ["execution", "planning", "safety", "orchestration", "communication"],
+        "evaluating":    ["execution", "orchestration", "planning", "safety", "communication"],
         "executing":     ["execution", "safety", "planning", "orchestration", "communication"],
         # Responding: user interaction while coordinating — tools + communication first,
         # then orchestration context at the back for awareness.
@@ -1819,6 +1827,40 @@ class CryptexMemory:
             reverse=True,
         )
 
+    def absorb_tool_result(
+        self,
+        tool_name: str,
+        args: dict[str, Any],
+        result_str: str,
+        is_error: bool,
+        *,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        """Action-time ring updates for orchestrator tool outcomes."""
+        from nls.brain.cryptex_tool_absorption import absorb_orchestrator_tool_result
+
+        absorb_orchestrator_tool_result(
+            self,
+            tool_name,
+            args,
+            result_str,
+            is_error,
+            details=details,
+            guardrails_registry=getattr(self, "_guardrails_registry", None),
+        )
+
+    def absorb_wave_review(self, team: Any) -> None:
+        """Action-time focus rotation when a team wave lands."""
+        from nls.brain.cryptex_tool_absorption import absorb_wave_review_outcome
+
+        absorb_wave_review_outcome(self, team)
+
+    def absorb_wake_attention_content(self, board_content: str) -> None:
+        """Align instruction focus with batched completion-review wake board."""
+        from nls.brain.cryptex_tool_absorption import absorb_wake_attention_content
+
+        absorb_wake_attention_content(self, board_content)
+
     # ------------------------------------------------------------------
     # compose_context — the context compositor
     # ------------------------------------------------------------------
@@ -2170,7 +2212,7 @@ class CryptexMemory:
                 _append(msg1_parts, "\n".join(cred_lines))
 
         def _render_skills() -> None:
-            # Skills list is not useful for casual conversational turns.
+            # Skills are hidden only on non-agentic chat renders (birth greeting).
             if render_mode == "chat":
                 return
             skills_ring = self._rings.get(RING_SKILLS)
@@ -2214,8 +2256,7 @@ class CryptexMemory:
             _append(_target, "\n".join(skill_lines), force=_boost)
 
         def _render_tools_mcp() -> None:
-            # MCP tool descriptions are only relevant for agentic/task modes.
-            if render_mode == "chat" or _orch_profile == "conversational":
+            if render_mode == "chat":
                 return
             if not _profile_spec.ring_visible(
                 RING_TOOLS_MCP, has_active_plan=_has_active_plan,
@@ -3202,11 +3243,55 @@ class CryptexMemory:
             {
                 "domain": "verification_gate",
                 "content": (
-                    "Before declaring a project complete: verify the server "
-                    "starts, the frontend builds, and key endpoints respond."
+                    "RELEASE VERIFICATION (before plan(complete) or task_complete):\n"
+                    "1) Read/list_dir key paths — confirm runnable code, not stubs only.\n"
+                    "2) bash: run tests (pytest, npm test) and a minimal smoke command "
+                    "(server start, build, or curl health) in the project dir.\n"
+                    "3) Trace API contracts: frontend calls must match real backend routes.\n"
+                    "4) No hardcoded secrets in source — .env + .env.example only.\n"
+                    "5) plan(verify) supplements this — it does NOT replace reading outputs."
                 ),
                 "render_mode": "agentic",
-                "consolidation_status": "pending",
+                "consolidation_status": "permanent",
+            },
+            {
+                "domain": "production_standards",
+                "content": (
+                    "PRODUCTION STANDARD — ship-quality, not demo-quality:\n"
+                    "- Deliverables must RUN: wired routes, entrypoints, imports, env docs.\n"
+                    "- Forbidden 'done' signals: placeholder-only files, client APIs with "
+                    "no server, package.json without install, 'TODO: implement' as the "
+                    "only implementation.\n"
+                    "- Integrations: use real SDK/HTTP with env vars; verify with a minimal "
+                    "call (import, curl, or unit test) before claiming done.\n"
+                    "- Monorepo deps: project_install uses CWD or install_dir= (any folder "
+                    "name) — not hardcoded frontend/backend paths.\n"
+                    "- Errors: handle failures; no infinite poll loops without timeout.\n"
+                    "- Match the stack in the plan (Python vs Node) — do not half-implement "
+                    "in the wrong language."
+                ),
+                "render_mode": "agentic",
+                "consolidation_status": "permanent",
+            },
+            {
+                "domain": "em_completion_review",
+                "content": (
+                    "COMPLETION REVIEW (monitoring/evaluating — mandatory discipline):\n"
+                    "When a delegate hits task_complete, YOU approve quality — not speed.\n"
+                    "CHECKLIST before team(intervene, decision='approve'):\n"
+                    "  • read/list_dir files they claim; open the main entrypoint/service\n"
+                    "  • Confirm behavior matches the step (not just config/package.json)\n"
+                    "  • If API step: routes exist and match frontend/service callers\n"
+                    "  • If integration step: dependency installed in the RIGHT package "
+                    "(backend vs frontend) and a smoke test passed\n"
+                    "Reject with decision='hint' or rewake when incomplete — do NOT approve "
+                    "to 'move the wave along'.\n"
+                    "WAVE ADVANCE: team(advance) ONLY when NO members are running/pending "
+                    "and NO other delegates await completion review. Otherwise "
+                    "team(inspect) or await_delegates(summary='...')."
+                ),
+                "render_mode": "coordinator",
+                "consolidation_status": "permanent",
             },
             {
                 "domain": "credential_hygiene",
@@ -3239,6 +3324,20 @@ class CryptexMemory:
             )
             count += 1
 
+        # Refresh production/review slots for agents created before these domains existed.
+        for d in defaults:
+            if d["domain"] not in existing_domains:
+                continue
+            if d["domain"] not in ("verification_gate",):
+                continue
+            self.upsert_behavioral(
+                domain=d["domain"],
+                content=d["content"],
+                render_mode=d["render_mode"],
+                consolidation_status=d["consolidation_status"],
+            )
+            count += 1
+
         return count
 
     def populate_agentic_supplement(self) -> int:
@@ -3249,6 +3348,8 @@ class CryptexMemory:
         Returns count of new slots written.
         """
         import sys as _sys
+
+        from nls.platform_shell import WINDOWS_INSTRUCTION_SKILLS_ENV_PROMPT
 
         behavioral_ring = self._rings.get(RING_BEHAVIORAL)
         env_ring = self._rings.get(RING_ENVIRONMENT)
@@ -3434,7 +3535,10 @@ class CryptexMemory:
                     "3. LAUNCH TEAM: team(action='launch', team_id=...).\n"
                     "4. MONITOR: Use team(action='inspect') to check progress.\n"
                     "5. STEER: Use team(action='hint', team_id=..., member=N, message='...') to redirect stuck members.\n"
-                    "6. ADVANCE: When wave completes, call team(action='advance').\n"
+                    "6. ADVANCE: team(action='advance') ONLY when the wave is fully quiet — "
+                    "no members running/pending, no delegates awaiting completion review. "
+                    "If you just approved one member but others still run: team(inspect) or "
+                    "await_delegates — do NOT advance yet.\n"
                     "   PARTIAL/FAILED outcome: You are the engineering MANAGER.\n"
                     "   PREFER rewake(member=N) over manual fixes.\n"
                     "   Quick-fix gaps (5-10 iters max), then RESUME the wave plan.\n"
@@ -3532,8 +3636,9 @@ class CryptexMemory:
                     "- bash: CLI operations, git, curl, builds, scripts. "
                     "NEVER use bash for pip install — use project_install for app "
                     "libraries or server_install for agent-runtime libraries.\n"
-                    "- project_install: Install into the project (.venv / npm) — "
-                    "for code you are building (assemblyai, fastapi, express, etc.).\n"
+                    "- project_install: App deps (.venv / npm). Uses your CWD or "
+                    "install_dir=<folder> when multiple package.json exist. "
+                    "npm package for AssemblyAI is assemblyai (not @assemblyai/assemblyai).\n"
                     "- server_install: Install into Babo's agent runtime only — "
                     "when YOU need a new agent capability (NOT pip/pip3).\n"
                     "- offer_download: After writing a file the user requested (doc, report, "
@@ -3753,8 +3858,13 @@ class CryptexMemory:
             },
         ]
 
+        _REFRESH_DOMAINS = frozenset({
+            "team_orchestration", "tool_best_practices", "workspace_discipline",
+            "coordinator_mode",
+        })
+
         for d in behavioral_defs:
-            if d["domain"] in existing:
+            if d["domain"] in existing and d["domain"] not in _REFRESH_DOMAINS:
                 continue
             self.upsert_behavioral(
                 domain=d["domain"],
@@ -3778,7 +3888,8 @@ class CryptexMemory:
                         "for agent-runtime Python only use server_install "
                         "(NOT pip — pip is unavailable in bash). "
                         "Your working directory is the current folder (use relative paths). "
-                        "To persist environment variables, write a .env file."
+                        "To persist environment variables, write a .env file.\n\n"
+                        + WINDOWS_INSTRUCTION_SKILLS_ENV_PROMPT.rstrip()
                     ) if _sys.platform == "win32" else (
                         "You have bash with internet access, git, gh CLI, curl, "
                         "python, node, npm. "
