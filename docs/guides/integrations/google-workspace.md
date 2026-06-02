@@ -8,7 +8,9 @@ Give your agent access to **Gmail, Google Calendar, Google Drive, and Google She
 
 ## Setup
 
-Setup type: **ui** — no manual Google Cloud project needed (Babo ships app credentials).
+Setup type: **ui** — no manual Google Cloud project needed on Babo Cloud (Babo ships app credentials).
+
+**Privacy:** [Privacy Policy](../../legal/privacy-policy.md) — how Google data is used (local tokens, Limited Use).
 
 1. Open **Tools → Integrations → Google Workspace**
 2. Click **Connect** — OAuth modal opens

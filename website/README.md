@@ -93,3 +93,4 @@ The old `github.io/babo/` URL can stay live in parallel; point ads and README at
 - [ ] `site_url` updated in `mkdocs.yml`
 - [ ] `website/CNAME` committed (if not using UI-only domain)
 - [ ] Smoke-test: `/`, docs nav, `/?audience=everyday`, Discord link
+- [ ] Privacy policy live at `https://babo.agency/legal/privacy-policy/` (Google OAuth consent screen)
