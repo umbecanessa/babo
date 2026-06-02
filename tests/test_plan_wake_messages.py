@@ -16,7 +16,8 @@ def test_wave_complete_wake_is_not_recovery_alarm():
     )
     assert "[WAVE COMPLETE" in msg
     assert "PLAN RECOVERY REQUIRED" not in msg
-    assert "Do NOT team(advance)" in msg
+    assert "ONLY when no members running" in msg
+    assert "not advance" in msg.lower()
 
 
 def test_recovery_wake_for_failed_steps():

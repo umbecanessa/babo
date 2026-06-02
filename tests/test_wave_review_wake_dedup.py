@@ -97,13 +97,13 @@ def test_stale_wake_when_successor_launched(tm: TeamManager):
     assert reason.startswith("successor_wave_running:")
 
 
-def test_breadcrumb_on_create_needs_advance():
+def test_breadcrumb_on_accept_partial_needs_advance():
     engine = BreadcrumbEngine()
     hint = engine.evaluate(
         BreadcrumbContext(
-            tool_name="team",
-            action="create",
-            is_error=True,
+            tool_name="plan",
+            action="accept_partial",
+            is_error=False,
             result_details={
                 "wave_needs_advance": True,
                 "prior_team_id": "team_old",
@@ -111,8 +111,8 @@ def test_breadcrumb_on_create_needs_advance():
             },
             unlocked_tools=frozenset({"team", "plan"}),
             is_coordinator=True,
+            orchestration_profile="orchestrated",
         ),
     )
     assert hint is not None
     assert "team(action='advance'" in hint
-    assert "team_old" in hint

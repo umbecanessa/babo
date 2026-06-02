@@ -39,13 +39,14 @@ def test_build_session_resume_guidance_lists_next_actions():
 def test_detect_stall_assessment_loop_ic_rescan():
     """Post-crash read-only re-scan with repeated status text."""
     state = LoopState(user_input="continue")
+    state.orchestration_profile = "orchestrated"
     state.active_mode = AgentMode.EXECUTING
     state.consecutive_text_only = 2
     state.total_tool_calls = 10
     config = LoopConfig(max_iterations=40)
-    for _ in range(10):
+    for i in range(10):
         state.tool_history.append(("read", False))
-        state.tool_call_signatures.append("read:path=a")
+        state.tool_call_signatures.append(f"read:path=file{i}")
     msg = detect_stall(state, config)
     assert msg is not None
     assert "re-assessing" in msg
@@ -68,7 +69,8 @@ def test_detect_stall_skips_team_inspect_read_monitoring():
     assert msg is None or "re-assessing" not in (msg or "")
 
 
-def test_reconcile_terminalizes_stale_active_team(tmp_path: Path):
+def test_reconcile_skips_terminal_teams_without_running_members(tmp_path: Path):
+    """reconcile_with_delegates syncs running delegates — not implicit terminalization."""
     agent_dir = tmp_path / "agent"
     agent_dir.mkdir()
     store = PlanStore(agent_dir)
@@ -85,6 +87,6 @@ def test_reconcile_terminalizes_stale_active_team(tmp_path: Path):
         ],
     )
     tm._teams[team.id] = team
-    tm.reconcile_with_delegates()
-    assert team.is_terminal
-    assert team.status in ("partial", "failed", "completed")
+    changed = tm.reconcile_with_delegates()
+    assert changed == 0
+    assert team.status == "active"

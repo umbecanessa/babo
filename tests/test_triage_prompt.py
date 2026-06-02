@@ -27,6 +27,6 @@ def test_build_triage_system_prompt_includes_catalog():
     assert "TOOL GATING" in prompt
     assert "- read: Read files" in prompt
     assert "forbid:tools" in prompt
-    assert "ANY available tool could usefully help" in prompt
+    assert "conversational ALWAYS has lookup" in prompt
     assert "NEVER forbid:team" in prompt
     assert "WRONG (do not output)" in prompt
