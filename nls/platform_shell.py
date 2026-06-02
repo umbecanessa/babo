@@ -114,8 +114,13 @@ def resolve_powershell_executable(*, prefer_pwsh: bool = True) -> str:
     return _powershell_exe_cache
 
 
+def _powershell_basename(exe: str) -> str:
+    """Executable filename only — safe when ``exe`` uses Windows separators on Unix."""
+    return os.path.basename(exe.replace("\\", "/"))
+
+
 def powershell_is_pwsh(exe: str | None = None) -> bool:
-    name = Path(exe or resolve_powershell_executable()).name.lower()
+    name = _powershell_basename(exe or resolve_powershell_executable()).lower()
     return name.startswith("pwsh")
 
 
@@ -123,8 +128,13 @@ def normalize_powershell_command_names(command: str) -> str:
     """When PS7 is available, rewrite inline ``powershell`` calls to ``pwsh``."""
     if not is_windows() or not powershell_is_pwsh():
         return command
-    pwsh_name = Path(resolve_powershell_executable()).name
-    return re.sub(r"\bpowershell(?:\.exe)?\b", pwsh_name, command, flags=re.I)
+    pwsh_name = _powershell_basename(resolve_powershell_executable())
+    return re.sub(
+        r"\bpowershell(?:\.exe)?\b",
+        lambda _m: pwsh_name,
+        command,
+        flags=re.I,
+    )
 
 
 def build_powershell_subprocess_argv(

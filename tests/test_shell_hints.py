@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import sys
+
 from nls.tools.agent_tools.shell_hints import (
     format_shell_error_hints,
     preflight_bash_command,
@@ -29,6 +31,8 @@ def test_module_not_found_hint():
 
 
 def test_double_nest_path_hint():
+    if sys.platform != "win32":
+        pytest.skip("Windows PowerShell cd error patterns")
     hint = format_shell_error_hints(
         "cd : Cannot find path 'C:\\ws\\my-app\\my-app\\src' because it does not exist.",
         "cd my-app",

@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
+
+import pytest
 
 from nls.skills_setup_policy import (
     format_activation_steps,
@@ -66,7 +69,8 @@ def test_instruction_hint_includes_path():
     assert "demo" in hint and "skills" in hint
 
 
-def test_post_read_nudge_python_first_on_windows(tmp_path: Path):
+@patch("nls.skills_setup_policy.is_windows", return_value=True)
+def test_post_read_nudge_python_first_on_windows(_win, tmp_path: Path):
     skill_dir = tmp_path / "discord-admin"
     skill_dir.mkdir()
     (skill_dir / "SKILL.md").write_text("# Discord\n", encoding="utf-8")

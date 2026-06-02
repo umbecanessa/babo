@@ -73,6 +73,8 @@ def test_http_api_hint_discord_empty_message():
 
 
 def test_bash_powershell_curl_not_doubled():
+    if sys.platform != "win32":
+        pytest.skip("PowerShell curl rewrite is Windows-only")
     from nls.tools.agent_tools.bash import BashTool
 
     fixed = BashTool._fix_powershell('curl.exe -s https://example.com')
@@ -94,6 +96,8 @@ def test_resolve_powershell_prefers_bundled_nls_pwsh_bin(tmp_path: Path):
 
 @patch("nls.platform_shell.shutil.which")
 def test_resolve_powershell_prefers_pwsh(mock_which):
+    if sys.platform != "win32":
+        pytest.skip("PowerShell resolution is Windows-only")
     reset_powershell_executable_cache()
     mock_which.side_effect = lambda name: {
         "pwsh.exe": r"C:\Program Files\PowerShell\7\pwsh.exe",

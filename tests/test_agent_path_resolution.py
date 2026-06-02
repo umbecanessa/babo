@@ -1,7 +1,10 @@
-"""Path resolution and display for agent file tools."""
+"""Tests for path resolution and display for agent file tools."""
 
 from __future__ import annotations
 
+import sys
+
+import pytest
 from pathlib import Path
 
 from nls.tools.agent_tools.bash import _guard_bash_cwd_change
@@ -26,6 +29,7 @@ def test_format_path_prefers_cwd_relative_inside_project():
     assert display == "frontend/src/App.tsx"
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows path semantics")
 def test_guard_bash_blocks_redundant_project_folder_cd():
     old = (
         r"C:\agent\workspace\icf-coaching-session-evaluation-platform\backend"
