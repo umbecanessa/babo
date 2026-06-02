@@ -228,22 +228,43 @@ def _extract_section(instructions: str, pattern: re.Pattern[str]) -> str:
     return match.group(1).strip()[:800] if match else ""
 
 
-def _instruction_skill_post_read_extra(slug: str) -> list[str]:
+def _instruction_skill_post_read_extra(
+    slug: str,
+    skill_path: Path | None = None,
+) -> list[str]:
     """Skill-specific next steps after SKILL.md — generic first, API-specific second."""
     lines = [
         "",
         "[NEXT STEPS — do not re-read SKILL.md]",
-        "1. Use skill CLI subcommands from SKILL.md (run.ps1 / .sh) — "
-        "not ad-hoc REST unless SKILL.md says so.",
-        "2. PowerShell: ASCII names in .ps1 strings; prefer $env:VAR over hardcoded secrets.",
-        "3. Post JSON via a file + Invoke-RestMethod -Body (Get-Content -Raw); "
-        "match the API schema exactly.",
-        "4. On Windows use curl.exe once — do not write curl.exe.exe.",
     ]
+    if is_windows():
+        json_note = ""
+        if skill_path is not None and any(skill_path.glob("*.json")):
+            json_note = (
+                " Payloads are already in *.json under the skill dir — load with "
+                "json.loads(Path(...).read_text(encoding='utf-8')); do not rebuild embeds in PowerShell."
+            )
+        lines.extend([
+            "1. Windows API/REST setup: write deploy-*.py beside the skill (httpx + JSON files on disk), "
+            f"then bash('python <absolute-skill-path>/deploy-*.py').{json_note} "
+            "Prefer this over inline PowerShell JSON, jq, or upstream .sh on Windows.",
+            "2. PowerShell (bash()): thin shell only — env checks, curl.exe one-liners, run.ps1 if shipped.",
+            "3. ASCII in scripts; use $env:VAR — never hardcode tokens; never curl.exe.exe.",
+            "4. Do not loop on WSL/jq diagnostics — execute or verify with Python + read() of results.",
+        ])
+        step = 5
+    else:
+        lines.extend([
+            "1. Use skill CLI subcommands from SKILL.md (run.ps1 / .sh) — "
+            "not ad-hoc REST unless SKILL.md says so.",
+            "2. Post JSON via a file; match the API schema exactly.",
+            "3. Prefer $env:VAR over hardcoded secrets.",
+        ])
+        step = 4
     if "discord" in slug.lower():
         lines.extend([
-            "5. Discord: Authorization `Bot <token>`; User-Agent DiscordBot (...).",
-            "6. channel-create: POST /guilds/{id}/channels. "
+            f"{step}. Discord: Authorization `Bot <token>`; User-Agent DiscordBot (...).",
+            f"{step + 1}. channel-create: POST /guilds/{{id}}/channels. "
             "Messages: `embeds` (array), not singular `embed`.",
         ])
     return lines
@@ -260,7 +281,7 @@ def instruction_skill_post_read_nudge(skill_md_path: str) -> str | None:
     if not slug:
         return None
     base = instruction_skill_setup_hint(slug, p.parent)
-    return base + "\n" + "\n".join(_instruction_skill_post_read_extra(slug))
+    return base + "\n" + "\n".join(_instruction_skill_post_read_extra(slug, p.parent))
 
 
 def build_instruction_skill_setup_lines(
@@ -278,6 +299,11 @@ def build_instruction_skill_setup_lines(
         "After reading SKILL.md: execute skill subcommands (run.ps1 / .sh) — "
         "do not loop on jq/WSL/curl.exe.exe diagnostics.",
     ]
+    if is_windows():
+        lines.append(
+            "Windows: for API/REST skills (Discord, GitHub, etc.), prefer a deploy-*.py "
+            "script (httpx + JSON files in the skill dir) over inline PowerShell or .sh."
+        )
     if read_index is not None:
         _already: list[str] = []
         _skills_prefix = str(skills_base).replace("\\", "/").lower()

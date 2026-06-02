@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 from nls.skills_setup_policy import (
     format_activation_steps,
+    instruction_skill_post_read_nudge,
     instruction_skill_setup_hint,
     is_instruction_only_skill,
     skill_configure_absorption_content,
@@ -63,3 +64,15 @@ def test_instruction_hint_includes_path():
     hint = instruction_skill_setup_hint("demo", Path("/data/skills/demo"))
     assert "SKILL.md" in hint
     assert "demo" in hint and "skills" in hint
+
+
+def test_post_read_nudge_python_first_on_windows(tmp_path: Path):
+    skill_dir = tmp_path / "discord-admin"
+    skill_dir.mkdir()
+    (skill_dir / "SKILL.md").write_text("# Discord\n", encoding="utf-8")
+    (skill_dir / "welcome-message.json").write_text("{}", encoding="utf-8")
+    nudge = instruction_skill_post_read_nudge(str(skill_dir / "SKILL.md"))
+    assert nudge is not None
+    assert "deploy-*.py" in nudge
+    assert "httpx" in nudge
+    assert "embeds" in nudge
