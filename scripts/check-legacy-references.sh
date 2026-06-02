@@ -13,6 +13,7 @@ PATTERN='sleep_trainer|nls_vllm_plugin|QLoRA|SlotRegistry|mint_moe_genesis|ToolO
 EXCLUDES=(
   --glob '!docs/**'
   --glob '!site/**'
+  --glob '!tests/**'
   --glob '!scripts/check-legacy-references.sh'
 )
 
