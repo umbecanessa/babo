@@ -1530,9 +1530,14 @@ body.lightbox-open {
   line-height: 1.6;
 }
 
-.download-card .btn { width: 100%; }
+.download-card-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+  width: 100%;
+}
 
-.download-card .btn + .btn { margin-top: 0.55rem; }
+.download-card-actions .btn { width: 100%; }
 
 /* Contribute */
 .contribute-section {
