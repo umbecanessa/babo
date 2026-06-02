@@ -1,6 +1,7 @@
 import { Component, computed, signal, inject, ChangeDetectionStrategy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { UpdateService } from '../../core/services/update.service';
+import { updateReleaseNotesPlainText } from './update-release-notes.util';
 
 @Component({
   selector: 'app-update-banner',
@@ -27,8 +28,8 @@ import { UpdateService } from '../../core/services/update.service';
               <span class="panel-title">Update Available</span>
               <span class="panel-version">v{{ info()?.version }}</span>
             </div>
-            @if (info()?.releaseNotes) {
-              <p class="release-notes">{{ info()?.releaseNotes }}</p>
+            @if (releaseNotesPlain()) {
+              <p class="release-notes">{{ releaseNotesPlain() }}</p>
             }
             <div class="panel-actions">
               <button class="btn-primary" (click)="onDownload()">Download</button>
@@ -305,6 +306,11 @@ export class UpdateBannerComponent {
   readonly transferredMB = computed(() => ((this.updateService.progress()?.transferred ?? 0) / 1048576).toFixed(1));
   readonly totalMB = computed(() => ((this.updateService.progress()?.total ?? 0) / 1048576).toFixed(1));
   readonly speedMBs = computed(() => ((this.updateService.progress()?.bytesPerSecond ?? 0) / 1048576).toFixed(1));
+
+  readonly releaseNotesPlain = computed(() => {
+    const raw = this.info()?.releaseNotes;
+    return raw?.trim() ? updateReleaseNotesPlainText(raw) : null;
+  });
 
   togglePanel() {
     this.panelOpen.update(v => !v);

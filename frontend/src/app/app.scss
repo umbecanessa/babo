@@ -146,57 +146,84 @@
   }
 }
 
-.nav-meta {
+.app-status-dock {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 90;
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-shrink: 0;
-  pointer-events: none;
-  user-select: none;
-
-  &--compact {
-    margin-right: 4px;
-  }
+  padding: 6px 8px;
+  border-radius: var(--radius-md);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--shadow-glass);
+  -webkit-app-region: no-drag;
+  pointer-events: auto;
 
   @media (max-width: 640px) {
+    right: 10px;
+    bottom: 10px;
     gap: 6px;
-
-    .nav-release-tag {
-      font-size: 9px;
-      padding: 2px 6px;
-    }
-
-    .nav-version {
-      font-size: 10px;
-      padding: 2px 6px;
-    }
+    padding: 5px 6px;
+    max-width: calc(100vw - 20px);
+    flex-wrap: wrap;
+    justify-content: flex-end;
   }
 }
 
-.nav-release-tag {
-  font-family: 'Inter', sans-serif;
+.status-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-sans);
   font-size: 10px;
   font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--accent-amber, #fbbf24);
-  background: rgba(251, 191, 36, 0.12);
-  border: 1px solid rgba(251, 191, 36, 0.35);
-  padding: 3px 8px;
-  border-radius: 999px;
+  letter-spacing: 0.04em;
   line-height: 1.2;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border);
+  white-space: nowrap;
 }
 
-.nav-version {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
+.status-chip--early {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent-warn);
+  background: var(--accent-warn-glow);
+  border-color: color-mix(in srgb, var(--accent-warn) 35%, var(--glass-border));
+}
+
+.status-chip--version {
+  font-family: var(--font-mono);
   font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
   color: var(--text-muted);
-  background: var(--overlay-2);
-  border: 1px solid var(--glass-border);
-  padding: 3px 8px;
-  border-radius: 999px;
-  line-height: 1.2;
+  background: var(--surface-inset);
+}
+
+.nav-discord {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  color: var(--text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover {
+    color: #e8eaf2;
+    background: color-mix(in srgb, #5865f2 22%, var(--overlay-2));
+  }
 }
 
 .nav-agent-tabs {

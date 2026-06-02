@@ -1,6 +1,8 @@
-import { Component, signal, ChangeDetectionStrategy } from '@angular/core';
+import { Component, computed, inject, signal, ChangeDetectionStrategy, SecurityContext } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { UpdateService } from '../../core/services/update.service';
+import { normalizeUpdateReleaseNotes } from './update-release-notes.util';
 
 @Component({
   selector: 'app-update-modal',
@@ -14,25 +16,29 @@ import { UpdateService } from '../../core/services/update.service';
           <div class="accent-bar"></div>
 
           <div class="card-body">
-            <div class="icon-container">
-              <div class="icon-glow"></div>
-              <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="32" height="32">
+            <div class="icon-wrap">
+              <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="28" height="28" aria-hidden="true">
                 <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
                 <polyline points="7 10 12 15 17 10"/>
                 <line x1="12" y1="15" x2="12" y2="3"/>
               </svg>
             </div>
 
-            <h2 class="title">Time to Update</h2>
-            <p class="version">Version {{ updateService.updateInfo()?.version }} is available</p>
+            <h2 class="title">Update available</h2>
+            <p class="version">
+              <span class="version-label">Version</span>
+              <span class="version-value">v{{ updateService.updateInfo()?.version }}</span>
+            </p>
 
-            @if (updateService.updateInfo()?.releaseNotes) {
-              <p class="notes">{{ updateService.updateInfo()?.releaseNotes }}</p>
+            @if (releaseNotesHtml()) {
+              <div class="notes" [innerHTML]="releaseNotesHtml()"></div>
+            } @else {
+              <p class="notes-fallback">A new build is ready to install.</p>
             }
 
             <div class="actions">
-              <button class="btn-primary" (click)="onUpdate()">Update Now</button>
-              <button class="btn-secondary" (click)="onLater()">Later</button>
+              <button type="button" class="btn-primary" (click)="onUpdate()">Update now</button>
+              <button type="button" class="btn-secondary" (click)="onLater()">Later</button>
             </div>
           </div>
         </div>
@@ -48,6 +54,8 @@ import { UpdateService } from '../../core/services/update.service';
       align-items: center;
       justify-content: center;
       background: var(--backdrop-scrim);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
       animation: backdropIn 200ms ease-out forwards;
       padding: 24px;
 
@@ -56,79 +64,137 @@ import { UpdateService } from '../../core/services/update.service';
 
     .modal-card {
       position: relative;
-      max-width: 420px;
+      max-width: 440px;
       width: 100%;
-      border-radius: 16px;
-      background: rgba(15, 15, 25, 0.92);
-      backdrop-filter: blur(24px);
-      -webkit-backdrop-filter: blur(24px);
-      border: 1px solid var(--accent-primary-glow);
+      border-radius: var(--radius-md);
+      background: var(--glass-bg);
+      backdrop-filter: blur(var(--glass-blur));
+      -webkit-backdrop-filter: blur(var(--glass-blur));
+      border: 1px solid var(--glass-border);
       overflow: hidden;
       animation: cardIn 250ms ease-out forwards;
-      box-shadow:
-        0 0 80px var(--accent-primary-glow),
-        0 25px 50px rgba(0, 0, 0, 0.4);
+      box-shadow: var(--shadow-glass), 0 24px 64px rgba(0, 0, 0, 0.35);
 
       &.closing { animation: cardOut 150ms ease-in forwards; }
     }
 
     .accent-bar {
-      height: 3px;
-      background: linear-gradient(90deg, var(--accent-primary), var(--accent-primary));
+      height: 2px;
+      flex-shrink: 0;
+      background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
     }
 
     .card-body {
-      padding: 32px 28px 24px;
+      padding: 28px 24px 22px;
       display: flex;
       flex-direction: column;
       align-items: center;
       text-align: center;
     }
 
-    .icon-container {
-      position: relative;
-      margin-bottom: 20px;
+    .icon-wrap {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 52px;
+      height: 52px;
+      margin-bottom: 16px;
+      border-radius: var(--radius-sm);
       color: var(--accent-primary);
+      background: var(--accent-tint-bg);
+      border: 1px solid var(--accent-tint-border);
+      box-shadow: var(--shadow-glow);
     }
-
-    .icon-glow {
-      position: absolute;
-      inset: -16px;
-      border-radius: 50%;
-      background: radial-gradient(circle, var(--accent-primary-glow), transparent 70%);
-    }
-
-    .icon-svg { position: relative; }
 
     .title {
-      font-family: 'Inter', sans-serif;
-      font-size: 1.25rem;
+      font-family: var(--font-sans);
+      font-size: 1.125rem;
       font-weight: 600;
       color: var(--text-primary);
-      margin-bottom: 8px;
+      margin: 0 0 10px;
     }
 
     .version {
-      font-family: 'JetBrains Mono', monospace;
-      font-size: 0.85rem;
-      color: var(--accent-primary);
-      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin: 0 0 16px;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+    }
+
+    .version-label {
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .version-value {
+      color: var(--on-accent-tint);
+      background: var(--accent-tint-bg);
+      border: 1px solid var(--accent-tint-border);
+      padding: 3px 10px;
+      border-radius: 999px;
+    }
+
+    .notes,
+    .notes-fallback {
+      width: 100%;
+      margin: 0 0 20px;
+      text-align: left;
+      font-family: var(--font-sans);
+      font-size: 0.8125rem;
+      line-height: 1.55;
+      color: var(--text-secondary);
     }
 
     .notes {
-      font-family: 'Inter', sans-serif;
-      font-size: 0.85rem;
-      color: #94a3b8;
-      line-height: 1.6;
-      margin-bottom: 20px;
-      max-height: 120px;
+      max-height: 140px;
       overflow-y: auto;
-      text-align: left;
-      width: 100%;
-      padding: 12px;
-      border-radius: 8px;
-      background: var(--overlay-1);
-      border: 1px solid var(--overlay-2);
+      padding: 12px 14px;
+      border-radius: var(--radius-sm);
+      background: var(--surface-inset);
+      border: 1px solid var(--glass-border);
+    }
+
+    .notes :deep(p) {
+      margin: 0 0 8px;
+    }
+
+    .notes :deep(p:last-child) {
+      margin-bottom: 0;
+    }
+
+    .notes :deep(strong) {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    .notes :deep(a) {
+      color: var(--accent-primary);
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    .notes :deep(a:hover) {
+      text-decoration: underline;
+    }
+
+    .notes :deep(tt),
+    .notes :deep(code) {
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      background: var(--overlay-2);
+      padding: 1px 4px;
+      border-radius: 4px;
+    }
+
+    .notes-fallback {
+      padding: 12px 14px;
+      border-radius: var(--radius-sm);
+      background: var(--surface-inset);
+      border: 1px solid var(--glass-border);
     }
 
     .actions {
@@ -139,64 +205,75 @@ import { UpdateService } from '../../core/services/update.service';
 
     .btn-primary {
       flex: 1;
-      height: 42px;
+      height: 40px;
       border: none;
-      border-radius: 10px;
-      background: linear-gradient(135deg, var(--accent-primary), var(--accent-primary));
-      color: #0f0f19;
-      font-family: 'Inter', sans-serif;
+      border-radius: var(--radius-sm);
+      background: var(--accent-primary);
+      color: #0c0d14;
+      font-family: var(--font-sans);
       font-size: 0.875rem;
       font-weight: 600;
       cursor: pointer;
-      transition: filter 200ms, box-shadow 200ms;
+      transition: filter 150ms, box-shadow 150ms, transform 150ms;
 
       &:hover {
-        filter: brightness(1.1);
-        box-shadow: 0 0 20px var(--accent-primary-glow);
+        filter: brightness(1.08);
+        box-shadow: var(--shadow-glow);
       }
     }
 
     .btn-secondary {
       flex: 1;
-      height: 42px;
-      border: 1px solid var(--overlay-4);
-      border-radius: 10px;
+      height: 40px;
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius-sm);
       background: transparent;
-      color: #94a3b8;
-      font-family: 'Inter', sans-serif;
+      color: var(--text-secondary);
+      font-family: var(--font-sans);
       font-size: 0.875rem;
       font-weight: 500;
       cursor: pointer;
-      transition: border-color 200ms, color 200ms;
+      transition: background 150ms, border-color 150ms, color 150ms;
 
       &:hover {
-        border-color: var(--overlay-5);
-        color: var(--text-secondary);
+        background: var(--glass-bg-hover);
+        border-color: var(--glass-border-strong);
+        color: var(--text-primary);
       }
     }
 
     @keyframes backdropIn { from { opacity: 0; } to { opacity: 1; } }
     @keyframes backdropOut { from { opacity: 1; } to { opacity: 0; } }
-    @keyframes cardIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
-    @keyframes cardOut { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.95); } }
+    @keyframes cardIn { from { opacity: 0; transform: scale(0.96) translateY(8px); } to { opacity: 1; transform: scale(1) translateY(0); } }
+    @keyframes cardOut { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.96); } }
   `,
 })
 export class UpdateModalComponent {
+  private readonly sanitizer = inject(DomSanitizer);
+
   closing = signal(false);
 
   constructor(public updateService: UpdateService) {}
 
-  onUpdate() {
+  readonly releaseNotesHtml = computed((): SafeHtml | null => {
+    const raw = this.updateService.updateInfo()?.releaseNotes;
+    if (!raw?.trim()) return null;
+    const normalized = normalizeUpdateReleaseNotes(raw);
+    const safe = this.sanitizer.sanitize(SecurityContext.HTML, normalized);
+    return safe ? this.sanitizer.bypassSecurityTrustHtml(safe) : null;
+  });
+
+  onUpdate(): void {
     this.dismiss();
     this.updateService.download();
   }
 
-  onLater() {
+  onLater(): void {
     this.dismiss();
     this.updateService.dismissModal();
   }
 
-  private dismiss() {
+  private dismiss(): void {
     this.closing.set(true);
     setTimeout(() => this.closing.set(false), 150);
   }

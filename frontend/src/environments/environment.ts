@@ -4,4 +4,5 @@ export const environment = {
   apiUrl: 'http://localhost:3000/api',
   runtimeUrl: 'http://localhost:3000/api/rt',
   wsUrl: 'http://localhost:3000',
+  discordSupportUrl: 'https://discord.gg/daCKzkv4z2',
 };

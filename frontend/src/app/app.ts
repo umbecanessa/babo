@@ -11,6 +11,8 @@ import { UpdateBannerComponent } from './shared/update-banner/update-banner.comp
 import { UpdateModalComponent } from './shared/update-banner/update-modal.component';
 import { ThemeService } from './core/services/theme.service';
 import { Day1CoachComponent } from './shared/onboarding/day1-coach.component';
+import { environment } from '../environments/environment';
+import { openExternalUrl } from './core/services/billing-return.util';
 
 @Component({
   selector: 'app-root',
@@ -35,6 +37,9 @@ export class App implements OnInit, OnDestroy {
   /** Whether we are inside an agent context (show agent-specific tabs) */
   hasAgentContext = signal(false);
 
+  /** Whether we are on the agents dashboard (agent list) */
+  isDashboardRoute = signal(false);
+
   /** Desktop app semver from Electron (e.g. 1.0.0) */
   appVersion = signal<string | null>(null);
 
@@ -58,16 +63,25 @@ export class App implements OnInit, OnDestroy {
     this.routeSub = this.router.events
       .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
       .subscribe((e) => {
-        const match = e.urlAfterRedirects.match(
-          /\/(chat|tools|tasks|projects|memory|brain|ide)\/([a-f0-9-]+)/
-        );
-        if (match) {
-          this.activeAgentId.set(match[2]);
-          this.hasAgentContext.set(true);
-        } else {
-          this.hasAgentContext.set(false);
-        }
+        this.syncRouteState(e.urlAfterRedirects);
       });
+    this.syncRouteState(this.router.url);
+  }
+
+  private syncRouteState(url: string): void {
+    const path = url.split('?')[0].split('#')[0];
+    const match = path.match(
+      /\/(chat|tools|tasks|projects|memory|brain|ide)\/([a-f0-9-]+)/
+    );
+    if (match) {
+      this.activeAgentId.set(match[2]);
+      this.hasAgentContext.set(true);
+      this.isDashboardRoute.set(false);
+    } else {
+      this.activeAgentId.set('');
+      this.hasAgentContext.set(false);
+      this.isDashboardRoute.set(path === '/dashboard' || path === '/');
+    }
   }
 
   ngOnDestroy() {
@@ -76,6 +90,10 @@ export class App implements OnInit, OnDestroy {
 
   logout() {
     this.auth.logout();
+  }
+
+  openDiscordSupport(): void {
+    openExternalUrl(environment.discordSupportUrl);
   }
 
   private async loadAppVersion(): Promise<void> {
