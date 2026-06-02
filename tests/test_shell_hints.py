@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import sys
 
+import pytest
+
 from nls.tools.agent_tools.shell_hints import (
     format_shell_error_hints,
     preflight_bash_command,
