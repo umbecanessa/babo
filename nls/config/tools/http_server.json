@@ -1,0 +1,68 @@
+{
+  "name": "http_server",
+  "description": "Start a simple local HTTP server to serve files or test webhooks. Useful for prototyping.",
+  "version": "1.0.0",
+  "category": "act",
+  "hormone_affinity": "dopamine",
+  "base_effort": 0.3,
+  "learning_yield": "low",
+  "risk_level": "execute",
+  "platform": "all",
+  "permissions": [
+    "network.listen",
+    "shell.execute"
+  ],
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "directory": {
+        "type": "string",
+        "description": "Directory to serve",
+        "default": "."
+      },
+      "port": {
+        "type": "integer",
+        "description": "Port to listen on",
+        "default": 8080
+      }
+    }
+  },
+  "manual": {
+    "overview": "Use when you need to serve files locally for testing, prototypes, or webhook callbacks. Starts a simple HTTP server.",
+    "examples": [
+      {
+        "input": {
+          "directory": "./build",
+          "port": 8080
+        },
+        "description": "Serve static build output on port 8080"
+      },
+      {
+        "input": {
+          "directory": ".",
+          "port": 3000
+        },
+        "description": "Serve current directory on port 3000"
+      }
+    ],
+    "tips": [
+      "Use a non-privileged port (1024+); 8080 and 3000 are common",
+      "Server runs until timeout; useful for quick manual testing",
+      "Directory is relative to cwd unless absolute path"
+    ],
+    "edge_cases": [
+      "Port in use will fail; try another port",
+      "Server binds to all interfaces; avoid sharing sensitive dirs on shared networks"
+    ],
+    "related_tools": [
+      "browser",
+      "compress",
+      "file_read"
+    ]
+  },
+  "executor": {
+    "type": "shell",
+    "command": "python -m http.server {{args.port}} --directory {{args.directory}}",
+    "timeout": 3600
+  }
+}

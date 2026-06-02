@@ -1,0 +1,89 @@
+{
+  "name": "note_memory",
+  "description": "Personal notes and scratch pad. Agent can save, retrieve, and search structured notes that persist across conversations.",
+  "version": "1.0.0",
+  "category": "think",
+  "hormone_affinity": "serotonin",
+  "base_effort": 0.1,
+  "learning_yield": "medium",
+  "risk_level": "write",
+  "platform": "all",
+  "permissions": [
+    "filesystem.write"
+  ],
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": [
+          "save",
+          "get",
+          "list",
+          "search",
+          "delete"
+        ],
+        "description": "Note action"
+      },
+      "title": {
+        "type": "string",
+        "description": "Note title / key"
+      },
+      "content": {
+        "type": "string",
+        "description": "Note content (for save)"
+      },
+      "query": {
+        "type": "string",
+        "description": "Search query (for search)"
+      }
+    },
+    "required": [
+      "action"
+    ]
+  },
+  "manual": {
+    "overview": "Use when you need persistent scratch notes across conversations—save context, decisions, or reminders for later retrieval.",
+    "examples": [
+      {
+        "input": {
+          "action": "save",
+          "title": "project-notes",
+          "content": "API key stored in keychain. Use /v1/translate."
+        },
+        "description": "Save a project note"
+      },
+      {
+        "input": {
+          "action": "search",
+          "query": "API key"
+        },
+        "description": "Search past notes for API key"
+      },
+      {
+        "input": {
+          "action": "list"
+        },
+        "description": "List all note titles"
+      }
+    ],
+    "tips": [
+      "Use descriptive titles for easy search and retrieval",
+      "search finds notes by content; list shows all titles",
+      "Notes persist across sessions; delete when no longer needed"
+    ],
+    "edge_cases": [
+      "Very large note content may impact search performance",
+      "No sync—notes are local to this agent instance"
+    ],
+    "related_tools": [
+      "cron_scheduler",
+      "calendar",
+      "hash_encode"
+    ]
+  },
+  "executor": {
+    "type": "python",
+    "handler": "nls.engine.tools_extended.NoteMemoryTool"
+  }
+}

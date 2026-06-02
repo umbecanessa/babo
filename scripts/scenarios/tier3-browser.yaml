@@ -1,0 +1,81 @@
+scenarios:
+  - id: web-01
+    name: Browser read-only browse
+    category: browser
+    tags: [tier3, browser]
+    timeout_s: 600
+    prompt: >-
+      Use the browser to open Wikipedia and find when the Eiffel Tower opened to the
+      public. Tell me the year and one sentence of context. Quote the page title you used.
+    pass:
+      tools_any: [browser, browser_live]
+      min_response_chars: 40
+
+  - id: web-02
+    name: Browser form fill
+    category: browser
+    tags: [tier3, browser]
+    timeout_s: 900
+    prompt: >-
+      Use the browser to open https://httpbin.org/forms/post — fill the custname field
+      with "BaboTest" and the comments field with "scenario ok", then submit. Tell me
+      what response or confirmation you see. If blocked, explain why.
+    pass:
+      tools_any: [browser, browser_live]
+
+  - id: web-03
+    name: Browser auth flow
+    category: browser
+    tags: [tier3, browser, manual]
+    manual: true
+    timeout_s: 1200
+    prompt: >-
+      MANUAL QA: Test browser auth on a real OAuth app you control. Navigate, complete
+      login, confirm session works. Document steps and outcome.
+    pass:
+      tools_any: [browser]
+
+  - id: web-04
+    name: Browser CDP vs Playwright path
+    category: browser
+    tags: [tier3, browser, manual]
+    manual: true
+    timeout_s: 900
+    prompt: >-
+      MANUAL QA: Run the same read-only browse task twice — note whether in-app CDP
+      webview or standalone Playwright was used (check desktop UI / logs).
+    pass:
+      tools_any: [browser]
+
+  - id: web-05
+    name: Browser screenshot evidence
+    category: browser
+    tags: [tier3, browser]
+    timeout_s: 600
+    prompt: >-
+      Use browser to open https://example.com and take a screenshot (browser screenshot
+      or screenshot tool). Save to workspace and describe what you see in the image.
+    pass:
+      tools_any: [browser, screenshot]
+
+  - id: browser-news-headline
+    name: Browser — HN headline
+    category: browser
+    tags: [tier3, browser]
+    timeout_s: 600
+    prompt: >-
+      Use the browser to visit https://news.ycombinator.com and tell me the title of
+      the #1 story on the front page right now. If the page blocks automation, say so.
+    pass:
+      tools_any: [browser, browser_live]
+
+  - id: web-fetch-smoke
+    name: Web fetch static page
+    category: browser
+    tags: [tier3, browser]
+    timeout_s: 300
+    prompt: >-
+      Use web_fetch on https://example.com and tell me the page title or first heading text.
+    pass:
+      tools_any: [web_fetch]
+      min_response_chars: 20

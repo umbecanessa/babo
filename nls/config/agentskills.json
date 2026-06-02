@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "prompt_injection": {
+    "enabled": true,
+    "max_skills_in_prompt": 10,
+    "use_thalamic_filtering": true,
+    "compaction_threshold_chars": 500
+  },
+  "clawhub": {
+    "enabled": true,
+    "install_dir": "data/skills/"
+  }
+}

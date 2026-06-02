@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "evaluation_frequency": "on_sleep",
+  "thresholds": {
+    "min_total_uses": 15,
+    "min_success_rate": 0.85,
+    "min_myelination_score": 0.65,
+    "max_feedback_correction_rate": 0.15
+  },
+  "auto_generate": false,
+  "require_approval": true,
+  "task_memory_lookback": 50
+}

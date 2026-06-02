@@ -1,0 +1,10 @@
+{
+  "max_slots": 15,
+  "max_goals": 5,
+  "max_prospective": 10,
+  "salience_decay_rate": 0.005,
+  "attention_window_size": 15,
+  "intention_check_method": "keyword",
+  "min_salience_evict": 0.05,
+  "consolidation_slot_count": 3
+}

@@ -1,0 +1,97 @@
+{
+  "name": "email",
+  "description": "Send and read emails. Requires SMTP/IMAP configuration via environment variables (NLS_SMTP_HOST, NLS_SMTP_USER, NLS_SMTP_PASS).",
+  "version": "1.0.0",
+  "category": "communicate",
+  "hormone_affinity": "oxytocin",
+  "base_effort": 0.4,
+  "learning_yield": "low",
+  "risk_level": "write",
+  "platform": "desktop",
+  "permissions": [
+    "network.outbound",
+    "keychain"
+  ],
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": [
+          "send",
+          "read",
+          "search"
+        ],
+        "description": "Email action"
+      },
+      "to": {
+        "type": "string",
+        "description": "Recipient email address"
+      },
+      "subject": {
+        "type": "string",
+        "description": "Email subject"
+      },
+      "body": {
+        "type": "string",
+        "description": "Email body"
+      },
+      "limit": {
+        "type": "integer",
+        "description": "Max emails to read",
+        "default": 10
+      }
+    },
+    "required": [
+      "action"
+    ]
+  },
+  "manual": {
+    "overview": "Use email when you need to send formal messages, documents, or updates to specific recipients, or when you need to read/search inbox for user context. Prefer it for async, durable communication that requires a paper trail.",
+    "examples": [
+      {
+        "input": {
+          "action": "send",
+          "to": "user@example.com",
+          "subject": "Daily summary",
+          "body": "Here is your daily briefing..."
+        },
+        "description": "Send a simple notification email"
+      },
+      {
+        "input": {
+          "action": "read",
+          "limit": 5
+        },
+        "description": "Fetch the 5 most recent inbox messages"
+      },
+      {
+        "input": {
+          "action": "search",
+          "limit": 20
+        },
+        "description": "Search inbox for recent emails"
+      }
+    ],
+    "tips": [
+      "Always set a clear subject line for send actions to improve deliverability and open rates",
+      "For read/search, use limit to avoid fetching too many messages and slowing the agent",
+      "Prefer plain text body for reliability; HTML may be stripped or misrendered by some clients",
+      "Double-check recipient addresses before sending to avoid misdelivery"
+    ],
+    "edge_cases": [
+      "SMTP credentials must be correct and the server must allow relay from your IP; otherwise sends will fail silently or with auth errors",
+      "Some providers (Gmail, Outlook) require app passwords or OAuth; verify env vars match your provider requirements",
+      "Reading from IMAP may fail if the mailbox is large or connection is slow; use small limits"
+    ],
+    "related_tools": [
+      "slack",
+      "notification",
+      "sms"
+    ]
+  },
+  "executor": {
+    "type": "python",
+    "handler": "nls.engine.tools_extended.EmailTool"
+  }
+}

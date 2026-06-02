@@ -1,0 +1,46 @@
+{
+  "name": "gx10-32b-turbo",
+  "description": "Qwen3 32B NF4 on NVIDIA GB10 Blackwell (128GB unified). Three-model parallel: inference + training + dream. Quantized (no_quantize=false) to fit 3 instances in 128GB.",
+
+  "runtime": {
+    "inference": {
+      "hf_model": "unsloth/Qwen3-32B-unsloth-bnb-4bit",
+      "attn_implementation": "sdpa",
+      "generation": {
+        "max_new_tokens": 4096
+      }
+    },
+    "training": {
+      "lora_rank": 32,
+      "lora_alpha": 64,
+      "learning_rate": 1.5e-4,
+      "epochs": 3,
+      "batch_size": 2
+    }
+  },
+
+  "drives": {
+    "drive_tick_seconds": 10,
+    "max_autonomous_actions_per_hour": 80,
+    "drives": {
+      "homeostasis":    { "cooldown_seconds": 30 },
+      "curiosity":      { "cooldown_seconds": 15 },
+      "competence":     { "cooldown_seconds": 22 },
+      "social":         { "cooldown_seconds": 75 },
+      "self_direction": { "cooldown_seconds": 150 }
+    },
+    "experience_tracker": {
+      "domain_search_cooldown_seconds": 150
+    }
+  },
+
+  "autonomic": {
+    "state_machine": {
+      "drowsy_timeout_seconds": 10.0
+    },
+    "sleep_triggers": {
+      "idle_timeout_seconds": 600,
+      "periodic_seconds": 3600
+    }
+  }
+}

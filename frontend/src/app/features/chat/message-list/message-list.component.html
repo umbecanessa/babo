@@ -1,0 +1,938 @@
+<div #scrollContainer class="messages-scroll">
+  <div class="messages-inner">
+    @if (messages.length === 0 && !streamingText?.trim()) {
+      <div class="empty-chat">
+        <div class="empty-orb">
+          <div class="empty-core"></div>
+          <div class="empty-ring"></div>
+        </div>
+        <p class="empty-text">Start a conversation</p>
+      </div>
+    }
+
+    @for (msg of messages; track $index) {
+      <div class="message-row" [class.user-row]="msg.type === 'user'"
+           [class.assistant-row]="msg.type === 'assistant'"
+           [class.status-row]="msg.type === 'status'"
+           [class.tool-row]="msg.type === 'tool_use'"
+           [class.drive-row]="msg.type === 'drive_action'"
+           [class.reach-out-row]="msg.type === 'reach_out'"
+           [class.channel-inbound-row]="msg.type === 'channel_inbound'"
+           [class.channel-outbound-row]="msg.type === 'channel_outbound'"
+           [class.drowsy-row]="msg.type === 'drowsy'"
+           [class.agentic-row]="msg.type === 'agentic_start' || msg.type === 'agentic_iteration' || msg.type === 'agentic_complete' || msg.type === 'turn_thinking' || msg.type === 'tool_output_chunk' || msg.type === 'tool_progress' || msg.type === 'browser_navigation' || msg.type === 'copilot_ack' || msg.type === 'ask_user'"
+           [class.activity-row]="msg.type === 'activity_status'"
+           [class.delegate-row]="msg.type === 'delegate_card' && !isInGroupedWave($index)">
+
+        @if (msg.type === 'user') {
+          <div class="msg-bubble user-bubble transcript-user">
+            @if (msg.content?.trim()) {
+              <p>{{ msg.content }}</p>
+            }
+            @if (msg.attachments?.length) {
+              <div class="msg-attachments">
+                @for (att of msg.attachments!; track att.path) {
+                  <div class="msg-attachment-chip" [class.is-image]="att.mime_type.startsWith('image/')">
+                    <span class="msg-attachment-icon">
+                      @if (att.mime_type.startsWith('image/')) {
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                      } @else if (att.mime_type === 'application/pdf' || att.mime_type.includes('word')) {
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                      } @else if (att.mime_type.includes('sheet') || att.mime_type.includes('excel') || att.mime_type === 'text/csv') {
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
+                      } @else {
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+                      }
+                    </span>
+                    <span class="msg-attachment-name" [title]="att.name">{{ att.name }}</span>
+                    @if (att.size) {
+                      <span class="msg-attachment-size">{{ att.size | number:'1.0-0' }}B</span>
+                    }
+                  </div>
+                }
+              </div>
+            }
+          </div>
+        } @else if (msg.type === 'assistant') {
+          @let parsed = parseTags(msg.content);
+          <div class="msg-bubble assistant-bubble transcript-assistant">
+            <div class="transcript-toolbar">
+              <button type="button" class="workbench-open-btn" (click)="openWorkbench(workbenchKeyForAssistant(msg))" title="Open workbench">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="2"/>
+                  <line x1="3" y1="17" x2="21" y2="17"/>
+                  <line x1="8" y1="8" x2="16" y2="8"/>
+                </svg>
+              </button>
+            </div>
+
+            @if (msg.reasoning) {
+              <div class="reasoning-section" [class.expanded]="isReasoningExpanded($index)">
+                <button class="reasoning-toggle" (click)="toggleReasoning($index)">
+                  <span class="reasoning-icon">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <circle cx="12" cy="12" r="10"></circle>
+                      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                      <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                    </svg>
+                  </span>
+                  <span class="reasoning-label">Reasoned</span>
+                  @if (!isReasoningExpanded($index)) {
+                    <span class="reasoning-preview">{{ reasoningSnippet(msg.reasoning) }}</span>
+                  }
+                  <span class="reasoning-chevron">
+                    @if (isReasoningExpanded($index)) {
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                    } @else {
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                    }
+                  </span>
+                </button>
+                @if (isReasoningExpanded($index)) {
+                  <div class="reasoning-content">
+                    <p>{{ msg.reasoning }}</p>
+                  </div>
+                }
+              </div>
+            }
+
+            <div class="md-content" [innerHTML]="parsed.text | markdown"></div>
+            @if (parsed.tags.length) {
+              @let visibleTags = isTagsExpanded($index) ? parsed.tags : parsed.tags.slice(0, 3);
+              @let hiddenCount = parsed.tags.length - 3;
+              <div class="signal-tags">
+                @for (tag of visibleTags; track tag.raw) {
+                  <span class="signal-pill" [title]="tag.raw">
+                    <span class="signal-dot" [style.background]="tagColor(tag.type)"></span>
+                    <span class="signal-type">{{ humanType(tag.type) }}</span>
+                    <span class="signal-label">{{ tag.label }}</span>
+                  </span>
+                }
+                @if (hiddenCount > 0 && !isTagsExpanded($index)) {
+                  <button class="signal-pill signal-more" (click)="toggleTags($index)">+{{ hiddenCount }} more</button>
+                }
+                @if (isTagsExpanded($index) && hiddenCount > 0) {
+                  <button class="signal-pill signal-more" (click)="toggleTags($index)">collapse</button>
+                }
+              </div>
+            }
+          </div>
+        } @else if (msg.type === 'tool_use') {
+          <div class="tool-card" [class.tool-success]="msg.tool?.success" [class.tool-fail]="!msg.tool?.success">
+            <div class="tool-header">
+              <span class="tool-icon">
+                @if (msg.tool?.source === 'wikipedia') {
+                  <span class="wiki-icon">W</span>
+                } @else {
+                  <span class="search-icon">&#128269;</span>
+                }
+              </span>
+              <span class="tool-label">
+                {{ msg.tool?.source === 'wikipedia' ? 'Wikipedia' : 'Searching' }}:
+                <strong>{{ msg.tool?.query }}</strong>
+              </span>
+              <span class="tool-status">
+                @if (msg.tool?.success) {
+                  <span class="tool-dot success"></span>
+                } @else {
+                  <span class="tool-dot fail"></span>
+                }
+              </span>
+            </div>
+            @if (msg.tool?.preview) {
+              <details class="tool-preview">
+                <summary>Result preview</summary>
+                <p>{{ (msg.tool?.preview ?? '') | slice:0:200 }}</p>
+              </details>
+            }
+          </div>
+        } @else if (msg.type === 'drive_action') {
+          <div class="drive-action-card" [class.expanded]="isDriveExpanded($index)">
+            <div class="drive-header" (click)="toggleDriveExpand($index)">
+              <span class="drive-icon">
+                @if (msg.drive?.actionType === 'wikipedia') {
+                  <span class="drive-icon-wiki">W</span>
+                } @else {
+                  <span class="drive-icon-search">&#128269;</span>
+                }
+              </span>
+              <div class="drive-header-text">
+                <span class="drive-label">{{ driveActionLabel(msg.drive?.actionType || '') }} <span class="drive-motive">({{ msg.drive?.name }})</span></span>
+                <span class="drive-query">"{{ msg.drive?.query }}"</span>
+              </div>
+              <span class="drive-expand-toggle">
+                @if (isDriveExpanded($index)) {
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                } @else {
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                }
+              </span>
+            </div>
+            @if (isDriveExpanded($index)) {
+              <div class="drive-details">
+                @if (msg.drive?.domain) {
+                  <div class="drive-domain">Domain: {{ msg.drive?.domain }}</div>
+                }
+                @if (msg.drive?.resultPreview) {
+                  <div class="drive-preview">{{ msg.drive?.resultPreview }}</div>
+                }
+                <div class="drive-status-line">
+                  @if (msg.drive?.success) {
+                    <span class="drive-dot success"></span> <span>Success</span>
+                  } @else {
+                    <span class="drive-dot fail"></span> <span>Failed</span>
+                  }
+                </div>
+              </div>
+            }
+          </div>
+        } @else if (msg.type === 'reach_out') {
+          <div class="reach-out-bubble">
+            <div class="reach-out-indicator">
+              <div class="reach-out-dot"></div>
+            </div>
+            <p>{{ msg.content }}</p>
+            <div class="reach-out-meta">
+              @if (msg.metadata && msg.metadata['channel'] && msg.metadata['channel'] !== 'chat') {
+                <span class="reach-out-channel">sent via {{ msg.metadata['channel'] }}</span>
+              }
+              @if (msg.drive?.name) {
+                <span class="reach-out-motive">reach out — {{ msg.drive?.name }} drive</span>
+              }
+            </div>
+          </div>
+        } @else if (msg.type === 'drowsy') {
+          <div class="drowsy-bubble">
+            <div class="drowsy-indicator">
+              <div class="drowsy-dot"></div>
+            </div>
+            <p>{{ msg.content }}</p>
+            @if (msg.drowsy?.reason) {
+              <span class="drowsy-reason">{{ msg.drowsy?.reason }}</span>
+            }
+            @if (!isDrowsyResponded($index)) {
+              <div class="drowsy-actions">
+                <button class="drowsy-btn drowsy-yes" (click)="onDrowsyAction($index, 'confirm')">
+                  Yes, rest up
+                </button>
+                <button class="drowsy-btn drowsy-no" (click)="onDrowsyAction($index, 'deny')">
+                  Stay awake
+                </button>
+              </div>
+            } @else {
+              <span class="drowsy-responded">Responded</span>
+            }
+          </div>
+        } @else if (msg.type === 'delegate_card' && msg.delegate && !isInGroupedWave($index) && msg.delegate.teamId && isFirstInWave($index) && getWaveMemberIndices($index).length > 1) {
+          @let memberIndices = getWaveMemberIndices($index);
+          @let waveMsg = msg;
+          <div class="delegate-wave-group"
+               [class.running]="waveAnyRunning(memberIndices)"
+               [class.done]="waveAllDone(memberIndices)">
+            <button type="button" class="delegate-wave-header"
+                    (click)="toggleWaveGroup(waveMsg.delegate!.teamId!, waveMsg.delegate!.waveAttempt)">
+              <span class="delegate-wave-icon">
+                @if (waveAnyRunning(memberIndices)) {
+                  <span class="delegate-spinner"></span>
+                } @else {
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-success)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                }
+              </span>
+              <span class="delegate-wave-title">{{ waveLabel(waveMsg) }}</span>
+              <span class="delegate-wave-sub">{{ waveSubtitle(memberIndices) }}</span>
+              @if (waveMsg.delegate!.waveAttempt && waveMsg.delegate!.waveAttempt > 1) {
+                <span class="delegate-wave-retry">try {{ waveMsg.delegate!.waveAttempt }}</span>
+              }
+              <span class="delegate-wave-chevron"
+                    [class.expanded]="!isWaveCollapsed(waveMsg.delegate!.teamId!, waveMsg.delegate!.waveAttempt)">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </span>
+            </button>
+            @if (!isWaveCollapsed(waveMsg.delegate!.teamId!, waveMsg.delegate!.waveAttempt)) {
+              <div class="delegate-wave-members">
+                @for (mIdx of memberIndices; track mIdx) {
+                  @let member = messages[mIdx];
+                  @if (member.delegate) {
+                    <div class="delegate-member-card"
+                         [class.running]="member.delegate.status === 'running'"
+                         [class.done]="member.delegate.status === 'done'"
+                         [class.error]="member.delegate.status === 'error'">
+                      <button type="button" class="delegate-member-header"
+                              (click)="delegateToggle.emit(member.delegate.number)">
+                        <span class="delegate-member-num">#{{ member.delegate.number }}</span>
+                        <span class="delegate-member-title">{{ member.delegate.task.split('\n')[0] }}</span>
+                        <span class="delegate-member-meta">
+                          @if (member.delegate.status === 'running') {
+                            @if (member.delegate.iterations && member.delegate.maxIterations) {
+                              <span>{{ member.delegate.iterations }}/{{ member.delegate.maxIterations }} iters</span>
+                            } @else {
+                              <span>working…</span>
+                            }
+                          } @else {
+                            <span>{{ member.delegate.totalToolCalls || member.delegate.toolCalls.length }} tools</span>
+                          }
+                        </span>
+                        <span class="delegate-card-chevron" [class.expanded]="member.delegate.expanded">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                        </span>
+                      </button>
+                      @if (member.delegate.expanded) {
+                        <div class="delegate-card-body delegate-member-body">
+                          @if (!member.delegate.toolCalls.length && member.delegate.status === 'running') {
+                            <div class="delegate-card-empty">Starting work…</div>
+                          }
+                          @for (tc of visibleDelegateTools(member.delegate); track $index) {
+                            <div class="delegate-tool-row" [class.error]="tc.isError">
+                              <span class="delegate-tool-icon">
+                                @if (tc.result === 'done') {
+                                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--accent-success)" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                } @else if (tc.isError) {
+                                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--accent-danger)" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                } @else {
+                                  <span class="delegate-tool-spinner"></span>
+                                }
+                              </span>
+                              <span class="delegate-tool-name">{{ tc.name }}</span>
+                              @if (tc.args?.path || tc.args?.file_path) {
+                                <span class="delegate-tool-detail">{{ tc.args.path || tc.args.file_path }}</span>
+                              } @else if (tc.args?.command) {
+                                <span class="delegate-tool-detail">$ {{ tc.args.command }}</span>
+                              }
+                            </div>
+                          }
+                          @if (hiddenDelegateToolCount(member.delegate) > 0) {
+                            <div class="delegate-tool-more">+ {{ hiddenDelegateToolCount(member.delegate) }} more in Projects</div>
+                          }
+                          @if (member.delegate.summary && member.delegate.status !== 'running') {
+                            <div class="delegate-card-summary">{{ member.delegate.summary.split('\n\n[DELEGATE')[0] }}</div>
+                          }
+                        </div>
+                      }
+                    </div>
+                  }
+                }
+              </div>
+            } @else {
+              <div class="delegate-wave-collapsed">{{ waveSubtitle(memberIndices) }} — expand for details</div>
+            }
+          </div>
+        } @else if (msg.type === 'delegate_card' && msg.delegate) {
+          <!-- Single sub-agent card (no team group) -->
+          <div class="delegate-card" [class.running]="msg.delegate.status === 'running'"
+               [class.done]="msg.delegate.status === 'done'" [class.error]="msg.delegate.status === 'error'">
+            <button type="button" class="delegate-card-header" (click)="delegateToggle.emit(msg.delegate.number)">
+              <span class="delegate-card-icon">
+                @if (msg.delegate.status === 'running') {
+                  <span class="delegate-spinner"></span>
+                } @else if (msg.delegate.status === 'done') {
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-success)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                } @else {
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-danger)" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                }
+              </span>
+              <span class="delegate-card-title">{{ msg.delegate.task.split('\n')[0] }}</span>
+              <span class="delegate-card-meta">
+                @if (msg.delegate.status === 'running') {
+                  @if (msg.delegate.iterations && msg.delegate.maxIterations) {
+                    <span class="delegate-card-badge running">{{ msg.delegate.iterations }}/{{ msg.delegate.maxIterations }} iters</span>
+                  } @else {
+                    <span class="delegate-card-badge running">working...</span>
+                  }
+                } @else {
+                  <span class="delegate-card-stats">{{ msg.delegate.totalToolCalls || msg.delegate.toolCalls.length }} tools</span>
+                }
+              </span>
+              <span class="delegate-card-chevron" [class.expanded]="msg.delegate.expanded">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+              </span>
+            </button>
+            @if (msg.delegate.expanded) {
+              <div class="delegate-card-body">
+                @if (!msg.delegate.toolCalls.length && msg.delegate.status === 'running') {
+                  <div class="delegate-card-empty">Starting work…</div>
+                }
+                @for (tc of visibleDelegateTools(msg.delegate); track $index) {
+                  <div class="delegate-tool-row" [class.error]="tc.isError">
+                    <span class="delegate-tool-icon">
+                      @if (tc.result === 'done') {
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--accent-success)" stroke-width="3"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                      } @else if (tc.isError) {
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--accent-danger)" stroke-width="3"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                      } @else {
+                        <span class="delegate-tool-spinner"></span>
+                      }
+                    </span>
+                    <span class="delegate-tool-name">{{ tc.name }}</span>
+                    @if (tc.args?.path || tc.args?.file_path) {
+                      <span class="delegate-tool-detail">{{ tc.args.path || tc.args.file_path }}</span>
+                    } @else if (tc.args?.command) {
+                      <span class="delegate-tool-detail">$ {{ tc.args.command }}</span>
+                    }
+                  </div>
+                }
+                @if (hiddenDelegateToolCount(msg.delegate) > 0) {
+                  <div class="delegate-tool-more">+ {{ hiddenDelegateToolCount(msg.delegate) }} more in Projects</div>
+                }
+                @if (msg.delegate.summary && msg.delegate.status !== 'running') {
+                  <div class="delegate-card-summary">{{ msg.delegate.summary.split('\n\n[DELEGATE')[0] }}</div>
+                }
+              </div>
+            }
+          </div>
+
+        } @else if (msg.type === 'agentic_start') {
+          <!-- agentic_start suppressed — workbench shows the full trace -->
+
+        } @else if (msg.type === 'agentic_iteration' && msg.agentic) {
+          <!-- Step cards suppressed from chat — visible in workbench -->
+
+        } @else if (msg.type === 'agentic_complete' && msg.agenticComplete) {
+          <!-- Done strip suppressed from chat — summary shown in header -->
+
+        } @else if (msg.type === 'tool_output_chunk') {
+          <!-- Shell output lives in workbench; show only a slim redirect pill -->
+          <div class="tool-output-pill" (click)="openWorkbench()">
+            <svg class="tool-output-pill-ic" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+            <span>Shell output</span>
+            <span class="tool-output-pill-hint">view in workbench</span>
+          </div>
+
+        } @else if (msg.type === 'tool_progress') {
+          <!-- Tool execution progress — compact inline cards -->
+          @if (msg.toolProgress?.toolName === 'write' || msg.toolProgress?.toolName === 'write_file' || msg.toolProgress?.toolName === 'create_file') {
+            <div class="tool-inline-card tool-inline-file" [class.done]="msg.toolProgress?.done" [class.error]="msg.toolProgress?.isError" [class.warn]="msg.toolProgress?.isWarning && !msg.toolProgress?.isError">
+              @if (!msg.toolProgress?.done) {
+                <span class="tool-progress-spinner"></span>
+              } @else if (msg.toolProgress?.isError) {
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent-danger)" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              } @else if (msg.toolProgress?.isWarning) {
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent-warn)" stroke-width="2.5"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+              } @else {
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent-success)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              }
+              <svg class="tool-inline-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+              @for (fp of toolFilePaths(msg); track fp) {
+                <button type="button" class="tool-file-chip" (click)="openToolFile(fp, $event)" [title]="fp">
+                  {{ fileChipLabel(fp) }}
+                </button>
+              } @empty {
+                <span class="tool-inline-label">file</span>
+              }
+              <span class="tool-inline-status">{{ msg.toolProgress?.done ? (msg.toolProgress?.isError ? 'Failed' : 'Written') : 'Writing…' }}</span>
+            </div>
+          } @else if (msg.toolProgress?.toolName === 'read' || msg.toolProgress?.toolName === 'read_file' || msg.toolProgress?.toolName === 'edit') {
+            <div class="tool-inline-card tool-inline-file" [class.done]="msg.toolProgress?.done" [class.error]="msg.toolProgress?.isError" [class.warn]="msg.toolProgress?.isWarning && !msg.toolProgress?.isError">
+              @if (!msg.toolProgress?.done) {
+                <span class="tool-progress-spinner"></span>
+              } @else if (msg.toolProgress?.isError) {
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent-danger)" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              } @else if (msg.toolProgress?.isWarning) {
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent-warn)" stroke-width="2.5"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+              } @else {
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent-success)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              }
+              <ng-container [ngTemplateOutlet]="toolIcon" [ngTemplateOutletContext]="{ toolName: msg.toolProgress?.toolName }"></ng-container>
+              @for (fp of toolFilePaths(msg); track fp) {
+                <button type="button" class="tool-file-chip" (click)="openToolFile(fp, $event)" [title]="fp">
+                  {{ fileChipLabel(fp) }}
+                </button>
+              } @empty {
+                <span class="tool-inline-label">{{ msg.toolProgress?.toolName === 'edit' ? 'file' : 'Read file' }}</span>
+              }
+              <span class="tool-inline-status">{{ msg.toolProgress?.done ? (msg.toolProgress?.isError ? 'Failed' : msg.toolProgress?.isWarning && msg.toolProgress?.toolName === 'edit' ? 'Edited' : msg.toolProgress?.isWarning ? 'Read' : (msg.toolProgress?.toolName === 'edit' ? 'Edited' : 'Read')) : (msg.toolProgress?.toolName === 'edit' ? 'Editing…' : 'Reading…') }}</span>
+            </div>
+          } @else if (msg.toolProgress?.toolName === 'bash') {
+            <div class="tool-inline-card tool-inline-bash" [class.done]="msg.toolProgress?.done" [class.error]="msg.toolProgress?.isError">
+              @if (!msg.toolProgress?.done) {
+                <span class="tool-progress-spinner"></span>
+              } @else if (msg.toolProgress?.isError) {
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent-danger)" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              } @else {
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent-success)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              }
+              <svg class="tool-inline-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+              <code class="tool-inline-cmd">{{ (msg.toolProgress?.arguments?.command || '') | slice:0:80 }}{{ (msg.toolProgress?.arguments?.command || '').length > 80 ? '…' : '' }}</code>
+              @if (msg.toolProgress?.isError) {
+                <span class="tool-inline-status error">Failed</span>
+              }
+            </div>
+          } @else if (msg.toolProgress?.toolName === 'offer_download') {
+            <!-- Download card -->
+            <div class="file-download-card" [class.done]="msg.toolProgress?.done" [class.error]="msg.toolProgress?.isError">
+              <div class="file-download-header">
+                <span class="file-download-icon">
+                  @if (!msg.toolProgress?.done) {
+                    <span class="tool-progress-spinner"></span>
+                  } @else if (msg.toolProgress?.isError) {
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f44" stroke-width="2.5">
+                      <line x1="18" y1="6" x2="6" y2="18"></line>
+                      <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                  } @else {
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                      <polyline points="14 2 14 8 20 8"></polyline>
+                    </svg>
+                  }
+                </span>
+                <div class="file-download-info">
+                  <span class="file-download-name">{{ $any(msg.toolProgress?.details)?.name || 'File' }}</span>
+                  @if ($any(msg.toolProgress?.details)?.size_human) {
+                    <span class="file-download-size">{{ $any(msg.toolProgress?.details)?.size_human }}</span>
+                  }
+                </div>
+                @if (msg.toolProgress?.done && !msg.toolProgress?.isError && $any(msg.toolProgress?.details)?.path) {
+                  <a class="file-download-btn"
+                     [href]="getDownloadUrl($any(msg.toolProgress?.details).path)"
+                     target="_blank" download>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                      <polyline points="7 10 12 15 17 10"></polyline>
+                      <line x1="12" y1="15" x2="12" y2="3"></line>
+                    </svg>
+                    Download
+                  </a>
+                }
+              </div>
+            </div>
+          } @else if (msg.toolProgress?.toolName === 'request_restart' && $any(msg.toolProgress?.details)?.type === 'skill_review') {
+            <!-- Skill review card -->
+            <div class="skill-review-card" [class.done]="msg.toolProgress?.done"
+                 [attr.data-review-id]="$any(msg.toolProgress?.details)?.review_id">
+              <div class="skill-review-header">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent-primary)" stroke-width="2">
+                  <path d="M12 2L2 7l10 5 10-5-10-5z"></path>
+                  <path d="M2 17l10 5 10-5"></path>
+                  <path d="M2 12l10 5 10-5"></path>
+                </svg>
+                <div class="skill-review-info">
+                  <span class="skill-review-title">New Skill</span>
+                  <span class="skill-review-reason">{{ $any(msg.toolProgress?.details)?.reason }}</span>
+                </div>
+              </div>
+              <div class="skill-review-stats">
+                <span class="skill-review-stat">{{ $any(msg.toolProgress?.details)?.skill_count || 0 }} skill(s)</span>
+              </div>
+              <div class="skill-review-files">
+                @for (sk of $any(msg.toolProgress?.details)?.skills || []; track sk.name) {
+                  <div class="skill-review-item">
+                    <span class="skill-review-file skill-name">{{ sk.name }}</span>
+                    @if (sk.description) {
+                      <span class="skill-desc">{{ sk.description }}</span>
+                    }
+                    @for (f of sk.files || []; track f.path) {
+                      <span class="skill-review-file">{{ f.path }}</span>
+                    }
+                    @if (sk.dependencies?.length) {
+                      <span class="skill-deps">deps: {{ sk.dependencies.join(', ') }}</span>
+                    }
+                  </div>
+                }
+              </div>
+              @if (!reviewResolved[$any(msg.toolProgress?.details)?.review_id]) {
+                <div class="skill-review-actions">
+                  <button class="skill-review-btn approve"
+                          [disabled]="reviewLoading[$any(msg.toolProgress?.details)?.review_id]"
+                          (click)="onApproveReview($any(msg.toolProgress?.details)?.review_id)">
+                    @if (reviewLoading[$any(msg.toolProgress?.details)?.review_id]) {
+                      <span class="skill-review-spinner"></span>
+                      Approving...
+                    } @else {
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                      </svg>
+                      Approve &amp; Restart
+                    }
+                  </button>
+                  <button class="skill-review-btn reject"
+                          [disabled]="reviewLoading[$any(msg.toolProgress?.details)?.review_id]"
+                          (click)="onRejectReview($any(msg.toolProgress?.details)?.review_id)">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                      <line x1="18" y1="6" x2="6" y2="18"></line>
+                      <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                    Reject
+                  </button>
+                </div>
+              } @else {
+                <div class="skill-review-resolved">
+                  <span class="skill-review-resolved-label" [class.approved]="reviewResolved[$any(msg.toolProgress?.details)?.review_id] === 'approved'"
+                        [class.rejected]="reviewResolved[$any(msg.toolProgress?.details)?.review_id] === 'rejected'">
+                    {{ reviewResolved[$any(msg.toolProgress?.details)?.review_id] === 'approved' ? 'Approved — server restarting to load skills' : 'Rejected — skills deleted' }}
+                  </span>
+                </div>
+              }
+            </div>
+          } @else if (msg.toolProgress?.toolName === 'wait') {
+            <!-- Wait / sleep card -->
+            <div class="tool-inline-card tool-inline-wait" [class.done]="msg.toolProgress?.done" [class.error]="msg.toolProgress?.isError">
+              @if (!msg.toolProgress?.done) {
+                <span class="tool-progress-spinner"></span>
+              } @else {
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent-success)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+              }
+              <svg class="tool-inline-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              <span class="tool-inline-label">{{ msg.toolProgress?.done ? 'Waited ' + (msg.toolProgress?.arguments?.seconds ?? '') + 's' : 'Waiting ' + (msg.toolProgress?.arguments?.seconds ?? '') + 's…' }}</span>
+            </div>
+          } @else {
+            <!-- Generic tool progress — single or grouped -->
+            @if ((msg.toolProgress?.groupCount ?? 0) > 1) {
+              <div class="tool-inline-card tool-group-card done" [class.error]="msg.toolProgress?.isError"
+                   (click)="msg.toolProgress!.groupExpanded = !msg.toolProgress!.groupExpanded">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent-success)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                <ng-container [ngTemplateOutlet]="toolIcon" [ngTemplateOutletContext]="{ toolName: msg.toolProgress?.toolName }"></ng-container>
+                <span class="tool-inline-label">{{ msg.content }}</span>
+                <span class="tool-group-chevron" [class.open]="msg.toolProgress?.groupExpanded">&#9662;</span>
+              </div>
+              @if (msg.toolProgress?.groupExpanded) {
+                <div class="tool-group-items">
+                  @for (item of msg.toolProgress?.groupItems || []; track $index) {
+                    <div class="tool-group-item" [class.error]="item.isError">
+                      @if (item.isError) {
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--accent-danger)" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                      } @else {
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--accent-success)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                      }
+                      <span>{{ item.label }}</span>
+                    </div>
+                  }
+                </div>
+              }
+            } @else {
+              <div class="tool-inline-card" [class.done]="msg.toolProgress?.done" [class.error]="msg.toolProgress?.isError">
+                @if (!msg.toolProgress?.done) {
+                  <span class="tool-progress-spinner"></span>
+                } @else if (msg.toolProgress?.isError) {
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent-danger)" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                } @else {
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--accent-success)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                }
+                <ng-container [ngTemplateOutlet]="toolIcon" [ngTemplateOutletContext]="{ toolName: msg.toolProgress?.toolName }"></ng-container>
+                <span class="tool-inline-label">{{ msg.toolProgress?.arguments?.pattern || msg.toolProgress?.arguments?.query || msg.toolProgress?.arguments?.url || msg.content || msg.toolProgress?.toolName }}</span>
+                @if (msg.toolProgress?.isError) {
+                  <span class="tool-inline-status error">Failed</span>
+                }
+              </div>
+            }
+          }
+
+        } @else if (msg.type === 'turn_thinking') {
+          <!-- Expandable thinking row -->
+          <div class="thinking-wrap">
+            <button class="thinking-row" (click)="toggleThinking($index)" [class.thinking-expanded]="isThinkingExpanded($index)">
+              <svg class="thinking-row-ic" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+              <span class="thinking-row-label">Thought{{ (msg.thinkingIteration ?? 0) > 1 ? ' (step ' + msg.thinkingIteration + ')' : '' }}</span>
+              <svg class="thinking-row-chevron" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                @if (isThinkingExpanded($index)) {
+                  <polyline points="6 15 12 9 18 15"/>
+                } @else {
+                  <polyline points="6 9 12 15 18 9"/>
+                }
+              </svg>
+            </button>
+            @if (isThinkingExpanded($index) && msg.thinking) {
+              <div class="thinking-body">{{ msg.thinking }}</div>
+            }
+          </div>
+
+        } @else if (msg.type === 'browser_preview') {
+          <!-- In-app browser preview card -->
+          <div class="browser-preview-card" [class.loading]="!msg.browserTitle" [class.error]="msg.browserError">
+            <div class="browser-preview-header">
+              <span class="browser-preview-icon">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="2" y1="12" x2="22" y2="12"></line>
+                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                </svg>
+              </span>
+              <div class="browser-preview-info">
+                <span class="browser-preview-title">{{ msg.browserTitle || 'Loading...' }}</span>
+                <span class="browser-preview-url">{{ msg.browserUrl }}</span>
+              </div>
+              <button class="browser-preview-expand" (click)="expandBrowser.emit(msg)">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="15 3 21 3 21 9"></polyline>
+                  <polyline points="9 21 3 21 3 15"></polyline>
+                  <line x1="21" y1="3" x2="14" y2="10"></line>
+                  <line x1="3" y1="21" x2="10" y2="14"></line>
+                </svg>
+              </button>
+            </div>
+            @if (msg.browserError) {
+              <div class="browser-preview-error">{{ msg.browserError }}</div>
+            }
+          </div>
+
+        } @else if (msg.type === 'browser_navigation') {
+          <!-- browser_navigation suppressed (legacy) -->
+
+        } @else if (msg.type === 'ask_user') {
+          <!-- Agent asking user for input -->
+          <div class="ask-user-card">
+            <div class="ask-user-icon">&#9995;</div>
+            <div class="ask-user-body">
+              <div class="ask-user-label">Agent is waiting for your answer</div>
+              <div class="ask-user-question">{{ msg.content }}</div>
+            </div>
+          </div>
+
+        } @else if (msg.type === 'copilot_ack') {
+          <!-- Co-pilot guidance acknowledgment -->
+          <div class="copilot-ack-pill">
+            <span class="copilot-ack-icon">&#10003;</span>
+            <span>{{ msg.content }}</span>
+          </div>
+
+        } @else if (msg.type === 'channel_inbound') {
+          <div class="channel-bubble channel-inbound">
+            <div class="channel-indicator">
+              <span class="channel-icon">
+                @if (msg.channel === 'email') {
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                } @else if (msg.channel === 'whatsapp') {
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+                } @else {
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                }
+              </span>
+              <span class="channel-sender">{{ msg.sender }}</span>
+              @if (msg.subject) {
+                <span class="channel-subject">{{ msg.subject }}</span>
+              }
+            </div>
+            <div class="channel-content">{{ msg.content }}</div>
+          </div>
+
+        } @else if (msg.type === 'channel_outbound') {
+          <div class="channel-bubble channel-outbound">
+            <div class="channel-indicator">
+              <span class="channel-icon reply">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
+              </span>
+              <span class="channel-reply-label">replied via {{ msg.channel }}</span>
+            </div>
+            <div class="channel-content">{{ msg.content }}</div>
+            <button class="feedback-btn" (click)="openFeedback($index, $event)" title="Give feedback on this reply">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+              </svg>
+            </button>
+          </div>
+
+          @if (feedbackMessageIndex() === $index) {
+            <div class="feedback-panel">
+              <div class="feedback-header">
+                <span class="feedback-title">Feedback on agent reply</span>
+                <button class="feedback-close" (click)="closeFeedback()">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </div>
+              <div class="feedback-quoted">"{{ msg.content | slice:0:120 }}{{ msg.content.length > 120 ? '...' : '' }}"</div>
+              <div class="feedback-type-toggle">
+                <button class="feedback-type-btn" [class.active]="feedbackType() === 'SPECIFIC'" (click)="feedbackType.set('SPECIFIC')">This thread</button>
+                <button class="feedback-type-btn" [class.active]="feedbackType() === 'GLOBAL'" (click)="feedbackType.set('GLOBAL')">All channels</button>
+              </div>
+              <textarea class="feedback-textarea" [(ngModel)]="feedbackText" placeholder="E.g. Don't use this tone, be more formal..." rows="3"></textarea>
+              <button class="feedback-submit" [disabled]="!feedbackText.trim() || feedbackSubmitting()" (click)="submitFeedback()">
+                @if (feedbackSubmitting()) {
+                  <span class="feedback-spinner"></span>
+                  Sending...
+                } @else {
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                  Send Feedback
+                }
+              </button>
+            </div>
+          }
+
+        } @else if (msg.type === 'status') {
+          <div class="status-pill" [ngClass]="statusDotClass(msg.content)">
+            <span class="status-dot-sm"></span>
+            {{ msg.content }}
+          </div>
+        }
+      </div>
+    }
+
+    <!-- Thinking / planning indicator (no bubble) -->
+    @if (showPendingIndicator) {
+      <div class="message-row agentic-row">
+        <div class="planning-row" [class.planning-long]="generationElapsed() >= 10">
+          <span class="planning-dots">
+            <span></span><span></span><span></span>
+          </span>
+          <span class="planning-label">{{ pendingLabel }}</span>
+        </div>
+      </div>
+    }
+
+    <!-- Streaming: progressive reasoning (reasoning arrives via separate tokens) -->
+    @if (streamingReasoning?.trim() && !streamingText?.trim()) {
+      <div class="message-row assistant-row">
+        <div class="msg-bubble assistant-bubble transcript-assistant streaming">
+          <div class="transcript-toolbar">
+            <button type="button" class="workbench-open-btn" title="Open workbench" (click)="openWorkbench()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2"/>
+                <line x1="3" y1="17" x2="21" y2="17"/>
+                <line x1="8" y1="8" x2="16" y2="8"/>
+              </svg>
+            </button>
+          </div>
+          <div class="reasoning-section streaming-reasoning" [class.expanded]="liveReasoningExpanded">
+            <button class="reasoning-toggle" (click)="liveReasoningExpanded = !liveReasoningExpanded">
+              <span class="reasoning-icon thinking-pulse">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                  <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                </svg>
+              </span>
+              <span class="reasoning-label">Reasoning<span class="thinking-dots">...</span></span>
+              @if (!liveReasoningExpanded) {
+                <span class="reasoning-preview">{{ reasoningSnippet(streamingReasoning) }}</span>
+              }
+              <span class="reasoning-chevron">
+                @if (liveReasoningExpanded) {
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                } @else {
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                }
+              </span>
+            </button>
+            @if (liveReasoningExpanded) {
+              <div class="reasoning-content">
+                <p>{{ streamingReasoning }}<span class="cursor-blink"></span></p>
+              </div>
+            }
+          </div>
+        </div>
+      </div>
+    }
+
+    <!-- Streaming: response text (with optional inline thinking from legacy path) -->
+    @if (streamingText?.trim()) {
+      @let streamParsed = parseStreamThinking(streamingText);
+      <div class="message-row assistant-row">
+        <div class="msg-bubble assistant-bubble transcript-assistant streaming">
+          <div class="transcript-toolbar">
+            <button type="button" class="workbench-open-btn" title="Open workbench" (click)="openWorkbench()">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="18" height="18" rx="2"/>
+                <line x1="3" y1="17" x2="21" y2="17"/>
+                <line x1="8" y1="8" x2="16" y2="8"/>
+              </svg>
+            </button>
+          </div>
+
+          <!-- Reasoning already streamed, show collapsed + response -->
+          @if (streamingReasoning && !streamParsed.isThinking) {
+            <div class="reasoning-section" [class.expanded]="streamReasoningExpanded">
+              <button class="reasoning-toggle" (click)="streamReasoningExpanded = !streamReasoningExpanded">
+                <span class="reasoning-icon">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                  </svg>
+                </span>
+                <span class="reasoning-label">Reasoned</span>
+                @if (!streamReasoningExpanded) {
+                  <span class="reasoning-preview">{{ reasoningSnippet(streamingReasoning) }}</span>
+                }
+                <span class="reasoning-chevron">
+                  @if (streamReasoningExpanded) {
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                  } @else {
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                  }
+                </span>
+              </button>
+              @if (streamReasoningExpanded) {
+                <div class="reasoning-content">
+                  <p>{{ streamingReasoning }}</p>
+                </div>
+              }
+            </div>
+            <div class="md-content streaming-md" [innerHTML]="stripTags(streamParsed.response) | markdown"></div><span class="cursor-blink"></span>
+          }
+          <!-- Legacy: thinking embedded in stream via <think> tags -->
+          @else if (streamParsed.isThinking) {
+            <div class="reasoning-section streaming-reasoning expanded">
+              <div class="reasoning-toggle">
+                <span class="reasoning-icon thinking-pulse">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                  </svg>
+                </span>
+                <span class="reasoning-label">Thinking<span class="thinking-dots">...</span></span>
+              </div>
+              <div class="reasoning-content">
+                <p>{{ streamParsed.thinking }}<span class="cursor-blink"></span></p>
+              </div>
+            </div>
+            @if (streamParsed.response) {
+              <div class="md-content" [innerHTML]="stripTags(streamParsed.response) | markdown"></div>
+            }
+          } @else if (streamParsed.thinking) {
+            <div class="reasoning-section" [class.expanded]="streamReasoningExpanded">
+              <button class="reasoning-toggle" (click)="streamReasoningExpanded = !streamReasoningExpanded">
+                <span class="reasoning-icon">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                  </svg>
+                </span>
+                <span class="reasoning-label">Reasoned</span>
+                <span class="reasoning-preview" *ngIf="!streamReasoningExpanded">{{ streamParsed.thinking | slice:0:120 }}{{ streamParsed.thinking.length > 120 ? '...' : '' }}</span>
+                <span class="reasoning-chevron">
+                  @if (streamReasoningExpanded) {
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                  } @else {
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                  }
+                </span>
+              </button>
+              @if (streamReasoningExpanded) {
+                <div class="reasoning-content">
+                  <p>{{ streamParsed.thinking }}</p>
+                </div>
+              }
+            </div>
+            <div class="md-content streaming-md" [innerHTML]="stripTags(streamParsed.response) | markdown"></div><span class="cursor-blink"></span>
+          } @else {
+            <div class="md-content streaming-md" [innerHTML]="stripTags(streamParsed.response) | markdown"></div><span class="cursor-blink"></span>
+          }
+        </div>
+      </div>
+    }
+  </div>
+</div>
+
+<ng-template #toolIcon let-toolName="toolName">
+  @if (toolName === 'team') {
+    <svg class="tool-inline-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+  } @else if (toolName === 'plan') {
+    <svg class="tool-inline-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+  } @else if (toolName === 'todo') {
+    <svg class="tool-inline-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="13" x2="14" y2="13"/><line x1="8" y1="17" x2="12" y2="17"/></svg>
+  } @else if (toolName === 'delegate') {
+    <svg class="tool-inline-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><line x1="21" y1="3" x2="14" y2="10"/><path d="M10 14L3 21"/></svg>
+  } @else if (toolName === 'scheduler') {
+    <svg class="tool-inline-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+  } @else if (toolName === 'read' || toolName === 'read_file') {
+    <svg class="tool-inline-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+  } @else if (toolName === 'grep' || toolName === 'glob' || toolName === 'semantic_search') {
+    <svg class="tool-inline-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+  } @else if (toolName === 'write' || toolName === 'write_file' || toolName === 'create_file') {
+    <svg class="tool-inline-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+  } @else if (toolName === 'edit') {
+    <svg class="tool-inline-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+  } @else {
+    <svg class="tool-inline-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+  }
+</ng-template>

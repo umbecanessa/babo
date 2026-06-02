@@ -1,0 +1,101 @@
+{
+  "name": "slack",
+  "description": "Send and read Slack messages. Requires a Slack Bot Token (set NLS_SLACK_TOKEN environment variable).",
+  "version": "1.0.0",
+  "category": "communicate",
+  "hormone_affinity": "oxytocin",
+  "base_effort": 0.3,
+  "learning_yield": "medium",
+  "risk_level": "write",
+  "platform": "desktop",
+  "permissions": [
+    "network.outbound",
+    "keychain"
+  ],
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": [
+          "send",
+          "read",
+          "list_channels"
+        ],
+        "description": "Slack action"
+      },
+      "channel": {
+        "type": "string",
+        "description": "Channel name or ID"
+      },
+      "text": {
+        "type": "string",
+        "description": "Message text (for send)"
+      },
+      "limit": {
+        "type": "integer",
+        "description": "Max messages to read",
+        "default": 10
+      }
+    },
+    "required": [
+      "action"
+    ]
+  },
+  "manual": {
+    "overview": "Use Slack when the user or team communicates via Slack and you need to send quick updates, alerts, or threaded discussions. Best for real-time team coordination and channel-based notifications.",
+    "examples": [
+      {
+        "input": {
+          "action": "send",
+          "channel": "#general",
+          "text": "Deployment completed successfully."
+        },
+        "description": "Post a status update to a channel"
+      },
+      {
+        "input": {
+          "action": "read",
+          "channel": "C12345",
+          "limit": 10
+        },
+        "description": "Read last 10 messages from a channel by ID"
+      },
+      {
+        "input": {
+          "action": "list_channels"
+        },
+        "description": "List available channels for the bot"
+      }
+    ],
+    "tips": [
+      "Use channel name (#channel) or channel ID; ID is more reliable if names change",
+      "Keep messages concise; Slack is for quick updates, not long-form content",
+      "For send, ensure the bot is invited to the channel or it will fail silently",
+      "Use list_channels first to discover valid channel targets before sending"
+    ],
+    "edge_cases": [
+      "Bot token must have chat:write and channels:read scopes; missing scopes cause 403 errors",
+      "Private channels require the bot to be explicitly invited; DMs require opening a conversation first",
+      "Rate limits apply; rapid sends may be throttled by Slack API"
+    ],
+    "related_tools": [
+      "discord",
+      "email",
+      "notification"
+    ]
+  },
+  "executor": {
+    "type": "http",
+    "method": "POST",
+    "url": "https://slack.com/api/chat.postMessage",
+    "headers": {
+      "Authorization": "Bearer {{env.NLS_SLACK_TOKEN}}",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "channel": "{{args.channel}}",
+      "text": "{{args.text}}"
+    }
+  }
+}

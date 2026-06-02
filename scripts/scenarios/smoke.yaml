@@ -1,0 +1,21 @@
+scenarios:
+  - id: smoke-chat
+    name: Simple chat response
+    category: smoke
+    tags: [smoke, tier0]
+    timeout_s: 120
+    prompt: >-
+      In 3 short bullet points, explain what a personal AI assistant is good at
+      for non-technical users. No tools needed — just answer in chat.
+    pass:
+      min_response_chars: 80
+
+  - id: smoke-bash
+    name: Bash echo
+    category: dev
+    tags: [smoke, tier1, dev]
+    timeout_s: 300
+    prompt: >-
+      Run bash to print exactly the line SCENARIO_OK using echo. Show me the output.
+    pass:
+      response_contains: SCENARIO_OK

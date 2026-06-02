@@ -1,0 +1,46 @@
+<div class="create-wrapper">
+  @if (!open) {
+    <button class="add-btn" (click)="toggle()">
+      <span class="plus">+</span> Add task
+    </button>
+  }
+
+  @if (open) {
+    <div class="create-form" (keydown)="onKeydown($event)">
+      <input
+        type="text"
+        class="input-title"
+        placeholder="What needs to be done?"
+        [(ngModel)]="title"
+        autofocus
+      />
+      <textarea
+        class="input-desc"
+        placeholder="Description (optional)"
+        [(ngModel)]="description"
+        rows="2"
+      ></textarea>
+      <div class="form-row">
+        <select class="select-field" [(ngModel)]="priority">
+          <option value="low">Low</option>
+          <option value="normal">Normal</option>
+          <option value="high">High</option>
+          <option value="urgent">Urgent</option>
+        </select>
+        <select class="select-field" [(ngModel)]="listId">
+          @for (list of lists; track list.id) {
+            <option [value]="list.id">{{ list.name }}</option>
+          }
+        </select>
+        <label class="idle-toggle">
+          <input type="checkbox" [(ngModel)]="idleEligible" />
+          <span class="idle-label" title="Agent works on this during idle time">&#9889; Idle</span>
+        </label>
+      </div>
+      <div class="form-actions">
+        <button class="btn-submit" (click)="submit()" [disabled]="!title.trim()">Add</button>
+        <button class="btn-cancel" (click)="toggle()">Cancel</button>
+      </div>
+    </div>
+  }
+</div>

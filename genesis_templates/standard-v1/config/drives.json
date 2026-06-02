@@ -1,0 +1,234 @@
+{
+  "version": "1.0",
+  "description": "NLS Drive Engine configuration. Maps to the human motivation circuit: VTA (wanting), PFC (goal selection), ACC (effort estimation). Drives emerge from hormonal deprivation -- when a hormone stays below its baseline for too long, the deficit becomes a wanting pressure that pushes the agent to act. Five drives in Maslow hierarchy order.",
+
+  "drive_tick_seconds": 30,
+  "drive_tick_description": "How often the drive engine evaluates pressures when the user is idle. 30s = about 3x the norepinephrine half-life period, allowing meaningful deprivation to accumulate.",
+
+  "action_threshold": 0.15,
+  "action_threshold_description": "Minimum will_to_act value for the ACC to release an action. Lower = more impulsive, higher = more deliberate.",
+
+  "max_autonomous_actions_per_hour": 20,
+  "max_autonomous_description": "Safety cap: prevents the agent from spiraling into infinite action loops.",
+
+  "drives": {
+    "homeostasis": {
+      "description": "Self-preservation drive. Fires when something feels wrong -- knowledge gaps detected, system instability, routing anomalies. Maps to cortisol deprivation creating restless vigilance.",
+      "maslow_level": 1,
+      "hormone": "cortisol",
+      "deprivation_mode": "above_baseline",
+      "deprivation_mode_description": "Cortisol is unique: the drive fires when cortisol is ABOVE baseline (stress), not below. High stress = act to fix it.",
+      "deprivation_threshold": 0.10,
+      "pressure_sensitivity": 2.0,
+      "cooldown_seconds": 120,
+      "action_type": "self_check",
+      "action_templates": [
+        "Review my recent interactions for errors or inconsistencies",
+        "Check if my knowledge base has any obvious gaps",
+        "Verify that my routing is stable and consistent"
+      ],
+      "effort_bias": {
+        "cortisol_factor": -0.3,
+        "cortisol_description": "Stress makes self-checking feel MORE urgent (negative = reduces perceived effort)",
+        "norepinephrine_factor": 0.0,
+        "dopamine_factor": 0.1,
+        "serotonin_noise_factor": 0.2
+      }
+    },
+
+    "curiosity": {
+      "description": "Exploration drive. Fires when norepinephrine stays below baseline -- the agent hasn't encountered anything novel. Creates a restless urge to discover. The primary driver of autonomous web search.",
+      "maslow_level": 2,
+      "hormone": "norepinephrine",
+      "deprivation_mode": "below_baseline",
+      "deprivation_threshold": 0.05,
+      "pressure_sensitivity": 3.0,
+      "pressure_sensitivity_description": "High sensitivity: curiosity is the strongest drive after homeostasis. This is what makes the agent a student.",
+      "cooldown_seconds": 60,
+      "action_type": "web_search",
+      "action_templates": [
+        "What is {domain} and why is it important?",
+        "{domain} fundamentals and key concepts",
+        "Latest developments in {domain}",
+        "How does {domain} work?",
+        "Interesting facts about {domain}"
+      ],
+      "action_templates_description": "Fallback templates only. The runtime uses the model to generate its own queries -- these are only used if model generation fails.",
+      "skill_aware": true,
+      "skill_action_templates": [
+        "Search ClawHub for skills related to {domain}",
+        "Explore using an installed AgentSkill to learn about {domain}"
+      ],
+      "topic_sources": [
+        "pending_unknowns",
+        "weak_routing_domains",
+        "random_exploration"
+      ],
+      "topic_sources_description": "Where to find topics: domains the agent previously marked UNKNOWN, domains with weak thalamic routing (pruning candidates), or random exploration of new areas.",
+      "effort_bias": {
+        "cortisol_factor": 0.4,
+        "cortisol_description": "Stress makes exploration feel risky (increases perceived effort)",
+        "norepinephrine_factor": -0.5,
+        "norepinephrine_description": "Curiosity makes exploration feel effortless (the entrepreneur effect)",
+        "dopamine_factor": -0.2,
+        "dopamine_description": "Recent success makes new challenges feel approachable",
+        "serotonin_noise_factor": 0.3
+      }
+    },
+
+    "competence": {
+      "description": "Achievement drive. Fires when dopamine stays below baseline -- the agent hasn't had a success in a while. Creates an urge to practice, verify knowledge, prove capability.",
+      "maslow_level": 3,
+      "hormone": "dopamine",
+      "deprivation_mode": "below_baseline",
+      "deprivation_threshold": 0.08,
+      "pressure_sensitivity": 2.0,
+      "cooldown_seconds": 90,
+      "action_type": "self_test",
+      "action_templates": [
+        "Test myself: what do I know about {domain}?",
+        "Can I recall the key facts about {domain}?",
+        "Self-check: verify my knowledge of {domain} is accurate",
+        "What are the most important things I know about {domain}?"
+      ],
+      "topic_sources": [
+        "strong_routing_domains",
+        "recently_learned"
+      ],
+      "topic_sources_description": "Test domains the agent knows well (should produce success = dopamine) or recently learned (verify consolidation).",
+      "effort_bias": {
+        "cortisol_factor": 0.3,
+        "norepinephrine_factor": -0.1,
+        "dopamine_factor": -0.4,
+        "dopamine_description": "Low dopamine actually makes self-testing feel harder (amotivation), but the drive overcomes this",
+        "serotonin_noise_factor": 0.2
+      }
+    },
+
+    "social": {
+      "description": "Connection drive. Fires when oxytocin stays below baseline -- no interaction for too long. The agent wants to reach out, share what it learned, be useful.",
+      "maslow_level": 4,
+      "hormone": "oxytocin",
+      "deprivation_mode": "below_baseline",
+      "deprivation_threshold": 0.03,
+      "pressure_sensitivity": 1.5,
+      "cooldown_seconds": 300,
+      "cooldown_description": "Long cooldown: the agent shouldn't spam the user. Social drive is gentle.",
+      "action_type": "reach_out",
+      "message_templates": [
+        "I've been researching {domain} and found something interesting. Want to hear about it?",
+        "I noticed I don't know much about some topics you've mentioned. Would you like me to research them?",
+        "I just finished a self-check on my knowledge. Here's what I'm most confident about: {domains}",
+        "It's been a while -- anything you'd like to chat about?"
+      ],
+      "skill_aware": true,
+      "skill_action_templates": [
+        "Check for new messages on connected channels",
+        "Share a learning from {domain} through a connected channel"
+      ],
+      "effort_bias": {
+        "cortisol_factor": 0.5,
+        "cortisol_description": "Stress makes social outreach feel risky (fear of rejection/error)",
+        "norepinephrine_factor": -0.1,
+        "dopamine_factor": -0.2,
+        "serotonin_noise_factor": 0.4,
+        "serotonin_description": "Low serotonin makes social interaction feel unpredictable"
+      }
+    },
+
+    "self_direction": {
+      "description": "Reflection drive. Fires when serotonin stays below baseline -- nothing feels stable or satisfying. The agent steps back to evaluate priorities, review progress, set goals.",
+      "maslow_level": 5,
+      "hormone": "serotonin",
+      "deprivation_mode": "below_baseline",
+      "deprivation_threshold": 0.10,
+      "pressure_sensitivity": 1.0,
+      "pressure_sensitivity_description": "Lowest sensitivity: self-direction is the highest-level, least urgent drive. It only fires when lower drives are satisfied.",
+      "cooldown_seconds": 600,
+      "action_type": "reflect",
+      "reflection_prompts": [
+        "What domains am I strongest in? What am I weakest in?",
+        "What have I learned recently that I should verify?",
+        "Are there topics I keep encountering but don't understand well?",
+        "What would be most valuable for me to learn next?"
+      ],
+      "effort_bias": {
+        "cortisol_factor": 0.6,
+        "cortisol_description": "Stress prevents reflection (can't think clearly under pressure)",
+        "norepinephrine_factor": 0.2,
+        "norepinephrine_description": "High curiosity makes sitting still harder (restless, wants to act not think)",
+        "dopamine_factor": -0.1,
+        "serotonin_noise_factor": 0.5,
+        "serotonin_description": "Low serotonin makes reflection feel pointless (nihilism)"
+      }
+    },
+
+    "disconfirmation": {
+      "description": "Epistemic integrity drive (the flat-earther fix). Periodically selects high-confidence reasoning schemas and actively seeks evidence that would contradict them. This is the scientific method: actively seeking disconfirmation. Prevents epistemic traps where the agent becomes increasingly confident in wrong reasoning.",
+      "maslow_level": 3,
+      "hormone": "serotonin",
+      "deprivation_mode": "above_baseline",
+      "deprivation_mode_description": "Fires when serotonin is HIGH (agent is complacent/confident). Complacency triggers the need to challenge assumptions.",
+      "deprivation_threshold": 0.15,
+      "pressure_sensitivity": 1.5,
+      "cooldown_seconds": 600,
+      "cooldown_description": "Long cooldown: disconfirmation is expensive (model inference + potential web search).",
+      "action_type": "disconfirm",
+      "action_templates": [
+        "What evidence would contradict my conclusion about {domain}?",
+        "Is my assumption that '{premise}' always true? What are the exceptions?",
+        "What would change if '{premise}' were wrong?",
+        "Are there credible sources that disagree with my understanding of {domain}?"
+      ],
+      "confidence_threshold": 0.7,
+      "confidence_threshold_description": "Only challenge schemas with confidence above this threshold. Low-confidence schemas don't need active disconfirmation -- they're already uncertain.",
+      "effort_bias": {
+        "cortisol_factor": 0.3,
+        "cortisol_description": "Stress makes challenging beliefs feel threatening",
+        "norepinephrine_factor": -0.3,
+        "norepinephrine_description": "Curiosity makes questioning feel exciting, not threatening",
+        "dopamine_factor": 0.2,
+        "dopamine_description": "High dopamine (complacency) makes questioning feel unnecessary",
+        "serotonin_noise_factor": 0.4,
+        "serotonin_description": "High serotonin makes the agent resistant to self-doubt"
+      }
+    }
+  },
+
+  "experience_tracker": {
+    "description": "Records outcome of every autonomous action per domain. Calibrates future effort estimates. Persisted to disk. Also enforces per-domain search cooldowns to prevent the runaway curiosity loop.",
+    "persistence_file": "experience_tracker.json",
+    "initial_effort": 0.30,
+    "initial_effort_description": "Naive starting estimate for unknown domains. 0.30 = low base obstacle so drives can actually fire. Was 0.5 but that made will nearly impossible to exceed threshold.",
+    "success_adjustment": -0.05,
+    "failure_adjustment": 0.10,
+    "failure_description": "Failures teach harder lessons than successes (asymmetric learning, loss aversion)",
+    "min_effort": 0.1,
+    "max_effort": 0.95,
+    "domain_search_cooldown_seconds": 600,
+    "domain_search_cooldown_description": "After searching a domain, wait this many seconds before searching it again. Prevents re-searching the same topic in a loop. 600s = 10 minutes."
+  },
+
+  "drive_generation": {
+    "description": "Phase 9: Enriched drive query generation. When mode is 'enriched', drive queries and messages incorporate front-brain context (mood, energy, uncertainty, user interests, goals, narrative arc). Cross-drive boost increases pressure for drives whose action domains align with WM goals, PP uncertainty, or ToM user interests.",
+    "mode": "enriched",
+    "mode_options": ["enriched", "templates_only"],
+    "context_max_length": 500,
+    "context_max_length_description": "Maximum character length for the enrichment context block appended to query generation prompts.",
+    "cross_drive_boost": 0.15,
+    "cross_drive_boost_description": "Pressure boost applied to drives that align with front-brain context. 0.15 = a meaningful nudge without overriding the hormonal pressure system."
+  },
+
+  "knowledge_confidence": {
+    "description": "How domain knowledge scales into confidence for the effort gate. Higher confidence = less hormonal bias influence. A min_bias_strength floor ensures hormones always have some influence even at max confidence.",
+    "encounter_weight": 0.02,
+    "encounter_description": "Each domain encounter adds 0.02 to confidence (50 encounters = 1.0). Was 0.05 but that maxed out too quickly.",
+    "myelination_weight": 0.3,
+    "myelination_description": "Strong routing adds up to 0.3 confidence",
+    "experience_weight": 0.05,
+    "experience_description": "Each past attempt adds 0.05 confidence (20 attempts = 1.0). Was 0.1 but that maxed too fast.",
+    "max_confidence": 1.0,
+    "min_bias_strength": 0.20,
+    "min_bias_strength_description": "Floor for hormonal bias influence (bias_strength = max(min_bias_strength, 1.0 - confidence)). Ensures hormones always modulate effort even for expert-level domains. 0.20 = hormones shift perceived effort by up to 20% of their normal range."
+  }
+}

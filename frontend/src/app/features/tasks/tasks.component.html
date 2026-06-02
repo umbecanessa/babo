@@ -1,0 +1,52 @@
+<div class="tasks-page">
+  <!-- Header with list filter tabs -->
+  <div class="tasks-header">
+    <h2 class="tasks-title">Task Board</h2>
+    <div class="list-tabs">
+      <button
+        class="list-tab"
+        [class.active]="activeListId() === null"
+        (click)="selectList(null)"
+      >
+        All
+      </button>
+      @for (list of lists(); track listTrack($index, list)) {
+        <button
+          class="list-tab"
+          [class.active]="activeListId() === list.id"
+          [style.--tab-color]="list.color"
+          (click)="selectList(list.id)"
+        >
+          <span class="tab-dot" [style.background]="list.color"></span>
+          {{ list.name }}
+          <span class="tab-count">{{ countForList(list.id) }}</span>
+        </button>
+      }
+      <button class="list-tab list-tab-new" (click)="onCreateList()" title="New list">+</button>
+    </div>
+  </div>
+
+  <!-- Board -->
+  @if (loading()) {
+    <div class="loading-state">Loading tasks...</div>
+  } @else if (error()) {
+    <div class="error-state">
+      <p>{{ error() }}</p>
+      <button class="retry-btn" (click)="loadData()">Retry</button>
+    </div>
+  } @else {
+    <div class="board-container">
+      <app-task-board
+        [items]="filteredItems"
+        [lists]="lists()"
+        [activeListId]="activeListId()"
+        [plansByTodoId]="plansByTodoId()"
+        (statusChange)="onStatusChange($event)"
+        (completeItem)="onComplete($event)"
+        (removeItem)="onRemove($event)"
+        (createItem)="onCreate($event)"
+        (editItem)="onEdit($event)"
+      />
+    </div>
+  }
+</div>

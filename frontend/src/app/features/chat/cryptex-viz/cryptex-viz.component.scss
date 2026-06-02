@@ -1,0 +1,187 @@
+:host {
+  display: block;
+}
+
+.cryptex-card-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 4px 0;
+}
+
+// ── Category section ─────────────────────────────────────
+
+.category-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.category-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  padding: 0 2px;
+  border-bottom: 1px solid var(--overlay-3);
+  padding-bottom: 3px;
+}
+
+// ── Ring block (label + card) ────────────────────────────
+
+.ring-block {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+// ── Label row ────────────────────────────────────────────
+
+.ring-label-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.15s;
+
+  &:hover {
+    background: var(--overlay-1);
+  }
+}
+
+.ring-color-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.ring-name {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1;
+}
+
+.slot-count {
+  font-size: 9px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+
+  &.empty {
+    opacity: 0.4;
+  }
+}
+
+// ── Tumbler window (position roller) ─────────────────────
+
+.tumbler-window {
+  width: 64px;
+  height: 18px;
+  overflow: hidden;
+  position: relative;
+  border-radius: 3px;
+  background: var(--overlay-1);
+  border: 1px solid var(--overlay-3);
+  flex-shrink: 0;
+}
+
+.tumbler-reel {
+  display: flex;
+  flex-direction: column;
+  transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.tumbler-pos {
+  height: 18px;
+  line-height: 18px;
+  font-size: 9px;
+  text-align: center;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0 4px;
+
+  &.active {
+    color: var(--text-primary);
+    font-weight: 600;
+  }
+}
+
+.position-static {
+  font-size: 9px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+// ── Glassmorphic card ────────────────────────────────────
+
+.ring-card {
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--overlay-2);
+  border-left: 3px solid var(--ring-color, var(--text-muted));
+  border-radius: 8px;
+  padding: 5px 10px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, box-shadow 0.2s;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+
+  &:hover {
+    background: var(--glass-bg);
+    border-color: var(--overlay-3);
+  }
+
+  &.selected {
+    background: var(--glass-bg);
+    border-color: var(--overlay-4);
+    box-shadow: 0 0 10px rgba(var(--ring-color-rgb, 100, 116, 139), 0.15);
+  }
+}
+
+// ── Slot preview rows ────────────────────────────────────
+
+.slot-preview-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  overflow: hidden;
+}
+
+.preview-access {
+  flex-shrink: 0;
+  font-size: 8px;
+  width: 14px;
+  text-align: center;
+}
+
+.preview-content {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+// ── Empty state ──────────────────────────────────────────
+
+.empty-state {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: 16px 0;
+}

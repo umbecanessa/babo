@@ -1,0 +1,241 @@
+<div class="creation-page">
+  <!-- Ambient -->
+  <div class="ambient">
+    <div class="glow glow-1"></div>
+    <div class="glow glow-2"></div>
+    <div class="particles">
+      @for (i of particleCount; track i) {
+        <div class="particle"
+             [style.--delay]="i * 0.6 + 's'"
+             [style.--x]="particleX(i)"
+             [style.--size]="particleSize(i)"
+             [style.--hue]="particleHue(i)"></div>
+      }
+    </div>
+  </div>
+
+  <!-- Error toast -->
+  @if (error()) {
+    <div class="error-toast animate-fade-in">{{ error() }}</div>
+  }
+
+  <!-- ═══ Phase: Selecting ═══ -->
+  @if (phase() === 'selecting') {
+    <div class="selection-stage animate-fade-in">
+      <div class="selection-header">
+        <h1 class="selection-title">Choose a Mind</h1>
+      </div>
+      <p class="selection-subtitle">Each path shapes how your agent thinks</p>
+
+      <!-- Model selector -->
+      @if (!loading() && modelOptions().length > 1) {
+        <div class="model-selector">
+          <span class="model-selector-label">Model</span>
+          <div class="model-pills">
+            @for (opt of modelOptions(); track opt.key) {
+              <button class="model-pill"
+                      [class.active]="!opt.disabled"
+                      [class.disabled]="opt.disabled"
+                      [disabled]="opt.disabled"
+                      [attr.title]="opt.disabled ? opt.label + ' (currently disabled)' : opt.label">
+                {{ opt.label }}
+              </button>
+            }
+          </div>
+        </div>
+      }
+
+      @if (loading()) {
+        <div class="loading-indicator">
+          <div class="loading-dot"></div>
+          <div class="loading-dot"></div>
+          <div class="loading-dot"></div>
+        </div>
+      } @else {
+        <div class="path-carousel">
+          @for (template of templates(); track template.version) {
+            <div class="path-card"
+                 [class.selected]="selectedVersion() === template.version"
+                 [class.educated]="template.educated"
+                 (click)="selectTemplate(template.version)">
+
+              <!-- Card icon -->
+              <div class="card-icon">
+                @switch (getPathMeta(template).icon) {
+                  @case ('flask') { <span class="icon-glyph">&#9879;</span> }
+                  @case ('scroll') { <span class="icon-glyph">&#9998;</span> }
+                  @case ('balance') { <span class="icon-glyph">&#9878;</span> }
+                  @case ('spark') { <span class="icon-glyph">&#10024;</span> }
+                  @default { <span class="icon-glyph">&#9673;</span> }
+                }
+              </div>
+
+              <!-- Genesis version tag -->
+              <div class="genesis-tag">{{ getGenesisTag(template) }}</div>
+
+              <!-- Card title & bio -->
+              <h3 class="card-title">{{ getPathMeta(template).title }}</h3>
+              <p class="card-bio">{{ getPathMeta(template).bio }}</p>
+
+              <!-- Strength bars -->
+              @if (getStrengthEntries(template).length > 0) {
+                <div class="strength-bars">
+                  @for (s of getStrengthEntries(template); track s.name) {
+                    <div class="strength-row">
+                      <span class="strength-label">{{ s.name }}</span>
+                      <div class="strength-track">
+                        <div class="strength-fill" [style.width]="strengthBarWidth(s.value)"></div>
+                      </div>
+                    </div>
+                  }
+                </div>
+              }
+
+              <!-- Education stats (only for educated templates with real data) -->
+              @if (template.educated && template.education) {
+                <div class="edu-stats">
+                  @if (template.education.total_facts > 0) {
+                    <div class="stat-pill">
+                      <span class="stat-value">{{ template.education.total_facts }}</span>
+                      <span class="stat-label">facts</span>
+                    </div>
+                  }
+                  @if (template.education.total_sleeps > 0) {
+                    <div class="stat-pill">
+                      <span class="stat-value">{{ template.education.total_sleeps }}</span>
+                      <span class="stat-label">sleeps</span>
+                    </div>
+                  }
+                  @if (template.has_epochs) {
+                    <div class="stat-pill">
+                      <span class="stat-value">&#10003;</span>
+                      <span class="stat-label">epochs</span>
+                    </div>
+                  }
+                </div>
+              }
+
+              <!-- Model tag -->
+              @if (template.base_model) {
+                <div class="model-tag">{{ formatModel(template) }}</div>
+              }
+
+              <!-- Education badge -->
+              @if (template.educated) {
+                <div class="edu-badge">Graduated</div>
+              } @else if (!template.educated && template.base_model) {
+                <div class="edu-badge blank">Blank Slate</div>
+              }
+
+              <!-- Minted date -->
+              @if (getMintedDate(template)) {
+                <div class="minted-date">Minted {{ getMintedDate(template) }}</div>
+              }
+            </div>
+          }
+        </div>
+
+        <button class="confirm-btn"
+                [disabled]="!selectedVersion()"
+                (click)="confirmSelection()">
+          Continue
+        </button>
+      }
+    </div>
+  }
+
+  <!-- ═══ Phase: Soul Wish ═══ -->
+  @if (phase() === 'soul-wish') {
+    <div class="soul-wish-stage animate-fade-in">
+      <h1 class="soul-wish-title">Give your agent a calling</h1>
+      <p class="soul-wish-subtitle">What should this mind care about most deeply?</p>
+
+      <div class="soul-wish-input-wrap">
+        <textarea class="soul-wish-input"
+                  [ngModel]="soulWish()"
+                  (ngModelChange)="soulWish.set($event)"
+                  placeholder="e.g. Understand the world through rigorous inquiry..."
+                  rows="3"
+                  maxlength="500"></textarea>
+      </div>
+
+      @if (soulWishSuggestions().length) {
+        <div class="soul-wish-suggestions">
+          @for (s of soulWishSuggestions(); track s) {
+            <button class="suggestion-pill" [class.active]="soulWish() === s"
+                    (click)="selectSuggestion(s)">{{ s }}</button>
+          }
+        </div>
+      }
+
+      <div class="soul-wish-actions">
+        <button class="skip-btn" (click)="skipSoulWish()">Skip</button>
+        <button class="confirm-btn" (click)="confirmSoulWish()">Continue</button>
+      </div>
+    </div>
+
+    <div class="creation-model-corner" aria-label="Inference model">
+      @if (modelService.showPicker()) {
+        <app-chat-model-picker
+          mode="creation"
+          variant="chip"
+          align="right"
+          menuPlacement="up"
+        />
+      } @else {
+        <div class="model-chip-placeholder" [class.loading]="modelService.loadingModels()">
+          @if (modelService.defaultModelLabel()) {
+            {{ modelService.defaultModelLabel() }}
+          } @else {
+            Loading models…
+          }
+        </div>
+      }
+    </div>
+  }
+
+  <!-- ═══ Phase: Waiting / Creating / Done (Orb) ═══ -->
+  @if (phase() !== 'selecting' && phase() !== 'soul-wish') {
+    <div class="center-stage animate-fade-in">
+      <!-- The Orb -->
+      <div class="orb-container" (click)="phase() === 'waiting' ? startCreation() : null"
+           [class.clickable]="phase() === 'waiting'">
+        <div class="orb"
+             [class.waiting]="phase() === 'waiting'"
+             [class.creating]="phase() === 'creating'"
+             [class.done]="phase() === 'done'">
+        </div>
+
+        <!-- Rings -->
+        <div class="ring ring-1" [class.active]="phase() !== 'waiting'"></div>
+        <div class="ring ring-2" [class.active]="phase() !== 'waiting'"></div>
+        <div class="ring ring-3" [class.active]="phase() !== 'waiting'"></div>
+        <div class="ring ring-4" [class.active]="phase() === 'creating'"></div>
+
+        <!-- Orbiting dots during creation -->
+        @if (phase() === 'creating') {
+          <div class="orbit-track">
+            <div class="orbit-dot dot-1"></div>
+            <div class="orbit-dot dot-2"></div>
+            <div class="orbit-dot dot-3"></div>
+          </div>
+        }
+      </div>
+
+      <!-- Phase text -->
+      <div class="phase-text">
+        @if (phase() === 'waiting') {
+          <p class="hint animate-fade-in">Click the orb to initiate life</p>
+        }
+        @if (phase() === 'creating') {
+          <p class="status animate-fade-in">{{ phaseText() }}</p>
+        }
+        @if (phase() === 'done') {
+          <p class="done-text animate-fade-in">{{ phaseText() }}</p>
+          <p class="done-sub animate-fade-in">Redirecting to chat...</p>
+        }
+      </div>
+    </div>
+  }
+
+</div>

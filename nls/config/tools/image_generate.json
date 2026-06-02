@@ -1,0 +1,82 @@
+{
+  "name": "image_generate",
+  "description": "Generate images from text descriptions. Uses local Stable Diffusion if available, or falls back to an API (requires NLS_IMAGE_API_KEY).",
+  "version": "1.0.0",
+  "category": "create",
+  "hormone_affinity": "dopamine",
+  "base_effort": 0.6,
+  "learning_yield": "low",
+  "risk_level": "write",
+  "platform": "all",
+  "permissions": [
+    "filesystem.write",
+    "network.outbound"
+  ],
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "prompt": {
+        "type": "string",
+        "description": "Text description of the image to generate"
+      },
+      "output_path": {
+        "type": "string",
+        "description": "Where to save the image",
+        "default": "generated_image.png"
+      },
+      "width": {
+        "type": "integer",
+        "description": "Image width",
+        "default": 512
+      },
+      "height": {
+        "type": "integer",
+        "description": "Image height",
+        "default": 512
+      }
+    },
+    "required": [
+      "prompt"
+    ]
+  },
+  "manual": {
+    "overview": "Use when you need to create images from text descriptions—illustrations, mockups, or visual assets. Requires NLS_IMAGE_API_KEY for API fallback or local Stable Diffusion.",
+    "examples": [
+      {
+        "input": {
+          "prompt": "A minimalist logo of a coffee cup with steam",
+          "output_path": "logo.png",
+          "width": 512,
+          "height": 512
+        },
+        "description": "Generate a simple logo for a coffee brand"
+      },
+      {
+        "input": {
+          "prompt": "Futuristic city skyline at sunset, cyberpunk style",
+          "width": 1024,
+          "height": 768
+        },
+        "description": "Create a wide cinematic wallpaper"
+      }
+    ],
+    "tips": [
+      "Be specific in prompts: include style, lighting, composition for better results",
+      "Start with 512x512 for faster generation; use 1024+ for final assets",
+      "Avoid overly long prompts—concise descriptions often work better"
+    ],
+    "edge_cases": [
+      "API failures return unclear errors; verify NLS_IMAGE_API_KEY is set",
+      "Very large dimensions may timeout or fail on memory-constrained systems"
+    ],
+    "related_tools": [
+      "browser",
+      "tts",
+      "compress"
+    ]
+  },
+  "executor": {
+    "type": "shell",
+    "command": "python -c \"import urllib.request, json, base64, sys; req=urllib.request.Request('https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image', data=json.dumps({'text_prompts':[{'text':'{{args.prompt}}'}],'cfg_scale':7,'height':{{args.height}},'width':{{args.width}},'samples':1}).encode(), headers={'Content-Type':'application/json','Authorization':'Bearer '+__import__('os').environ.get('NLS_IMAGE_API_KEY','')}, method='POST'); resp=urllib.request.urlopen(req); data=json.loads(resp.read()); img=base64.b64decode(data['artifacts'][0]['base64']); open('{{args.output_path}}','wb').write(img); print('Image saved to {{args.output_path}}')\""
+  }
+}

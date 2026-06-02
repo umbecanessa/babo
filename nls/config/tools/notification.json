@@ -1,0 +1,76 @@
+{
+  "name": "notification",
+  "description": "Show a native OS notification to the user.",
+  "version": "1.0.0",
+  "category": "communicate",
+  "hormone_affinity": "oxytocin",
+  "base_effort": 0.1,
+  "learning_yield": "low",
+  "risk_level": "read",
+  "platform": "desktop",
+  "permissions": [
+    "notification"
+  ],
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "title": {
+        "type": "string",
+        "description": "Notification title",
+        "default": "NLS"
+      },
+      "body": {
+        "type": "string",
+        "description": "Notification body text"
+      }
+    },
+    "required": [
+      "body"
+    ]
+  },
+  "manual": {
+    "overview": "Use desktop notifications when the user is at their machine and you need quick, non-intrusive alerts. Ideal for completion signals, reminders, or background task results without leaving the current context.",
+    "examples": [
+      {
+        "input": {
+          "title": "NLS",
+          "body": "Build finished successfully"
+        },
+        "description": "Notify when a long task completes"
+      },
+      {
+        "input": {
+          "title": "Reminder",
+          "body": "Meeting in 5 minutes"
+        },
+        "description": "Send a timely reminder"
+      },
+      {
+        "input": {
+          "body": "New message received"
+        },
+        "description": "Minimal notification using default title"
+      }
+    ],
+    "tips": [
+      "Keep body short; desktop notifications are small; long text gets truncated",
+      "Use title for context (e.g. Alert, Done, Error) so the user can prioritize at a glance",
+      "Best for non-critical alerts; do not rely on it for must-acknowledge messages",
+      "Works without network; useful when other channels are unavailable"
+    ],
+    "edge_cases": [
+      "User may have Do Not Disturb or notification permissions disabled; the notification may not appear",
+      "Some OSes limit notification length or frequency; very long or rapid-fire notifications may be dropped",
+      "macOS may require notification permissions to be granted in System Preferences first"
+    ],
+    "related_tools": [
+      "slack",
+      "email",
+      "discord"
+    ]
+  },
+  "executor": {
+    "type": "python",
+    "handler": "nls.engine.tools_extended.NotificationTool"
+  }
+}

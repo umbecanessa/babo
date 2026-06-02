@@ -1,0 +1,104 @@
+# Channel scenarios — require paired skills, OAuth, or external devices.
+# Skipped by the harness unless you pass --include-manual.
+scenarios:
+  - id: com-01
+    name: Email outbound
+    category: channels
+    tags: [tier4, channels, manual]
+    manual: true
+    prompt: >-
+      MANUAL QA: Send a test email to yourself using the email skill. Confirm delivery
+      in your inbox. Log alias used and thread id.
+    pass:
+      tools_any: [email_send]
+
+  - id: com-02
+    name: Email thread continuity
+    category: channels
+    tags: [tier4, channels, manual]
+    manual: true
+    prompt: >-
+      MANUAL QA: Reply in an existing email thread. Verify email_history shows continuity.
+    pass:
+      tools_any: [email_history]
+
+  - id: com-03
+    name: Telegram bot DM
+    category: channels
+    tags: [tier4, channels, manual]
+    manual: true
+    prompt: >-
+      MANUAL QA: Pair Telegram bot, send DM, confirm bot responds.
+    pass:
+      tools_any: [telegram_send]
+
+  - id: com-04
+    name: Telegram group mention
+    category: channels
+    tags: [tier4, channels, manual]
+    manual: true
+    prompt: >-
+      MANUAL QA: In a Telegram group, @mention the bot and confirm gated response.
+    pass:
+      tools_any: [telegram_send]
+
+  - id: com-05
+    name: WhatsApp message
+    category: channels
+    tags: [tier4, channels, manual]
+    manual: true
+    prompt: >-
+      MANUAL QA: Pair WhatsApp bridge (QR), send test message to your phone.
+    pass:
+      tools_any: [whatsapp]
+
+  - id: com-06
+    name: Google Gmail send
+    category: channels
+    tags: [tier4, channels, manual]
+    manual: true
+    prompt: >-
+      MANUAL QA: Complete Google OAuth, send email from your Gmail via agent.
+    pass:
+      tools_any: [gmail_send]
+
+  - id: com-07
+    name: Google Calendar event
+    category: channels
+    tags: [tier4, channels, manual]
+    manual: true
+    prompt: >-
+      MANUAL QA: Create a calendar event via agent; verify in Google Calendar.
+    pass:
+      tools_any: [calendar_create]
+
+  - id: com-08
+    name: Google Drive / Sheets
+    category: channels
+    tags: [tier4, channels, manual]
+    manual: true
+    prompt: >-
+      MANUAL QA: Upload a file or write a sheet row via Google Workspace skill.
+    pass:
+      tools_any: [drive_upload, sheets_write]
+
+  - id: com-09
+    name: Cross-channel contacts
+    category: channels
+    tags: [tier4, channels, manual]
+    manual: true
+    prompt: >-
+      MANUAL QA: With any channel paired, ask agent to resolve a contact by name via contacts tool.
+    pass:
+      tools_any: [contacts]
+
+  - id: com-10
+    name: Deferred channel goal on complete
+    category: channels
+    tags: [tier4, channels, manual]
+    manual: true
+    prompt: >-
+      MANUAL QA: Start a small task with goal "when done, Telegram me the summary".
+      Confirm message arrives on completion.
+    pass:
+      tools_any: [communicate, telegram_send]

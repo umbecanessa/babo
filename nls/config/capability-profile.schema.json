@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://babo.local/schemas/capability-profile.v1.json",
+  "title": "BaboCapabilityProfile",
+  "description": "Composable placement of inference, visual cortex, transcribe, and embeddings workloads.",
+  "type": "object",
+  "required": ["version", "inference", "visualCortex", "transcribe", "embeddings"],
+  "additionalProperties": false,
+  "properties": {
+    "version": { "const": 1 },
+    "profileId": { "type": "string" },
+    "inferenceCapabilities": { "$ref": "#/$defs/InferenceCapabilities" },
+    "scan": { "$ref": "#/$defs/CapabilityScan" },
+    "inference": { "$ref": "#/$defs/WorkloadPlacement" },
+    "visualCortex": { "$ref": "#/$defs/WorkloadPlacement" },
+    "transcribe": { "$ref": "#/$defs/WorkloadPlacement" },
+    "embeddings": { "$ref": "#/$defs/WorkloadPlacement" }
+  },
+  "$defs": {
+    "InferenceCapabilities": {
+      "type": "object",
+      "required": ["multimodal", "source"],
+      "properties": {
+        "multimodal": {
+          "type": "string",
+          "enum": ["true", "false", "unknown"]
+        },
+        "source": {
+          "type": "string",
+          "enum": ["registry", "user", "probe", "default"]
+        }
+      }
+    },
+    "CapabilityTier": {
+      "type": "string",
+      "enum": ["self_local", "self_lan", "hosted_babo", "byok_cloud", "off"]
+    },
+    "WorkloadPlacement": {
+      "type": "object",
+      "required": ["tier"],
+      "additionalProperties": false,
+      "properties": {
+        "tier": { "$ref": "#/$defs/CapabilityTier" },
+        "url": { "type": "string", "format": "uri" },
+        "model": { "type": "string" },
+        "secret": { "type": "string" },
+        "modelPreference": {
+          "type": "string",
+          "enum": ["auto", "moondream", "smolvlm", "fastvlm"]
+        },
+        "strategy": {
+          "type": "string",
+          "enum": [
+            "off",
+            "on_demand_inference",
+            "dedicated_vlm_local",
+            "dedicated_vlm_lan",
+            "ambient_via_inference"
+          ]
+        },
+        "reason": { "type": "string" }
+      }
+    },
+    "DeviceScan": {
+      "type": "object",
+      "required": ["platform", "ramGb", "vramGb", "gpuName", "hasCuda", "hasMps", "hasMlxVlm"],
+      "properties": {
+        "platform": { "type": "string", "enum": ["win32", "darwin", "linux"] },
+        "ramGb": { "type": "number", "minimum": 0 },
+        "vramGb": { "type": "number", "minimum": 0 },
+        "gpuName": { "type": "string" },
+        "hasCuda": { "type": "boolean" },
+        "hasMps": { "type": "boolean" },
+        "hasMlxVlm": { "type": "boolean" },
+        "hardwareTier": { "type": "string", "enum": ["A", "B", "C", "D", "E", "F"] }
+      }
+    },
+    "LanServiceProbe": {
+      "type": "object",
+      "required": ["host", "port", "kind", "url", "healthy"],
+      "properties": {
+        "host": { "type": "string" },
+        "port": { "type": "integer" },
+        "kind": {
+          "type": "string",
+          "enum": ["inference", "transcribe", "vision", "embed", "unknown"]
+        },
+        "url": { "type": "string" },
+        "modelIds": { "type": "array", "items": { "type": "string" } },
+        "healthy": { "type": "boolean" },
+        "detail": { "type": "string" }
+      }
+    },
+    "CapabilityScan": {
+      "type": "object",
+      "required": ["scannedAt", "device", "lan"],
+      "properties": {
+        "scannedAt": { "type": "string", "format": "date-time" },
+        "device": { "$ref": "#/$defs/DeviceScan" },
+        "lan": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/LanServiceProbe" }
+        }
+      }
+    }
+  }
+}

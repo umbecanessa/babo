@@ -1,0 +1,119 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+// ---------------------------------------------------------------------------
+// Side panel (webview + toolbar)
+// ---------------------------------------------------------------------------
+
+.browser-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  background: transparent;
+}
+
+.browser-panel-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--glass-bg);
+  border-bottom: 1px solid var(--overlay-3);
+  flex-shrink: 0;
+}
+
+.browser-panel-icon {
+  flex-shrink: 0;
+  color: var(--accent-primary);
+  display: flex;
+  align-items: center;
+}
+
+.browser-panel-url-bar {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: var(--surface-inset);
+  border-radius: 6px;
+  border: 1px solid var(--glass-border);
+}
+
+.browser-panel-spinner {
+  flex-shrink: 0;
+  color: var(--accent-primary);
+  animation: spin 1.2s linear infinite;
+  display: flex;
+  align-items: center;
+}
+
+.browser-panel-title {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.browser-panel-url {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.browser-panel-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  transition: color 0.15s, background 0.15s;
+
+  &:hover {
+    color: var(--text-primary);
+    background: var(--overlay-3);
+  }
+}
+
+.browser-panel-content {
+  flex: 1;
+  position: relative;
+  min-height: 0;
+}
+
+.browser-webview {
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+.browser-panel-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--glass-bg);
+  color: var(--accent-danger);
+  font-size: 13px;
+  padding: 20px;
+  text-align: center;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

@@ -1,0 +1,437 @@
+@if (!profile()) {
+
+  <p class="panel-muted">Loading capabilities…</p>
+
+} @else {
+
+  @if (scanLoading()) {
+
+    <p class="panel-muted">Scanning hardware…</p>
+
+  } @else if (scan()) {
+
+    <div class="device-strip">
+
+      <span>{{ scan()!.device.gpuName }}</span>
+
+      <span>{{ scan()!.device.vramGb }} GB VRAM</span>
+
+      <span>{{ scan()!.device.ramGb }} GB RAM</span>
+
+      <button type="button" class="link-btn" (click)="runDeviceScan()">Rescan</button>
+
+    </div>
+
+  }
+
+
+
+  <section class="feature-section primary">
+
+    <div class="feature-head">
+
+      <span class="feature-icon">🧠</span>
+
+      <div>
+
+        <h3>Primary model (chat &amp; tools)</h3>
+
+        <p>Default for your messages and the main agent loop.</p>
+
+      </div>
+
+    </div>
+
+
+
+    <div class="choice-cards">
+
+      @for (card of brainCards; track card.tier) {
+
+        <button
+
+          type="button"
+
+          class="choice-card"
+
+          [class.active]="brainTier() === card.tier"
+
+          [class.suggested]="card.tier === recommendedBrainTier"
+
+          (click)="onBrainTierChange(card.tier)"
+
+        >
+
+          <span class="card-glyph">{{ card.glyph }}</span>
+
+          <span class="card-body">
+
+            <span class="card-title">
+
+              {{ card.title }}
+
+              @if (card.tier === recommendedBrainTier) {
+
+                <span class="suggested-pill">Suggested</span>
+
+              }
+
+            </span>
+
+            <span class="card-sub">{{ card.subtitle }}</span>
+
+          </span>
+
+        </button>
+
+      }
+
+    </div>
+
+
+
+    @if (brainTier() === 'hosted_babo') {
+
+      <p class="field-label">Chat model (Babo Cloud)</p>
+
+      <p class="small-muted">Routed through your Babo account after sign-in.</p>
+
+      <div class="chip-row providers">
+
+        @for (m of baboCloudModels(); track m.id) {
+
+          <button
+
+            type="button"
+
+            class="chip"
+
+            [class.active]="baboCloudModelActive(m.id)"
+
+            (click)="selectBaboCloudModel(m.id)"
+
+          >{{ m.label }}</button>
+
+        }
+
+      </div>
+
+      <button type="button" class="link-btn" (click)="onBrainTierChange('byok_cloud')">
+
+        Use your own API key instead
+
+      </button>
+
+    }
+
+
+
+    @if (brainTier() === 'byok_cloud') {
+
+      <p class="field-label">Cloud provider</p>
+
+      <div class="chip-row providers">
+
+        @for (p of cloudProviders; track p.id) {
+
+          <button
+
+            type="button"
+
+            class="chip"
+
+            [class.active]="cloudProviderId() === p.id"
+
+            (click)="selectCloudProvider(p.id)"
+
+          >{{ p.name }}</button>
+
+        }
+
+      </div>
+
+      <div class="form-group">
+
+        <label>API key</label>
+
+        <input type="password" [(ngModel)]="config.inferenceApiKey" placeholder="Paste your key" />
+
+      </div>
+
+      <button type="button" class="link-btn" (click)="onBrainTierChange('hosted_babo')">
+
+        Use Babo Cloud instead
+
+      </button>
+
+    }
+
+
+
+    @if (brainTier() === 'self_lan') {
+
+      <div class="form-group">
+
+        <label>Server address</label>
+
+        <input
+
+          type="text"
+
+          [ngModel]="brainServerUrl()"
+
+          (ngModelChange)="setBrainServerUrl($event)"
+
+          placeholder="http://192.168.1.50:8000"
+
+        />
+
+        <span class="hint">No /v1 at the end — Babo adds that automatically.</span>
+
+      </div>
+
+    }
+
+
+
+    @if (brainTier() === 'self_local') {
+
+      <p class="small-muted">Looks for Ollama on this computer (port 11434). Use Test to detect your model.</p>
+
+    }
+
+
+
+    @if (brainTier() !== 'hosted_babo') {
+
+      <div class="test-row">
+
+        <button class="btn-secondary small" type="button" (click)="testBrain()" [disabled]="testing()">
+
+          {{ testing() ? 'Testing…' : 'Test connection' }}
+
+        </button>
+
+        @if (testResult()) {
+
+          <span class="test-result" [class.ok]="testResult()!.ok" [class.fail]="!testResult()!.ok">
+
+            {{ testResult()!.message }}
+
+            @if (testResult()!.ok) { · {{ testResult()!.latency }}ms }
+
+          </span>
+
+        }
+
+      </div>
+
+      @if (brainModelLabel()) {
+
+        <p class="model-pill">Model: <strong>{{ brainModelLabel() }}</strong></p>
+
+      }
+
+    }
+
+  </section>
+
+
+
+  <section class="feature-section">
+
+    <div class="feature-head">
+
+      <span class="feature-icon">◇</span>
+
+      <div>
+
+        <h3>Sub-agents (delegates)</h3>
+
+        <p>Background workers spawned during complex tasks. Usually match the primary model.</p>
+
+      </div>
+
+    </div>
+
+
+
+    <label class="toggle-row inline-check">
+
+      <input
+
+        type="checkbox"
+
+        [checked]="delegateUsesPrimary()"
+
+        (change)="setDelegateUsesPrimary($any($event.target).checked)"
+
+      />
+
+      <span>Same model as primary</span>
+
+    </label>
+
+
+
+    @if (!delegateUsesPrimary()) {
+
+      @if (brainTier() === 'hosted_babo') {
+
+        <div class="chip-row providers">
+
+          @for (m of baboCloudModels(); track m.id) {
+
+            <button
+
+              type="button"
+
+              class="chip"
+
+              [class.active]="delegateModelActive(m.id)"
+
+              (click)="selectDelegateModel(m.id)"
+
+            >{{ m.label }}</button>
+
+          }
+
+        </div>
+
+      } @else if (brainModelLabel()) {
+
+        <p class="model-pill">Delegate model: <strong>{{ delegateModelLabel() }}</strong></p>
+
+        <p class="small-muted">Uses the primary connection model above. Pick a different primary tier for more options.</p>
+
+      }
+
+    }
+
+  </section>
+
+
+
+  <section class="feature-section secondary">
+
+    <h3 class="section-mini-title">Other capabilities</h3>
+
+
+
+    <div class="toggle-row">
+
+      <div>
+
+        <h3>Ambient screen awareness</h3>
+
+        <p class="small-muted">Optional background view of your desktop (small local model).</p>
+
+      </div>
+
+      <label class="toggle-switch">
+
+        <input type="checkbox" [checked]="ambientVisionOn()" (change)="toggleAmbient($any($event.target).checked)" />
+
+        <span></span>
+
+      </label>
+
+    </div>
+
+    @if (ambientVisionOn()) {
+
+      <div class="chip-row">
+
+        <button type="button" class="chip" [class.active]="visualTier() === 'self_local'" [class.disabled]="!canLocalVision()" (click)="setVisualLocal()">This PC</button>
+
+        <button type="button" class="chip" [class.active]="visualTier() === 'self_lan'" [class.disabled]="!hasLanVision()" (click)="setVisualLan()">My server</button>
+
+      </div>
+
+    }
+
+
+
+    <div class="sub-block">
+
+      <h3>Voice input</h3>
+
+      <div class="chip-row">
+
+        @for (opt of voiceOptions; track opt.tier) {
+
+          <button type="button" class="chip" [class.active]="voiceTier() === opt.tier" (click)="onVoiceTierChange(opt.tier)">{{ opt.shortLabel }}</button>
+
+        }
+
+      </div>
+
+    </div>
+
+
+
+    <div class="toggle-row">
+
+      <div>
+
+        <h3>Code search</h3>
+
+        <p class="small-muted">Find files by meaning in your projects.</p>
+
+      </div>
+
+      <label class="toggle-switch">
+
+        <input type="checkbox" [checked]="codeSearchOn()" (change)="toggleCodeSearch($any($event.target).checked)" />
+
+        <span></span>
+
+      </label>
+
+    </div>
+
+  </section>
+
+
+
+  <div class="experience-strip compact">
+
+    @for (row of experienceRows(); track row.label) {
+
+      <div class="exp-row">
+
+        <span>{{ row.label }}</span>
+
+        <span [class.status-ok]="row.ok" [class.status-off]="!row.ok">{{ row.value }}</span>
+
+      </div>
+
+    }
+
+  </div>
+
+
+
+  @if (saveError()) {
+
+    <p class="save-error">{{ saveError() }}</p>
+
+  }
+
+
+
+  <div class="panel-actions">
+
+    <button class="btn-primary" type="button" (click)="save()" [disabled]="saving()">
+
+      {{ saving() ? 'Saving…' : 'Save & restart runtime' }}
+
+    </button>
+
+    <p class="panel-footnote">Model changes apply immediately. The runtime restarts only when tier, server URL, or vision settings change.</p>
+
+  </div>
+
+}
+
+

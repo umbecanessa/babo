@@ -1,0 +1,4 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+# Shell scripts must be LF so they run on Mac when synced from Windows tarball
+desktop/build-mac.sh text eol=lf

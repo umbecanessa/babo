@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Babo — Local agent runtime</title>
+  <meta name="description" content="Open-source persistent AI agents on your machine. Early access." />
+  <meta name="theme-color" content="#0c0d14" />
+  <link rel="icon" href="assets/favicon.png" type="image/png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <script>
+    (function () {
+      var t = "dark";
+      try {
+        var s = localStorage.getItem("babo_theme");
+        if (s === "light" || s === "dark" || s === "system") t = s;
+      } catch (_) {}
+      document.documentElement.setAttribute("data-theme", t);
+    })();
+  </script>
+  <link rel="stylesheet" href="css/tokens.css" />
+  <link rel="stylesheet" href="css/site.css" />
+</head>
+<body data-audience="innovator">
+  <div class="mesh mesh-a" aria-hidden="true"></div>
+  <div class="mesh mesh-b" aria-hidden="true"></div>
+  <div class="noise" aria-hidden="true"></div>
+  <div class="grid-bg" aria-hidden="true"></div>
+
+  <header class="site-nav" role="banner">
+    <div class="wrap">
+      <a class="brand" href="#top">
+        <span class="brand-orb" aria-hidden="true"><span class="brand-orb-core"></span><span class="brand-orb-ring"></span></span>
+        <img src="assets/babo.png" alt="" width="28" height="28" />
+        <span>Babo</span>
+      </a>
+      <div class="nav-end">
+        <button class="nav-toggle" type="button" aria-label="Open menu" aria-expanded="false">☰</button>
+        <ul class="nav-links">
+          <li><a href="#punches">Why Babo</a></li>
+          <li><a href="#product">Screenshots</a></li>
+          <li><a href="#manifesto">Vision</a></li>
+          <li><a href="#pricing">Pricing</a></li>
+          <li class="nav-contribute"><a href="#contribute">Contribute</a></li>
+          <li><a href="#download">Get Babo</a></li>
+          <li><a class="nav-docs" href="getting-started/installation/">Docs</a></li>
+        </ul>
+        <a class="nav-discord" href="https://discord.gg/daCKzkv4z2" target="_blank" rel="noopener noreferrer" aria-label="Join us on Discord" title="Join us on Discord">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18" aria-hidden="true"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
+        </a>
+        <button type="button" class="theme-toggle-btn" id="theme-toggle" aria-label="Cycle theme" title="Cycle theme">
+          <svg class="icon-sun" viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
+            <path fill-rule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clip-rule="evenodd"/>
+          </svg>
+          <svg class="icon-moon" viewBox="0 0 20 20" fill="currentColor" width="16" height="16" aria-hidden="true">
+            <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z"/>
+          </svg>
+          <span class="theme-toggle-badge" aria-hidden="true">auto</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="wrap hero-inner">
+        <div class="hero-copy reveal">
+          <div class="badge-row" id="hero-badges"></div>
+          <h1 class="hero-headline">
+            <span class="hero-line" id="hero-title">Stop paying</span>
+            <span class="hero-line hero-line-accent" id="hero-title-gradient">per thought.</span>
+          </h1>
+          <p class="hero-lead" id="hero-lead"></p>
+          <div class="hero-cta">
+            <a class="btn btn-primary btn-glow" id="hero-cta-primary" href="#download">Install</a>
+            <a class="btn btn-ghost" id="hero-cta-secondary" href="https://github.com/umbecanessa/babo">GitHub</a>
+          </div>
+          <p class="hero-meta" id="hero-meta"></p>
+        </div>
+
+        <div class="hero-visual reveal reveal-delay-2" data-tilt>
+          <div class="hero-aurora" aria-hidden="true"></div>
+          <div class="hero-seal">
+            <div class="hero-seal-mark">
+              <div class="hero-seal-orb" aria-hidden="true">
+                <span class="hero-seal-orb-core"></span>
+                <span class="hero-seal-orb-ring"></span>
+              </div>
+              <img class="hero-seal-logo" src="assets/babo.png" alt="Babo" width="896" height="1200" fetchpriority="high" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="marquee-wrap" aria-hidden="true">
+        <div class="marquee" id="marquee-track"></div>
+      </div>
+    </section>
+
+    <section id="punches" class="section-punches">
+      <div class="wrap">
+        <header class="section-head reveal">
+          <p class="section-label" id="punches-label">Why builders switch</p>
+          <h2 class="section-title" id="punches-title">Agent stack, not chat UI</h2>
+        </header>
+        <div class="punch-grid" id="punch-grid"></div>
+
+        <div class="integrates integrates-section reveal" id="integrates-strip">
+          <p class="integrates-label" id="integrates-label">Works with</p>
+          <ul class="integrates-logos" id="integrates-logos"></ul>
+        </div>
+      </div>
+    </section>
+
+    <section id="drift" class="drift-strip hidden">
+      <div class="wrap">
+        <div class="drift-panel glass">
+          <h3 id="drift-title"></h3>
+          <p id="drift-text"></p>
+        </div>
+      </div>
+    </section>
+
+    <section id="product" class="product-section">
+      <div class="wrap">
+        <header class="section-head reveal">
+          <p class="section-label">See it</p>
+          <h2 class="section-title">The real product</h2>
+          <p class="section-lead section-lead-tight" id="product-lead"></p>
+        </header>
+
+        <div class="showcase reveal" data-showcase>
+          <div class="showcase-tabs" role="tablist" aria-label="Product screenshots">
+            <button type="button" class="showcase-tab is-active" role="tab" aria-selected="true" data-tab="chat">Chat</button>
+            <button type="button" class="showcase-tab" role="tab" aria-selected="false" data-tab="projects">Projects</button>
+            <button type="button" class="showcase-tab" role="tab" aria-selected="false" data-tab="memory">Memory</button>
+            <button type="button" class="showcase-tab" role="tab" aria-selected="false" data-tab="tools">Tools</button>
+            <button type="button" class="showcase-tab" role="tab" aria-selected="false" data-tab="brain">Brain</button>
+          </div>
+          <p class="showcase-zoom-hint">Tap or click screenshot to view full size</p>
+
+          <div class="showcase-panels">
+            <figure class="showcase-panel is-active" data-panel="chat" role="tabpanel">
+              <div class="showcase-frame">
+                <div class="showcase-window">
+                  <div class="showcase-chrome" aria-hidden="true">
+                    <span class="device-dot"></span><span class="device-dot"></span><span class="device-dot"></span>
+                    <span class="showcase-chrome-title">Babo</span>
+                  </div>
+                  <div class="screen-viewport screen-viewport-showcase">
+                    <img src="assets/screenshots/chat.png" alt="" loading="lazy" />
+                  </div>
+                </div>
+              </div>
+              <figcaption data-caption="chat"></figcaption>
+            </figure>
+
+            <figure class="showcase-panel" data-panel="projects" role="tabpanel" hidden>
+              <div class="showcase-frame">
+                <div class="showcase-subtabs" role="tablist">
+                  <button type="button" class="showcase-subtab is-active" data-subtab="timeline" aria-selected="true">Timeline</button>
+                  <button type="button" class="showcase-subtab" data-subtab="board" aria-selected="false">Board</button>
+                </div>
+                <div class="showcase-window">
+                  <div class="showcase-chrome" aria-hidden="true">
+                    <span class="device-dot"></span><span class="device-dot"></span><span class="device-dot"></span>
+                    <span class="showcase-chrome-title">Projects</span>
+                  </div>
+                  <div class="screen-viewport screen-viewport-showcase">
+                    <img src="assets/screenshots/projects-timeline.png" alt="" data-subpanel="timeline" loading="lazy" />
+                    <img src="assets/screenshots/projects-board.png" alt="" data-subpanel="board" hidden loading="lazy" />
+                  </div>
+                </div>
+              </div>
+              <figcaption data-caption="projects"></figcaption>
+            </figure>
+
+            <figure class="showcase-panel" data-panel="memory" role="tabpanel" hidden>
+              <div class="showcase-frame">
+                <div class="showcase-subtabs" role="tablist">
+                  <button type="button" class="showcase-subtab is-active" data-subtab="cryptex" aria-selected="true">Cryptex</button>
+                  <button type="button" class="showcase-subtab" data-subtab="overview" aria-selected="false">Overview</button>
+                </div>
+                <div class="showcase-window">
+                  <div class="showcase-chrome" aria-hidden="true">
+                    <span class="device-dot"></span><span class="device-dot"></span><span class="device-dot"></span>
+                    <span class="showcase-chrome-title">Memory</span>
+                  </div>
+                  <div class="screen-viewport screen-viewport-showcase is-portrait">
+                    <img src="assets/screenshots/memory-cryptex.png" alt="Memory cryptex view" data-subpanel="cryptex" data-portrait loading="lazy" />
+                    <img src="assets/screenshots/memory-overview.png" alt="" data-subpanel="overview" hidden loading="lazy" />
+                  </div>
+                </div>
+              </div>
+              <figcaption data-caption="memory"></figcaption>
+            </figure>
+
+            <figure class="showcase-panel" data-panel="tools" role="tabpanel" hidden>
+              <div class="showcase-frame">
+                <div class="showcase-window">
+                  <div class="showcase-chrome" aria-hidden="true">
+                    <span class="device-dot"></span><span class="device-dot"></span><span class="device-dot"></span>
+                    <span class="showcase-chrome-title">Tools</span>
+                  </div>
+                  <div class="screen-viewport screen-viewport-showcase">
+                    <img src="assets/screenshots/tools.png" alt="" loading="lazy" />
+                  </div>
+                </div>
+              </div>
+              <figcaption data-caption="tools"></figcaption>
+            </figure>
+
+            <figure class="showcase-panel" data-panel="brain" role="tabpanel" hidden>
+              <div class="showcase-frame">
+                <div class="showcase-subtabs" role="tablist">
+                  <button type="button" class="showcase-subtab is-active" data-subtab="overview" aria-selected="true">Overview</button>
+                  <button type="button" class="showcase-subtab" data-subtab="visual" aria-selected="false">Vision</button>
+                </div>
+                <div class="showcase-window">
+                  <div class="showcase-chrome" aria-hidden="true">
+                    <span class="device-dot"></span><span class="device-dot"></span><span class="device-dot"></span>
+                    <span class="showcase-chrome-title">Brain</span>
+                  </div>
+                  <div class="screen-viewport screen-viewport-showcase">
+                    <img src="assets/screenshots/brain.png" alt="" data-subpanel="overview" loading="lazy" />
+                    <img src="assets/screenshots/brain-visual.png" alt="" data-subpanel="visual" hidden loading="lazy" />
+                  </div>
+                </div>
+              </div>
+              <figcaption data-caption="brain"></figcaption>
+            </figure>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="manifesto" class="manifesto-section">
+      <div class="wrap">
+        <div class="manifesto-panel reveal">
+          <span class="manifesto-mark" aria-hidden="true">"</span>
+          <p class="manifesto-quote" id="manifesto-quote"></p>
+          <p class="manifesto-body" id="manifesto-body"></p>
+        </div>
+      </div>
+    </section>
+
+    <section id="pricing" class="section-pricing">
+      <div class="wrap">
+        <header class="section-head reveal">
+          <p class="section-label" id="pricing-label">Pricing</p>
+          <h2 class="section-title" id="pricing-title">Open source first. Cloud optional.</h2>
+          <p class="section-lead section-lead-tight" id="pricing-lead"></p>
+        </header>
+        <div class="pricing-grid reveal" id="pricing-grid"></div>
+        <p class="pricing-footnote reveal" id="pricing-footnote"></p>
+      </div>
+    </section>
+
+    <section id="download" class="section-download">
+      <div class="wrap">
+        <header class="section-head reveal">
+          <p class="section-label">Get Babo</p>
+          <h2 class="section-title" id="download-title">Run it yourself</h2>
+          <p class="section-lead section-lead-tight" id="download-lead"></p>
+        </header>
+        <div class="download-grid reveal">
+          <article class="download-card glass">
+            <h3>Desktop</h3>
+            <p>Windows, macOS, or Linux — wizard-guided setup after install.</p>
+            <a class="btn btn-primary" href="https://github.com/umbecanessa/babo/releases" target="_blank" rel="noopener noreferrer">Download latest release</a>
+            <a class="btn btn-ghost download-card-secondary" href="getting-started/installation/">Install guide</a>
+          </article>
+          <article class="download-card glass">
+            <h3>Self-host</h3>
+            <p>Full stack in your browser.</p>
+            <a class="btn btn-ghost" href="configuration/self-hosting/">Self-hosting</a>
+          </article>
+          <article class="download-card glass">
+            <h3>Source</h3>
+            <p>MIT — fork and extend.</p>
+            <a class="btn btn-ghost" href="https://github.com/umbecanessa/babo">GitHub</a>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="contribute" class="contribute-section">
+      <div class="wrap">
+        <div class="contribute-panel glass">
+          <p class="section-label">Community</p>
+          <h2 class="section-title" id="contribute-title"></h2>
+          <p class="section-lead section-lead-tight" id="contribute-lead"></p>
+          <div class="cta-buttons">
+            <a class="btn btn-primary" id="contribute-primary" href="#">Feedback</a>
+            <a class="btn btn-discord" id="contribute-discord" href="https://discord.gg/daCKzkv4z2" target="_blank" rel="noopener noreferrer">
+              <svg class="btn-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" width="18" height="18" aria-hidden="true"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
+              <span id="contribute-discord-label">Join us on Discord</span>
+            </a>
+            <a class="btn btn-ghost" id="contribute-secondary" href="#">Learn more</a>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap footer-inner">
+      <p class="footer-copy">© <span id="year"></span> Babo · MIT · Open source</p>
+      <ul class="footer-links">
+        <li><a href="legal/privacy-policy/">Privacy</a></li>
+        <li><a href="getting-started/installation/">Docs</a></li>
+        <li><a href="https://github.com/umbecanessa/babo">GitHub</a></li>
+        <li><a href="https://github.com/umbecanessa/neural-ledger-system">NLS research</a></li>
+      </ul>
+    </div>
+  </footer>
+
+  <div class="lightbox" id="screenshot-lightbox" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-label="Enlarged screenshot">
+    <button type="button" class="lightbox-close" aria-label="Close">×</button>
+    <div class="lightbox-backdrop" tabindex="-1"></div>
+    <div class="lightbox-stage">
+      <img class="lightbox-img" alt="" />
+    </div>
+    <p class="lightbox-hint">Esc or tap outside to close</p>
+  </div>
+
+  <script src="js/audience.js"></script>
+  <script src="js/site.js"></script>
+</body>
+</html>

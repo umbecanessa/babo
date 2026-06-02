@@ -1,0 +1,199 @@
+.chat-sidebar {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border-left: 1px solid var(--glass-border);
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--glass-border);
+  background: color-mix(in srgb, var(--glass-bg) 80%, transparent);
+  flex-shrink: 0;
+}
+
+.thread-select {
+  flex: 1;
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--overlay-3);
+  background: var(--overlay-1);
+  color: var(--text-primary);
+  font-size: 12px;
+  outline: none;
+  cursor: pointer;
+
+  option { background: var(--bg-secondary); color: var(--text-primary); }
+}
+
+.close-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 18px;
+  cursor: pointer;
+  flex-shrink: 0;
+
+  &:hover { background: var(--overlay-3); color: var(--text-primary); }
+}
+
+// ── Messages ───────────────────────────────────
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+
+  &::-webkit-scrollbar { width: 4px; }
+  &::-webkit-scrollbar-thumb {
+    background: var(--overlay-4);
+    border-radius: 2px;
+  }
+}
+
+.empty-chat {
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+  padding: 40px 16px;
+  line-height: 1.5;
+}
+
+.msg {
+  display: flex;
+  flex-direction: column;
+  max-width: 85%;
+
+  &.msg-user {
+    align-self: flex-end;
+    .msg-bubble {
+      background: var(--accent-primary-glow);
+      color: var(--text-primary);
+      border: 1px solid var(--accent-primary-glow);
+      border-radius: 12px 12px 4px 12px;
+    }
+  }
+
+  &.msg-assistant {
+    align-self: flex-start;
+    .msg-bubble {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      color: var(--text-primary);
+      border-radius: 12px 12px 12px 4px;
+    }
+  }
+
+  &.msg-system {
+    align-self: center;
+    .msg-bubble {
+      background: rgba(248, 113, 113, 0.1);
+      color: var(--accent-danger);
+      border-radius: 8px;
+      font-size: 11px;
+    }
+  }
+}
+
+.msg-bubble {
+  padding: 8px 12px;
+  font-size: 13px;
+  line-height: 1.45;
+  word-break: break-word;
+
+  ::ng-deep {
+    p { margin: 0 0 6px; &:last-child { margin-bottom: 0; } }
+    ul, ol { margin: 4px 0; padding-left: 18px; }
+    li { margin-bottom: 2px; }
+    code.inline-code {
+      background: var(--overlay-3);
+      padding: 1px 4px;
+      border-radius: 3px;
+      font-size: 12px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+    .code-block-wrapper {
+      margin: 6px 0;
+      border-radius: 6px;
+      overflow: hidden;
+      background: var(--surface-inset);
+      .code-block-header {
+        display: flex;
+        justify-content: space-between;
+        padding: 4px 8px;
+        font-size: 10px;
+        color: var(--text-muted);
+        background: var(--overlay-1);
+      }
+      pre {
+        margin: 0;
+        padding: 8px;
+        overflow-x: auto;
+        font-size: 11px;
+      }
+    }
+    strong { color: var(--text-primary); }
+    a { color: var(--accent-primary); text-decoration: none; &:hover { text-decoration: underline; } }
+  }
+}
+
+.msg-source {
+  font-size: 10px;
+  color: var(--text-muted);
+  padding: 2px 4px;
+}
+
+// ── Input ──────────────────────────────────────
+
+.sidebar-input {
+  display: flex;
+  gap: 6px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--overlay-3);
+  flex-shrink: 0;
+}
+
+.chat-input {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--overlay-3);
+  background: var(--overlay-1);
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+
+  &::placeholder { color: var(--text-muted); }
+  &:focus { border-color: var(--text-muted); }
+  &:disabled { opacity: 0.5; }
+}
+
+.send-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: none;
+  background: var(--accent-primary);
+  color: white;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  flex-shrink: 0;
+
+  &:hover:not(:disabled) { background: var(--accent-primary); }
+  &:disabled { opacity: 0.4; cursor: default; }
+}

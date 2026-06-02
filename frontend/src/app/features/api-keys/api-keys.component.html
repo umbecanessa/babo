@@ -1,0 +1,118 @@
+<div class="apikeys-page">
+  <!-- Ambient -->
+  <div class="ambient">
+    <div class="glow glow-1"></div>
+    <div class="glow glow-2"></div>
+  </div>
+
+  <div class="content">
+    <!-- Header -->
+    <div class="header animate-fade-in">
+      <div>
+        <h1 class="title">API Keys</h1>
+        <p class="subtitle">Programmatic access to your agents</p>
+      </div>
+    </div>
+
+    <!-- Create key -->
+    <div class="create-card animate-fade-in">
+      <h2 class="card-title">Generate New Key</h2>
+      <div class="create-form">
+        <input type="text" [(ngModel)]="newKeyName" placeholder="Key name (e.g. production, dev)"
+               class="key-input" />
+        <button (click)="createKey()" class="generate-btn">
+          <span class="gen-dot"></span>
+          Generate
+        </button>
+      </div>
+    </div>
+
+    <!-- Created key reveal -->
+    @if (createdKey()) {
+      <div class="key-reveal animate-slide-up">
+        <div class="reveal-header">
+          <div class="reveal-dot"></div>
+          <span class="reveal-title">Key Created</span>
+        </div>
+        <p class="reveal-warning">Copy this key now. You won't be able to see it again.</p>
+        <div class="reveal-key-row">
+          <code class="reveal-key">{{ createdKey() }}</code>
+          <button (click)="copyKey()" class="copy-btn">
+            {{ copied() ? 'Copied!' : 'Copy' }}
+          </button>
+        </div>
+        <button (click)="closeModal()" class="dismiss-btn">Dismiss</button>
+      </div>
+    }
+
+    <!-- Keys table -->
+    <div class="table-card animate-fade-in">
+      <table class="keys-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Key</th>
+            <th>Requests</th>
+            <th>Status</th>
+            <th class="text-right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (key of keys(); track key.id) {
+            <tr>
+              <td class="cell-name">{{ key.name }}</td>
+              <td class="cell-key">{{ key.keyPrefix }}</td>
+              <td class="cell-count">{{ key.totalRequests }}</td>
+              <td>
+                <span class="status-badge" [class.active]="key.isActive" [class.revoked]="!key.isActive">
+                  {{ key.isActive ? 'Active' : 'Revoked' }}
+                </span>
+              </td>
+              <td class="cell-actions">
+                @if (key.isActive) {
+                  <button (click)="revokeKey(key.id)" class="action-btn revoke">Revoke</button>
+                }
+                <button (click)="deleteKey(key.id)" class="action-btn delete">Delete</button>
+              </td>
+            </tr>
+          } @empty {
+            <tr>
+              <td colspan="5" class="empty-cell">No API keys yet. Generate one above.</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Code snippets -->
+    <div class="snippets-card animate-fade-in">
+      <h2 class="card-title">Usage Examples</h2>
+
+      <div class="snippet-group">
+        <h3 class="snippet-label">Python (OpenAI SDK)</h3>
+        <pre class="snippet-code"><code>from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://nls-api.up.railway.app/v1",
+    api_key="nlsk_your_key_here"
+)
+
+response = client.chat.completions.create(
+    model="agent:your-agent-id",
+    messages=[&#123;"role": "user", "content": "Hello!"&#125;],
+    stream=True
+)
+for chunk in response:
+    print(chunk.choices[0].delta.content or "", end="")</code></pre>
+      </div>
+
+      <div class="snippet-group">
+        <h3 class="snippet-label">curl</h3>
+        <pre class="snippet-code"><code>curl https://nls-api.up.railway.app/v1/chat/completions \
+  -H "Authorization: Bearer nlsk_your_key_here" \
+  -H "Content-Type: application/json" \
+  -d '&#123;"model":"agent:your-agent-id","messages":[&#123;"role":"user","content":"Hello!"&#125;]&#125;'</code></pre>
+      </div>
+    </div>
+  </div>
+</div>

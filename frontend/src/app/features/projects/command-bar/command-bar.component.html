@@ -1,0 +1,15 @@
+<div class="command-bar">
+  <svg class="cmd-icon" viewBox="0 0 20 20" fill="currentColor" width="14" height="14">
+    <path d="M2 5a2 2 0 012-2h12a2 2 0 012 2v7a2 2 0 01-2 2H6l-4 3V5z"/>
+  </svg>
+  <input
+    class="cmd-input"
+    [(ngModel)]="message"
+    placeholder="Tell the orchestrator what to do..."
+    (keydown)="onKeydown($event)"
+    [disabled]="sending"
+  />
+  <button class="cmd-send" (click)="send()" [disabled]="!message.trim() || sending">
+    @if (sending) { ... } @else { Send }
+  </button>
+</div>

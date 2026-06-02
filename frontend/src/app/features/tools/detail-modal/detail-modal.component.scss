@@ -1,0 +1,103 @@
+$bg-panel: var(--glass-bg);
+$border: var(--glass-border);
+$accent: var(--accent-primary);
+$text-heading: var(--text-primary);
+$text-muted: var(--text-muted);
+$radius-lg: 14px;
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--overlay-5);
+  backdrop-filter: blur(6px);
+  animation: fadeIn 0.18s ease-out;
+
+  &.closing {
+    animation: fadeOut 0.18s ease-in forwards;
+  }
+}
+
+.modal-panel {
+  width: 92vw;
+  max-width: 640px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  background: $bg-panel;
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid $border;
+  border-radius: $radius-lg;
+  box-shadow: var(--shadow-glass), 0 24px 80px var(--overlay-5);
+  animation: slideUp 0.22s ease-out;
+
+  .closing & {
+    animation: slideDown 0.18s ease-in forwards;
+  }
+}
+
+.modal-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid $border;
+  flex-shrink: 0;
+}
+
+.modal-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: $text-heading;
+  margin: 0;
+}
+
+.modal-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: 1px solid $border;
+  border-radius: 8px;
+  color: $text-muted;
+  cursor: pointer;
+  transition: all 0.15s;
+
+  &:hover {
+    color: $text-heading;
+    border-color: var(--overlay-5);
+    background: var(--overlay-2);
+  }
+}
+
+.modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes fadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(24px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes slideDown {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(16px) scale(0.97); }
+}

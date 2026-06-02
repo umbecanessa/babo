@@ -1,0 +1,66 @@
+# Babo — optional full Python stack (server development)
+# Product desktop installs use requirements-desktop.txt instead.
+
+# Optional local GGUF inference (not required for BYO API mode)
+llama-cpp-python>=0.3.0
+
+# Transformers stack (tokenizers, optional local models)
+peft>=0.13.0
+transformers>=4.45.0
+torch>=2.1.0
+safetensors>=0.4.0
+
+# Configuration & data models
+pyyaml>=6.0
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# CLI
+typer[all]>=0.12.0
+rich>=13.0.0
+
+# Browser (browser-use wraps Playwright with stealth, anti-detection, extensions)
+browser-use>=0.11.0
+
+# Server (FastAPI multi-agent inference)
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+websockets>=13.0
+
+# Cloud Bridge APIs
+anthropic>=0.40.0
+openai>=1.50.0
+
+# MCP (Model Context Protocol) -- generic tool gateway
+mcp>=1.6.0
+httpx>=0.27.0
+
+# Web search (free metasearch, no API key)
+ddgs>=9.0.0
+
+# Speech-to-text (Whisper)
+faster-whisper>=1.0.0
+
+# Vision (Visual Cortex -- tiered VLM: Moondream / SmolVLM / FastVLM)
+accelerate>=0.30.0
+psutil>=5.9.0
+# mlx-vlm>=0.20.0   # Optional: Apple Silicon only (FastVLM backend)
+
+# Document parsing
+pymupdf>=1.24.0
+python-docx>=1.1.0
+openpyxl>=3.1.0
+python-pptx>=1.0.0
+striprtf>=0.0.26
+
+# Google Workspace (OAuth + API clients)
+google-auth>=2.20.0
+google-auth-oauthlib>=1.1.0
+google-api-python-client>=2.100.0
+cryptography>=41.0.0
+
+# --- Optional: Training (Mining) ---
+# unsloth>=2024.12
+# bitsandbytes>=0.44.0
+# trl>=0.12.0
+# datasets>=3.0.0

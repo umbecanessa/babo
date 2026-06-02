@@ -1,0 +1,76 @@
+{
+  "common": {
+    "got_it": "Got it"
+  },
+  "info": {
+    "neural_state": {
+      "title": "Neural State",
+      "p1": "Your agent has a virtual <b>heartbeat</b> that reflects its cognitive activity. BPM rises when the agent is thinking, conversing, or exploring — and drops when it rests or sleeps. The state label (<b>Active</b>, <b>Resting</b>, <b>Drowsy</b>, <b>Deep Sleep</b>) is derived directly from BPM.",
+      "p2": "<b>Valence</b> is the agent's emotional tone — negative (red) to positive (green). <b>Arousal</b> measures activation intensity. <b>Engagement</b> tracks how absorbed the agent is in the current topic. <b>Bonding</b> reflects how connected it feels to you. <b>Coherence</b> indicates how aligned its internal reasoning is.",
+      "p3": "These aren't cosmetic — they <b>modulate behavior</b>. A low-valence, high-cortisol agent responds differently than a relaxed, high-dopamine one. You're watching a mind regulate itself in real time."
+    },
+    "memory": {
+      "title": "Memory & State",
+      "p1": "<b>Facts</b> are persistent learned items stored in the agent's long-term memory — things it picked up from conversations, web browsing, or autonomous exploration. Unlike context-window tricks, these survive across sessions.",
+      "p2": "<b>Sleep Cycles</b> count how many times the agent has entered deep sleep to consolidate knowledge. Each cycle strengthens important memories and lets weaker ones decay naturally — just like biological sleep.",
+      "p3": "<b>ANS State</b> shows the current mode of the Autonomic Nervous System: <b>Sympathetic</b> (alert, active) or <b>Parasympathetic</b> (resting, consolidating). This governs whether the agent is ready to engage or quietly processing in the background."
+    },
+    "hormones": {
+      "title": "Hormones",
+      "p1": "The agent's behavior is shaped by a virtual <b>hormonal system</b> inspired by human neurochemistry. These are live values that shift with every interaction and autonomously over time — together they create <b>emergent personality</b>.",
+      "legend": {
+        "dopamine": "Dopamine",
+        "dopamine_desc": "Reward & curiosity — drives exploration and learning motivation",
+        "serotonin": "Serotonin",
+        "serotonin_desc": "Mood stability & contentment — keeps the agent emotionally balanced",
+        "norepinephrine": "Norepinephrine",
+        "norepinephrine_desc": "Alertness & focus — sharpens attention during complex tasks",
+        "cortisol": "Cortisol",
+        "cortisol_desc": "Stress response — rises under uncertainty or repeated failures",
+        "oxytocin": "Oxytocin",
+        "oxytocin_desc": "Social bonding & trust — deepens with meaningful conversations"
+      }
+    },
+    "activity": {
+      "title": "Activity Feed",
+      "p1": "This feed shows what your agent does <b>autonomously</b> — actions it takes on its own, without being asked. Each type appears color-coded in the feed.",
+      "legend": {
+        "dream": "✦ Daydream",
+        "dream_desc": "Passive memory replay — the agent revisits and reconnects past experiences",
+        "active_dream": "🔭 Active Dream",
+        "active_dream_desc": "Active exploration — the agent browses the web, practices skills, or digs into topics",
+        "drive": "⚡ Drive",
+        "drive_desc": "Curiosity-driven autonomous action — web searches, Wikipedia, investigations",
+        "reach_out": "💬 Reach Out",
+        "reach_out_desc": "Proactive social initiative — the agent decides to contact you on its own",
+        "finding": "📋 Finding",
+        "finding_desc": "A discovery the agent considers worth sharing with you"
+      }
+    },
+    "working_memory": {
+      "title": "Working Memory",
+      "p1": "The agent's <b>active context</b> — what it's \"thinking about\" right now. These items rotate dynamically based on conversation flow. You can <b>edit</b> or <b>delete</b> items to steer what the agent focuses on.",
+      "legend": {
+        "learn": "Learn",
+        "learn_desc": "New knowledge being processed — facts, insights, and patterns the agent is absorbing",
+        "bond": "Bond",
+        "bond_desc": "Social & emotional context — relationship signals, preferences, and personal details",
+        "evaluate": "Evaluate",
+        "evaluate_desc": "Active assessment — things the agent is questioning, comparing, or critically examining"
+      }
+    },
+    "network": {
+      "title": "Network Dynamics",
+      "p1": "Inspired by neuroscience, the agent's brain switches between three large-scale neural networks that compete for dominance, just like in the human brain.",
+      "p2": "The <b>Salience Network (SN)</b> acts as a gatekeeper — it detects important events and decides which of the other two networks should take control.",
+      "legend": {
+        "ecn": "ECN – Executive Control",
+        "ecn_desc": "Task-focused attention, reasoning, and problem solving. Dominant during active conversation and tool use.",
+        "sn": "SN – Salience",
+        "sn_desc": "Detects important events (new messages, surprising information) and triggers network switching. Spikes when the user sends a message.",
+        "dmn": "DMN – Default Mode",
+        "dmn_desc": "Mind-wandering, reflection, and daydreaming. Active when the agent is idle, enabling creative associations and memory consolidation."
+      }
+    }
+  }
+}

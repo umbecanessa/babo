@@ -1,0 +1,51 @@
+{
+  "name": "file_edit",
+  "description": "Surgical text replacement in a file. Finds an exact string and replaces it. Supports replace_all for bulk changes.",
+  "version": "1.0.0",
+  "category": "create",
+  "hormone_affinity": "dopamine",
+  "base_effort": 0.4,
+  "learning_yield": "low",
+  "risk_level": "write",
+  "platform": "desktop",
+  "permissions": ["filesystem.write"],
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "path": { "type": "string", "description": "File path" },
+      "old_string": { "type": "string", "description": "Text to find" },
+      "new_string": { "type": "string", "description": "Replacement text" },
+      "replace_all": { "type": "boolean", "description": "Replace all occurrences", "default": false }
+    },
+    "required": ["path", "old_string", "new_string"]
+  },
+
+  "manual": {
+    "overview": "Use file_edit for precise, surgical modifications to existing files. Instead of rewriting the whole file, you specify the exact text to find and what to replace it with. This is safer and more efficient than file_write for edits.",
+    "examples": [
+      { "description": "Fix a typo in code", "input": { "path": "/app/main.py", "old_string": "pritn('hello')", "new_string": "print('hello')" } },
+      { "description": "Rename a variable everywhere", "input": { "path": "/app/utils.py", "old_string": "old_name", "new_string": "new_name", "replace_all": true } },
+      { "description": "Add an import statement", "input": { "path": "/app/main.py", "old_string": "import os", "new_string": "import os\nimport sys" } }
+    ],
+    "tips": [
+      "Include enough context in old_string to make it unique within the file.",
+      "Use replace_all=true when renaming variables or updating repeated patterns.",
+      "Always read the file first (file_read) to see the exact text before editing."
+    ],
+    "edge_cases": [
+      "If old_string is not found in the file, the edit will fail.",
+      "If old_string matches multiple locations and replace_all is false, only the first match is replaced.",
+      "Whitespace and indentation matter — old_string must match exactly."
+    ],
+    "related_tools": ["file_read", "file_write", "diff_patch"]
+  },
+
+  "executor": {
+    "type": "file_edit",
+    "path": "{{args.path}}",
+    "old_string": "{{args.old_string}}",
+    "new_string": "{{args.new_string}}",
+    "replace_all": "{{args.replace_all}}"
+  }
+}

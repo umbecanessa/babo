@@ -1,0 +1,46 @@
+<div class="chat-sidebar">
+  <!-- Header -->
+  <div class="sidebar-header">
+    <select class="thread-select" [ngModel]="activeThread()" (ngModelChange)="selectThread($event)">
+      @for (thread of threads(); track thread.id) {
+        <option [value]="thread.id">{{ thread.label }}</option>
+      }
+    </select>
+    <button class="close-btn" (click)="close.emit()" title="Close">&times;</button>
+  </div>
+
+  <!-- Messages -->
+  <div class="messages">
+    @if (loadingHistory()) {
+      <div class="empty-chat">Loading conversation...</div>
+    } @else if (messages().length === 0) {
+      <div class="empty-chat">
+        No messages yet. Chat with the orchestrator &mdash; project context is injected automatically.
+      </div>
+    } @else {
+      @for (msg of messages(); track $index) {
+        <div class="msg" [class]="'msg-' + msg.role">
+          <div class="msg-bubble" [innerHTML]="msg.content | markdown"></div>
+          @if (msg.source && msg.source !== 'history') {
+            <span class="msg-source">{{ msg.source }}</span>
+          }
+        </div>
+      }
+    }
+  </div>
+
+  <!-- Input -->
+  <div class="sidebar-input">
+    <input
+      class="chat-input"
+      [ngModel]="input()"
+      (ngModelChange)="updateInput($event)"
+      placeholder="Message..."
+      (keydown)="onKeydown($event)"
+      [disabled]="sending()"
+    />
+    <button class="send-btn" (click)="send()" [disabled]="!input().trim() || sending()">
+      @if (sending()) { &hellip; } @else { Send }
+    </button>
+  </div>
+</div>

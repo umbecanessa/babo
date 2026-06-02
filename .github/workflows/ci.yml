@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install test dependencies
+        run: pip install pytest pydantic pydantic-settings pyyaml httpx
+
+      - name: Compile server + nls
+        env:
+          NLS_PRODUCT_MODE: '1'
+        run: python -m compileall server nls -q
+
+      - name: Pytest (product mode)
+        env:
+          NLS_PRODUCT_MODE: '1'
+        run: python -m pytest tests/ -q
+
+      - name: Legacy reference grep gate
+        run: bash scripts/check-legacy-references.sh

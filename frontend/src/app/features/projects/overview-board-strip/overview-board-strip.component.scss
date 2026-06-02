@@ -1,0 +1,135 @@
+.board-strip {
+  flex-shrink: 0;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: blur(var(--glass-blur));
+}
+
+.strip-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.strip-title {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+}
+
+.strip-link {
+  border: none;
+  background: transparent;
+  color: var(--accent-primary);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+
+  &:hover {
+    background: var(--accent-primary-glow);
+  }
+}
+
+.strip-empty {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.strip-row {
+  & + & {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--overlay-2);
+  }
+}
+
+.strip-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+
+  &--warn {
+    color: var(--accent-warn);
+  }
+}
+
+.strip-cards {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+
+  &::-webkit-scrollbar {
+    height: 4px;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: var(--overlay-3);
+    border-radius: 2px;
+  }
+}
+
+.mini-card {
+  flex: 0 0 min(240px, 80vw);
+  min-width: 180px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--overlay-1);
+  border: 1px solid var(--overlay-2);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  &--blocked {
+    border-color: rgba(251, 191, 36, 0.25);
+    background: rgba(251, 191, 36, 0.04);
+  }
+}
+
+.mini-priority {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  align-self: flex-start;
+
+  &.p-high, &.p-urgent {
+    background: var(--accent-warn);
+  }
+  &.p-normal {
+    background: var(--accent-primary);
+  }
+  &.p-low {
+    background: var(--text-muted);
+  }
+  &.p-queued {
+    background: var(--accent-warn);
+  }
+}
+
+.mini-title {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.mini-plan,
+.mini-meta {
+  font-size: 10px;
+  color: var(--text-muted);
+}

@@ -1,0 +1,188 @@
+{
+  "version": "1.0",
+  "description": "V5 Neural Signal Sensing — probe configuration. Linear classifiers on frozen hidden states detect signal-worthy moments without text tags. Each probe category groups related signals from the full NLS taxonomy (signals.json) into a trainable category.",
+
+  "enabled": true,
+
+  "probe_signals": [
+    "LEARN",
+    "UNKNOWN",
+    "LOOKUP_RECALL",
+    "EVAL_POSITIVE",
+    "EVAL_NEGATIVE",
+    "EVAL_UNCERTAIN",
+    "CURIOSITY",
+    "FOCUS",
+    "BONDING",
+    "PLAN",
+    "REFLECT",
+    "DOUBT"
+  ],
+
+  "signal_taxonomy_mapping": {
+    "LEARN": {
+      "description": "Hippocampal encoding — model encountered or absorbed a new fact",
+      "text_tags": ["LEARN"]
+    },
+    "UNKNOWN": {
+      "description": "ACC gap detection — model recognized it doesn't know something",
+      "text_tags": ["UNKNOWN"]
+    },
+    "LOOKUP_RECALL": {
+      "description": "Memory retrieval — model is attempting to recall or lookup stored knowledge",
+      "text_tags": ["LOOKUP", "RECALL:hit", "RECALL:miss", "RECALL_HIT", "RECALL_MISS"]
+    },
+    "EVAL_POSITIVE": {
+      "description": "Success evaluation — model confirmed correctness, had insight, or resolved understanding",
+      "text_tags": [
+        "EVALUATE:correct", "EVALUATE:revised", "EVALUATE:insightful",
+        "EVALUATE:understanding", "EVALUATE:grasping", "EVALUATE:crystallizing",
+        "EVALUATE:learning", "EVALUATE:proud"
+      ]
+    },
+    "EVAL_NEGATIVE": {
+      "description": "Failure evaluation — model recognized an error, is stuck, or overwhelmed",
+      "text_tags": [
+        "EVALUATE:incorrect", "EVALUATE:frustrated", "EVALUATE:struggling",
+        "EVALUATE:overwhelmed", "EVALUATE:anxious", "EVALUATE:disappointed"
+      ]
+    },
+    "EVAL_UNCERTAIN": {
+      "description": "Uncertainty — model is unsure, confused, or conflicted",
+      "text_tags": [
+        "EVALUATE:uncertain", "EVALUATE:confused", "EVALUATE:conflicted"
+      ]
+    },
+    "CURIOSITY": {
+      "description": "Epistemic drive — model is curious, intrigued, or exploring",
+      "text_tags": [
+        "EVALUATE:curious", "EVALUATE:intrigued", "EVALUATE:wondering",
+        "EVALUATE:surprised", "ACC"
+      ]
+    },
+    "FOCUS": {
+      "description": "Attention/processing — model is in deep task execution or comprehension",
+      "text_tags": [
+        "EVALUATE:processing", "EVALUATE:synthesizing", "EVALUATE:connecting",
+        "INSULA"
+      ]
+    },
+    "BONDING": {
+      "description": "Social/emotional warmth — rapport building, gratitude, affection",
+      "text_tags": [
+        "EVALUATE:warm", "EVALUATE:pleased", "EVALUATE:grateful",
+        "EVALUATE:moved", "EVALUATE:tender", "EVALUATE:amused",
+        "EVALUATE:playful", "EVALUATE:inspired", "EVALUATE:nostalgic",
+        "EVALUATE:ironic", "BONDING", "CLOSER"
+      ]
+    },
+    "PLAN": {
+      "description": "Plan lifecycle — model is structuring, organizing, or stepping through work",
+      "text_tags": ["PLAN:create", "PLAN:step", "PLAN_CREATE", "PLAN_STEP"]
+    },
+    "REFLECT": {
+      "description": "Introspection — self-referential processing, cross-domain connection",
+      "text_tags": ["REFLECT", "CONNECT", "EVALUATE:aligned"]
+    },
+    "DOUBT": {
+      "description": "Epistemic conflict — model detects contradiction or is skeptical",
+      "text_tags": [
+        "DOUBT", "EVALUATE:skeptical", "EVALUATE:wary",
+        "EVALUATE:melancholic"
+      ]
+    }
+  },
+
+  "thresholds": {
+    "LEARN": 0.30,
+    "UNKNOWN": 0.40,
+    "LOOKUP_RECALL": 0.35,
+    "EVAL_POSITIVE": 0.40,
+    "EVAL_NEGATIVE": 0.50,
+    "EVAL_UNCERTAIN": 0.40,
+    "CURIOSITY": 0.35,
+    "FOCUS": 0.35,
+    "BONDING": 0.40,
+    "PLAN": 0.35,
+    "REFLECT": 0.70,
+    "DOUBT": 0.40
+  },
+
+  "hormone_mappings": {
+    "LEARN": {
+      "norepinephrine": 0.3,
+      "acetylcholine": 0.2
+    },
+    "UNKNOWN": {
+      "norepinephrine": 0.25,
+      "cortisol": 0.1
+    },
+    "LOOKUP_RECALL": {
+      "dopamine": 0.1,
+      "acetylcholine": 0.15
+    },
+    "EVAL_POSITIVE": {
+      "dopamine": 0.25,
+      "serotonin": 0.15
+    },
+    "EVAL_NEGATIVE": {
+      "cortisol": 0.15,
+      "dopamine": -0.10
+    },
+    "EVAL_UNCERTAIN": {
+      "norepinephrine": 0.2,
+      "cortisol": 0.15
+    },
+    "CURIOSITY": {
+      "dopamine": 0.2,
+      "norepinephrine": 0.35
+    },
+    "FOCUS": {
+      "acetylcholine": 0.3,
+      "norepinephrine": 0.15
+    },
+    "BONDING": {
+      "oxytocin": 0.35,
+      "dopamine": 0.1,
+      "cortisol": -0.15
+    },
+    "PLAN": {
+      "dopamine": 0.15,
+      "acetylcholine": 0.2
+    },
+    "REFLECT": {
+      "acetylcholine": 0.2,
+      "serotonin": 0.15
+    },
+    "DOUBT": {
+      "norepinephrine": 0.25,
+      "cortisol": 0.15,
+      "dopamine": -0.1
+    }
+  },
+
+  "model": {
+    "hidden_dim": 5120,
+    "intermediate_dim": 256,
+    "dropout": 0.1,
+    "hidden_layers_used": [-1],
+    "pooling": "mean"
+  },
+
+  "training": {
+    "learning_rate": 1e-3,
+    "epochs": 50,
+    "batch_size": 16,
+    "train_split": 0.85,
+    "loss": "bce",
+    "min_samples_per_signal": 10,
+    "negative_ratio": 0.0
+  },
+
+  "inference": {
+    "post_gen_enabled": true,
+    "per_iteration_in_agentic": true,
+    "fallback_to_text_tags": true,
+    "max_sequence_length": 4096
+  }
+}

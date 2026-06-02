@@ -1,0 +1,77 @@
+scenarios:
+  - id: ext-01
+    name: ClawHub search
+    category: extensibility
+    tags: [tier8, extensibility]
+    timeout_s: 600
+    prompt: >-
+      Use clawhub to search for skills related to "calendar" or "email". List top 3
+      results with names only — do not install anything.
+    pass:
+      tools_any: [clawhub]
+
+  - id: ext-02
+    name: ClawHub install (optional restart)
+    category: extensibility
+    tags: [tier8, extensibility, slow, manual]
+    manual: true
+    timeout_s: 1800
+    prompt: >-
+      MANUAL QA: clawhub install a harmless skill, request_restart if prompted, confirm
+      new tool appears after restart.
+    pass:
+      tools_any: [clawhub, request_restart]
+
+  - id: ext-03
+    name: MCP connect
+    category: extensibility
+    tags: [tier8, extensibility, manual]
+    manual: true
+    prompt: >-
+      MANUAL QA: Use mcp_manage to connect a local MCP server (e.g. filesystem).
+      Call one proxied tool successfully.
+    pass:
+      tools_any: [mcp_manage]
+
+  - id: ext-04
+    name: MCP disconnect
+    category: extensibility
+    tags: [tier8, extensibility, manual]
+    manual: true
+    prompt: >-
+      MANUAL QA: After EXT-03, disconnect MCP and confirm tools are removed.
+    pass:
+      tools_any: [mcp_manage]
+
+  - id: ext-05
+    name: Skill configure
+    category: extensibility
+    tags: [tier8, extensibility]
+    timeout_s: 600
+    prompt: >-
+      Use skill_configure to read the current config schema for any enabled bundled skill
+      (or report none enabled). Do not change secrets — read-only unless a safe default exists.
+    pass:
+      tools_any: [skill_configure]
+
+  - id: ext-06
+    name: Crystallize skill
+    category: extensibility
+    tags: [tier8, extensibility, slow, manual]
+    manual: true
+    timeout_s: 3600
+    prompt: >-
+      MANUAL QA: Advanced — crystallize_skill after practicing an AgentSkill workflow.
+    pass:
+      tools_any: [crystallize_skill]
+
+  - id: ext-07
+    name: Discover tools keyword
+    category: extensibility
+    tags: [tier8, extensibility]
+    timeout_s: 300
+    prompt: >-
+      Use discover_tools with keyword "spreadsheet" or "pdf". Report at least one deferred
+      Tool Shop tool name returned.
+    pass:
+      tools_any: [discover_tools]

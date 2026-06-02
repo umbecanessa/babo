@@ -1,0 +1,50 @@
+{
+  "name": "test_runner",
+  "description": "Execute test suites and parse results. Supports pytest (Python), jest/vitest (JS/TS), and generic test commands.",
+  "version": "1.0.0",
+  "category": "act",
+  "hormone_affinity": "dopamine",
+  "base_effort": 0.4,
+  "learning_yield": "medium",
+  "risk_level": "execute",
+  "platform": "desktop",
+  "permissions": ["shell.execute", "filesystem.read"],
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "command": { "type": "string", "description": "Test command (e.g. 'pytest tests/', 'npm test', 'jest --verbose')" },
+      "cwd": { "type": "string", "description": "Working directory (project root)" },
+      "timeout": { "type": "integer", "description": "Timeout in seconds", "default": 120 }
+    },
+    "required": ["command"]
+  },
+
+  "manual": {
+    "overview": "Use test_runner to execute test suites and see results. Supports pytest for Python, jest/vitest for JavaScript, and any custom test command. Always run tests after making code changes.",
+    "examples": [
+      { "description": "Run Python tests with verbose output", "input": { "command": "pytest tests/ -v", "cwd": "/project" } },
+      { "description": "Run a specific test file", "input": { "command": "pytest tests/test_auth.py -v" } },
+      { "description": "Run JavaScript tests", "input": { "command": "npm test", "cwd": "/frontend" } }
+    ],
+    "tips": [
+      "Run tests after every code change to catch regressions early.",
+      "Use -v (verbose) to see individual test names and statuses.",
+      "Run specific test files instead of the full suite for faster feedback.",
+      "Set an appropriate timeout — test suites can vary from seconds to minutes."
+    ],
+    "edge_cases": [
+      "Tests requiring database connections may fail without proper setup.",
+      "Some test frameworks need virtual environments or node_modules installed first.",
+      "Timeout should be set higher for integration/e2e tests."
+    ],
+    "related_tools": ["terminal", "code_analyze", "git"]
+  },
+
+  "executor": {
+    "type": "shell",
+    "command": "{{args.command}}",
+    "cwd": "{{args.cwd}}",
+    "timeout": "{{args.timeout}}"
+  }
+}

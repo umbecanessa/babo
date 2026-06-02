@@ -1,0 +1,47 @@
+{
+  "name": "file_tree",
+  "description": "List directory structure. Shows files and folders with sizes.",
+  "version": "1.0.0",
+  "category": "sense",
+  "hormone_affinity": "norepinephrine",
+  "base_effort": 0.1,
+  "learning_yield": "medium",
+  "risk_level": "read",
+  "platform": "desktop",
+  "permissions": ["filesystem.read"],
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "path": { "type": "string", "description": "Directory path" },
+      "depth": { "type": "integer", "description": "Max recursion depth", "default": 2 },
+      "glob": { "type": "string", "description": "Filter by glob pattern" }
+    },
+    "required": ["path"]
+  },
+
+  "manual": {
+    "overview": "Use file_tree to get an overview of a project's directory structure. Shows folders and files hierarchically with sizes. Essential first step when exploring an unfamiliar project.",
+    "examples": [
+      { "description": "See project structure (2 levels deep)", "input": { "path": "/home/user/project", "depth": 2 } },
+      { "description": "List only Python files", "input": { "path": "/project/src", "glob": "*.py", "depth": 3 } },
+      { "description": "Quick overview of root directory", "input": { "path": "/home/user/project", "depth": 1 } }
+    ],
+    "tips": [
+      "Start with depth=1 or 2 for a high-level overview, then go deeper on interesting directories.",
+      "Use glob to filter for specific file types when the tree is too large.",
+      "Check file_tree before file_search to understand where code lives."
+    ],
+    "edge_cases": [
+      "Very large directories (node_modules, .git) may produce huge output; limit depth.",
+      "Hidden files (starting with .) are included by default.",
+      "Symbolic links are followed but cycles are detected and stopped."
+    ],
+    "related_tools": ["file_read", "file_search", "code_analyze"]
+  },
+
+  "executor": {
+    "type": "python",
+    "handler": "nls.engine.tools_builtin.FileTreeTool"
+  }
+}

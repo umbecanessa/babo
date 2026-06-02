@@ -1,0 +1,65 @@
+{
+  "name": "service_monitoring",
+  "description": "Monitor a web service and alert on failures",
+  "category": "system",
+  "difficulty": "intermediate",
+  "prerequisites": [
+    "curl available in PATH",
+    "Python 3 available"
+  ],
+  "steps": [
+    {
+      "description": "Check a service health endpoint",
+      "tool": "bash",
+      "example_params": {
+        "command": "curl -s -o /dev/null -w 'HTTP %{http_code} in %{time_total}s' https://example.com/health"
+      },
+      "expected_outcome": "HTTP 200 in 0.5s",
+      "error_patterns": [
+        "Connection refused",
+        "HTTP 5xx"
+      ],
+      "recovery_hints": [
+        "Service may be down, check if the process is running",
+        "Check firewall rules and port bindings"
+      ]
+    },
+    {
+      "description": "Write a monitoring script",
+      "tool": "write",
+      "example_params": {
+        "path": "monitor.py",
+        "content": "import subprocess\nimport time\nimport json\nfrom datetime import datetime\n\nSERVICES = [\n    {\"name\": \"api\", \"url\": \"https://example.com/health\"},\n]\nLOG_FILE = \"monitor.log\"\nCHECK_INTERVAL = 60\n\ndef check(service):\n    try:\n        result = subprocess.run(\n            [\"curl\", \"-s\", \"-o\", \"/dev/null\", \"-w\", \"%{http_code}\", service[\"url\"]],\n            capture_output=True, text=True, timeout=10\n        )\n        return int(result.stdout.strip())\n    except Exception:\n        return 0\n\nwhile True:\n    for svc in SERVICES:\n        code = check(svc)\n        status = \"UP\" if 200 <= code < 300 else \"DOWN\"\n        entry = f\"{datetime.now().isoformat()} {svc['name']}: {status} (HTTP {code})\"\n        print(entry)\n        with open(LOG_FILE, 'a') as f:\n            f.write(entry + '\\n')\n    time.sleep(CHECK_INTERVAL)\n"
+      },
+      "expected_outcome": "Monitoring script created",
+      "error_patterns": [],
+      "recovery_hints": []
+    },
+    {
+      "description": "Run the monitor in background",
+      "tool": "bash",
+      "example_params": {
+        "command": "nohup python monitor.py > /dev/null 2>&1 & echo \"Monitor PID: $!\""
+      },
+      "expected_outcome": "Monitor running in background with PID shown",
+      "error_patterns": [],
+      "recovery_hints": []
+    },
+    {
+      "description": "Check recent monitoring results",
+      "tool": "bash",
+      "example_params": {
+        "command": "tail -10 monitor.log"
+      },
+      "expected_outcome": "Last 10 health check entries",
+      "error_patterns": [],
+      "recovery_hints": []
+    }
+  ],
+  "learning_signals": [
+    "curl -w '%{http_code}' extracts the HTTP status code",
+    "curl -w '%{time_total}' measures total response time",
+    "nohup + & runs a process in background that survives terminal close",
+    "Monitor PID: use 'kill <pid>' to stop, 'ps aux | grep monitor' to find"
+  ]
+}

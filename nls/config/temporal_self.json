@@ -1,0 +1,17 @@
+{
+  "history_size": 50,
+  "mood_alpha": 0.02,
+  "derivative_window": 10,
+  "energy_drain_per_inference": 0.002,
+  "energy_drain_per_tool_call": 0.001,
+  "energy_drain_hormone_factor": 0.001,
+  "energy_restore_per_sleep": 0.30,
+  "energy_restore_full_sleep": 1.0,
+  "energy_restore_idle_rate": 0.0005,
+  "felt_time_thresholds": {
+    "brief": 30,
+    "moderate": 120,
+    "long": 600,
+    "eternal": 1800
+  }
+}

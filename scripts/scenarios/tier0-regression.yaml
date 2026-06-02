@@ -1,0 +1,42 @@
+scenarios:
+  - id: r-01
+    name: ICF platform E2E (golden)
+    category: regression
+    tags: [tier0, slow, icf, regression]
+    timeout_s: 7200
+    disabled: true
+    prompt: >-
+      Build the full ICF coaching session evaluation platform end-to-end from the PRD
+      in the workspace. Create a GitHub repo, plan, scaffold monorepo, implement with
+      teams/delegates, run plan(verify), and reach plan(complete). This is the golden
+      regression — do not stop at scaffold only.
+    pass:
+      tools_any: [plan, team]
+      min_response_chars: 100
+
+  - id: r-02
+    name: ICF solo (no teams)
+    category: regression
+    tags: [tier0, slow, icf, regression]
+    timeout_s: 3600
+    disabled: true
+    prompt: >-
+      Build a minimal ICF session evaluator API only — FastAPI with one POST /evaluate
+      endpoint and mock scoring. Use plan tool. Do NOT launch teams or delegates;
+      implement everything yourself in executing mode. Stop after plan(complete).
+    pass:
+      tools_any: [plan]
+      tools_not_any: [team]
+
+  - id: r-03
+    name: ICF wave-0 scaffold only
+    category: regression
+    tags: [tier0, slow, icf, regression]
+    timeout_s: 2400
+    disabled: true
+    prompt: >-
+      Scaffold an ICF monorepo: README, backend/ and frontend/ folders, .gitignore,
+      requirements.txt and package.json stubs. Create plan, complete wave-0 only,
+      then stop. Do not implement business logic beyond placeholders.
+    pass:
+      tools_any: [plan, write]

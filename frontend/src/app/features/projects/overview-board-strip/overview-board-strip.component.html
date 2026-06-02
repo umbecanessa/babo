@@ -1,0 +1,44 @@
+<section class="board-strip" aria-label="Task queue snapshot">
+  <div class="strip-header">
+    <span class="strip-title">Queue</span>
+    @if (hasCards) {
+      <button type="button" class="strip-link" (click)="openBoard.emit()">Open Board</button>
+    }
+  </div>
+
+  @if (!hasCards) {
+    <p class="strip-empty">No in-progress or blocked tasks. Add work from the Board tab.</p>
+  } @else {
+    @if (inProgress.length) {
+      <div class="strip-row">
+        <span class="strip-label">In progress</span>
+        <div class="strip-cards">
+          @for (item of inProgress; track item.id) {
+            <article class="mini-card">
+              <span class="mini-priority" [class]="'p-' + item.priority"></span>
+              <span class="mini-title">{{ item.title }}</span>
+              @if (planProgress(item); as prog) {
+                <span class="mini-plan">{{ prog }} plan steps</span>
+              }
+            </article>
+          }
+        </div>
+      </div>
+    }
+
+    @if (blocked.length) {
+      <div class="strip-row">
+        <span class="strip-label strip-label--warn">Blocked</span>
+        <div class="strip-cards">
+          @for (item of blocked; track item.id) {
+            <article class="mini-card mini-card--blocked">
+              <span class="mini-priority p-queued"></span>
+              <span class="mini-title">{{ item.title }}</span>
+              <span class="mini-meta">Waiting on dependency</span>
+            </article>
+          }
+        </div>
+      </div>
+    }
+  }
+</section>

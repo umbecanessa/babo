@@ -1,0 +1,112 @@
+<div class="dashboard">
+  <!-- Ambient background -->
+  <div class="ambient">
+    <div class="glow glow-1"></div>
+    <div class="glow glow-2"></div>
+  </div>
+
+  <div class="content">
+    <!-- Header -->
+    <div class="header animate-fade-in">
+      <div>
+        <h1 class="title">Agents</h1>
+        <p class="subtitle">Your neural fleet</p>
+      </div>
+      <div class="header-actions">
+        @if (!platform.isRemote || hasOnlineAgent()) {
+          <a routerLink="/create" class="create-btn btn-primary">
+            <span class="btn-dot"></span>
+            Create Agent
+          </a>
+        }
+      </div>
+    </div>
+
+    <!-- Stats bar -->
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-value">{{ agents().length }}</div>
+        <div class="stat-label">Total</div>
+        <div class="stat-glow stat-glow-blue"></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value stat-green">{{ activeCount }}</div>
+        <div class="stat-label">Active</div>
+        <div class="stat-glow stat-glow-green"></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value stat-orange">{{ pausedCount }}</div>
+        <div class="stat-label">Paused</div>
+        <div class="stat-glow stat-glow-orange"></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value stat-amber">{{ sleepingCount }}</div>
+        <div class="stat-label">Sleeping</div>
+        <div class="stat-glow stat-glow-amber"></div>
+      </div>
+    </div>
+
+    <!-- Agent grid -->
+    @if (runtimeStarting()) {
+      <div class="runtime-loading animate-fade-in">
+        <div class="runtime-orb">
+          <div class="runtime-core"></div>
+          <div class="runtime-ring ring-1"></div>
+          <div class="runtime-ring ring-2"></div>
+          <div class="runtime-ring ring-3"></div>
+          <div class="runtime-particles">
+            <span></span><span></span><span></span><span></span><span></span><span></span>
+          </div>
+        </div>
+        <div class="runtime-progress">
+          <div class="runtime-progress-track">
+            <div class="runtime-progress-fill"></div>
+          </div>
+        </div>
+        <p class="runtime-status">{{ runtimeStatus() }}</p>
+        <p class="runtime-hint">This typically takes 20–40 seconds</p>
+      </div>
+    } @else if (error()) {
+      <div class="empty-state animate-fade-in">
+        <div class="error-banner">
+          <span class="error-dot"></span>
+          <span>{{ error() }}</span>
+        </div>
+        <button class="retry-btn" (click)="loadAgents()">Retry</button>
+      </div>
+    } @else if (loading()) {
+      <div class="empty-state">
+        <div class="loading-orb">
+          <div class="loading-core"></div>
+          <div class="loading-ring"></div>
+        </div>
+      </div>
+    } @else if (agents().length === 0) {
+      <div class="empty-state animate-fade-in">
+        <div class="empty-orb" (click)="navigateToCreate()">
+          <div class="empty-core"></div>
+          <div class="empty-ring ring-1"></div>
+          <div class="empty-ring ring-2"></div>
+          <div class="empty-ring ring-3"></div>
+        </div>
+        <p class="empty-title">No agents yet</p>
+        <p class="empty-hint">Click the orb or press <a routerLink="/create">Create Agent</a> to begin</p>
+      </div>
+    } @else {
+      <div class="agents-grid">
+        @for (agent of agents(); track agent.id) {
+          <app-agent-card
+            [agent]="agent"
+            [online]="isAgentOnline(agent.id)"
+            [remoteMode]="platform.isRemote"
+            [deleting]="deletingAgentId() === agent.id"
+            [pausing]="pausingAgentId() === agent.id"
+            (delete)="deleteAgent(agent.id)"
+            (togglePause)="togglePause(agent)"
+          />
+        }
+      </div>
+    }
+  </div>
+
+</div>

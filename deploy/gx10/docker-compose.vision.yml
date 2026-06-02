@@ -1,0 +1,22 @@
+# Babo vision worker on GX10 (host port 8443 → brain.babo.agency).
+#
+#   export BABO_VISION_SECRET=your-shared-secret
+#   docker compose -f docker-compose.vision.yml up -d --build
+
+services:
+  babo-vision:
+    build:
+      context: ./vision-server
+      args:
+        VISION_MODEL: ${VISION_MODEL:-moondream2}
+    image: babo-vision:latest
+    container_name: babo-vision
+    restart: unless-stopped
+    ports:
+      - "8443:8443"
+    environment:
+      VISION_PORT: "8443"
+      VISION_MODEL: ${VISION_MODEL:-moondream2}
+      VISION_DEVICE: ${VISION_DEVICE:-cpu}
+      VISION_SECRET: ${BABO_VISION_SECRET:-}
+      BABO_VISION_SECRET: ${BABO_VISION_SECRET:-}

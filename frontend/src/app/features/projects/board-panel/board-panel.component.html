@@ -1,0 +1,61 @@
+<div class="board">
+  @for (col of columns; track trackColumn($index, col)) {
+    <div class="column" [class.collapsed]="col.id === 'done' && doneCollapsed">
+      <div class="column-header">
+        <span class="column-dot" [style.background]="col.color"></span>
+        <span class="column-label">{{ col.label }}</span>
+        <span class="column-count">{{ col.items.length }}</span>
+        @if (col.id === 'done') {
+          <button class="collapse-btn" (click)="toggleDone()" [title]="doneCollapsed ? 'Expand' : 'Collapse'">
+            {{ doneCollapsed ? '\u25B6' : '\u25BC' }}
+          </button>
+        }
+      </div>
+
+      @if (col.id === 'inbox') {
+        <app-task-create
+          [lists]="lists"
+          [defaultListId]="'inbox'"
+          (created)="onCreate($event)"
+        />
+      }
+
+      @if (!(col.id === 'done' && doneCollapsed)) {
+        <div
+          cdkDropList
+          [id]="'bp-col-' + col.id"
+          [cdkDropListData]="col.items"
+          [cdkDropListConnectedTo]="connectedDropLists"
+          (cdkDropListDropped)="onDrop($event, col.id)"
+          class="column-items"
+        >
+          @for (item of col.items; track trackItem($index, item)) {
+            <div cdkDrag [cdkDragData]="item" class="drag-item">
+              <app-task-card
+                [task]="item"
+                [lists]="lists"
+                [plan]="plansByTodoId[item.id] || null"
+                (complete)="onComplete($event)"
+                (remove)="onRemove($event)"
+                (edit)="onEdit($event)"
+              />
+              @if (col.id === 'queued' && item.depends_on?.length) {
+                <button class="unblock-btn" (click)="onUnblock(item.id)" title="Force unblock — move to In Progress">
+                  Unblock
+                </button>
+              }
+            </div>
+          }
+
+          @if (col.items.length === 0) {
+            <div class="column-empty">
+              @if (col.id === 'inbox') { No new tasks }
+              @else if (col.id === 'in_progress') { Nothing in progress }
+              @else { Empty }
+            </div>
+          }
+        </div>
+      }
+    </div>
+  }
+</div>

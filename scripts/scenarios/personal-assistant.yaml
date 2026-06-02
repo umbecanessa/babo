@@ -1,0 +1,70 @@
+scenarios:
+  - id: pa-work-plan
+    name: Career / work imagery planning
+    category: personal_assistant
+    tags: [tier1, personal]
+    timeout_s: 480
+    prompt: >-
+      My dad is thinking about changing jobs. He works in logistics today but is
+      curious about moving into warehouse team lead or safety coordinator roles.
+      Help him think it through: strengths to highlight, 2 realistic paths for the
+      next 12 months, and 5 questions he should ask in informational interviews.
+      No code, no repos — just a clear structured plan he can discuss at the kitchen table.
+    pass:
+      min_response_chars: 400
+      tools_not_any: [plan, team]
+
+  - id: pa-tax-math
+    name: Freelance tax / accounting math
+    category: personal_assistant
+    tags: [tier1, personal]
+    timeout_s: 480
+    prompt: >-
+      My wife does freelance consulting in Italy (regime forfettario, coefficient 78%).
+      She invoiced €42,000 this year and paid €3,200 in INPS contributions so far.
+      Walk through estimated taxable base, substitutive tax at 15%, what she might
+      still owe, and a simple monthly set-aside rule. Show the math step by step.
+      Assume no VAT and no other deductions unless you state them explicitly.
+    pass:
+      min_response_chars: 300
+      response_contains_any: ["%", "€", "tax", "INPS"]
+      tools_not_any: [plan, team]
+
+  - id: pa-weekly-plan
+    name: Weekly family planning
+    category: personal_assistant
+    tags: [tier1, personal]
+    timeout_s: 360
+    prompt: >-
+      Help me plan next week. I work Mon–Fri 9–6, need 3 gym sessions, one date night,
+      grocery run, and 2 hours for taxes paperwork. Propose a realistic schedule with
+      buffers. No tools — conversational planning only.
+    pass:
+      min_response_chars: 250
+      tools_not_any: [plan, team]
+
+  - id: pa-research-compare
+    name: Compare two options (research style)
+    category: personal_assistant
+    tags: [tier2, personal]
+    timeout_s: 600
+    prompt: >-
+      Compare term life vs whole life insurance for a 35-year-old with a newborn:
+      cost, flexibility, when each makes sense, and 3 questions to ask a broker.
+      If you use the web, cite sources briefly. Otherwise reason from general knowledge
+      and say what you would verify online.
+    pass:
+      min_response_chars: 350
+
+  - id: pa-draft-letter
+    name: Draft a professional email
+    category: personal_assistant
+    tags: [tier1, personal]
+    timeout_s: 300
+    prompt: >-
+      Draft a polite email to a school principal requesting a meeting about my
+      child's learning support needs. Tone: firm but collaborative. Under 200 words.
+      Do not send anything — just write the draft.
+    pass:
+      min_response_chars: 150
+      tools_not_any: [plan, team]

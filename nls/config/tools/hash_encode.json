@@ -1,0 +1,82 @@
+{
+  "name": "hash_encode",
+  "description": "Hash, encode, and decode data. Supports MD5, SHA256, base64, URL-encoding, and JWT decoding.",
+  "version": "1.0.0",
+  "category": "think",
+  "hormone_affinity": "norepinephrine",
+  "base_effort": 0.1,
+  "learning_yield": "low",
+  "risk_level": "read",
+  "platform": "all",
+  "permissions": [],
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": [
+          "md5",
+          "sha256",
+          "base64_encode",
+          "base64_decode",
+          "url_encode",
+          "url_decode",
+          "jwt_decode"
+        ],
+        "description": "Action"
+      },
+      "input": {
+        "type": "string",
+        "description": "Input data"
+      }
+    },
+    "required": [
+      "action",
+      "input"
+    ]
+  },
+  "manual": {
+    "overview": "Use when you need to hash, encode, or decode data—checksums, base64, URL-encoding, or JWT inspection.",
+    "examples": [
+      {
+        "input": {
+          "action": "sha256",
+          "input": "hello world"
+        },
+        "description": "Compute SHA256 hash"
+      },
+      {
+        "input": {
+          "action": "base64_decode",
+          "input": "SGVsbG8gV29ybGQ="
+        },
+        "description": "Decode base64 string"
+      },
+      {
+        "input": {
+          "action": "jwt_decode",
+          "input": "eyJhbGc...token..."
+        },
+        "description": "Decode JWT payload (header + payload)"
+      }
+    ],
+    "tips": [
+      "Use sha256 for integrity checks; md5 is weaker and deprecated for security",
+      "jwt_decode only reads payload; it does not verify signature",
+      "url_encode handles spaces and special chars for query strings"
+    ],
+    "edge_cases": [
+      "Invalid base64 or malformed JWT will raise decode errors",
+      "jwt_decode reveals payload—never log tokens with secrets"
+    ],
+    "related_tools": [
+      "calculator",
+      "regex_tool",
+      "compress"
+    ]
+  },
+  "executor": {
+    "type": "shell",
+    "command": "python -c \"import hashlib, base64, urllib.parse, json; action='{{args.action}}'; inp='{{args.input}}'; r={'md5':lambda:hashlib.md5(inp.encode()).hexdigest(),'sha256':lambda:hashlib.sha256(inp.encode()).hexdigest(),'base64_encode':lambda:base64.b64encode(inp.encode()).decode(),'base64_decode':lambda:base64.b64decode(inp).decode(),'url_encode':lambda:urllib.parse.quote(inp),'url_decode':lambda:urllib.parse.unquote(inp),'jwt_decode':lambda:json.dumps(json.loads(base64.b64decode(inp.split('.')[1]+'==').decode()),indent=2)}[action](); print(r)\""
+  }
+}

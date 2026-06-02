@@ -1,0 +1,62 @@
+# Desktop / permissions / inference — mostly manual or environment-specific.
+scenarios:
+  - id: dsk-01
+    name: Capability scan onboarding
+    category: desktop
+    tags: [tier10, desktop, manual]
+    manual: true
+    prompt: >-
+      MANUAL QA: Run setup wizard capability scan. Profile tier should match hardware.
+    pass: {}
+
+  - id: dsk-02
+    name: LAN inference routing
+    category: desktop
+    tags: [tier10, desktop, manual]
+    manual: true
+    prompt: >-
+      MANUAL QA: Agent with self_lan Qwen on GX10 — chat works, compaction uses same adapter.
+      Run with --model pointing at LAN model and check runtime.log.
+    pass: {}
+
+  - id: dsk-03
+    name: Cloud orchestrator + local delegate
+    category: desktop
+    tags: [tier10, desktop, slow, manual]
+    manual: true
+    prompt: >-
+      MANUAL QA: Gemini orchestrator with local delegate model. Launch team and verify
+      both model routes in runtime.log.
+    pass:
+      tools_any: [team]
+
+  - id: dsk-04
+    name: Permission gate shell path
+    category: desktop
+    tags: [tier10, desktop, manual]
+    manual: true
+    prompt: >-
+      MANUAL QA: Run bash outside allowed workspace path. Expect permission prompt or
+      clean denial in desktop shell.
+    pass:
+      tools_any: [bash]
+
+  - id: dsk-05
+    name: Runtime restart recovery
+    category: desktop
+    tags: [tier10, desktop, manual]
+    manual: true
+    prompt: >-
+      MANUAL QA: request_restart after skill change. Agent recovers and tools reload.
+    pass:
+      tools_any: [request_restart]
+
+  - id: dsk-06
+    name: Multi-agent UI isolation
+    category: desktop
+    tags: [tier10, desktop, manual]
+    manual: true
+    prompt: >-
+      MANUAL QA: Open two agents in parallel in desktop UI. No cross-agent WS bleed;
+      separate workspaces.
+    pass: {}

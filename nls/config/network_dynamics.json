@@ -1,0 +1,32 @@
+{
+  "sn_switch_threshold": 0.45,
+  "sn_arousal_weight": 0.35,
+  "sn_delta_ratio_weight": 0.25,
+  "sn_prediction_error_weight": 0.25,
+  "sn_recency_weight": 0.15,
+  "sn_spike_amount": 0.30,
+  "sn_spike_decay": 0.08,
+
+  "ecn_engagement_weight": 0.60,
+  "ecn_recency_weight": 0.25,
+  "ecn_wm_salience_weight": 0.15,
+
+  "dmn_idle_weight": 0.40,
+  "dmn_low_engagement_weight": 0.30,
+  "dmn_frustration_weight": 0.20,
+  "dmn_low_arousal_weight": 0.10,
+
+  "anti_correlation_strength": 0.85,
+
+  "dmn_passive_threshold": 0.40,
+  "dmn_active_threshold": 0.60,
+  "dmn_min_idle_breaths": 3,
+  "dmn_active_min_idle_breaths": 8,
+
+  "transition_history_size": 20,
+  "activation_ema_alpha": 0.15,
+
+  "wake_ecn": 0.30,
+  "wake_sn": 0.30,
+  "wake_dmn": 0.30
+}

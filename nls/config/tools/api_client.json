@@ -1,0 +1,53 @@
+{
+  "name": "api_client",
+  "description": "Make HTTP requests to REST APIs. Supports GET, POST, PUT, DELETE with JSON body and custom headers.",
+  "version": "1.0.0",
+  "category": "sense",
+  "hormone_affinity": "norepinephrine",
+  "base_effort": 0.3,
+  "learning_yield": "high",
+  "risk_level": "write",
+  "platform": "all",
+  "permissions": ["network.outbound"],
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "url": { "type": "string", "description": "Request URL" },
+      "method": { "type": "string", "enum": ["GET", "POST", "PUT", "DELETE"], "default": "GET" },
+      "headers": { "type": "object", "description": "HTTP headers" },
+      "body": { "type": "object", "description": "JSON request body" },
+      "timeout": { "type": "integer", "description": "Timeout in seconds", "default": 30 }
+    },
+    "required": ["url"]
+  },
+
+  "manual": {
+    "overview": "Use when you need to call external REST APIs or web services (GET, POST, PUT, DELETE). Choose this over file-based tools when data lives on remote servers.",
+    "examples": [
+      {"input": {"url": "https://api.example.com/users", "method": "GET"}, "description": "Fetch a list of users from a REST API"},
+      {"input": {"url": "https://api.example.com/orders", "method": "POST", "headers": {"Content-Type": "application/json"}, "body": {"customer_id": "123", "items": ["item1"]}}, "description": "Create a new order with JSON body"}
+    ],
+    "tips": [
+      "Always set Content-Type to application/json when sending JSON bodies",
+      "Use appropriate HTTP methods: GET for reads, POST for creates, PUT for updates",
+      "Set reasonable timeouts for slow endpoints",
+      "Include Authorization headers when APIs require auth"
+    ],
+    "edge_cases": [
+      "Network failures may timeout; verify the URL and connectivity before retrying",
+      "Some APIs return non-JSON (HTML errors); check response parsing",
+      "Rate limits may apply; avoid hammering endpoints"
+    ],
+    "related_tools": ["json_transform", "spreadsheet", "sql_query"]
+  },
+
+  "executor": {
+    "type": "http",
+    "method": "{{args.method}}",
+    "url": "{{args.url}}",
+    "headers": "{{args.headers}}",
+    "body": "{{args.body}}",
+    "timeout": "{{args.timeout}}"
+  }
+}

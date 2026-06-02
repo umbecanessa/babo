@@ -1,0 +1,934 @@
+$bg-0: transparent;
+$bg-1: var(--glass-bg);
+$bg-2: var(--glass-bg);
+$bg-3: var(--overlay-2);
+$border: var(--glass-border);
+$text: var(--text-primary);
+$text-dim: var(--text-secondary);
+$text-muted: var(--text-muted);
+$accent: var(--accent-primary);
+$accent-hover: var(--accent-primary);
+$green: var(--accent-success);
+$amber: var(--accent-warn);
+$red: var(--accent-danger);
+
+.toggle-btn,
+.field-input,
+.field-select,
+.btn-secondary,
+.permission-row,
+.channel-card {
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  box-shadow: var(--shadow-glass);
+}
+
+:host {
+  display: flex;
+  height: calc(100vh - 48px);
+  width: 100%;
+  overflow: hidden;
+}
+
+.settings-page {
+  display: flex;
+  width: 100%;
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 24px;
+  gap: 32px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+// ── Sidebar ──────────────────────────────────────────────────
+.settings-nav {
+  width: 200px;
+  flex-shrink: 0;
+}
+
+.settings-title {
+  font-size: 20px;
+  font-weight: 600;
+  margin-bottom: 4px;
+  color: $text;
+}
+
+.settings-subtitle {
+  font-size: 12px;
+  color: $text-muted;
+  margin-bottom: 16px;
+  line-height: 1.4;
+}
+
+.nav-item {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  color: $text-dim;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 6px;
+  margin-bottom: 2px;
+  transition: background 0.15s;
+
+  &:hover {
+    background: $bg-3;
+    color: $text;
+  }
+
+  &.active {
+    background: rgba($accent, 0.1);
+    color: $accent;
+    font-weight: 500;
+  }
+}
+
+// ── Content ──────────────────────────────────────────────────
+.settings-content {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-right: 4px;
+}
+
+.section {
+  margin-bottom: 32px;
+}
+
+.section-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: $text;
+  margin-bottom: 4px;
+}
+
+.subsection-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: $text;
+  margin: 24px 0 8px;
+
+  &:first-of-type {
+    margin-top: 16px;
+  }
+}
+
+.section-desc {
+  color: $text-muted;
+  font-size: 14px;
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+// ── Toggle Group ─────────────────────────────────────────────
+.toggle-group {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 20px;
+
+  &.compact {
+    gap: 4px;
+  }
+}
+
+.toggle-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: $bg-2;
+  border: 2px solid $border;
+  color: $text-dim;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: left;
+
+  &:hover {
+    border-color: var(--glass-border);
+    color: $text;
+  }
+
+  &.active {
+    border-color: $accent;
+    background: rgba($accent, 0.05);
+    color: $text;
+  }
+
+  &.small {
+    padding: 8px 16px;
+    font-size: 13px;
+    flex: none;
+  }
+}
+
+.toggle-icon {
+  color: $text-muted;
+  flex-shrink: 0;
+
+  .active & {
+    color: $accent;
+  }
+}
+
+.toggle-label {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.toggle-hint {
+  font-size: 12px;
+  color: $text-muted;
+  margin-top: 2px;
+}
+
+// ── Fields ───────────────────────────────────────────────────
+.field-group {
+  margin-bottom: 16px;
+}
+
+.field-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: $text-dim;
+  margin-bottom: 6px;
+}
+
+.field-input {
+  width: 100%;
+  background: $bg-1;
+  border: 1px solid $border;
+  color: $text;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color 0.15s;
+
+  &:focus {
+    border-color: $accent;
+  }
+
+  &.short {
+    width: 120px;
+  }
+}
+
+.field-select {
+  width: 100%;
+  background: $bg-1;
+  border: 1px solid $border;
+  color: $text;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 14px;
+  outline: none;
+  appearance: none;
+  cursor: pointer;
+
+  &:focus {
+    border-color: $accent;
+  }
+
+  option {
+    background: $bg-1;
+    color: $text;
+  }
+}
+
+.field-hint {
+  display: block;
+  font-size: 12px;
+  color: $text-muted;
+  margin-top: 4px;
+}
+
+.field-row {
+  display: flex;
+  gap: 16px;
+}
+
+.input-with-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  .field-input {
+    flex: 1;
+  }
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+
+  &.connected {
+    background: $green;
+    box-shadow: 0 0 6px rgba($green, 0.5);
+  }
+
+  &.disconnected {
+    background: $red;
+  }
+
+  &.checking {
+    background: $amber;
+    animation: pulse 1s ease-in-out infinite;
+  }
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+// ── Buttons ──────────────────────────────────────────────────
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 20px;
+  background: $accent;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.15s;
+
+  &:hover {
+    background: $accent-hover;
+    text-decoration: none;
+  }
+
+  &:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 16px;
+  background: $bg-2;
+  color: $text;
+  border: 1px solid $border;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+
+  &:hover {
+    background: $bg-3;
+    border-color: var(--glass-border);
+  }
+}
+
+.save-row {
+  padding-top: 16px;
+  border-top: 1px solid $border;
+}
+
+// ── Cloud API Key Card ──────────────────────────────────────
+.cloud-key-section {
+  margin-bottom: 16px;
+}
+
+.api-key-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  background: $bg-2;
+  border: 1px solid $border;
+  border-radius: 10px;
+  margin-top: 8px;
+  margin-bottom: 6px;
+  transition: border-color 0.15s;
+
+  &.active {
+    border-color: rgba($green, 0.3);
+    background: rgba($green, 0.03);
+  }
+
+  &.loading {
+    border-color: rgba($amber, 0.3);
+    background: rgba($amber, 0.03);
+  }
+
+  &.empty {
+    border-color: rgba($red, 0.2);
+    background: rgba($red, 0.03);
+  }
+}
+
+.key-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.key-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+  color: $text-dim;
+}
+
+.key-name {
+  font-weight: 600;
+  color: $text;
+  font-size: 14px;
+}
+
+.key-prefix {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  color: $text-muted;
+}
+
+.key-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+
+  &.active {
+    background: rgba($green, 0.12);
+    color: $green;
+  }
+}
+
+.btn-generate {
+  padding: 7px 14px;
+  background: $accent;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+  white-space: nowrap;
+
+  &:hover {
+    background: $accent-hover;
+  }
+}
+
+.hint-link {
+  color: $accent;
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+// ── Channels ─────────────────────────────────────────────────
+
+.channel-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.channel-card {
+  background: $bg-2;
+  border: 1px solid $border;
+  border-radius: 12px;
+  padding: 20px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+
+  &:hover {
+    border-color: var(--glass-border);
+  }
+
+  &.connected {
+    border-color: rgba($green, 0.3);
+  }
+}
+
+.channel-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.channel-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+
+  &.telegram {
+    background: rgba(#0088cc, 0.12);
+    color: #0088cc;
+  }
+  &.whatsapp {
+    background: rgba(#25d366, 0.12);
+    color: #25d366;
+  }
+  &.email {
+    background: rgba($accent, 0.12);
+    color: $accent;
+  }
+  &.google-workspace {
+    background: rgba(#4285F4, 0.12);
+    color: #4285F4;
+  }
+}
+
+.channel-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.channel-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: $text;
+}
+
+.channel-status {
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+
+  &.connected { color: $green; }
+  &.disconnected { color: $text-muted; }
+}
+
+.channel-desc {
+  font-size: 13px;
+  color: $text-dim;
+  line-height: 1.5;
+  margin-bottom: 16px;
+}
+
+.btn-channel-connect,
+.btn-channel-manage {
+  width: 100%;
+  padding: 9px 0;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.btn-channel-connect {
+  background: $accent;
+  color: white;
+
+  &:hover { background: $accent-hover; }
+}
+
+.btn-channel-manage {
+  background: $bg-3;
+  color: $text-dim;
+  border: 1px solid $border;
+
+  &:hover {
+    background: var(--bg-secondary);
+    color: $text;
+  }
+}
+
+// ── Email Alias Display ──────────────────────────────────────
+
+.email-alias-display {
+  padding: 14px 16px;
+  background: rgba($green, 0.04);
+  border: 1px solid rgba($green, 0.2);
+  border-radius: 10px;
+}
+
+.alias-label {
+  display: block;
+  font-size: 12px;
+  color: $text-muted;
+  margin-bottom: 6px;
+  font-weight: 500;
+}
+
+.alias-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.alias-value {
+  flex: 1;
+  font-size: 14px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  color: $green;
+  background: rgba($green, 0.06);
+  padding: 6px 10px;
+  border-radius: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.btn-copy {
+  background: none;
+  border: 1px solid rgba($green, 0.2);
+  border-radius: 6px;
+  padding: 6px 8px;
+  color: $text-dim;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.15s;
+
+  &:hover {
+    background: rgba($green, 0.08);
+    color: $green;
+    border-color: rgba($green, 0.4);
+  }
+}
+
+.alias-hint {
+  display: block;
+  font-size: 12px;
+  color: $text-muted;
+  margin-top: 8px;
+  line-height: 1.5;
+}
+
+// ── Desktop settings ─────────────────────────────────────────
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+  margin-bottom: 12px;
+}
+
+.chip {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--overlay-4);
+  background: var(--overlay-1);
+  color: $text-dim;
+  font-size: 12px;
+  cursor: pointer;
+
+  &.active {
+    border-color: var(--text-muted);
+    background: var(--accent-primary-glow);
+    color: $text;
+  }
+
+  &.recommended:not(.active)::after {
+    content: ' · suggested';
+    font-size: 10px;
+    color: $accent;
+  }
+}
+
+.info-pill {
+  font-size: 13px;
+  color: $text-dim;
+  margin: 8px 0 16px;
+
+  strong {
+    color: $text;
+    font-weight: 500;
+  }
+}
+
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+
+  &.stacked {
+    flex-direction: column;
+    align-items: stretch;
+
+    button {
+      width: 100%;
+    }
+  }
+}
+
+.status-text {
+  font-size: 12px;
+  &.ok { color: $green; }
+  &.fail { color: $red; }
+}
+
+.status-card {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: $bg-2;
+  border: 1px solid $border;
+  margin-bottom: 16px;
+}
+
+.status-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: $text;
+}
+
+.status-meta {
+  font-size: 12px;
+  color: $text-muted;
+  margin-top: 2px;
+}
+
+.status-error {
+  font-size: 12px;
+  color: $red;
+  margin-top: 4px;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-top: 5px;
+  flex-shrink: 0;
+  background: $text-muted;
+
+  &.running {
+    background: $green;
+    box-shadow: 0 0 8px rgba($green, 0.5);
+  }
+
+  &.stopped {
+    background: $red;
+  }
+}
+
+.log-view {
+  margin-top: 12px;
+  padding: 12px;
+  max-height: 240px;
+  overflow: auto;
+  font-size: 11px;
+  line-height: 1.45;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  background: $bg-0;
+  border: 1px solid $border;
+  border-radius: 8px;
+  color: $text-dim;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.profile-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.profile-card {
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid $border;
+  background: $bg-2;
+}
+
+.profile-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.profile-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: $text;
+}
+
+.profile-badge {
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba($green, 0.15);
+  color: $green;
+}
+
+.profile-desc {
+  font-size: 12px;
+  color: $text-muted;
+  margin: 0 0 10px;
+}
+
+.grant-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 12px;
+  font-size: 11px;
+  color: $text-muted;
+
+  li {
+    padding: 2px 0;
+    &.granted { color: $text-dim; }
+  }
+}
+
+.btn-secondary.small {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.btn-secondary.danger {
+  color: $red;
+  border-color: rgba($red, 0.3);
+
+  &:hover {
+    background: rgba($red, 0.08);
+  }
+}
+
+// ── Utility ──────────────────────────────────────────────────
+.text-green { color: $green; }
+.text-amber { color: $amber; }
+.text-red { color: $red; }
+
+.info-card {
+  padding: 14px 16px;
+  margin-bottom: 20px;
+  border: 1px solid $border;
+  border-radius: 8px;
+  background: $bg-1;
+
+  &.babo-provided {
+    border-color: rgba($green, 0.25);
+  }
+
+  &.prereq {
+    border-color: rgba($amber, 0.35);
+  }
+
+  &.localhost-webhook {
+    border-color: rgba($red, 0.4);
+    background: rgba($red, 0.06);
+  }
+}
+
+.setup-steps {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  color: $text-dim;
+  font-size: 13px;
+  line-height: 1.55;
+
+  li + li {
+    margin-top: 6px;
+  }
+}
+
+.checklist {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  color: $text-dim;
+  font-size: 13px;
+}
+
+.webhook-hint code,
+.field-hint code {
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.info-pill.ok {
+  color: $green;
+  border-color: rgba($green, 0.3);
+}
+
+.inline-link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  color: $accent;
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+}
+
+.billing-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.usage-block {
+  margin: 16px 0 20px;
+}
+
+.usage-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.usage-bar {
+  height: 8px;
+  border-radius: 4px;
+  background: $bg-3;
+  overflow: hidden;
+}
+
+.usage-fill {
+  height: 100%;
+  background: $accent;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+
+  &.warn {
+    background: $amber;
+  }
+
+  &.full {
+    background: $red;
+  }
+}
+
+.refund-note {
+  margin-top: 20px;
+  font-size: 12px;
+  color: $text-muted;
+}

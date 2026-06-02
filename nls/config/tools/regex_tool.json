@@ -1,0 +1,85 @@
+{
+  "name": "regex_tool",
+  "description": "Test, match, and apply regular expressions against text or files. Useful for pattern extraction and text transformation.",
+  "version": "1.0.0",
+  "category": "sense",
+  "hormone_affinity": "norepinephrine",
+  "base_effort": 0.2,
+  "learning_yield": "medium",
+  "risk_level": "read",
+  "platform": "all",
+  "permissions": [
+    "filesystem.read"
+  ],
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "pattern": {
+        "type": "string",
+        "description": "Regular expression pattern"
+      },
+      "text": {
+        "type": "string",
+        "description": "Text to match against (or file path if action=file)"
+      },
+      "action": {
+        "type": "string",
+        "enum": [
+          "match",
+          "findall",
+          "replace",
+          "file"
+        ],
+        "default": "findall"
+      },
+      "replacement": {
+        "type": "string",
+        "description": "Replacement string (for replace action)"
+      }
+    },
+    "required": [
+      "pattern",
+      "text"
+    ]
+  },
+  "manual": {
+    "overview": "Use when you need to match, extract, or replace patterns in text. Essential for parsing logs, URLs, or structured data.",
+    "examples": [
+      {
+        "input": {
+          "pattern": "\\d{3}-\\d{3}-\\d{4}",
+          "text": "Call 555-123-4567 for info",
+          "action": "findall"
+        },
+        "description": "Extract US phone numbers"
+      },
+      {
+        "input": {
+          "pattern": "(\\w+)@(\\w+\\.\\w+)",
+          "text": "Contact admin@example.com",
+          "action": "replace",
+          "replacement": "[\\1 at \\2]"
+        },
+        "description": "Obfuscate email addresses"
+      }
+    ],
+    "tips": [
+      "Test patterns on small samples before running on large text",
+      "Use findall for extraction, replace for transformation",
+      "Escape special regex chars: . * + ? [ ] ( ) { } | \\"
+    ],
+    "edge_cases": [
+      "Catastrophic backtracking can hang on complex patterns with long input",
+      "Replace with capture groups uses \\1 syntax; backslashes need escaping in JSON"
+    ],
+    "related_tools": [
+      "pdf_tools",
+      "hash_encode",
+      "json_transform"
+    ]
+  },
+  "executor": {
+    "type": "shell",
+    "command": "python -c \"import re, json, sys; pattern=r'{{args.pattern}}'; text='''{{args.text}}'''; matches=re.findall(pattern, text); print(json.dumps(matches, indent=2))\""
+  }
+}

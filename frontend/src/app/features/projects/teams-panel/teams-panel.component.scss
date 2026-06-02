@@ -1,0 +1,620 @@
+$glass-bg: var(--glass-bg);
+$glass-border: var(--glass-border);
+$glass-blur: blur(var(--glass-blur));
+$radius: 12px;
+$indigo: var(--accent-primary);
+$green: var(--accent-success);
+$amber: var(--accent-warn);
+$red: var(--accent-danger);
+$slate: var(--text-muted);
+
+.waves-dashboard {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.empty-state {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 12px;
+  padding: 32px 0;
+}
+
+.empty-icon {
+  font-size: 16px;
+  opacity: 0.4;
+}
+
+.wave-attempts-badge {
+  font-size: 10px;
+  color: $amber;
+  margin-left: 6px;
+}
+
+.wave-attempt {
+  border-top: 1px solid var(--overlay-2);
+  padding: 8px 10px 4px;
+
+  &.attempt-collapsed .member-tiles {
+    display: none;
+  }
+}
+
+.attempt-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 0 8px;
+  background: none;
+  border: none;
+  color: $slate;
+  font-size: 11px;
+  cursor: pointer;
+  text-align: left;
+
+  &:hover {
+    color: var(--text-primary);
+  }
+}
+
+.attempt-label {
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.attempt-meta {
+  flex: 1;
+  opacity: 0.7;
+  font-family: ui-monospace, monospace;
+  font-size: 10px;
+}
+
+.attempt-chevron {
+  opacity: 0.5;
+}
+
+.tile-delegate {
+  font-size: 10px;
+  font-family: ui-monospace, monospace;
+  color: $indigo;
+  flex-shrink: 0;
+}
+
+.tile-step-id {
+  font-size: 9px;
+  font-family: ui-monospace, monospace;
+  color: var(--text-muted);
+  background: var(--overlay-2);
+  padding: 1px 5px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.tile-status-badge {
+  font-size: 9px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+
+  &.badge-running {
+    color: $indigo;
+    background: rgba($indigo, 0.12);
+  }
+
+  &.badge-done {
+    color: $green;
+    background: rgba($green, 0.12);
+  }
+
+  &.badge-failed,
+  &.badge-cancelled {
+    color: $red;
+    background: rgba($red, 0.12);
+  }
+
+  &.badge-pending {
+    color: $slate;
+    background: var(--overlay-2);
+  }
+}
+
+.tile-stats-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 2px 8px 6px 28px;
+  font-size: 10px;
+  color: var(--text-muted);
+
+  strong {
+    color: var(--text-secondary);
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-weight: 600;
+  }
+}
+
+.tile-hint-ack {
+  font-size: 10px;
+  color: $amber;
+  margin: 0 0 6px;
+  font-style: italic;
+}
+
+.tile-recent {
+  margin-bottom: 6px;
+}
+
+.tile-recent-label {
+  display: block;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.tile-recent-list {
+  margin: 0;
+  padding: 0 0 0 14px;
+  font-size: 10px;
+  color: var(--text-muted);
+  line-height: 1.4;
+  max-height: 72px;
+  overflow-y: auto;
+
+  li {
+    margin-bottom: 2px;
+    word-break: break-word;
+  }
+}
+
+// ── Wave Card ────────────────────────────────────
+
+.wave-card {
+  --accent: #{$indigo};
+  background: $glass-bg;
+  backdrop-filter: $glass-blur;
+  border: 1px solid $glass-border;
+  border-radius: $radius;
+  overflow: hidden;
+  animation: wave-in 0.3s ease-out both;
+  transition: border-color 0.2s, box-shadow 0.2s;
+
+  &:hover {
+    border-color: var(--overlay-3);
+    box-shadow: 0 4px 20px -4px rgba(0, 0, 0, 0.3);
+  }
+
+  &.wave-completed {
+    opacity: 0.7;
+    &:hover { opacity: 0.85; }
+  }
+
+  &.wave-planned {
+    opacity: 0.6;
+    border-style: dashed;
+    &:hover { opacity: 0.75; }
+  }
+}
+
+@keyframes wave-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+// ── Wave Header ──────────────────────────────────
+
+.wave-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px 10px 0;
+  min-height: 40px;
+}
+
+.wave-accent-bar {
+  width: 3px;
+  align-self: stretch;
+  background: var(--accent);
+  border-radius: 0 2px 2px 0;
+  flex-shrink: 0;
+}
+
+.wave-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.wave-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.wave-team-name {
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.wave-stats {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.wave-stat {
+  font-size: 11px;
+  font-weight: 600;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  padding: 2px 8px;
+  border-radius: 6px;
+  white-space: nowrap;
+
+  &--live {
+    color: $indigo;
+    background: rgba($indigo, 0.1);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  &--done {
+    color: $green;
+    background: rgba($green, 0.1);
+  }
+
+  &--fail {
+    color: $red;
+    background: rgba($red, 0.1);
+  }
+
+  &--planned {
+    color: var(--text-muted);
+    background: var(--overlay-1);
+    font-weight: 500;
+    font-family: inherit;
+    text-transform: uppercase;
+    font-size: 9px;
+    letter-spacing: 0.5px;
+  }
+
+  &--unlaunched {
+    color: var(--accent-warn);
+    background: rgba(251, 191, 36, 0.12);
+    font-family: inherit;
+    font-size: 10px;
+    letter-spacing: 0.02em;
+    text-transform: none;
+  }
+
+  &--time {
+    color: var(--text-muted);
+    background: transparent;
+    padding: 0;
+    font-weight: 500;
+  }
+}
+
+.live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: $indigo;
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { box-shadow: 0 0 4px rgba($indigo, 0.4); opacity: 1; }
+  50% { box-shadow: 0 0 10px rgba($indigo, 0.8); opacity: 0.7; }
+}
+
+.wave-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.wave-action-btn {
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--overlay-3);
+  background: var(--overlay-1);
+  color: var(--text-muted);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+  line-height: 1;
+
+  &:hover { background: var(--overlay-3); color: var(--text-primary); }
+
+  &--primary {
+    border-color: rgba($indigo, 0.2);
+    color: $indigo;
+    &:hover { background: rgba($indigo, 0.12); }
+  }
+
+  &--danger {
+    border-color: rgba($red, 0.15);
+    color: $red;
+    &:hover { background: rgba($red, 0.1); }
+  }
+}
+
+// ── Progress Track ───────────────────────────────
+
+.wave-progress-track {
+  display: flex;
+  height: 3px;
+  gap: 1px;
+  margin: 0 14px;
+}
+
+.wave-progress-seg {
+  height: 100%;
+  border-radius: 1px;
+  transition: background 0.3s;
+
+  &.seg-done { background: $green; }
+  &.seg-running { background: $indigo; animation: seg-pulse 1.5s ease-in-out infinite; }
+  &.seg-failed { background: $red; }
+  &.seg-cancelled { background: var(--overlay-3); }
+  &.seg-pending { background: var(--overlay-3); }
+}
+
+@keyframes seg-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+// ── Member Tiles ─────────────────────────────────
+
+.member-tiles {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 6px 10px 8px;
+}
+
+.member-tile {
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.12s;
+
+  &:hover { background: var(--overlay-1); }
+
+  &.tile-running { border-left: 2px solid $indigo; }
+  &.tile-done { border-left: 2px solid $green; }
+  &.tile-failed { border-left: 2px solid $red; }
+  &.tile-cancelled { border-left: 2px solid var(--overlay-3); }
+  &.tile-pending { border-left: 2px solid var(--overlay-3); }
+}
+
+.tile-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  min-height: 28px;
+}
+
+.tile-icon {
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  flex-shrink: 0;
+}
+
+.tile-spinner {
+  width: 10px;
+  height: 10px;
+  border: 1.5px solid rgba($indigo, 0.25);
+  border-top-color: $indigo;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.tile-task {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.tile-metrics {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.tile-metric {
+  font-size: 9px;
+  color: var(--text-muted);
+  background: var(--overlay-2);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  white-space: nowrap;
+
+  &--time {
+    color: var(--accent-primary);
+    background: rgba($indigo, 0.08);
+  }
+}
+
+// ── Tile Detail (expanded) ───────────────────────
+
+.tile-detail {
+  padding: 4px 8px 8px 28px;
+  animation: detail-in 0.15s ease-out;
+}
+
+@keyframes detail-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.tile-result {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.45;
+  margin: 0 0 6px;
+  max-height: 80px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.tile-detail-stats {
+  display: flex;
+  gap: 12px;
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+
+  strong {
+    color: var(--text-secondary);
+    font-family: 'SF Mono', 'Fira Code', monospace;
+  }
+}
+
+.tile-hint-btn {
+  padding: 3px 10px;
+  border-radius: 5px;
+  border: 1px solid rgba($indigo, 0.2);
+  background: rgba($indigo, 0.06);
+  color: $indigo;
+  font-size: 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+  margin-top: 4px;
+
+  &:hover { background: rgba($indigo, 0.14); }
+}
+
+// ── Hint Input ───────────────────────────────────
+
+.hint-row {
+  display: flex;
+  gap: 4px;
+  padding: 4px 8px 6px;
+}
+
+.hint-input {
+  flex: 1;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba($indigo, 0.2);
+  background: var(--surface-inset-strong);
+  color: var(--text-primary);
+  font-size: 11px;
+  outline: none;
+
+  &::placeholder { color: var(--text-muted); }
+  &:focus { border-color: rgba($indigo, 0.4); }
+}
+
+.hint-send {
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: none;
+  background: $indigo;
+  color: white;
+  font-size: 12px;
+  cursor: pointer;
+  &:hover { background: var(--accent-primary); }
+}
+
+.hint-cancel {
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  line-height: 1;
+  &:hover { color: $red; }
+}
+
+// ── Step Tiles (planned waves) ───────────────────
+
+.step-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 14px 10px;
+}
+
+.step-tile {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--overlay-1);
+  border: 1px solid var(--overlay-1);
+}
+
+.step-icon {
+  font-size: 9px;
+  flex-shrink: 0;
+}
+
+.step-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.wave-hint {
+  font-size: 10px;
+  color: var(--accent-warn);
+  padding: 0 8px;
+  max-width: 200px;
+  text-align: right;
+}
+
+.unlaunched-banner {
+  margin: 8px 12px 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  color: var(--accent-warn);
+  background: rgba(251, 191, 36, 0.08);
+  border: 1px solid rgba(251, 191, 36, 0.2);
+
+  code {
+    font-size: 11px;
+    color: var(--accent-warn);
+  }
+}

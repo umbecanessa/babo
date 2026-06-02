@@ -1,0 +1,41 @@
+<!-- Side panel mode — only rendered when expanded (*ngIf in parent) -->
+<div class="browser-panel">
+  <div class="browser-panel-toolbar">
+    <span class="browser-panel-icon">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <line x1="2" y1="12" x2="22" y2="12"/>
+        <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+      </svg>
+    </span>
+    <div class="browser-panel-url-bar">
+      <span class="browser-panel-spinner" *ngIf="isLoading">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2.5" stroke-linecap="round">
+          <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+        </svg>
+      </span>
+      <span class="browser-panel-title" *ngIf="pageTitle">{{ pageTitle }} —</span>
+      <span class="browser-panel-url">{{ pageUrl }}</span>
+    </div>
+    <button class="browser-panel-close" (click)="onCollapse()" title="Close browser panel">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="6" x2="6" y2="18"/>
+        <line x1="6" y1="6" x2="18" y2="18"/>
+      </svg>
+    </button>
+  </div>
+  <div class="browser-panel-content">
+    <webview #webviewRef
+             src="about:blank"
+             partition="persist:nls-agent"
+             useragent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+             class="browser-webview">
+    </webview>
+    <div class="browser-panel-error" *ngIf="hasError">
+      {{ errorMessage }}
+    </div>
+  </div>
+</div>

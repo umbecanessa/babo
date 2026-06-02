@@ -1,0 +1,47 @@
+{
+  "name": "local_db",
+  "description": "Query local SQLite databases. Run SELECT queries to read data, or CREATE/INSERT to modify.",
+  "version": "1.0.0",
+  "category": "sense",
+  "hormone_affinity": "norepinephrine",
+  "base_effort": 0.3,
+  "learning_yield": "high",
+  "risk_level": "read",
+  "platform": "desktop",
+  "permissions": ["filesystem.read"],
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "db_path": { "type": "string", "description": "Path to SQLite database file" },
+      "query": { "type": "string", "description": "SQL query to execute" },
+      "limit": { "type": "integer", "description": "Max rows to return", "default": 100 }
+    },
+    "required": ["db_path", "query"]
+  },
+
+  "manual": {
+    "overview": "Use when you need to query or modify a local SQLite database file. Best for structured data stored in .db or .sqlite files.",
+    "examples": [
+      {"input": {"db_path": "/data/app.db", "query": "SELECT * FROM users LIMIT 5"}, "description": "Fetch first 5 users from SQLite"},
+      {"input": {"db_path": "/data/app.db", "query": "INSERT INTO logs (id, msg) VALUES (1, 'test')"}, "description": "Insert a row into the logs table"}
+    ],
+    "tips": [
+      "Prefer SELECT for reads; use CREATE/INSERT only when you need to modify",
+      "Sanitize user input to avoid SQL injection; use parameterized queries when possible",
+      "Use LIMIT in SELECT to cap result size",
+      "db_path must be an absolute or valid relative path to the .db file"
+    ],
+    "edge_cases": [
+      "Database may be locked if another process has it open",
+      "Invalid SQL or missing tables will raise errors",
+      "Schema differences may cause type mismatches in results"
+    ],
+    "related_tools": ["sql_query", "spreadsheet", "json_transform"]
+  },
+
+  "executor": {
+    "type": "shell",
+    "command": "python -c \"import sqlite3, json, sys; conn=sqlite3.connect('{{args.db_path}}'); conn.row_factory=sqlite3.Row; cur=conn.execute('{{args.query}}'); rows=[dict(r) for r in cur.fetchmany({{args.limit}})]; print(json.dumps(rows, indent=2, default=str)); conn.close()\""
+  }
+}

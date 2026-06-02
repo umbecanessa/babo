@@ -1,0 +1,92 @@
+{
+  "name": "github_repo",
+  "description": "Create and manage a GitHub repository using the gh CLI",
+  "category": "devops",
+  "difficulty": "basic",
+  "prerequisites": [
+    "gh CLI installed (GitHub CLI)",
+    "gh authenticated (gh auth login)"
+  ],
+  "steps": [
+    {
+      "description": "Verify gh CLI is available and authenticated",
+      "tool": "bash",
+      "example_params": {
+        "command": "gh auth status"
+      },
+      "expected_outcome": "Logged in to github.com as USERNAME",
+      "error_patterns": [
+        "not logged in",
+        "gh: command not found"
+      ],
+      "recovery_hints": [
+        "Install gh: https://cli.github.com/",
+        "Run: gh auth login"
+      ]
+    },
+    {
+      "description": "Create a new repository",
+      "tool": "bash",
+      "example_params": {
+        "command": "gh repo create my-project --public --clone --add-readme"
+      },
+      "expected_outcome": "Created repository USERNAME/my-project on GitHub",
+      "error_patterns": [
+        "Name already exists on this account",
+        "could not create repository"
+      ],
+      "recovery_hints": [
+        "Use a different repository name",
+        "Check gh auth status for permissions"
+      ]
+    },
+    {
+      "description": "Create project files",
+      "tool": "write",
+      "example_params": {
+        "path": "my-project/README.md",
+        "content": "# My Project\nCreated by NLS agent.\n"
+      },
+      "expected_outcome": "README file created",
+      "error_patterns": [],
+      "recovery_hints": []
+    },
+    {
+      "description": "Commit and push",
+      "tool": "bash",
+      "example_params": {
+        "command": "cd my-project && git add -A && git commit -m \"Initial setup\" && git push"
+      },
+      "expected_outcome": "Changes pushed to GitHub",
+      "error_patterns": [],
+      "recovery_hints": []
+    },
+    {
+      "description": "Create an issue",
+      "tool": "bash",
+      "example_params": {
+        "command": "cd my-project && gh issue create --title \"Setup CI/CD\" --body \"Set up GitHub Actions for testing\""
+      },
+      "expected_outcome": "Issue created with URL",
+      "error_patterns": [],
+      "recovery_hints": []
+    },
+    {
+      "description": "Create a pull request",
+      "tool": "bash",
+      "example_params": {
+        "command": "cd my-project && git checkout -b feature/initial-setup && git push -u origin feature/initial-setup && gh pr create --title \"Initial project setup\" --body \"Basic project structure\""
+      },
+      "expected_outcome": "Pull request created with URL",
+      "error_patterns": [],
+      "recovery_hints": []
+    }
+  ],
+  "learning_signals": [
+    "gh repo create: --public/--private, --clone, --add-readme flags",
+    "gh issue create: --title, --body, --label, --assignee flags",
+    "gh pr create: --title, --body, --base, --head flags",
+    "gh CLI authenticates via: gh auth login (browser or token)",
+    "List repos: gh repo list, List issues: gh issue list, List PRs: gh pr list"
+  ]
+}

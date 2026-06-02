@@ -1,0 +1,47 @@
+{
+  "name": "diff_patch",
+  "description": "Generate unified diffs between files or apply patches. Useful for code review and incremental edits.",
+  "version": "1.0.0",
+  "category": "sense",
+  "hormone_affinity": "norepinephrine",
+  "base_effort": 0.2,
+  "learning_yield": "medium",
+  "risk_level": "read",
+  "platform": "desktop",
+  "permissions": ["filesystem.read"],
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "action": { "type": "string", "enum": ["diff", "apply"], "description": "Action to perform" },
+      "file_a": { "type": "string", "description": "First file (original)" },
+      "file_b": { "type": "string", "description": "Second file (modified)" },
+      "patch": { "type": "string", "description": "Patch content (for apply action)" }
+    },
+    "required": ["action"]
+  },
+
+  "manual": {
+    "overview": "Use diff_patch to compare two files and see exactly what changed, line by line. Produces unified diff format. Useful for code review and understanding changes before committing.",
+    "examples": [
+      { "description": "Compare original and modified file", "input": { "action": "diff", "file_a": "/app/main.py.bak", "file_b": "/app/main.py" } },
+      { "description": "Review changes before git commit", "input": { "action": "diff", "file_a": "/app/old_version.py", "file_b": "/app/new_version.py" } }
+    ],
+    "tips": [
+      "Use this before committing to review exactly what changed.",
+      "Lines starting with + are additions, - are removals.",
+      "For git-tracked changes, prefer 'git diff' instead."
+    ],
+    "edge_cases": [
+      "Both files must exist for diff action.",
+      "Binary files will produce meaningless output.",
+      "Very large files may produce very long diffs."
+    ],
+    "related_tools": ["git", "file_read", "file_edit"]
+  },
+
+  "executor": {
+    "type": "shell",
+    "command": "python -c \"import difflib; a=open('{{args.file_a}}').readlines(); b=open('{{args.file_b}}').readlines(); diff=difflib.unified_diff(a,b,fromfile='{{args.file_a}}',tofile='{{args.file_b}}'); print(''.join(diff))\""
+  }
+}

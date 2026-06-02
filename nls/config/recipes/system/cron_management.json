@@ -1,0 +1,75 @@
+{
+  "name": "cron_management",
+  "description": "Manage cron jobs for scheduled task execution",
+  "category": "system",
+  "difficulty": "basic",
+  "prerequisites": [
+    "cron/crontab available (Linux/macOS)"
+  ],
+  "steps": [
+    {
+      "description": "List current cron jobs",
+      "tool": "bash",
+      "example_params": {
+        "command": "crontab -l 2>/dev/null || echo 'No crontab configured'"
+      },
+      "expected_outcome": "Current cron jobs listed or 'no crontab' message",
+      "error_patterns": [],
+      "recovery_hints": []
+    },
+    {
+      "description": "Create a script to run on schedule",
+      "tool": "write",
+      "example_params": {
+        "path": "health_check.sh",
+        "content": "#!/bin/bash\nDATE=$(date '+%Y-%m-%d %H:%M:%S')\nSTATUS=$(curl -s -o /dev/null -w '%{http_code}' https://example.com)\necho \"$DATE - Status: $STATUS\" >> /tmp/health_check.log\n"
+      },
+      "expected_outcome": "Health check script created",
+      "error_patterns": [],
+      "recovery_hints": []
+    },
+    {
+      "description": "Make the script executable",
+      "tool": "bash",
+      "example_params": {
+        "command": "chmod +x health_check.sh"
+      },
+      "expected_outcome": "Script is now executable",
+      "error_patterns": [],
+      "recovery_hints": []
+    },
+    {
+      "description": "Add a cron job to run every 5 minutes",
+      "tool": "bash",
+      "example_params": {
+        "command": "(crontab -l 2>/dev/null; echo '*/5 * * * * /path/to/health_check.sh') | crontab -"
+      },
+      "expected_outcome": "Cron job added",
+      "error_patterns": [
+        "Permission denied",
+        "crontab: command not found"
+      ],
+      "recovery_hints": [
+        "Run with sudo if needed",
+        "On some systems use systemd timers instead"
+      ]
+    },
+    {
+      "description": "Verify the cron job was added",
+      "tool": "bash",
+      "example_params": {
+        "command": "crontab -l"
+      },
+      "expected_outcome": "Shows the health_check cron entry",
+      "error_patterns": [],
+      "recovery_hints": []
+    }
+  ],
+  "learning_signals": [
+    "Cron format: minute hour day-of-month month day-of-week command",
+    "*/5 = every 5 units, 0 = at zero (e.g., 0 * = at minute 0 of every hour)",
+    "List jobs: crontab -l, Edit: crontab -e, Remove all: crontab -r",
+    "Append safely: (crontab -l; echo 'new job') | crontab -",
+    "Cron logs: /var/log/syslog or journalctl -u cron"
+  ]
+}

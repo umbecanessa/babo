@@ -1,0 +1,48 @@
+{
+  "name": "json_transform",
+  "description": "Parse, query, and transform JSON data. Supports JSONPath queries, formatting, merging, and schema validation.",
+  "version": "1.0.0",
+  "category": "sense",
+  "hormone_affinity": "norepinephrine",
+  "base_effort": 0.2,
+  "learning_yield": "medium",
+  "risk_level": "read",
+  "platform": "all",
+  "permissions": ["filesystem.read"],
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "action": { "type": "string", "enum": ["format", "query", "merge", "validate"], "description": "Transform action" },
+      "data": { "type": "string", "description": "JSON string or file path" },
+      "query": { "type": "string", "description": "JSONPath expression (for query)" },
+      "schema": { "type": "object", "description": "JSON Schema (for validate)" }
+    },
+    "required": ["action", "data"]
+  },
+
+  "manual": {
+    "overview": "Use when you need to parse, query, transform, or validate JSON. Supports JSONPath, formatting, merging, and schema validation.",
+    "examples": [
+      {"input": {"action": "format", "data": "{\"a\":1,\"b\":2}"}, "description": "Pretty-print JSON for readability"},
+      {"input": {"action": "query", "data": "/data/config.json", "query": "$.users[*].name"}, "description": "Extract all user names via JSONPath"}
+    ],
+    "tips": [
+      "Use action=format for pretty-printing; action=query for JSONPath extraction",
+      "Data can be a JSON string or file path",
+      "Merge and validate require schema/query for correct behavior",
+      "Escape quotes in embedded JSON strings"
+    ],
+    "edge_cases": [
+      "Invalid JSON in data string will fail parsing",
+      "JSONPath syntax may differ by implementation; test expressions",
+      "Large JSON files can consume memory; consider streaming for big data"
+    ],
+    "related_tools": ["api_client", "spreadsheet", "sql_query"]
+  },
+
+  "executor": {
+    "type": "shell",
+    "command": "python -c \"import json, os, sys; data_in='{{args.data}}'; d=json.loads(data_in) if data_in.strip().startswith('{') else json.load(open(data_in)); print(json.dumps(d, indent=2))\""
+  }
+}

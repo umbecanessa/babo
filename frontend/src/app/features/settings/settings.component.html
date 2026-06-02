@@ -1,0 +1,538 @@
+<div class="settings-page">
+  <aside class="settings-nav">
+    <h2 class="settings-title">Settings</h2>
+    @if (platform.isElectron) {
+      <p class="settings-subtitle">Desktop app &amp; local agent</p>
+    }
+    @for (section of sections(); track section.id) {
+      <button
+        class="nav-item"
+        [class.active]="activeSection() === section.id"
+        (click)="onSectionChange(section.id)"
+      >
+        <span class="nav-label">{{ section.label }}</span>
+      </button>
+    }
+  </aside>
+
+  <main class="settings-content">
+  @if (platform.isElectron) {
+    <!-- Models & AI -->
+    @if (activeSection() === 'models') {
+      <section class="section">
+        <h3 class="section-title">Models &amp; AI</h3>
+        <p class="section-desc">
+          Default chat model, Babo Cloud, sub-agents, voice, and screen awareness.
+          Pick a different model per message from the chat composer.
+        </p>
+        <app-capability-settings-panel (saved)="onCapabilitiesSaved()" />
+      </section>
+    }
+
+    <!-- Account & sync -->
+    @if (activeSection() === 'account') {
+      <section class="section">
+        <h3 class="section-title">Account &amp; sync</h3>
+        <p class="section-desc">
+          Login, agents, and dashboard sync through this server. The local Python runtime is separate.
+        </p>
+
+        <div class="chip-row">
+          @for (opt of backendChoices; track opt.id) {
+            <button
+              type="button"
+              class="chip"
+              [class.active]="backendChoice() === opt.id"
+              [class.recommended]="opt.recommended"
+              (click)="selectBackendChoice(opt.id)"
+            >{{ opt.shortLabel }}</button>
+          }
+        </div>
+
+        @for (opt of backendChoices; track opt.id) {
+          @if (backendChoice() === opt.id && opt.description) {
+            <p class="field-hint">{{ opt.description }}</p>
+          }
+        }
+
+        @if (backendChoice() === 'custom') {
+          <div class="field-group">
+            <label class="field-label">Your server URL</label>
+            <input
+              class="field-input"
+              [ngModel]="nestjsUrl()"
+              (ngModelChange)="setCustomBackendUrl($event)"
+              placeholder="https://your-app.up.railway.app"
+            />
+            <span class="field-hint">No /api at the end — Babo adds that automatically.</span>
+          </div>
+        } @else {
+          <p class="info-pill">Server: <strong>{{ nestjsUrl() }}</strong></p>
+        }
+
+        <div class="action-row">
+          <button class="btn-secondary" type="button" (click)="testBackend()" [disabled]="backendTesting()">
+            {{ backendTesting() ? 'Testing…' : 'Test connection' }}
+          </button>
+          @if (backendTestResult()) {
+            <span class="status-text" [class.ok]="backendTestResult()!.ok" [class.fail]="!backendTestResult()!.ok">
+              {{ backendTestResult()!.message }}
+              @if (backendTestResult()!.ok) { · {{ backendTestResult()!.latency }}ms }
+            </span>
+          }
+        </div>
+
+        <button class="btn-primary" type="button" (click)="saveBackend()" [disabled]="backendSaving() || !canSaveBackend()">
+          {{ backendSaving() ? 'Saving…' : 'Save server URL' }}
+        </button>
+      </section>
+    }
+
+    <!-- System (runtime + environment) -->
+    @if (activeSection() === 'system') {
+      <section class="section">
+        <h3 class="section-title">System</h3>
+        <p class="section-desc">Local Python agent and desktop environment.</p>
+
+        <h4 class="subsection-title">Agent runtime</h4>
+        <p class="field-hint">Process on this machine (port {{ runtimePort() }}).</p>
+
+        <div class="status-card">
+          <span class="status-dot" [class.running]="runtimeStatus()?.running" [class.stopped]="!runtimeStatus()?.running"></span>
+          <div>
+            <div class="status-title">
+              @if (runtimeStatus()?.running) {
+                Running
+              } @else {
+                Stopped
+              }
+            </div>
+            @if (runtimeStatus()?.running) {
+              <div class="status-meta">
+                PID {{ runtimeStatus()!.pid ?? '—' }}
+                · uptime {{ formatUptime(runtimeStatus()!.uptime) }}
+              </div>
+            }
+            @if (runtimeStatus()?.error) {
+              <div class="status-error">{{ runtimeStatus()!.error }}</div>
+            }
+          </div>
+        </div>
+
+        <div class="action-row">
+          @if (!runtimeStatus()?.running) {
+            <button class="btn-primary" type="button" (click)="runtimeControl('start')" [disabled]="runtimeAction() !== 'idle'">
+              Start
+            </button>
+          } @else {
+            <button class="btn-secondary" type="button" (click)="runtimeControl('restart')" [disabled]="runtimeAction() !== 'idle'">
+              Restart
+            </button>
+            <button class="btn-secondary danger" type="button" (click)="runtimeControl('stop')" [disabled]="runtimeAction() !== 'idle'">
+              Stop
+            </button>
+          }
+          <button class="btn-secondary" type="button" (click)="loadRuntimeLogs()">View logs</button>
+        </div>
+
+        @if (showRuntimeLogs()) {
+          <pre class="log-view">{{ runtimeLogs().join('\n') || '(empty)' }}</pre>
+        }
+
+        <h4 class="subsection-title">Python environment</h4>
+        <div class="status-card">
+          <span class="status-dot" [class.running]="venvReady()"></span>
+          <div>
+            <div class="status-title">{{ venvReady() ? 'Environment ready' : 'Not installed' }}</div>
+            <div class="status-meta">Setup {{ setupComplete() ? 'complete' : 'incomplete' }}</div>
+          </div>
+        </div>
+
+        <div class="action-row stacked">
+          <button class="btn-secondary" type="button" (click)="openSetupWizard()">Open setup wizard</button>
+          <button class="btn-secondary danger" type="button" (click)="resetPythonEnvironment()" [disabled]="envResetting()">
+            {{ envResetting() ? 'Resetting…' : 'Reset Python environment' }}
+          </button>
+        </div>
+      </section>
+    }
+
+    <!-- Permissions -->
+    @if (activeSection() === 'permissions') {
+      <section class="section">
+        <h3 class="section-title">Permissions</h3>
+        <p class="section-desc">
+          What the desktop shell may do on your behalf (files, shell, network). Agent tools may request additional access.
+        </p>
+
+        <div class="profile-cards">
+          @for (profile of permissionProfiles(); track profile.id) {
+            <div class="profile-card">
+              <div class="profile-head">
+                <span class="profile-name">{{ profile.name }}</span>
+                @if (activePermissionProfile() === profile.id) {
+                  <span class="profile-badge">Active</span>
+                }
+              </div>
+              <p class="profile-desc">{{ profile.description }}</p>
+              <ul class="grant-list">
+                @for (entry of (profile.grants | keyvalue); track entry.key) {
+                  <li [class.granted]="entry.value">{{ entry.key }}: {{ entry.value ? 'allowed' : 'denied' }}</li>
+                }
+              </ul>
+              <button class="btn-secondary small" type="button" (click)="applyPermissionProfile(profile.id)">
+                Apply profile
+              </button>
+            </div>
+          }
+        </div>
+
+        <button class="btn-secondary" type="button" (click)="resetPermissions()">Reset all permission decisions</button>
+      </section>
+    }
+  }
+
+  <!-- Platform integrations (desktop + web) -->
+  @if (activeSection() === 'billing' && billingEnabled()) {
+    <section class="section">
+      <h3 class="section-title">Billing</h3>
+      <p class="section-desc">
+        Babo Cloud Basic — <strong>$6.99/mo</strong> with <strong>$5 included</strong> model usage.
+        Checkout uses Stripe (Link supported). No free inference trial.
+      </p>
+
+      @if (subscriptionLoading()) {
+        <p class="field-hint">Loading subscription…</p>
+      } @else if (subscription(); as sub) {
+        @if (sub.billingExempt || sub.status === 'lifetime_comp') {
+          <div class="info-card babo-provided">
+            <h4 class="subsection-title">Lifetime access</h4>
+            <p class="field-hint">
+              You have complimentary Babo Cloud access
+              @if (sub.hostedGx10Enabled) {
+                including <strong>Babo Brain (GX10)</strong>.
+              }
+            </p>
+            <p class="info-pill ok">No subscription required</p>
+          </div>
+        } @else if (sub.status === 'none' || sub.status === 'canceled') {
+          <div class="info-card prereq">
+            <h4 class="subsection-title">Subscribe to use Babo Cloud models</h4>
+            <p class="field-hint">
+              Hosted models require an active subscription. Your API key on this device (BYOK) still works without a sub.
+            </p>
+            <ul class="checklist">
+              <li>$6.99/month — billed via Stripe</li>
+              <li>$5 included usage per month (OpenRouter resold)</li>
+              <li>On-demand overage at 1.25× after pool is used</li>
+            </ul>
+            <button
+              class="btn-primary"
+              type="button"
+              (click)="subscribeToCloud()"
+              [disabled]="billingActionLoading()"
+            >
+              {{ billingActionLoading() ? 'Opening checkout…' : 'Subscribe — $6.99/mo' }}
+            </button>
+          </div>
+        } @else {
+          <div class="billing-status-row">
+            <span class="info-pill" [class.ok]="sub.status === 'active'" [class.fail]="sub.status === 'past_due'">
+              {{ subscriptionStatusLabel(sub.status) }}
+              @if (sub.planId === 'cloud_basic') { · Babo Cloud Basic }
+            </span>
+            @if (sub.currentPeriodEnd) {
+              <span class="field-hint">Renews {{ sub.currentPeriodEnd | date: 'mediumDate' }}</span>
+            }
+          </div>
+
+          @if (sub.includedCreditCents > 0) {
+            <div class="usage-block">
+              <div class="usage-head">
+                <span class="field-label">Included usage</span>
+                <span class="field-hint">
+                  {{ formatUsd(sub.usedCreditCents) }} used of {{ formatUsd(sub.includedCreditCents) }}
+                  · {{ includedRemaining() }}% remaining
+                </span>
+              </div>
+              <div class="usage-bar">
+                <div
+                  class="usage-fill"
+                  [style.width.%]="sub.usedPercent"
+                  [class.warn]="sub.usedPercent >= 80"
+                  [class.full]="sub.usedPercent >= 100"
+                ></div>
+              </div>
+            </div>
+          }
+
+          <div class="action-row stacked">
+            <button
+              class="btn-secondary"
+              type="button"
+              (click)="openBillingPortal()"
+              [disabled]="billingActionLoading()"
+            >
+              Manage subscription
+            </button>
+          </div>
+
+          <h4 class="subsection-title">On-demand usage</h4>
+          <p class="field-hint">
+            After included usage is exhausted, enable on-demand to continue at 1.25× upstream cost (capped monthly).
+          </p>
+          <div class="toggle-group compact">
+            <button
+              type="button"
+              class="toggle-btn small"
+              [class.active]="onDemandEnabled()"
+              (click)="setOnDemandSetting(true)"
+            >On</button>
+            <button
+              type="button"
+              class="toggle-btn small"
+              [class.active]="!onDemandEnabled()"
+              (click)="setOnDemandSetting(false)"
+            >Off</button>
+          </div>
+
+          @if (onDemandEnabled()) {
+            <div class="field-group">
+              <label class="field-label">Monthly overage spend cap (USD)</label>
+              <input
+                type="number"
+                class="field-input short"
+                min="0"
+                step="1"
+                [ngModel]="spendCapInput()"
+                (ngModelChange)="spendCapInput.set($event)"
+              />
+              <span class="field-hint">Default $15/mo overage cap beyond included usage.</span>
+              <button
+                class="btn-secondary"
+                type="button"
+                (click)="saveSpendCap()"
+                [disabled]="billingActionLoading()"
+              >
+                Save cap
+              </button>
+            </div>
+          }
+
+          @if (sub.refundEligibleUntil) {
+            <p class="field-hint refund-note">
+              31-day refund available on your first subscription payment until
+              {{ sub.refundEligibleUntil | date: 'mediumDate' }}. Overage charges are not refundable.
+            </p>
+          }
+        }
+      }
+    </section>
+  }
+
+  @if (activeSection() === 'integrations') {
+    <section class="section">
+      <h3 class="section-title">Integrations</h3>
+      <p class="section-desc">
+        Platform credentials for agent channels (Resend email, Google OAuth on self-hosted servers).
+        Per-agent connections — Telegram bots, WhatsApp QR, OAuth sign-in — are under
+        <a [routerLink]="toolsLink()">Tools → Integrations</a>.
+      </p>
+
+      @if (localWebhookWarning(); as localWarn) {
+        <div class="info-card localhost-webhook">
+          <h4 class="subsection-title">Localhost NestJS</h4>
+          <p class="field-hint">{{ localWarn }}</p>
+        </div>
+      }
+
+      @if (platformCapsLoading()) {
+        <p class="field-hint">Loading…</p>
+      } @else if (usesBaboCloudBackend(backendChoice())) {
+        <div class="info-card babo-provided">
+          <h4 class="subsection-title">Babo Cloud</h4>
+          <p class="field-hint">
+            Email and Google Workspace use Babo-provided credentials on
+            <strong>{{ nestjsUrl() }}</strong>. Connect channels per agent in Tools.
+          </p>
+          @if (emailServerConfigured()) {
+            <p class="info-pill ok">Email (Resend) active@if (emailInboundDomain()) { · {{ emailInboundDomain() }}}</p>
+          }
+          <ul class="checklist">
+            <li>Telegram — your BotFather token (self-service)</li>
+            <li>WhatsApp — QR pairing on Babo Desktop</li>
+          </ul>
+        </div>
+      } @else {
+        <div class="info-card prereq">
+          <h4 class="subsection-title">Before connecting channels</h4>
+          <ol class="setup-steps">
+            @for (step of integrationPrereqSteps(); track step) {
+              <li>{{ step }}</li>
+            }
+          </ol>
+        </div>
+
+        <h4 class="subsection-title">Email (Resend)</h4>
+        <p class="field-hint">
+          Inbound mail hits your NestJS webhook, then relays to Babo Desktop.
+          Configure Resend here <em>or</em> set <code>RESEND_API_KEY</code> and
+          <code>RESEND_INBOUND_DOMAIN</code> on your NestJS deployment.
+        </p>
+        @if (emailServerConfigured() && !resendConfigured()) {
+          <p class="info-pill ok">Resend configured on server@if (emailInboundDomain()) { · {{ emailInboundDomain() }}}</p>
+        }
+        @if (nestPublicWebhookBase()) {
+          <p class="field-hint webhook-hint">
+            Resend inbound webhook URL:
+            <code>{{ nestPublicWebhookBase() }}/api/channels/email/webhook</code>
+          </p>
+        }
+
+        @if (resendConfigured()) {
+          <p class="info-pill ok">Your Resend credentials saved@if (resendInboundDomain()) { · {{ resendInboundDomain() }}}</p>
+          <button class="btn-secondary danger" type="button" (click)="clearResendCredentials()" [disabled]="resendSaving()">
+            Remove saved credentials
+          </button>
+        } @else if (!emailServerConfigured()) {
+          <div class="field-group">
+            <label class="field-label">Resend API key</label>
+            <input
+              class="field-input"
+              type="password"
+              [ngModel]="resendApiKey()"
+              (ngModelChange)="resendApiKey.set($event)"
+              placeholder="re_…"
+              autocomplete="off"
+            />
+          </div>
+          <div class="field-group">
+            <label class="field-label">Inbound domain</label>
+            <input
+              class="field-input"
+              [ngModel]="resendInboundDomain()"
+              (ngModelChange)="resendInboundDomain.set($event)"
+              placeholder="inbox.yourdomain.com"
+            />
+            <span class="field-hint">Verified domain in Resend for inbound routing.</span>
+          </div>
+          <button class="btn-primary" type="button" (click)="saveResendCredentials()" [disabled]="resendSaving()">
+            {{ resendSaving() ? 'Saving…' : 'Save Resend credentials' }}
+          </button>
+        }
+
+        <h4 class="subsection-title">Google Workspace</h4>
+        <p class="field-hint">
+          Create a Google Cloud OAuth app and save <code>client_id</code> /
+          <code>client_secret</code> in each agent's Tools → Google Workspace config,
+          or ask the agent in chat to walk you through setup.
+        </p>
+        <p class="field-hint">
+          Redirect URI:
+          <code>http://localhost:{{ runtimePort() }}/skills/google-workspace/oauth/callback</code>
+        </p>
+
+        <h4 class="subsection-title">Telegram &amp; WhatsApp</h4>
+        <p class="field-hint">
+          Telegram uses your BotFather token and registers webhooks on your NestJS server.
+          WhatsApp pairs via QR on Babo Desktop — no NestJS webhook for inbound WhatsApp messages.
+        </p>
+      }
+    </section>
+  }
+
+  <!-- Appearance (desktop + web) -->
+  @if (activeSection() === 'appearance') {
+    <section class="section">
+      <h3 class="section-title">Appearance</h3>
+      <p class="section-desc">Theme for the Babo interface. System follows your OS.</p>
+
+      <div class="field-group">
+        <label class="field-label">Theme</label>
+        <div class="toggle-group compact">
+          <button class="toggle-btn small" [class.active]="themeService.mode() === 'light'" (click)="updateTheme('light')">Light</button>
+          <button class="toggle-btn small" [class.active]="themeService.mode() === 'dark'" (click)="updateTheme('dark')">Dark</button>
+          <button class="toggle-btn small" [class.active]="themeService.mode() === 'system'" (click)="updateTheme('system')">System</button>
+        </div>
+      </div>
+
+      @if (!platform.isElectron) {
+        <div class="field-row">
+          <div class="field-group">
+            <label class="field-label">Editor font size</label>
+            <input
+              type="number"
+              class="field-input short"
+              [ngModel]="webSettings().editor_font_size"
+              (ngModelChange)="updateEditorFontSize($event)"
+              min="10"
+              max="24"
+            />
+          </div>
+          <div class="field-group">
+            <label class="field-label">Font family</label>
+            <select
+              class="field-select"
+              [ngModel]="webSettings().editor_font_family"
+              (ngModelChange)="updateEditorFontFamily($event)"
+            >
+              <option value="'SF Mono', 'Fira Code', monospace">SF Mono / Fira Code</option>
+              <option value="'Cascadia Code', monospace">Cascadia Code</option>
+              <option value="'JetBrains Mono', monospace">JetBrains Mono</option>
+              <option value="'Consolas', monospace">Consolas</option>
+              <option value="monospace">System monospace</option>
+            </select>
+          </div>
+        </div>
+      }
+    </section>
+  }
+
+  <!-- API keys (web) -->
+  @if (activeSection() === 'keys') {
+    <section class="section">
+      <h3 class="section-title">API keys</h3>
+      <p class="section-desc">Keys for programmatic access to your Babo cloud account.</p>
+      <a routerLink="/settings/api-keys" class="btn-primary">Manage API keys</a>
+    </section>
+  }
+
+  <!-- General -->
+  @if (activeSection() === 'general') {
+    <section class="section">
+      <h3 class="section-title">General</h3>
+
+      <div class="field-group">
+        <label class="field-label">Agent integrations</label>
+        <p class="field-hint">
+          Channel setup lives under
+          <a [routerLink]="toolsLink()">Tools → Integrations</a>.
+          Self-hosted Resend and platform prerequisites are under
+          <button type="button" class="inline-link-btn" (click)="onSectionChange('integrations')">Settings → Integrations</button>.
+        </p>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label">Onboarding tutorials</label>
+        <p class="field-hint">Re-show introductory tips on Chat, Tools, Memory, and other pages.</p>
+        <button class="btn-secondary" type="button" (click)="resetOnboarding()">Reset first-run tour</button>
+      </div>
+
+      @if (appVersion()) {
+        <div class="field-group">
+          <label class="field-label">Version</label>
+          <p class="info-pill">{{ appVersion() }}</p>
+        </div>
+      }
+    </section>
+  }
+
+  @if (!platform.isElectron && activeSection() === 'appearance') {
+    <div class="save-row">
+      <button class="btn-primary" type="button" (click)="saveWebSettings()" [disabled]="saving()">
+        {{ saving() ? 'Saving…' : 'Save settings' }}
+      </button>
+    </div>
+  }
+  </main>
+</div>

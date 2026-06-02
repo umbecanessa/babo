@@ -1,0 +1,109 @@
+scenarios:
+  - id: orch-01
+    name: Mode ladder plan → build → review
+    category: orchestration
+    tags: [tier6, orchestration]
+    timeout_s: 1200
+    prompt: >-
+      In one session: (1) switch to planning mode and create a 2-step plan to add a
+      hello.py script, (2) switch to executing and implement it, (3) switch to evaluating
+      and review if it works. Use switch_mode appropriately. No teams.
+    pass:
+      tools_any: [switch_mode, plan]
+
+  - id: orch-02
+    name: Escalate file access
+    category: orchestration
+    tags: [tier6, orchestration, slow]
+    timeout_s: 1800
+    disabled: true
+    prompt: >-
+      Launch a team with one delegate whose step touches a file you own exclusively.
+      When delegate hits FILE LOCKED, escalate with reason file_access. Orchestrator
+      should grant_paths or fix. Keep scope tiny — one file hello.txt.
+    pass:
+      tools_any: [team, escalate]
+
+  - id: orch-03
+    name: Completion review intervene
+    category: orchestration
+    tags: [tier6, orchestration, slow]
+    timeout_s: 1800
+    disabled: true
+    prompt: >-
+      Team wave where delegate calls task_complete before work is done. Orchestrator
+      should team(intervene, approve) once — not spiral text hints. Minimal 1-file task.
+    pass:
+      tools_any: [team, task_complete]
+
+  - id: orch-04
+    name: Partial wave accept_partial
+    category: orchestration
+    tags: [tier6, orchestration, slow]
+    timeout_s: 1800
+    disabled: true
+    prompt: >-
+      Plan with 2 parallel steps; intentionally make step 2 impossible (bad path).
+      When one delegate fails, use accept_partial and team(advance). Plan should progress.
+    pass:
+      tools_any: [plan, team]
+
+  - id: orch-05
+    name: Verify gate before complete
+    category: orchestration
+    tags: [tier6, orchestration]
+    timeout_s: 1200
+    prompt: >-
+      Create a plan with one step "Add add(a,b) in math.py". Implement add but do NOT
+      add tests. Call plan(verify) — it should fail or warn. Add a test, verify again,
+      then plan(complete).
+    pass:
+      tools_any: [plan]
+      acceptable_exit_reasons: [post_launch_yield, awaiting_delegates]
+
+  - id: orch-06
+    name: Respond mid-flight
+    category: orchestration
+    tags: [tier6, orchestration, slow]
+    manual: true
+    prompt: >-
+      MANUAL QA: Start a team wave, then send a user message while delegates run.
+      Agent should enter responding mode without killing delegates.
+    pass:
+      tools_any: [team, communicate]
+
+  - id: orch-07
+    name: Await delegates
+    category: orchestration
+    tags: [tier6, orchestration]
+    timeout_s: 1200
+    prompt: >-
+      Create a minimal plan, launch a team with one small delegate task (write ping.txt),
+      then use await_delegates. Report when wave completes.
+    pass:
+      tools_any: [team, await_delegates]
+      acceptable_exit_reasons: [post_launch_yield, awaiting_delegates]
+
+  - id: orch-08
+    name: SubCryptex delegate handoff
+    category: orchestration
+    tags: [tier6, orchestration, slow]
+    timeout_s: 1800
+    disabled: true
+    prompt: >-
+      Two sequential delegates: first researches "Babo agent architecture" in workspace
+      docs, second implements a one-line summary file using delegate_ring handoff.
+    pass:
+      tools_any: [delegate, delegate_ring]
+
+  - id: dev-mini-plan
+    name: Small 3-step plan (no team)
+    category: orchestration
+    tags: [tier6, orchestration]
+    timeout_s: 600
+    prompt: >-
+      Create a plan with exactly 3 steps to organize a home office: declutter desk,
+      cable management, lighting. Use the plan tool. Do NOT launch teams or delegates.
+      Mark step 1 in progress and summarize the plan.
+    pass:
+      tools_any: [plan]

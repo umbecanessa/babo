@@ -1,0 +1,12 @@
+{
+  "history_size": 30,
+  "pe_norepinephrine_scale": 0.08,
+  "pe_serotonin_scale": 0.04,
+  "pe_cortisol_scale": 0.03,
+  "uncertainty_alpha": 0.12,
+  "uncertainty_base": 0.50,
+  "high_uncertainty_threshold": 0.70,
+  "low_pe_threshold": 0.15,
+  "high_pe_threshold": 0.50,
+  "max_uncertainty_domains": 50
+}

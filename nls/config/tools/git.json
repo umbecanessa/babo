@@ -1,0 +1,51 @@
+{
+  "name": "git",
+  "description": "Perform git operations on a local repository. Supports status, diff, log, add, commit, push, pull, branch, etc.",
+  "version": "1.0.0",
+  "category": "act",
+  "hormone_affinity": "dopamine",
+  "base_effort": 0.3,
+  "learning_yield": "low",
+  "risk_level": "write",
+  "platform": "desktop",
+  "permissions": ["filesystem.read", "filesystem.write", "shell.execute"],
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "command": { "type": "string", "description": "Git subcommand (e.g. 'status', 'diff', 'commit -m \"msg\"')" },
+      "repo": { "type": "string", "description": "Repository path (defaults to cwd)" }
+    },
+    "required": ["command"]
+  },
+
+  "manual": {
+    "overview": "Use git for version control operations. Check status, view diffs, commit changes, manage branches. Always check status before committing. Never force-push without explicit permission.",
+    "examples": [
+      { "description": "Check what files changed", "input": { "command": "status" } },
+      { "description": "View staged changes", "input": { "command": "diff --staged" } },
+      { "description": "Commit with a message", "input": { "command": "add -A && git commit -m \"fix: resolve login bug\"" } },
+      { "description": "View recent commits", "input": { "command": "log --oneline -10" } },
+      { "description": "Create and switch to a new branch", "input": { "command": "checkout -b feature/new-tool" } }
+    ],
+    "tips": [
+      "Always run 'status' and 'diff' before committing to review changes.",
+      "Write meaningful commit messages that explain WHY, not just WHAT.",
+      "Use branches for features: 'checkout -b feature/name'.",
+      "Never commit secrets (.env files, API keys, credentials)."
+    ],
+    "edge_cases": [
+      "Force push and hard reset are blocked for safety.",
+      "Merge conflicts require manual resolution — read the conflict markers.",
+      "Large binary files should use Git LFS, not regular git add."
+    ],
+    "related_tools": ["terminal", "file_read", "diff_patch"]
+  },
+
+  "executor": {
+    "type": "shell",
+    "command": "git {{args.command}}",
+    "cwd": "{{args.repo}}",
+    "blocked_patterns": ["push --force", "push -f", "reset --hard"]
+  }
+}

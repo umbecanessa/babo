@@ -1,0 +1,65 @@
+{
+  "name": "setup_telegram_bot",
+  "description": "Set up a Telegram bot from scratch using the BotFather API",
+  "category": "communication",
+  "difficulty": "intermediate",
+  "prerequisites": [
+    "curl available in PATH",
+    "Internet access"
+  ],
+  "steps": [
+    {
+      "description": "Create a new bot via BotFather",
+      "tool": "bash",
+      "example_params": {
+        "command": "curl -s https://api.telegram.org/bot${BOT_TOKEN}/getMe"
+      },
+      "expected_outcome": "Bot info returned with bot username and ID",
+      "error_patterns": [
+        "401 Unauthorized - invalid bot token",
+        "Connection refused - no internet access"
+      ],
+      "recovery_hints": [
+        "Ask the user for the correct bot token from @BotFather",
+        "Check network connectivity with 'curl -s https://api.telegram.org'"
+      ]
+    },
+    {
+      "description": "Create the bot handler script",
+      "tool": "write",
+      "example_params": {
+        "path": "telegram_bot.py",
+        "content": "import asyncio\nimport aiohttp\nimport os\n\nTOKEN = os.environ.get(\"TELEGRAM_BOT_TOKEN\", \"\")\nAPI = f\"https://api.telegram.org/bot{TOKEN}\"\n\nasync def get_updates(offset=0):\n    async with aiohttp.ClientSession() as session:\n        async with session.get(f\"{API}/getUpdates\", params={\"offset\": offset, \"timeout\": 30}) as resp:\n            data = await resp.json()\n            return data.get(\"result\", [])\n\nasync def send_message(chat_id, text):\n    async with aiohttp.ClientSession() as session:\n        await session.post(f\"{API}/sendMessage\", json={\"chat_id\": chat_id, \"text\": text})\n\nasync def main():\n    offset = 0\n    print(\"Bot started. Listening for messages...\")\n    while True:\n        updates = await get_updates(offset)\n        for update in updates:\n            offset = update[\"update_id\"] + 1\n            msg = update.get(\"message\", {})\n            text = msg.get(\"text\", \"\")\n            chat_id = msg.get(\"chat\", {}).get(\"id\")\n            if chat_id and text:\n                print(f\"Received: {text}\")\n                await send_message(chat_id, f\"Echo: {text}\")\n\nasyncio.run(main())\n"
+      },
+      "expected_outcome": "Bot handler file created",
+      "error_patterns": [],
+      "recovery_hints": []
+    },
+    {
+      "description": "Install dependencies",
+      "tool": "bash",
+      "example_params": {
+        "command": "pip install aiohttp"
+      },
+      "expected_outcome": "aiohttp installed successfully",
+      "error_patterns": [],
+      "recovery_hints": []
+    },
+    {
+      "description": "Test the bot",
+      "tool": "bash",
+      "example_params": {
+        "command": "TELEGRAM_BOT_TOKEN=$BOT_TOKEN timeout 10 python telegram_bot.py || true"
+      },
+      "expected_outcome": "Bot starts and listens for messages",
+      "error_patterns": [],
+      "recovery_hints": []
+    }
+  ],
+  "learning_signals": [
+    "Telegram Bot API base URL: https://api.telegram.org/bot{token}/",
+    "Key endpoints: getMe, getUpdates, sendMessage",
+    "Long polling: use timeout parameter in getUpdates for efficient polling",
+    "Bot tokens come from @BotFather on Telegram"
+  ]
+}

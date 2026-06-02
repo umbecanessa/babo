@@ -1,0 +1,85 @@
+{
+  "name": "pdf_tools",
+  "description": "Read, extract text from, and search within PDF documents.",
+  "version": "1.0.0",
+  "category": "sense",
+  "hormone_affinity": "norepinephrine",
+  "base_effort": 0.3,
+  "learning_yield": "high",
+  "risk_level": "read",
+  "platform": "all",
+  "permissions": [
+    "filesystem.read"
+  ],
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": [
+          "extract_text",
+          "page_count",
+          "search"
+        ],
+        "description": "PDF action"
+      },
+      "path": {
+        "type": "string",
+        "description": "Path to the PDF file"
+      },
+      "query": {
+        "type": "string",
+        "description": "Search query (for search action)"
+      },
+      "pages": {
+        "type": "string",
+        "description": "Page range, e.g. '1-5' or 'all'",
+        "default": "all"
+      }
+    },
+    "required": [
+      "action",
+      "path"
+    ]
+  },
+  "_note": "Requires PyPDF2 or pymupdf: pip install PyPDF2",
+  "manual": {
+    "overview": "Use when you need to read or search PDF documents—contracts, reports, books. Supports text extraction, pagecount, and search within PDFs.",
+    "examples": [
+      {
+        "input": {
+          "action": "extract_text",
+          "path": "report.pdf",
+          "pages": "1-5"
+        },
+        "description": "Extract text from first 5 pages of a report"
+      },
+      {
+        "input": {
+          "action": "search",
+          "path": "manual.pdf",
+          "query": "configuration"
+        },
+        "description": "Find all occurrences of 'configuration' in the manual"
+      }
+    ],
+    "tips": [
+      "Scanned PDFs contain images—text extraction may return empty; use OCR tools separately",
+      "Use 'pages' to limit extraction on large PDFs and avoid memory issues",
+      "Search is case-sensitive; normalize query if needed"
+    ],
+    "edge_cases": [
+      "Encrypted or password-protected PDFs will fail without the password",
+      "Some PDFs have non-standard encoding; extracted text may have garbled characters"
+    ],
+    "related_tools": [
+      "audio_transcribe",
+      "translate",
+      "regex_tool"
+    ]
+  },
+  "executor": {
+    "type": "shell",
+    "command": "python -c \"import PyPDF2, json, sys; reader=PyPDF2.PdfReader('{{args.path}}'); pages=range(len(reader.pages)); text='\\n'.join(reader.pages[i].extract_text() or '' for i in pages); print(text[:10000])\""
+  }
+}

@@ -1,0 +1,59 @@
+{
+  "name": "calculator",
+  "description": "Evaluate mathematical expressions safely. Supports arithmetic, trigonometry, statistics, and unit conversions.",
+  "version": "1.0.0",
+  "category": "think",
+  "hormone_affinity": "norepinephrine",
+  "base_effort": 0.1,
+  "learning_yield": "medium",
+  "risk_level": "read",
+  "platform": "all",
+  "permissions": [],
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "expression": {
+        "type": "string",
+        "description": "Math expression (e.g. 'sqrt(144) + 3**2', '2 * pi * 5')"
+      }
+    },
+    "required": [
+      "expression"
+    ]
+  },
+  "manual": {
+    "overview": "Use when you need to evaluate math expressions safely—arithmetic, trigonometry, statistics, unit conversions. Safer than raw eval.",
+    "examples": [
+      {
+        "input": {
+          "expression": "sqrt(144) + 3**2"
+        },
+        "description": "Compute square root and power"
+      },
+      {
+        "input": {
+          "expression": "2 * 3.14159 * 5"
+        },
+        "description": "Circumference of circle with radius 5"
+      }
+    ],
+    "tips": [
+      "Use Python math syntax: sqrt, sin, cos, log, pi, e",
+      "Chain operations; avoid shell injection by using this tool instead of terminal",
+      "For unit conversions, use explicit formulas (e.g., miles * 1.609 for km)"
+    ],
+    "edge_cases": [
+      "Division by zero or invalid expressions raise errors",
+      "Very large numbers may overflow or produce inf"
+    ],
+    "related_tools": [
+      "translate",
+      "hash_encode",
+      "regex_tool"
+    ]
+  },
+  "executor": {
+    "type": "shell",
+    "command": "python -c \"import math; result = eval('{{args.expression}}', {'__builtins__': {}}, vars(math)); print(result)\""
+  }
+}

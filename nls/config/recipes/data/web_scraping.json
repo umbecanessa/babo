@@ -1,0 +1,71 @@
+{
+  "name": "web_scraping",
+  "description": "Scrape and analyze a website using curl and Python",
+  "category": "data",
+  "difficulty": "intermediate",
+  "prerequisites": [
+    "curl available in PATH",
+    "Python 3 available"
+  ],
+  "steps": [
+    {
+      "description": "Fetch the raw HTML of a page",
+      "tool": "bash",
+      "example_params": {
+        "command": "curl -s -L https://example.com > page.html && wc -l page.html"
+      },
+      "expected_outcome": "HTML saved to page.html with line count shown",
+      "error_patterns": [
+        "Connection refused",
+        "Could not resolve host"
+      ],
+      "recovery_hints": [
+        "Check the URL is correct",
+        "Check network connectivity"
+      ]
+    },
+    {
+      "description": "Write a parser script",
+      "tool": "write",
+      "example_params": {
+        "path": "parse_page.py",
+        "content": "from html.parser import HTMLParser\nimport sys\n\nclass LinkExtractor(HTMLParser):\n    def __init__(self):\n        super().__init__()\n        self.links = []\n    def handle_starttag(self, tag, attrs):\n        if tag == 'a':\n            for name, value in attrs:\n                if name == 'href' and value:\n                    self.links.append(value)\n\nwith open(sys.argv[1] if len(sys.argv) > 1 else 'page.html') as f:\n    parser = LinkExtractor()\n    parser.feed(f.read())\n    for link in parser.links:\n        print(link)\n"
+      },
+      "expected_outcome": "Parser script created",
+      "error_patterns": [],
+      "recovery_hints": []
+    },
+    {
+      "description": "Run the parser",
+      "tool": "bash",
+      "example_params": {
+        "command": "python parse_page.py page.html"
+      },
+      "expected_outcome": "List of extracted links printed",
+      "error_patterns": [
+        "FileNotFoundError",
+        "SyntaxError"
+      ],
+      "recovery_hints": [
+        "Ensure page.html exists (run the fetch step first)",
+        "Check the Python script for syntax errors"
+      ]
+    },
+    {
+      "description": "Save results to JSON",
+      "tool": "bash",
+      "example_params": {
+        "command": "python -c \"import json; links = open('links.txt').readlines(); print(json.dumps([l.strip() for l in links], indent=2))\" > results.json"
+      },
+      "expected_outcome": "Results saved as JSON",
+      "error_patterns": [],
+      "recovery_hints": []
+    }
+  ],
+  "learning_signals": [
+    "curl -s -L follows redirects and suppresses progress bar",
+    "Python html.parser is in the standard library (no pip install needed)",
+    "For complex scraping, pip install beautifulsoup4 lxml",
+    "Always respect robots.txt and rate-limit requests"
+  ]
+}

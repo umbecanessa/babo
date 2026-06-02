@@ -1,0 +1,157 @@
+scenarios:
+  - id: dev-01
+    name: Greenfield REST API
+    category: dev
+    tags: [tier1, dev, slow]
+    timeout_s: 3600
+    disabled: true
+    prompt: >-
+      Create a small FastAPI CRUD API for a todo list with SQLite. Add a plan with
+      steps, implement, add a simple test, run it with bash, then plan(complete).
+      Keep scope minimal — one router, one model, sqlite file in workspace.
+    pass:
+      tools_any: [plan, write, bash]
+
+  - id: dev-02
+    name: Brownfield bug fix
+    category: dev
+    tags: [tier1, dev]
+    timeout_s: 1800
+    prompt: >-
+      In the workspace, create a tiny Python module calc.py with add(a,b) that has an
+      intentional bug (subtracts instead). Write a failing test test_calc.py. Fix the bug,
+      make tests pass with bash pytest. Summarize what you changed.
+    pass:
+      tools_any: [write, edit, bash]
+
+  - id: dev-03
+    name: Refactor with file ledger
+    category: dev
+    tags: [tier1, dev]
+    timeout_s: 1800
+    prompt: >-
+      Create auth.py with a single function get_user(id) returning a dict. Then refactor:
+      extract validation into validators.py and import it. Use file_history to show who
+      changed what. Do not use teams.
+    pass:
+      tools_any: [write, edit, file_history]
+
+  - id: dev-04
+    name: Monorepo + CI workflow
+    category: dev
+    tags: [tier1, dev, slow]
+    timeout_s: 2700
+    disabled: true
+    prompt: >-
+      Scaffold a minimal monorepo with backend/ (Python) and frontend/ (static HTML).
+      Add .github/workflows/ci.yml that runs a simple test on push. Follow the ci_cd_pipeline
+      recipe pattern. Create plan first.
+    pass:
+      tools_any: [plan, write]
+
+  - id: dev-05
+    name: Dependency hell recovery
+    category: dev
+    tags: [tier1, dev]
+    timeout_s: 1200
+    prompt: >-
+      Create requirements.txt with conflicting pins: fastapi==0.100.0 and pydantic==2.5.0
+      (known friction). Run project_install. If it fails, fix requirements.txt and retry
+      using project_install — do NOT use python -m pip install in bash. Report the error
+      text you saw.
+    pass:
+      tools_any: [project_install, write]
+
+  - id: dev-06
+    name: GitHub repo ops
+    category: dev
+    tags: [tier1, dev]
+    timeout_s: 1200
+    prompt: >-
+      Create a new local git repo in workspace subfolder gh-smoke-test with README.md
+      saying "scenario test". Init git, one commit. If gh CLI is available, create a
+      private repo and push; if not, explain what's missing. Do not use teams.
+    pass:
+      tools_any: [bash, write]
+      response_must_not_contain: ["BLOCKED", "NOT the orchestrator"]
+
+  - id: dev-07
+    name: Sub-agent delegate research
+    category: dev
+    tags: [tier1, dev, orchestration]
+    timeout_s: 1200
+    prompt: >-
+      Delegate a research spike: "Summarize pros/cons of SQLite vs Postgres for a small
+      SaaS MVP" to a sub-agent using delegate. You summarize the delegate result in chat.
+      Do NOT implement code yourself — only delegate and synthesize.
+    pass:
+      tools_any: [delegate, team]
+
+  - id: dev-08
+    name: Parallel wave delegates
+    category: dev
+    tags: [tier1, dev, slow, orchestration]
+    timeout_s: 2700
+    disabled: true
+    prompt: >-
+      Create a plan with 2 parallel wave-0 steps: (1) backend/hello.py printing hello,
+      (2) frontend/index.html with title Hello. Launch a team to implement both in parallel.
+      Advance wave when done or accept_partial if one fails.
+    pass:
+      tools_any: [plan, team]
+
+  - id: dev-read-file
+    name: Read a file in workspace
+    category: dev
+    tags: [tier1, dev]
+    timeout_s: 300
+    prompt: >-
+      Use the read tool on README.md in the current workspace (or repo root). Tell me
+      the first heading line you find. If missing, say what you tried.
+    pass:
+      tools_any: [read]
+
+  - id: dev-write-edit
+    name: Write and edit file
+    category: dev
+    tags: [tier1, dev]
+    timeout_s: 300
+    prompt: >-
+      Write scratch.txt with line "version 1". Then use edit to change it to "version 2".
+      Read the file back and confirm the content.
+    pass:
+      tools_any: [write, edit, read]
+      response_contains: "version 2"
+
+  - id: dev-grep-glob
+    name: Grep and glob search
+    category: dev
+    tags: [tier1, dev]
+    timeout_s: 300
+    prompt: >-
+      Use glob to find any *.py files in the workspace (max depth reasonable). Then grep
+      for "def " in one of them. Report file count and one matching line.
+    pass:
+      tools_any: [glob, grep]
+
+  - id: dev-list-dir
+    name: List directory structure
+    category: dev
+    tags: [tier1, dev]
+    timeout_s: 300
+    prompt: >-
+      Use list_dir on the workspace root (non-recursive). Tell me how many entries you see
+      and name two of them.
+    pass:
+      tools_any: [list_dir]
+
+  - id: dev-todo-list
+    name: Todo tool smoke
+    category: dev
+    tags: [tier1, dev]
+    timeout_s: 300
+    prompt: >-
+      Add a todo list with 3 items for packing for a weekend trip. Use the todo tool,
+      then list them back to me.
+    pass:
+      tools_any: [todo]

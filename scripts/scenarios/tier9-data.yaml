@@ -1,0 +1,68 @@
+scenarios:
+  - id: data-01
+    name: CSV pipeline
+    category: data
+    tags: [tier9, data]
+    timeout_s: 900
+    prompt: >-
+      Create sample.csv with columns name,amount and 5 rows. Use bash or write to produce
+      summary.md with total amount and row count. No external dependencies required.
+    pass:
+      tools_any: [write, bash, read]
+
+  - id: data-02
+    name: PDF extract
+    category: data
+    tags: [tier9, data]
+    timeout_s: 900
+    prompt: >-
+      If a PDF exists in workspace, read it and extract first page text. If none, create
+      a minimal PDF with bash/python if possible, or use discover_tools for pdf_tools and
+      explain limitation.
+    pass:
+      tools_any: [read, discover_tools]
+
+  - id: data-03
+    name: Archive compress
+    category: data
+    tags: [tier9, data]
+    timeout_s: 600
+    prompt: >-
+      Create folder data-pkg/ with two text files. Zip or tar it with bash. List archive
+      contents to verify.
+    pass:
+      tools_any: [bash, write]
+
+  - id: data-04
+    name: Local SQLite query
+    category: data
+    tags: [tier9, data]
+    timeout_s: 900
+    prompt: >-
+      Create items.db with SQLite (bash/python): table items(id, name), insert 3 rows.
+      Query all rows and report results. Use discover_tools for sql_query/local_db if helpful.
+    pass:
+      tools_any: [bash, write]
+
+  - id: data-05
+    name: Offer download
+    category: data
+    tags: [tier9, data]
+    timeout_s: 300
+    prompt: >-
+      Write download-me.txt with content "download ok". Use offer_download so I can fetch
+      it from the UI. Confirm the tool result.
+    pass:
+      tools_any: [offer_download, write]
+
+  - id: data-06
+    name: Vision describe image
+    category: data
+    tags: [tier9, data, manual]
+    manual: true
+    timeout_s: 600
+    prompt: >-
+      MANUAL QA: Attach or provide a screenshot in workspace, use vision tool to describe
+      main content. Requires vision model/runtime endpoint.
+    pass:
+      tools_any: [vision, screenshot]

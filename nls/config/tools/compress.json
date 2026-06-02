@@ -1,0 +1,98 @@
+{
+  "name": "compress",
+  "description": "Compress and extract archives. Supports zip, tar.gz, and tar.bz2 formats.",
+  "version": "1.0.0",
+  "category": "act",
+  "hormone_affinity": "serotonin",
+  "base_effort": 0.2,
+  "learning_yield": "low",
+  "risk_level": "write",
+  "platform": "desktop",
+  "permissions": [
+    "filesystem.read",
+    "filesystem.write"
+  ],
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": [
+          "compress",
+          "extract",
+          "list"
+        ],
+        "description": "Archive action"
+      },
+      "path": {
+        "type": "string",
+        "description": "Archive path (or source path for compress)"
+      },
+      "output": {
+        "type": "string",
+        "description": "Output path",
+        "default": "."
+      },
+      "format": {
+        "type": "string",
+        "enum": [
+          "zip",
+          "tar.gz",
+          "tar.bz2"
+        ],
+        "default": "zip"
+      }
+    },
+    "required": [
+      "action",
+      "path"
+    ]
+  },
+  "manual": {
+    "overview": "Use when you need to create or extract archives—zip, tar.gz, tar.bz2. Useful for bundling files or unpacking downloads.",
+    "examples": [
+      {
+        "input": {
+          "action": "compress",
+          "path": "./project",
+          "output": "backup",
+          "format": "zip"
+        },
+        "description": "Zip a directory"
+      },
+      {
+        "input": {
+          "action": "extract",
+          "path": "archive.tar.gz",
+          "output": "./extracted"
+        },
+        "description": "Extract a tarball"
+      },
+      {
+        "input": {
+          "action": "list",
+          "path": "bundle.zip"
+        },
+        "description": "List contents without extracting"
+      }
+    ],
+    "tips": [
+      "Use output without extension for compress; tool appends format",
+      "Extract to an empty or new dir to avoid overwriting",
+      "zip is portable; tar.gz/tar.bz2 common for Unix bundles"
+    ],
+    "edge_cases": [
+      "Extracting to existing dir may overwrite files without warning",
+      "Very large archives can exhaust disk or memory"
+    ],
+    "related_tools": [
+      "http_server",
+      "file_read",
+      "image_generate"
+    ]
+  },
+  "executor": {
+    "type": "shell",
+    "command": "python -c \"import shutil, zipfile, tarfile, json, sys; action='{{args.action}}'; path='{{args.path}}'; out='{{args.output}}'; fmt='{{args.format}}'; r=''; exec('if action==\"compress\": shutil.make_archive(out,fmt.replace(\\\".\\\",\\\"\\\"),\\\".\\\",path); r=f\\\"Compressed to {out}.{fmt}\\\"') if action=='compress' else exec('if action==\"extract\": shutil.unpack_archive(path,out); r=f\\\"Extracted to {out}\\\"') if action=='extract' else exec('import zipfile; zf=zipfile.ZipFile(path); r=chr(10).join(zf.namelist())') if fmt=='zip' else None; print(r)\""
+  }
+}

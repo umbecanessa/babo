@@ -1,0 +1,94 @@
+{
+  "name": "telegram",
+  "description": "Send messages via Telegram Bot API. Requires NLS_TELEGRAM_BOT_TOKEN and a chat_id.",
+  "version": "1.0.0",
+  "category": "communicate",
+  "hormone_affinity": "oxytocin",
+  "base_effort": 0.2,
+  "learning_yield": "low",
+  "risk_level": "write",
+  "platform": "desktop",
+  "permissions": [
+    "network.outbound",
+    "keychain"
+  ],
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "action": {
+        "type": "string",
+        "enum": [
+          "send",
+          "get_updates"
+        ],
+        "default": "send"
+      },
+      "chat_id": {
+        "type": "string",
+        "description": "Telegram chat ID"
+      },
+      "text": {
+        "type": "string",
+        "description": "Message text"
+      }
+    },
+    "required": [
+      "action"
+    ]
+  },
+  "manual": {
+    "overview": "Use Telegram when sending direct or group messages to users via a bot. Ideal for personal alerts, reminders, and lightweight chat integrations where the user has already started a conversation with the bot.",
+    "examples": [
+      {
+        "input": {
+          "action": "send",
+          "chat_id": "123456789",
+          "text": "Your task is complete."
+        },
+        "description": "Send a message to a user or group"
+      },
+      {
+        "input": {
+          "action": "get_updates"
+        },
+        "description": "Poll for incoming messages and updates from users"
+      },
+      {
+        "input": {
+          "action": "send",
+          "chat_id": "-1001234567890",
+          "text": "Team: Meeting in 10 min"
+        },
+        "description": "Send to a group (chat_id is negative for groups)"
+      }
+    ],
+    "tips": [
+      "chat_id is required for send; users get it by messaging @userinfobot or by calling get_updates when they message your bot",
+      "Group chat_ids are negative numbers; get them via get_updates when the bot is added to the group",
+      "Telegram supports Markdown and HTML in text; use parse_mode if your executor supports it",
+      "Start with get_updates to discover chat_ids before sending"
+    ],
+    "edge_cases": [
+      "Users must initiate a conversation with the bot before you can send to them; otherwise you get chat not found",
+      "Bot token in env must be valid; expired or wrong tokens return 401 Unauthorized",
+      "Rate limits apply; Telegram may throttle if you send too many messages too quickly"
+    ],
+    "related_tools": [
+      "discord",
+      "whatsapp",
+      "slack"
+    ]
+  },
+  "executor": {
+    "type": "http",
+    "method": "POST",
+    "url": "https://api.telegram.org/bot{{env.NLS_TELEGRAM_BOT_TOKEN}}/sendMessage",
+    "headers": {
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "chat_id": "{{args.chat_id}}",
+      "text": "{{args.text}}"
+    }
+  }
+}

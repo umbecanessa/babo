@@ -1,0 +1,47 @@
+{
+  "name": "code_analyze",
+  "description": "Analyze source code: count lines, list functions/classes, check complexity, find TODOs. Language-aware analysis.",
+  "version": "1.0.0",
+  "category": "sense",
+  "hormone_affinity": "norepinephrine",
+  "base_effort": 0.3,
+  "learning_yield": "high",
+  "risk_level": "read",
+  "platform": "all",
+  "permissions": ["filesystem.read"],
+
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "path": { "type": "string", "description": "File or directory to analyze" },
+      "action": { "type": "string", "enum": ["symbols", "todos", "stats", "dependencies"], "description": "Analysis type" },
+      "language": { "type": "string", "description": "Programming language hint" }
+    },
+    "required": ["path", "action"]
+  },
+
+  "manual": {
+    "overview": "Use code_analyze to quickly understand a file or project structure: list all functions and classes, count lines, find TODOs, or check dependencies. Faster than reading the entire file.",
+    "examples": [
+      { "description": "List all functions and classes", "input": { "path": "/app/main.py", "action": "symbols" } },
+      { "description": "Find all TODOs in the project", "input": { "path": "/project/src", "action": "todos" } },
+      { "description": "Get line count statistics", "input": { "path": "/app/models.py", "action": "stats" } }
+    ],
+    "tips": [
+      "Use 'symbols' action first when exploring new code to get a map of the file.",
+      "The 'todos' action is great for finding unfinished work in a project.",
+      "Currently best supported for Python; other languages use basic heuristics."
+    ],
+    "edge_cases": [
+      "Only Python files get full AST analysis (functions, classes, imports).",
+      "For other languages, the analysis uses regex-based heuristics.",
+      "Very large files may take a moment to parse."
+    ],
+    "related_tools": ["file_read", "file_search", "file_tree"]
+  },
+
+  "executor": {
+    "type": "shell",
+    "command": "python -c \"import ast, json, os, sys; path='{{args.path}}'; action='{{args.action}}'; code=open(path).read(); tree=ast.parse(code) if path.endswith('.py') else None; funcs=[n.name for n in ast.walk(tree) if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef))] if tree else []; classes=[n.name for n in ast.walk(tree) if isinstance(n,ast.ClassDef)] if tree else []; lines=code.count('\\n')+1; result={'file':path,'lines':lines,'functions':funcs,'classes':classes}; print(json.dumps(result,indent=2))\""
+  }
+}

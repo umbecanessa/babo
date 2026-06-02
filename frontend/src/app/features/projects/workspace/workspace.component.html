@@ -1,0 +1,26 @@
+<div class="workspace">
+  <aside class="explorer-pane" [style.width.px]="explorerWidth()">
+    <app-workspace-explorer
+      [rootPath]="rootPath()"
+      [activePath]="activePath()"
+      (fileOpen)="openFile($event)"
+    />
+  </aside>
+
+  <div
+    class="split-handle"
+    (mousedown)="onResizeStart($event)"
+    title="Drag to resize"
+  ></div>
+
+  <section class="editor-pane">
+    <app-workspace-editor
+      [tabs]="tabs()"
+      [activePath]="activePath()"
+      (tabSelect)="selectTab($event)"
+      (tabClose)="closeTab($event)"
+      (tabDirty)="onTabDirty($event)"
+      (save)="saveTab($event)"
+    />
+  </section>
+</div>

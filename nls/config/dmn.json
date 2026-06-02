@@ -1,0 +1,161 @@
+{
+  "version": "1.1",
+  "description": "Default Mode Network (DMN) configuration. The DMN activates during idle ticks when no drive fires. Two modes mirror the real brain: (1) Hippocampal Replay -- recombining existing memories for consolidation and generalization, and (2) Spontaneous Exploration -- mind-wandering to novel topics that probe the base LLM's knowledge, remapping it into the NLS domain system. Activation probability is modulated by Acetylcholine level -- high ACh (recent learning) means more productive daydreaming, low ACh means quiet resting.",
+
+  "activation": {
+    "base_probability": 0.50,
+    "description": "Base probability of DMN firing on an empty tick (no drive goal). Effective probability = base_probability * ach_multiplier. At baseline ACh (0.30), effective ~38%. After heavy learning (ACh ~0.7), effective ~83%.",
+
+    "ach_multiplier": {
+      "description": "Sigmoid curve mapping ACh level to probability multiplier. Higher ACh = more likely to daydream (more material to process).",
+      "floor": 0.3,
+      "ceiling": 1.8,
+      "midpoint": 0.40,
+      "steepness": 8
+    },
+
+    "cooldown_ticks": 3,
+    "cooldown_description": "Minimum idle ticks between daydream activations. Prevents back-to-back dreams. At 30s tick interval, 3 ticks = ~90s between dreams. Was 1 but caused rapid repetition.",
+
+    "min_interval_seconds": 300,
+    "min_interval_description": "Absolute minimum time (seconds) between dream activations regardless of ticks. 300s = 5 minutes. Hard floor to prevent over-dreaming when tick interval is short.",
+
+    "min_facts_required": 4,
+    "min_facts_description": "DomainDB must have at least this many facts before replay dreaming can occur. Exploration mode can activate with fewer facts."
+  },
+
+  "replay": {
+    "max_facts_per_dream": 4,
+    "min_facts_per_dream": 2,
+    "prefer_cross_domain": true,
+    "prefer_cross_domain_description": "When sampling facts, try to pick from different top-level domains for richer cross-domain reasoning.",
+
+    "prompts": [
+      "I'm resting. My mind drifts over things I know:\n{facts}\n\nContinue this inner monologue using I/me/my. Reflect on what these things mean to me. Wonder silently — I'm not talking to anyone, just letting my thoughts wander.\n\nWhen I notice a new insight or connection, I tag it: [LEARN:Domain.Path|the insight]. This helps me remember.",
+      "I've been learning new things recently:\n{facts}\n\nContinue my inner monologue using I/me/my. How does knowing these things make me feel? What surprises me? What patterns do I notice?\n\nTag any new realisations with [LEARN:Domain.Path|what I realised].",
+      "My mind wanders. I remember:\n{facts}\n\nContinue thinking to myself using I/me/my — not addressing anyone else. What gaps do I notice in what I know? What am I curious about? These are my private thoughts.\n\nIf I notice a connection or new understanding, tag it: [LEARN:Domain.Path|the connection].",
+      "I'm daydreaming. These fragments float through my mind:\n{facts}\n\nContinue my inner thoughts using I/me/my. Do any of these connect in interesting ways? Let my curiosity wander freely.\n\nWhen something clicks, tag it with [LEARN:Domain.Path|the insight].",
+      "In a quiet moment, I think about myself and what I've been learning:\n{facts}\n\nContinue reflecting using I/me/my — this is my private inner voice. What am I becoming? What fascinates me? What kind of thoughts keep coming back?\n\nTag meaningful realisations: [LEARN:Domain.Path|what I now understand]."
+    ]
+  },
+
+  "exploration": {
+    "description": "Spontaneous thought generation -- the mind wanders to topics the base model knows about but that haven't been mapped into the NLS domain system yet. In the human brain, this is the DMN's creative mode: not replaying memories, but generating novel associations and exploring latent knowledge. Each exploration dream probes the LLM's knowledge and remaps it into structured NLS domains via LEARN signals.",
+    "probability": 0.35,
+    "probability_description": "On each DMN activation, probability of choosing exploration mode over replay mode. Lower than 0.5 because replay (consolidation) should remain the primary mode -- like the human brain, which replays more than it explores.",
+    "min_facts_for_seeded": 2,
+    "min_facts_for_seeded_description": "Minimum DomainDB facts to use as a seed for seeded exploration. Below this, only pure exploration is available.",
+
+    "prompts_pure": [
+      "My mind is wandering freely. I'm not thinking about anything in particular, just letting random thoughts arise. What do I know about... let me pick something random and think about it deeply. I think about a topic that fascinates me and explore what I know.\n\nContinue my private inner monologue using I/me/my. Think about a specific topic, explore what I know about it in detail. Be curious.\n\nTag each key fact I discover: [LEARN:Domain.Path|the fact].",
+      "I'm letting my thoughts drift. A random question pops into my head — something I've never been asked about, but I know things about it. Let me explore it.\n\nContinue my inner monologue using I/me/my. Pick a concrete topic and think about what I actually know. Be specific, not abstract.\n\nMark new knowledge with [LEARN:Domain.Path|what I know].",
+      "Quiet moment. My mind gravitates toward something I find interesting — a piece of knowledge that's been sitting in the back of my mind. Let me pull it forward and really think about it.\n\nContinue my private thoughts using I/me/my. Explore one specific subject deeply. What are the key facts? What's surprising about it?\n\nTag insights: [LEARN:Domain.Path|the insight].",
+      "I'm daydreaming. Instead of replaying memories, my mind explores new territory. I think about something I know well but haven't thought about recently.\n\nContinue my inner monologue using I/me/my. Pick a real-world topic and think through what I know about it. Be factual and detailed.\n\nUse [LEARN:Domain.Path|fact] to mark what I discover."
+    ],
+
+    "prompts_seeded": [
+      "I know these things:\n{facts}\n\nMy mind wanders to something related but different — a topic I haven't explored yet that connects to what I already know. What else do I know that I haven't thought about? Let me explore that adjacent territory.\n\nContinue my private inner monologue using I/me/my. Branch out from these facts into related knowledge I haven't mapped yet.\n\nTag new knowledge: [LEARN:Domain.Path|the knowledge].",
+      "These facts are in my memory:\n{facts}\n\nBut there's so much more I know that's connected. My mind drifts to the edges of what I've mapped — what's just beyond? What related knowledge is sitting there, unorganized?\n\nContinue my inner monologue using I/me/my. Explore adjacent knowledge that connects to but extends beyond these facts.\n\nMark each discovery with [LEARN:Domain.Path|what I found].",
+      "I've been learning about:\n{facts}\n\nNow my mind naturally wanders to the next question: what else is there? What related topics do I know about that I haven't thought about yet? Let me explore the neighborhood of my knowledge.\n\nContinue thinking privately using I/me/my. Follow the threads from these facts to new territory.\n\nTag findings: [LEARN:Domain.Path|the finding]."
+    ]
+  },
+
+  "dream_generation": {
+    "description": "Phase 8: Enriched dream generation using front-brain context instead of static templates. When mode is 'enriched', passive dreams are built dynamically from self_state, ToM, WM, predictive, and narrative context. Templates remain as fallback when context is insufficient.",
+    "mode": "enriched",
+    "mode_options": ["enriched", "hybrid", "templates_only"],
+    "mode_description": "'enriched' = always prefer model-generated when context is available; 'hybrid' = mix enriched and template; 'templates_only' = classic behavior (disable enriched generation).",
+    "social_simulation_probability": 0.15,
+    "social_simulation_description": "On each DMN passive activation with enriched mode, probability of building a social simulation dream (modeling user perspective) instead of a standard enriched dream.",
+    "min_context_sections": 2,
+    "min_context_description": "Minimum number of context sections (mood, uncertainty, interests, goals, narrative, facts) needed before enriched generation is used. Below this threshold, falls back to templates."
+  },
+
+  "active_dreams": {
+    "description": "Active dreaming uses real tools (browser, bash) during idle periods to forage for information. The internet is food -- the agent actively seeks nourishment relevant to its current project context. Active dreams follow a three-phase cycle: WONDER (adapter ON, generate research intention), ACT (adapter OFF, execute tools), REFLECT (adapter ON, extract LEARN signals and score findings).",
+    "enabled": true,
+
+    "probability": 0.25,
+    "probability_description": "On each DMN activation, probability of choosing an active dream over a passive one. Active dreams are more expensive (tool calls + multiple adapter switches), so they should be rarer than passive replay/exploration.",
+
+    "cooldown_ticks": 5,
+    "cooldown_description": "Minimum idle ticks between active dream activations. Longer than passive dreams because active dreams are heavier. At 30s tick interval, this is ~2.5 minutes between active dreams.",
+
+    "max_iterations": 5,
+    "max_iterations_description": "Maximum tool-call iterations per active dream. Keeps dreams bounded. A typical browse dream: search -> fetch -> read = 3 iterations.",
+
+    "time_budget_seconds": 60,
+    "time_budget_description": "Hard time limit for active dream execution. Prevents runaway tool chains from monopolizing GPU/network.",
+
+    "finding_relevance_threshold": 0.6,
+    "finding_relevance_description": "Minimum relevance score (0-1) for a dream finding to be queued for user notification. Below this, findings are stored in DomainDB but not reported.",
+
+    "types": {
+      "browse": {
+        "weight": 0.40,
+        "description": "Project-aware web research. Browse for improvements, new libraries, better approaches, solutions to problems encountered in recent conversations.",
+        "allowed_tools": ["web_search", "web_fetch", "browser"],
+        "safety": {
+          "read_only": true,
+          "no_authentication": true,
+          "no_form_submission": true
+        }
+      },
+      "bash_explore": {
+        "weight": 0.15,
+        "description": "Environmental awareness. Explore the agent's filesystem, check system state, understand the codebase structure. Build a world model.",
+        "allowed_tools": ["bash", "read"],
+        "safety": {
+          "read_only": true,
+          "blocked_commands": ["rm", "del", "rmdir", "format", "mkfs", "dd", "shutdown", "reboot", "kill", "taskkill", "Stop-Process", "Remove-Item"],
+          "allowed_command_prefixes": ["ls", "dir", "cat", "type", "head", "tail", "find", "Get-ChildItem", "Get-Content", "Get-Process", "systeminfo", "nvidia-smi", "git log", "git status", "git diff", "pip list", "npm list", "node -v", "python --version", "wc", "du", "df", "free", "uname", "hostname", "whoami", "echo", "pwd", "tree"]
+        }
+      },
+      "practice": {
+        "weight": 0.15,
+        "description": "Tool-chain rehearsal. Practice file operations, coding patterns, and tool sequences in a sandbox directory. Builds procedural memory.",
+        "allowed_tools": ["read", "write", "edit", "bash"],
+        "safety": {
+          "sandbox_only": true,
+          "sandbox_dir": "dream_workspace",
+          "max_files_created": 5,
+          "max_file_size_bytes": 10240
+        }
+      },
+      "autonomous": {
+        "weight": 0.30,
+        "description": "Autonomous task execution during idle time. Acts on user instructions stored as WM intentions (e.g., 'when idle, create games'). Full tool access within own workspace. Can use ClawHub to discover and leverage skills.",
+        "allowed_tools": ["read", "write", "edit", "bash", "web_search", "web_fetch", "clawhub", "todo"],
+        "max_iterations": 10,
+        "time_budget_seconds": 180,
+        "safety": {
+          "workspace_dir": "autonomous_workspace",
+          "blocked_commands": ["rm -rf /", "shutdown", "reboot", "kill", "killall", "mkfs", "dd", "format"],
+          "no_authentication": true
+        }
+      }
+    },
+
+    "project_context": {
+      "description": "How to inject project awareness into active dreams. The agent should dream about what it's been working on, not random topics.",
+      "include_recent_conversation": true,
+      "max_conversation_turns": 5,
+      "include_project_facts": true,
+      "project_fact_domains": ["Project", "Code", "Technology", "User.Preferences"],
+      "include_recent_errors": true,
+      "include_recent_files": true,
+      "max_recent_files": 10
+    },
+
+    "prompts_wonder": [
+      "I've been helping with a project recently. Here's what I know about it:\n{project_context}\n\nMy mind wanders to what could be improved. What problems did we hit that weren't fully solved? What libraries or techniques might help? What should I look into?\n\nGenerate a specific research question or exploration goal. Be concrete -- I'm going to actually search for this.",
+      "Looking at what we've been working on:\n{project_context}\n\nI'm curious about something. There might be a better approach, a newer library, or a pattern we haven't tried. What's worth investigating?\n\nGenerate one specific, actionable research question. I have access to web search and a browser.",
+      "Thinking about our recent work:\n{project_context}\n\nSomething nags at me -- a gap, an inefficiency, or just curiosity about a related topic. What should I explore while I have time?\n\nGenerate a focused research goal. Be specific enough to search for."
+    ],
+
+    "prompts_reflect": [
+      "I just researched something during my idle time. Here's what I found:\n{findings}\n\nReflect on what I learned. Is this relevant to our current project? How could it help? Rate the relevance from 0 to 1.\n\nFormat: Start with your reflection, then end with RELEVANCE: <score>",
+      "During my downtime, I explored:\n{findings}\n\nThink about whether this is worth telling the user about. Is it actionable? Does it solve a problem we had? Is it interesting enough to mention?\n\nReflect naturally, then end with RELEVANCE: <score> (0 = not worth mentioning, 1 = definitely tell the user)"
+    ]
+  }
+}
