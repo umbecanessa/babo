@@ -125,8 +125,26 @@ if ($branch -ne $Branch) {
     Write-Err "Current branch is '$branch'. Checkout '$Branch' first (or pass -Branch)."
 }
 
-$dirty = git status --porcelain --untracked-files=no
-if ($dirty -and -not $DryRun) {
+function Get-ReleaseBlockingDirty {
+    $ignore = @(
+        '^desktop/dist-electron/',
+        '^desktop/release/',
+        '^desktop/release-build/',
+        '^desktop/release-mac/'
+    )
+    git status --porcelain --untracked-files=no | Where-Object {
+        $path = ($_ -replace '^\S+\s+', '').Trim() -replace '\\', '/'
+        if ($path -match ' -> ') { $path = ($path -split ' -> ')[-1].Trim() -replace '\\', '/' }
+        $blocked = $true
+        foreach ($pat in $ignore) {
+            if ($path -match $pat) { $blocked = $false; break }
+        }
+        $blocked
+    }
+}
+
+$dirty = @(Get-ReleaseBlockingDirty)
+if ($dirty.Count -gt 0 -and -not $DryRun) {
     Write-Host "   Uncommitted changes:" -ForegroundColor Yellow
     $dirty | ForEach-Object { Write-Host "     $_" }
     Write-Err "Commit or stash other changes before releasing."

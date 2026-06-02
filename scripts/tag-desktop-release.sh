@@ -81,8 +81,34 @@ command -v node >/dev/null || die "node not found"
 current_branch="$(git rev-parse --abbrev-ref HEAD)"
 [[ "$current_branch" == "$BRANCH" ]] || die "On branch '$current_branch'; checkout '$BRANCH' first."
 
-if [[ -n "$(git status --porcelain --untracked-files=no)" && "$DRY_RUN" -eq 0 ]]; then
-  git status --short
+is_ignored_release_path() {
+  local path="${1//\\//}"
+  case "$path" in
+    desktop/dist-electron/*|desktop/release/*|desktop/release-build/*|desktop/release-mac/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+has_blocking_dirty() {
+  local line path
+  while IFS= read -r line; do
+    path="${line#?? }"
+    path="${path#* -> }"
+    path="${path//\\//}"
+    if ! is_ignored_release_path "$path"; then
+      return 0
+    fi
+  done < <(git status --porcelain --untracked-files=no)
+  return 1
+}
+
+if [[ "$DRY_RUN" -eq 0 ]] && has_blocking_dirty; then
+  git status --porcelain --untracked-files=no | while IFS= read -r line; do
+    path="${line#?? }"
+    path="${path#* -> }"
+    path="${path//\\//}"
+    is_ignored_release_path "$path" || echo "$line"
+  done
   die "Commit or stash other changes before releasing."
 fi
 
