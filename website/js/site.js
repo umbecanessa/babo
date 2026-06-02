@@ -339,7 +339,7 @@
   /* Hero seal tilt */
   const tiltEl = document.querySelector("[data-tilt]");
   if (tiltEl && window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
-    const frame = tiltEl.querySelector(".hero-seal");
+    const frame = tiltEl.querySelector(".hero-seal-mark");
     if (frame) {
       tiltEl.addEventListener("mousemove", (e) => {
         const r = tiltEl.getBoundingClientRect();

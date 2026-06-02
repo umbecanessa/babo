@@ -688,19 +688,23 @@ section[id] {
 }
 
 .hero-seal {
-  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: min(92vw, 480px);
-  aspect-ratio: 1;
   transform-style: preserve-3d;
   transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+.hero-seal-mark {
+  position: relative;
+  display: inline-block;
+  line-height: 0;
+  transform-style: preserve-3d;
+}
+
 .hero-seal-orb {
   position: absolute;
-  inset: 4%;
+  inset: -6% -10%;
   pointer-events: none;
 }
 
@@ -728,8 +732,11 @@ section[id] {
 .hero-seal-logo {
   position: relative;
   z-index: 1;
-  width: 100%;
+  display: block;
+  width: auto;
   height: auto;
+  max-width: min(38vw, 340px);
+  max-height: min(52vh, 460px);
   object-fit: contain;
   filter: drop-shadow(0 12px 40px rgba(0, 0, 0, 0.14));
 }
@@ -1644,7 +1651,7 @@ code {
 
   .hero-visual { order: -1; }
 
-  .hero-seal { width: min(78vw, 320px); }
+  .hero-seal-logo { max-width: min(56vw, 280px); max-height: min(44vh, 360px); }
 
   .punch-card,
   .punch-card-featured {
