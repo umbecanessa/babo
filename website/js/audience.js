@@ -47,11 +47,12 @@ window.BABO_AUDIENCE = {
       brain: "Hormones, network, visual cortex.",
     },
     manifesto: {
+      label: "Manifesto",
       quote:
         "LLMs are infrastructure — like electricity. They should run in your home and office, not only in a vendor’s meter.",
-      body:
-        "Most work does not need a frontier model every turn. Babo is the open-source agent OS on your machine: persistent memory, real tools, optional cloud. Pay for power when you choose it — not because the product forgot you overnight. <a href=\"https://github.com/umbecanessa/neural-ledger-system\">NLS research</a> is the longer bet on stateful inference so cost stays flat as history grows.",
-      moreHtml: '<a href="manifesto/">Read the full manifesto</a>',
+      snippet:
+        "Most work does not need a frontier model every turn. We are building an open-source agent OS for your hardware — persistent memory, real tools, optional cloud — with <a href=\"https://github.com/umbecanessa/neural-ledger-system\">NLS research</a> on stateful inference so cost does not explode as history grows.",
+      cta: { href: "manifesto/", label: "Read the full manifesto" },
     },
     drift: {
       title: "Built against drift",
@@ -172,10 +173,11 @@ window.BABO_AUDIENCE = {
       brain: "Optional — see what your agent is doing inside.",
     },
     manifesto: {
+      label: "Manifesto",
       quote: "Every family deserves an agent on their own computer — not another subscription that forgets them.",
-      body:
-        "Babo is early access, open source, and local-first: one brain for your tasks, email, and messages, with a wizard instead of a terminal. The big vision is an agent in every home; today we ship the software you can actually install.",
-      moreHtml: '<a href="manifesto/">Read the full manifesto</a>',
+      snippet:
+        "Babo is early access and local-first: one brain for your tasks, email, and messages — no terminal required. The long-term vision is an agent in every home; today you can install the software.",
+      cta: { href: "manifesto/", label: "Read the manifesto" },
     },
     drift: null,
     pricing: {

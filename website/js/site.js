@@ -138,19 +138,16 @@
       if (copy.captions[key]) el.textContent = copy.captions[key];
     });
 
+    const manifestoLabel = document.getElementById("manifesto-teaser-label");
     const quoteEl = document.getElementById("manifesto-quote");
-    const bodyEl = document.getElementById("manifesto-body");
-    const moreEl = document.getElementById("manifesto-more");
+    const snippetEl = document.getElementById("manifesto-snippet");
+    const manifestoCta = document.getElementById("manifesto-cta");
+    if (manifestoLabel && copy.manifesto.label) manifestoLabel.textContent = copy.manifesto.label;
     if (quoteEl) quoteEl.textContent = copy.manifesto.quote;
-    if (bodyEl) bodyEl.innerHTML = copy.manifesto.body;
-    if (moreEl) {
-      if (copy.manifesto.moreHtml) {
-        moreEl.innerHTML = copy.manifesto.moreHtml;
-        moreEl.classList.remove("hidden");
-      } else {
-        moreEl.innerHTML = "";
-        moreEl.classList.add("hidden");
-      }
+    if (snippetEl) snippetEl.innerHTML = copy.manifesto.snippet || "";
+    if (manifestoCta && copy.manifesto.cta) {
+      manifestoCta.href = copy.manifesto.cta.href;
+      manifestoCta.textContent = copy.manifesto.cta.label;
     }
 
     const driftSection = document.getElementById("drift");
