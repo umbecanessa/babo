@@ -8,6 +8,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
+
 from nls.platform_shell import (
     build_powershell_subprocess_argv,
     extract_missing_bin_from_output,
