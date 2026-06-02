@@ -1,0 +1,285 @@
+# Build Babo Desktop (Windows + macOS) and publish a GitHub Release for auto-update.
+#
+# Trigger: push a semver tag vX.Y.Z on a commit whose desktop/package.json version matches.
+#
+# Optional signing secrets (Settings → Secrets and variables → Actions):
+#   WINDOWS_CERTIFICATE_BASE64  - base64-encoded .p12 for Authenticode
+#   WINDOWS_CERTIFICATE_PASSWORD
+#   APPLE_CERTIFICATE_BASE64    - base64-encoded Developer ID Application .p12
+#   APPLE_CERTIFICATE_PASSWORD
+#   APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, APPLE_TEAM_ID  - notarization (macOS)
+#
+# Without signing secrets, unsigned installers are published (auto-update still works).
+
+name: Release Desktop
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build (e.g. v1.9.6). Must exist on the remote.'
+        required: true
+        type: string
+      skip_mac:
+        description: 'Skip macOS build (Windows-only release)'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-desktop-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  resolve-version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+
+      - name: Resolve release version
+        id: meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+          fi
+          if [[ ! "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Tag must look like v1.2.3 (got: $TAG)" >&2
+            exit 1
+          fi
+          VERSION="${TAG#v}"
+          PKG_VERSION="$(node -p "require('./desktop/package.json').version")"
+          if [[ "$PKG_VERSION" != "$VERSION" ]]; then
+            echo "desktop/package.json version ($PKG_VERSION) must match tag ($TAG)" >&2
+            echo "Bump package.json on main, commit, then tag and push." >&2
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Release $TAG (package.json $PKG_VERSION)"
+
+  build-windows:
+    needs: resolve-version
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve-version.outputs.tag }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            desktop/package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python deps (genesis + icons)
+        run: pip install pillow pydantic pydantic-settings pyyaml
+
+      - name: Regenerate genesis template
+        run: python scripts/regenerate-genesis.py
+
+      - name: Ensure desktop icons
+        run: python scripts/ensure-desktop-icons.py
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install desktop dependencies
+        working-directory: desktop
+        run: npm ci
+
+      - name: Build Angular (electron)
+        working-directory: frontend
+        run: npx ng build --configuration=electron
+
+      - name: Compile Electron TypeScript
+        working-directory: desktop
+        run: npm run build:electron
+
+      - name: Import Windows code signing certificate
+        if: secrets.WINDOWS_CERTIFICATE_BASE64 != ''
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          if (-not $env:WINDOWS_CERTIFICATE_BASE64) { exit 0 }
+          $bytes = [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_BASE64)
+          $path = "$env:RUNNER_TEMP\babo-windows.p12"
+          [IO.File]::WriteAllBytes($path, $bytes)
+          echo "CSC_LINK=$path" >> $env:GITHUB_ENV
+          echo "CSC_KEY_PASSWORD=$env:WINDOWS_CERTIFICATE_PASSWORD" >> $env:GITHUB_ENV
+
+      - name: Package Windows NSIS installer
+        working-directory: desktop
+        run: npx electron-builder --win nsis --publish never
+
+      - name: Fix latest.yml installer filename if needed
+        shell: pwsh
+        working-directory: desktop
+        run: |
+          $installer = Get-ChildItem release\*.exe | Where-Object {
+            $_.Name -notlike '*uninstaller*' -and $_.Name -like '*Setup*'
+          } | Select-Object -First 1
+          if (-not $installer) { throw 'NSIS installer not found in desktop/release' }
+          $latestYml = 'release\latest.yml'
+          if (-not (Test-Path $latestYml)) { throw 'latest.yml not found' }
+          $content = Get-Content $latestYml -Raw
+          if ($content -notmatch [regex]::Escape($installer.Name)) {
+            $content = $content -replace 'Babo[-. ]Setup[-. ]\d+\.\d+\.\d+\.exe', $installer.Name
+            Set-Content $latestYml $content -NoNewline
+            Write-Host "Patched latest.yml -> $($installer.Name)"
+          }
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          if-no-files-found: error
+          path: |
+            desktop/release/*Setup*.exe
+            desktop/release/*.blockmap
+            desktop/release/latest.yml
+
+  build-macos:
+    needs: resolve-version
+    if: github.event_name != 'workflow_dispatch' || inputs.skip_mac != true
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve-version.outputs.tag }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            desktop/package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python deps (genesis + icons)
+        run: pip install pillow pydantic pydantic-settings pyyaml
+
+      - name: Regenerate genesis template
+        run: python scripts/regenerate-genesis.py
+
+      - name: Ensure desktop icons
+        run: python scripts/ensure-desktop-icons.py
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install desktop dependencies
+        working-directory: desktop
+        run: npm ci
+
+      - name: Import macOS code signing certificate
+        if: secrets.APPLE_CERTIFICATE_BASE64 != ''
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${APPLE_CERTIFICATE_BASE64:-}" ]]; then exit 0; fi
+          CERT_PATH="$RUNNER_TEMP/babo-mac.p12"
+          echo "$APPLE_CERTIFICATE_BASE64" | base64 --decode > "$CERT_PATH"
+          security create-keychain -p actions build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p actions build.keychain
+          security import "$CERT_PATH" -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign -T /usr/bin/productsign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k actions build.keychain
+          echo "CSC_LINK=$CERT_PATH" >> "$GITHUB_ENV"
+          echo "CSC_KEY_PASSWORD=$APPLE_CERTIFICATE_PASSWORD" >> "$GITHUB_ENV"
+          echo "CSC_IDENTITY_AUTO_DISCOVERY=true" >> "$GITHUB_ENV"
+
+      - name: Build macOS release artifacts
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.APPLE_CERTIFICATE_BASE64 != '' && 'true' || 'false' }}
+        run: bash desktop/build-mac.sh
+
+      - name: Collect macOS artifacts into upload folder
+        run: |
+          set -euo pipefail
+          VERSION="${{ needs.resolve-version.outputs.version }}"
+          mkdir -p mac-upload
+          shopt -s nullglob
+          for f in desktop/release/Babo-"${VERSION}"-mac*.dmg \
+                   desktop/release/Babo-"${VERSION}"-mac*.zip \
+                   desktop/release/Babo-"${VERSION}"-mac*.blockmap \
+                   desktop/release/latest-mac.yml; do
+            cp "$f" mac-upload/
+          done
+          if [[ -z "$(ls -A mac-upload)" ]]; then
+            echo "No macOS release artifacts found" >&2
+            exit 1
+          fi
+          ls -la mac-upload/
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          if-no-files-found: error
+          path: mac-upload/*
+
+  publish:
+    needs: [resolve-version, build-windows, build-macos]
+    if: |
+      always() &&
+      needs.build-windows.result == 'success' &&
+      (needs.build-macos.result == 'success' || needs.build-macos.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List release files
+        run: find artifacts -type f | sort
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.resolve-version.outputs.tag }}
+          name: ${{ needs.resolve-version.outputs.tag }}
+          generate_release_notes: true
+          make_latest: true
+          fail_on_unmatched_files: true
+          files: |
+            artifacts/**/*.exe
+            artifacts/**/*.blockmap
+            artifacts/**/latest.yml
+            artifacts/**/*.dmg
+            artifacts/**/*.zip
+            artifacts/**/latest-mac.yml

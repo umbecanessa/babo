@@ -65,8 +65,15 @@ fi
 # Prevent macOS from creating ._* AppleDouble resource fork files in tarballs
 export COPYFILE_DISABLE=1
 
+EB_MAC_EXTRA=()
+if [[ -z "${APPLE_ID:-}" || -z "${APPLE_APP_SPECIFIC_PASSWORD:-}" || -z "${APPLE_TEAM_ID:-}" ]]; then
+  EB_MAC_EXTRA=(-c.mac.notarize=false)
+  echo ">> Notarization disabled (APPLE_ID / APPLE_APP_SPECIFIC_PASSWORD / APPLE_TEAM_ID not set)"
+fi
+
 echo ">> Building macOS app in $(pwd)..."
-npm run dist:mac
+npm run build
+npx electron-builder --mac dmg zip --publish never "${EB_MAC_EXTRA[@]}"
 
 if [[ ! -d release ]] || [[ -z "$(ls -A release 2>/dev/null)" ]]; then
   echo "ERROR: desktop/release is missing or empty after build"

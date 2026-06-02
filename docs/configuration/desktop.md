@@ -36,7 +36,27 @@ cd desktop
 .\build-local.ps1 -Installer   # full Babo-Setup-x.y.z.exe
 ```
 
-**Publish a GitHub release (Windows):**
+**Publish via GitHub Actions (recommended):**
+
+One command from the repo root (patch bump by default):
+
+```powershell
+.\scripts\tag-desktop-release.ps1
+```
+
+```bash
+./scripts/tag-desktop-release.sh
+```
+
+Examples: `-Bump minor`, `-Version 1.9.7` / `--version 1.9.7`, `-DryRun` / `--dry-run`.
+
+That bumps `desktop/package.json`, commits on `main`, pushes tag `vX.Y.Z`, and triggers [`.github/workflows/release-desktop.yml`](../../.github/workflows/release-desktop.yml) to build Windows + macOS and publish the GitHub Release (`latest.yml` / `latest-mac.yml`).
+
+Re-run a failed build from **Actions → Release Desktop → Run workflow** (use the same tag).
+
+Optional repo secrets for code signing: `WINDOWS_CERTIFICATE_*`, `APPLE_CERTIFICATE_*`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`. Unsigned builds still publish and auto-update works.
+
+**Manual release (local):**
 
 ```powershell
 cd desktop
@@ -45,15 +65,13 @@ cd desktop
 .\release.ps1 -Version 1.9.7
 ```
 
-**Windows + Mac (requires SSH to a Mac build machine):**
+**Windows + Mac via Mac Mini SSH:**
 
 ```powershell
 .\release-all.ps1
 ```
 
 See also `desktop/BUILD-MAC.md` for macOS-only builds via `build-mac.sh`.
-
-macOS builds must run on a Mac (`npm run dist:mac` or `build-mac.sh`).
 
 ---
 
@@ -86,7 +104,9 @@ NLS_SLEEP_ENABLED=true
 
 ## Updates
 
-Releases publish to GitHub. Auto-update checks on launch (requires `GH_TOKEN` or `GITHUB_TOKEN` for private rate limits in CI — not needed for end users on public repo).
+Releases publish to **public** GitHub Releases on `umbecanessa/babo`. The desktop app checks on launch and every 4 hours (`desktop/electron/update-manager.ts`). End users do not need a GitHub token.
+
+CI builds must upload `latest.yml` (Windows) and, when macOS is included, `latest-mac.yml` plus installers — the Release Desktop workflow does this automatically.
 
 ---
 

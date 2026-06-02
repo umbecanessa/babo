@@ -85,6 +85,11 @@ export class UpdateManager {
   initialize(win: BrowserWindow): void {
     this.mainWindow = win;
 
+    if (!app.isPackaged) {
+      log.info('[UpdateManager] skipping auto-update (app is not packaged)');
+      return;
+    }
+
     autoUpdater.logger = log;
     (autoUpdater.logger as any).transports.file.level = 'debug';
 
