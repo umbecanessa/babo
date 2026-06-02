@@ -151,28 +151,15 @@ async def lifespan(app: FastAPI):
     connection_manager = ConnectionManager()
     app.state.connection_manager = connection_manager
     sleep_scheduler.connection_manager = connection_manager
+    agent_manager.connection_manager = connection_manager
 
-    nestjs_url = os.environ.get("NESTJS_URL", "")
-    relay_secret = (
-        os.environ.get("RUNTIME_SHARED_SECRET", "").strip()
-        or os.environ.get("NLS_SHARED_SECRET", "").strip()
+    from server.services.agent_relay import ensure_all_agent_relays
+
+    n_relays = await ensure_all_agent_relays(
+        connection_manager, settings.agents_dir,
     )
-    if nestjs_url:
-        from nls.runtime.channels import ChannelRelayClient
-
-        for agent_id, runtime in agent_manager.get_loaded_runtimes().items():
-            try:
-                relay = ChannelRelayClient(
-                    nestjs_url,
-                    agent_id,
-                    relay_secret,
-                    agent_name=getattr(runtime, "_agent_name", "") or "",
-                    genesis_version=getattr(runtime, "_genesis_version", "") or "",
-                )
-                await relay.connect()
-                connection_manager.register_relay(agent_id, relay)
-            except Exception as exc:
-                logger.debug("Dashboard relay skipped for %s: %s", agent_id, exc)
+    if n_relays:
+        logger.info("Started cloud relay for %d agent(s)", n_relays)
 
     consciousness_enabled = os.environ.get(
         "NLS_CONSCIOUSNESS_ENABLED", "true",

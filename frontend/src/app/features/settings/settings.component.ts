@@ -16,6 +16,7 @@ import { firstValueFrom } from 'rxjs';
 import { ToastService } from '../../shared/toast/toast.service';
 import { Day1CoachService } from '../../shared/onboarding/day1-coach.service';
 import { PlatformService } from '../../core/services/platform.service';
+import { UpdateService } from '../../core/services/update.service';
 import { ThemeService, ThemeMode } from '../../core/services/theme.service';
 import { CapabilitySettingsPanelComponent } from '../../shared/capability-settings-panel/capability-settings-panel.component';
 import { AgentModelService } from '../../core/services/agent-model.service';
@@ -75,6 +76,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
   activeSection = signal<string>('');
   saving = signal(false);
   appVersion = signal('');
+  checkingUpdates = signal(false);
 
   /** Web-only appearance persisted in NestJS */
   webSettings = signal<WebAppearanceSettings>({
@@ -194,7 +196,27 @@ export class SettingsComponent implements OnInit, OnDestroy {
     private agentModels: AgentModelService,
     public platform: PlatformService,
     public themeService: ThemeService,
+    public updateService: UpdateService,
   ) {}
+
+  async checkForUpdates(): Promise<void> {
+    if (!this.platform.isElectron) return;
+    this.checkingUpdates.set(true);
+    try {
+      await this.updateService.check();
+      const s = this.updateService.state();
+      if (s === 'idle') {
+        this.toast.show('You are on the latest version', 'info', 3000);
+      } else if (s === 'available') {
+        const v = this.updateService.updateInfo()?.version;
+        this.toast.show(v ? `Update v${v} available` : 'Update available', 'info', 4000);
+      } else if (s === 'error') {
+        this.toast.show(this.updateService.errorMessage() || 'Update check failed', 'error', 5000);
+      }
+    } finally {
+      this.checkingUpdates.set(false);
+    }
+  }
 
   ngOnInit(): void {
     const sectionParam = this.route.snapshot.queryParamMap.get('section');

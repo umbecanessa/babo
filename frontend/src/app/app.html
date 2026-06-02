@@ -25,6 +25,16 @@
         </div>
       </div>
 
+      <!-- Center: release channel + version (dashboard / global nav) -->
+      @if (!hasAgentContext()) {
+        <div class="nav-meta" aria-label="Release info">
+          <span class="nav-release-tag">Early access</span>
+          @if (appVersion(); as ver) {
+            <span class="nav-version">v{{ ver }}</span>
+          }
+        </div>
+      }
+
       <!-- Center: agent-context tabs (only visible inside an agent) -->
       @if (hasAgentContext()) {
         <div class="nav-agent-tabs">
@@ -65,6 +75,14 @@
 
       <!-- Right: theme + update + settings + logout -->
       <div class="nav-right">
+        @if (hasAgentContext()) {
+          <div class="nav-meta nav-meta--compact" aria-label="Release info">
+            <span class="nav-release-tag">Early access</span>
+            @if (appVersion(); as ver) {
+              <span class="nav-version">v{{ ver }}</span>
+            }
+          </div>
+        }
         <button
           type="button"
           class="theme-toggle-btn"

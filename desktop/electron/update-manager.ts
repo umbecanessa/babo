@@ -93,14 +93,16 @@ export class UpdateManager {
     autoUpdater.logger = log;
     (autoUpdater.logger as any).transports.file.level = 'debug';
 
-    const token = process.env.GH_TOKEN || process.env.GITHUB_TOKEN;
+    // Use latest-release latest.yml (GitHub atom/API tag resolution is flaky for NSIS).
+    const owner = process.env.GH_RELEASE_OWNER || 'umbecanessa';
+    const repo = process.env.GH_RELEASE_REPO || 'babo';
+    const feedUrl = `https://github.com/${owner}/${repo}/releases/latest/download`;
     autoUpdater.setFeedURL({
-      provider: 'github',
-      owner: process.env.GH_RELEASE_OWNER || 'umbecanessa',
-      repo: process.env.GH_RELEASE_REPO || 'babo',
-      private: Boolean(token),
-      ...(token ? { token } : {}),
-    } as any);
+      provider: 'generic',
+      url: feedUrl,
+    });
+
+    log.info('[UpdateManager] feed URL:', feedUrl);
 
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;

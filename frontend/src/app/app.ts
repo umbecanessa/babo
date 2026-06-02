@@ -35,6 +35,9 @@ export class App implements OnInit, OnDestroy {
   /** Whether we are inside an agent context (show agent-specific tabs) */
   hasAgentContext = signal(false);
 
+  /** Desktop app semver from Electron (e.g. 1.0.0) */
+  appVersion = signal<string | null>(null);
+
   private routeSub!: Subscription;
 
   constructor(
@@ -49,6 +52,8 @@ export class App implements OnInit, OnDestroy {
   }
 
   ngOnInit() {
+    void this.loadAppVersion();
+
     // Track route changes to extract agentId from URL
     this.routeSub = this.router.events
       .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
@@ -71,5 +76,16 @@ export class App implements OnInit, OnDestroy {
 
   logout() {
     this.auth.logout();
+  }
+
+  private async loadAppVersion(): Promise<void> {
+    if (!this.platform.isElectron) return;
+    try {
+      const nls = (window as { nls?: { getVersion?: () => Promise<string> } }).nls;
+      const v = await nls?.getVersion?.();
+      if (v) this.appVersion.set(v);
+    } catch {
+      // Non-critical if preload is unavailable
+    }
   }
 }

@@ -91,6 +91,19 @@ class ConnectionManager:
         """Remove a relay client for an agent."""
         self._relay_clients.pop(agent_id, None)
 
+    async def stop_relay(self, agent_id: str) -> None:
+        """Disconnect and unregister a relay client."""
+        relay = self._relay_clients.pop(agent_id, None)
+        if relay is not None:
+            try:
+                await relay.disconnect()
+            except Exception:
+                pass
+
+    def has_relay(self, agent_id: str) -> bool:
+        """True when a ChannelRelayClient is registered (may be reconnecting)."""
+        return agent_id in self._relay_clients
+
     def relay_connected(self, agent_id: str) -> bool:
         """True when a ChannelRelayClient is registered and connected to NestJS."""
         relay = self._relay_clients.get(agent_id)

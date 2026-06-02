@@ -521,7 +521,18 @@
       @if (appVersion()) {
         <div class="field-group">
           <label class="field-label">Version</label>
-          <p class="info-pill">{{ appVersion() }}</p>
+          <p class="info-pill">v{{ appVersion() }} · Early access</p>
+          <button
+            class="btn-secondary"
+            type="button"
+            (click)="checkForUpdates()"
+            [disabled]="checkingUpdates()"
+          >
+            {{ checkingUpdates() ? 'Checking…' : 'Check for updates' }}
+          </button>
+          @if (updateService.state() === 'error') {
+            <p class="field-hint error-hint">{{ updateService.errorMessage() }}</p>
+          }
         </div>
       }
     </section>

@@ -262,6 +262,9 @@ class AgentManager:
         # Consciousness scheduler (set after startup by main.py)
         self.consciousness_scheduler: Any = None
 
+        # Connection manager (set after startup by main.py)
+        self.connection_manager: Any = None
+
     # ===================================================================
     # Periodic Autosave
     # ===================================================================
@@ -428,6 +431,12 @@ class AgentManager:
             self.consciousness_scheduler.register_agent(agent_id)
 
         logger.info("Agent %s loaded and ready for serving", agent_id)
+
+        cm = self.connection_manager
+        if cm is not None:
+            from server.services.agent_relay import ensure_agent_relay
+
+            await ensure_agent_relay(cm, agent_id, self.agents_dir, runtime=runtime)
 
     def _load_agent_meta(self, agent_id: str, agent_dir: Path) -> None:
         """Load agent metadata from agent_meta.json into cache."""

@@ -3,9 +3,8 @@ productName: Babo
 copyright: Copyright © 2026 Babo
 
 publish:
-  provider: github
-  owner: umbecanessa
-  repo: babo
+  provider: generic
+  url: https://github.com/umbecanessa/babo/releases/latest/download
 
 directories:
   output: release

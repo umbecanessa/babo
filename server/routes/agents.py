@@ -127,30 +127,16 @@ async def create_agent(body: CreateAgentRequest, request: Request):
         except Exception as _me:
             logger.warning("Agent %s: failed to persist owner identity: %s", new_agent_id, _me)
 
-    # Auto-start relay for the new agent if NestJS URL is configured
-    nestjs_url = os.environ.get("NESTJS_URL", "")
-    relay_secret = os.environ.get("RUNTIME_SHARED_SECRET", "") or os.environ.get("NLS_SHARED_SECRET", "")
-    if nestjs_url:
-        try:
-            from nls.runtime.channels import ChannelRelayClient
+    from server.services.agent_relay import ensure_agent_relay
 
-            connection_manager = getattr(request.app.state, "connection_manager", None)
-            runtime = request.app.state.agent_manager.get_loaded_runtimes().get(new_agent_id)
-            agent_name = getattr(runtime, "_agent_name", "") or body.name or ""
-            genesis_ver = getattr(runtime, "_genesis_version", "") or genesis
-
-            relay = ChannelRelayClient(
-                nestjs_url, new_agent_id, relay_secret,
-                agent_name=agent_name,
-                genesis_version=genesis_ver,
-            )
-            import asyncio
-            asyncio.ensure_future(relay.connect())
-            if connection_manager:
-                connection_manager.register_relay(new_agent_id, relay)
-            logger.info("Started relay for new agent %s", new_agent_id)
-        except Exception as exc:
-            logger.warning("Failed to start relay for %s: %s", new_agent_id, exc)
+    connection_manager = getattr(request.app.state, "connection_manager", None)
+    runtime = request.app.state.agent_manager.get_loaded_runtimes().get(new_agent_id)
+    await ensure_agent_relay(
+        connection_manager,
+        new_agent_id,
+        request.app.state.settings.agents_dir,
+        runtime=runtime,
+    )
 
     return CreateAgentResponse(
         agent_id=new_agent_id,
@@ -233,6 +219,11 @@ async def delete_agent(agent_id: str, request: Request):
     except Exception as exc:
         logger.error("Failed to delete agent %s: %s", agent_id, exc)
         raise HTTPException(status_code=500, detail=str(exc))
+
+    cm = getattr(request.app.state, "connection_manager", None)
+    if cm is not None:
+        await cm.stop_relay(agent_id)
+
     return {"deleted": agent_id}
 
 

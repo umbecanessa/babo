@@ -253,6 +253,10 @@ $red: var(--accent-danger);
   margin-top: 4px;
 }
 
+.error-hint {
+  color: var(--accent-danger, #e74c3c);
+}
+
 .field-row {
   display: flex;
   gap: 16px;
