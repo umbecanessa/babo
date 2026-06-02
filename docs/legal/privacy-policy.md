@@ -21,7 +21,7 @@ Babo is **local-first**: agent memory, workspace files, and most runtime state s
 | **Product** | Babo — persistent AI agents with memory, projects, and integrations |
 | **Open source** | [github.com/umbecanessa/babo](https://github.com/umbecanessa/babo) (MIT) |
 | **Operator** | Babo Agency — website **babo.agency**, optional Babo Cloud **api.babo.agency** |
-| **Contact** | [privacy@babo.agency](mailto:privacy@babo.agency) |
+| **Contact** | [cc@umberto.me](mailto:cc@umberto.me) |
 
 If you **self-host** Babo (your own NestJS/backend and data directory), you are the operator for that deployment. This policy still applies when you use **our** OAuth app, Babo Cloud, or this website.
 
@@ -196,7 +196,7 @@ No system is perfectly secure. Keep your OS, Babo install, and API keys updated.
 
 Depending on your location, you may have rights to **access**, **correct**, **delete**, or **export** personal data, and to **object** or **restrict** certain processing.
 
-- **Babo Cloud account:** contact [privacy@babo.agency](mailto:privacy@babo.agency).
+- **Babo Cloud account:** contact [cc@umberto.me](mailto:cc@umberto.me).
 - **Local data:** delete under your data directory or via in-app agent removal.
 - **Google:** revoke as in §6.4.
 - **Marketing:** we do not send promotional email by default from this policy’s scope.
@@ -236,7 +236,7 @@ We may update this policy. We will post the new version at this URL with an upda
 ## 16. Contact
 
 **Babo Agency**  
-Email: [privacy@babo.agency](mailto:privacy@babo.agency)  
+Email: [cc@umberto.me](mailto:cc@umberto.me)  
 Website: [https://babo.agency](https://babo.agency)
 
 For open-source security issues, see the repository’s security policy on GitHub.

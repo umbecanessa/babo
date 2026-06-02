@@ -8,4 +8,4 @@ Policies for Babo Agency services and the public website.
 
 **Public URL (for OAuth & app stores):** [https://babo.agency/legal/privacy-policy/](https://babo.agency/legal/privacy-policy/)
 
-Contact: [privacy@babo.agency](mailto:privacy@babo.agency)
+Contact: [cc@umberto.me](mailto:cc@umberto.me)
