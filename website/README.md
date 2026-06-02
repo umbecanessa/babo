@@ -7,7 +7,7 @@ Static early-access homepage — **separate from the open-source documentation**
 | `website/` | Marketing HTML/CSS/JS (audience variants in `js/audience.js`) |
 | `docs/` + `mkdocs.yml` | Technical documentation (published via [Deploy documentation](../../.github/workflows/docs.yml)) |
 
-GitHub Pages for this repo deploys **MkDocs only** (`https://umbecanessa.github.io/babo/`). The marketing site is not overlaid on that build.
+Documentation is published at **https://babo.agency/** (MkDocs from `docs/`). The marketing site is not overlaid on that build.
 
 ## Local preview (marketing only)
 

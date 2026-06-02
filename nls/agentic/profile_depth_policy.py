@@ -109,7 +109,7 @@ def _multi_step_signals(state: LoopState) -> bool:
     if len(state.goals or []) >= 2:
         return True
     hints = {h.strip().lower() for h in (state.hints or []) if h and h.strip()}
-    if "setup:instruction_skill" in hints:
+    if "setup:instruction_skill" in hints or "setup:native_skill" in hints:
         return True
     ui = (state.user_input or "").lower()
     if any(
@@ -411,7 +411,7 @@ def _evaluate_error_recovery(
     if profile != "conversational":
         return None
     hints = {h.strip().lower() for h in (state.hints or []) if h and h.strip()}
-    if "setup:instruction_skill" not in hints:
+    if "setup:instruction_skill" not in hints and "setup:native_skill" not in hints:
         return None
     if tool_name not in _IC_TOOLS and tool_name not in ("plan", "todo"):
         return None

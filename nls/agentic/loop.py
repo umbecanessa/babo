@@ -1210,6 +1210,8 @@ async def run_loop(
     inject_prompt_structured_hints(user_input, state.hints)
     from nls.agentic.profile_guard_policy import enrich_instruction_skill_hints
     enrich_instruction_skill_hints(user_input, state.goals, state.hints)
+    from nls.agentic.profile_guard_policy import enrich_native_skill_hints
+    enrich_native_skill_hints(user_input, state.goals, state.hints)
 
     if _deferred_actions:
         from .goals import deferred_actions_to_goal_strings
@@ -1296,7 +1298,17 @@ async def run_loop(
         context.append({"role": "system", "content": _anchor})
 
     _hint_tokens = {h.strip().lower() for h in state.hints if h and h.strip()}
-    if "setup:instruction_skill" in _hint_tokens:
+    if "setup:native_skill" in _hint_tokens:
+        try:
+            from nls.skills_setup_policy import build_native_skill_setup_lines
+
+            context.append({
+                "role": "system",
+                "content": "\n".join(build_native_skill_setup_lines()),
+            })
+        except Exception:
+            pass
+    elif "setup:instruction_skill" in _hint_tokens:
         try:
             from nls.skills_setup_policy import resolve_data_skills_dir
 

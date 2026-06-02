@@ -4943,7 +4943,7 @@ class AgentRuntime:
                     block_height=self._sleep_count,
                 )
 
-    def dream_generate(
+    async def dream_generate_async(
         self, prompt: str,
         worker_model: Any = None, worker_tokenizer: Any = None,
     ) -> str:
@@ -4969,33 +4969,48 @@ class AgentRuntime:
         from nls.runtime.inference_compat import micro_inference_extra_body
 
         _upstream = getattr(_vllm, "base_url", "") or ""
-        gen_kwargs: dict[str, Any] = {
-            "adapter_name": _adapter,
-            "max_tokens": gen_cfg.get("max_new_tokens", 1024),
-            "temperature": temperature,
-            "top_p": gen_cfg.get("top_p", 0.9),
-            "messages": messages,
-            "extra_body": micro_inference_extra_body(_upstream, thinking=False),
-        }
+        result = await _vllm.generate(
+            adapter_name=_adapter,
+            max_tokens=gen_cfg.get("max_new_tokens", 1024),
+            temperature=temperature,
+            top_p=gen_cfg.get("top_p", 0.9),
+            messages=messages,
+            extra_body=micro_inference_extra_body(_upstream, thinking=False),
+        )
 
+        raw = result.text.strip()
+        response, _ = strip_thinking(raw)
+        return response
+
+    def dream_generate(
+        self, prompt: str,
+        worker_model: Any = None, worker_tokenizer: Any = None,
+    ) -> str:
+        """Sync wrapper — always schedules on the server event loop."""
+        coro = self.dream_generate_async(
+            prompt,
+            worker_model=worker_model,
+            worker_tokenizer=worker_tokenizer,
+        )
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             loop = None
 
         if loop is not None and loop.is_running():
-            future = asyncio.run_coroutine_threadsafe(
-                _vllm.generate(**gen_kwargs), loop,
-            )
-            result = future.result(timeout=300.0)
-        else:
-            result = asyncio.run(
-                _vllm.generate(**gen_kwargs),
-            )
+            future = asyncio.run_coroutine_threadsafe(coro, loop)
+            return future.result(timeout=300.0)
 
-        raw = result.text.strip()
-        response, _ = strip_thinking(raw)
-        return response
+        from server.main import app
+
+        main_loop = getattr(app.state, "loop", None)
+        if main_loop is not None and main_loop.is_running():
+            future = asyncio.run_coroutine_threadsafe(coro, main_loop)
+            return future.result(timeout=300.0)
+
+        raise RuntimeError(
+            "dream_generate requires a running asyncio event loop",
+        )
 
     def add_dream_finding(self, finding: Any) -> None:
         self._dream_findings.append(finding)

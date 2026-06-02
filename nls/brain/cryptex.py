@@ -3350,6 +3350,7 @@ class CryptexMemory:
         import sys as _sys
 
         from nls.platform_shell import WINDOWS_INSTRUCTION_SKILLS_ENV_PROMPT
+        from nls.skills_setup_policy import native_skill_authoring_summary
 
         behavioral_ring = self._rings.get(RING_BEHAVIORAL)
         env_ring = self._rings.get(RING_ENVIRONMENT)
@@ -3390,13 +3391,21 @@ class CryptexMemory:
                 "render_mode": "agentic",
                 "consolidation_status": "permanent",
                 "content": (
-                    "SOLO PLAN WORKFLOW: You may use plan/todo for your own "
-                    "execution checklist. Mark steps non-delegatable unless "
-                    "you are in full orchestration mode with teams. Execute "
-                    "each step yourself — do NOT mark delegatable steps done "
-                    "without completing the work. Use plan(action='complete') "
-                    "when finished."
+                    "SOLO PLAN WORKFLOW: Use plan/todo as your own execution checklist. "
+                    "In solo_structured mode all plan steps are non-delegatable — "
+                    "you execute each step yourself with write/bash/edit.\n"
+                    "Per step: plan(action='update', step_id='...', status='in_progress'), "
+                    "do the work, then plan(action='update', step_id='...', status='done', "
+                    "notes='evidence of completion'). Do NOT use team, delegate, or "
+                    "accept_partial unless you are in orchestrated mode with waves.\n"
+                    "When all steps finish: plan(action='complete')."
                 ),
+            },
+            {
+                "domain": "native_skill_authoring",
+                "render_mode": "agentic",
+                "consolidation_status": "permanent",
+                "content": native_skill_authoring_summary(),
             },
             {
                 "domain": "task_focus",
@@ -3860,8 +3869,9 @@ class CryptexMemory:
 
         _REFRESH_DOMAINS = frozenset({
             "team_orchestration", "tool_best_practices", "workspace_discipline",
-            "coordinator_mode",
+            "coordinator_mode", "solo_plan_workflow", "native_skill_authoring",
         })
+        _REFRESH_ENV_DOMAINS = frozenset({"platform_docs"})
 
         for d in behavioral_defs:
             if d["domain"] in existing and d["domain"] not in _REFRESH_DOMAINS:
@@ -3876,7 +3886,23 @@ class CryptexMemory:
 
         # --- RING_ENVIRONMENT slots ---
         if env_ring:
+            from nls.skills_setup_policy import (
+                NATIVE_SKILL_DOCS_URL,
+                PLATFORM_DOCS_GETTING_STARTED,
+                PLATFORM_DOCS_URL,
+            )
+
             env_defs = [
+                {
+                    "domain": "platform_docs",
+                    "content": (
+                        f"Platform documentation: {PLATFORM_DOCS_URL}\n"
+                        f"Start here: {PLATFORM_DOCS_GETTING_STARTED}\n"
+                        f"Native Python skills: {NATIVE_SKILL_DOCS_URL}\n"
+                        "Use web_fetch on these URLs when building unfamiliar "
+                        "platform features — do not guess file layouts."
+                    ),
+                },
                 {
                     "domain": "shell",
                     "content": (
@@ -3901,7 +3927,7 @@ class CryptexMemory:
                 },
             ]
             for d in env_defs:
-                if d["domain"] in existing:
+                if d["domain"] in existing and d["domain"] not in _REFRESH_ENV_DOMAINS:
                     continue
                 self.upsert_environment(
                     domain=d["domain"],

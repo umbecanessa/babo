@@ -1078,12 +1078,7 @@ class InnerLoop:
         mode = getattr(dream_job, "mode", "replay")
 
         try:
-            loop = asyncio.get_running_loop()
-            dream_response = await loop.run_in_executor(
-                None,
-                self.runtime.dream_generate,
-                prompt,
-            )
+            dream_response = await self.runtime.dream_generate_async(prompt)
 
             # Content-level dedup: skip near-identical dreams
             dmn = getattr(self.runtime, "dmn", None)

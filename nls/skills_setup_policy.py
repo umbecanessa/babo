@@ -367,3 +367,67 @@ def skill_configure_absorption_content(
     if is_error:
         return None
     return None
+
+
+PLATFORM_DOCS_URL = "https://babo.agency/"
+PLATFORM_DOCS_GETTING_STARTED = "https://babo.agency/getting-started/"
+NATIVE_SKILL_DOCS_SLUG = "extension/add-bundled-skill"
+NATIVE_SKILL_DOCS_URL = f"{PLATFORM_DOCS_URL}{NATIVE_SKILL_DOCS_SLUG}/"
+
+
+def platform_doc_url(path: str = "") -> str:
+    """Absolute URL under the published Babo documentation site."""
+    slug = (path or "").strip().strip("/")
+    if not slug:
+        return PLATFORM_DOCS_URL
+    return f"{PLATFORM_DOCS_URL}{slug}/"
+
+_NATIVE_SKILL_AUTHORING_RE = re.compile(
+    r"\b(?:nls|native|bundled)\s+(?:python\s+)?skill\b"
+    r"|\b(?:build|create|author|write|implement)\s+(?:a|an)\s+"
+    r"(?:native|bundled|nls)\s+(?:python\s+)?skill\b"
+    r"|\bskill\s+(?:with|using)\s+(?:register|config\.schema|config_schema)\b"
+    r"|\bnls/skills/bundled\b"
+    r"|\bregister\s*\(\s*app\s*,\s*ctx\b",
+    re.IGNORECASE,
+)
+
+
+def looks_like_native_skill_authoring(text: str) -> bool:
+    """True when the user wants a native Python NLS skill, not ClawHub/SKILL.md only."""
+    return bool(_NATIVE_SKILL_AUTHORING_RE.search(text or ""))
+
+
+def native_skill_authoring_summary() -> str:
+    """Compact native-skill contract for Cryptex / loop system lines."""
+    return (
+        "NATIVE NLS SKILL (Python plugin — NOT instruction-only SKILL.md):\n"
+        "- Ship in repo: nls/skills/bundled/{skill-name}/\n"
+        "- Per-agent override: data/skills/{skill-name}/ (same layout)\n"
+        "- Required: __init__.py with SkillMeta + register(app, ctx)\n"
+        "- Optional: SKILL.md (AgentSkill instructions), config.schema.json (Tools UI)\n"
+        "- register(): ctx.register_tool_factory(...), ctx.include_router(...), "
+        "ctx.on_startup(...)\n"
+        "- Loader discovers by directory name on server start — no manual import list\n"
+        f"- Platform docs: {PLATFORM_DOCS_GETTING_STARTED}\n"
+        f"- Native skill guide: {NATIVE_SKILL_DOCS_URL}\n"
+        "- Use web_fetch on those URLs when unsure — do not guess file layouts.\n"
+        "- Do NOT use skill_configure for greenfield authoring — that configures "
+        "existing bundled channel skills. Use write/edit to scaffold files.\n"
+        "- Copy patterns from nls/skills/bundled/ (e.g. telegram-channel, mcp-client)."
+    )
+
+
+def build_native_skill_setup_lines() -> list[str]:
+    """System lines injected at loop start for setup:native_skill turns."""
+    return [
+        "[NATIVE SKILL AUTHORING] " + native_skill_authoring_summary().replace(
+            "\n", " ",
+        ),
+        (
+            "Workflow: web_fetch the native skill guide if needed, read bundled "
+            "examples under nls/skills/bundled/, scaffold __init__.py + modules, "
+            "add config.schema.json if credentials needed, then verify imports. "
+            f"Docs: {NATIVE_SKILL_DOCS_URL}"
+        ),
+    ]

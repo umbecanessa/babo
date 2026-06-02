@@ -6,7 +6,7 @@ Welcome to the Babo docs. Babo is a persistent AI agent platform with long-term 
 
 New users: [download the latest release](https://github.com/umbecanessa/babo/releases), then follow [Installation](getting-started/installation.md) and [Quickstart](getting-started/quickstart.md).
 
-Published docs: [GitHub Pages](https://umbecanessa.github.io/babo/) (built from this `docs/` folder on each push to `main`).
+Published docs: [babo.agency](https://babo.agency/getting-started/) (MkDocs built from this `docs/` folder).
 
 ---
 

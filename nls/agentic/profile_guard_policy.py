@@ -56,6 +56,10 @@ HINT_INSTRUCTION_SKILL_SETUP = frozenset({
     "setup:instruction_skill",
 })
 
+HINT_NATIVE_SKILL_SETUP = frozenset({
+    "setup:native_skill",
+})
+
 _CONFIGURE_INTENT_RE = re.compile(
     r"\b(configure|set\s*up)\s+(?:the\s+)?(?:skill|bot|integration|channel|installed)\b"
     r"|\b(?:skill|bot|integration)\s+(?:token|setup|configure|credentials?)\b"
@@ -291,10 +295,15 @@ def boost_triage_for_work_continuation(
     if is_continuation and not triage.goals:
         triage.goals = ["Continue the in-progress task"]
     hints = list(triage.hints or [])
-    if has_task_context and "setup:instruction_skill" not in {
-        h.strip().lower() for h in hints if h
-    }:
-        hints.append("setup:instruction_skill")
+    hint_tokens = {h.strip().lower() for h in hints if h}
+    if has_task_context and not (hint_tokens & HINT_NATIVE_SKILL_SETUP):
+        from nls.skills_setup_policy import looks_like_native_skill_authoring
+
+        if looks_like_native_skill_authoring(recent_text):
+            if "setup:native_skill" not in hint_tokens:
+                hints.append("setup:native_skill")
+        elif "setup:instruction_skill" not in hint_tokens:
+            hints.append("setup:instruction_skill")
     triage.hints = hints
 
 
@@ -316,13 +325,41 @@ def enrich_instruction_skill_hints(
 ) -> None:
     """Add setup:instruction_skill when user is configuring an AgentSkill/ClawHub pkg."""
     tokens = {h.strip().lower() for h in hints if h and h.strip()}
-    if tokens & HINT_INSTRUCTION_SKILL_SETUP:
+    if tokens & (HINT_INSTRUCTION_SKILL_SETUP | HINT_NATIVE_SKILL_SETUP):
         return
     blob = f"{user_input or ''} {' '.join(goals or [])}"
+    from nls.skills_setup_policy import looks_like_native_skill_authoring
+
+    if looks_like_native_skill_authoring(blob):
+        return
     if not _CONFIGURE_INTENT_RE.search(blob):
         return
     hints.append("setup:instruction_skill")
     hints.append(
         "ClawHub/AgentSkill setup: read installed SKILL.md under data/skills/ "
         "and use bash — not skill_configure"
+    )
+
+
+def enrich_native_skill_hints(
+    user_input: str,
+    goals: list[str] | None,
+    hints: list[str],
+) -> None:
+    """Add setup:native_skill when user asks to build a bundled/native Python skill."""
+    tokens = {h.strip().lower() for h in hints if h and h.strip()}
+    if tokens & (HINT_INSTRUCTION_SKILL_SETUP | HINT_NATIVE_SKILL_SETUP):
+        return
+    blob = f"{user_input or ''} {' '.join(goals or [])}"
+    from nls.skills_setup_policy import (
+        NATIVE_SKILL_DOCS_URL,
+        looks_like_native_skill_authoring,
+    )
+
+    if not looks_like_native_skill_authoring(blob):
+        return
+    hints.append("setup:native_skill")
+    hints.append(
+        f"Native NLS skill: scaffold nls/skills/bundled/{{name}}/ with register() — "
+        f"see {NATIVE_SKILL_DOCS_URL}"
     )

@@ -313,6 +313,11 @@ def cap_profile_for_tool_surface(profile: str, allowed_tools: frozenset[str]) ->
     return p
 
 
+def is_solo_execution_profile(profile: str | None) -> bool:
+    """True when the agent executes plan steps itself (no team waves)."""
+    return normalize_profile(profile) == "solo_structured"
+
+
 def plan_step_delegatable_default(profile: str | None) -> bool:
     return get_profile_spec(profile).default_step_delegatable
 

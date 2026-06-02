@@ -55,7 +55,7 @@ def has_substantive_tool_success(state: LoopState) -> bool:
 def requires_substantive_delivery(state: LoopState) -> bool:
     """Tasks that must run bash/write/etc. before prose-only loop exit."""
     hints = {h.strip().lower() for h in (state.hints or []) if h and h.strip()}
-    if "setup:instruction_skill" in hints:
+    if "setup:instruction_skill" in hints or "setup:native_skill" in hints:
         return True
     goals = " ".join(g or "" for g in (state.goals or [])).lower()
     return any(
@@ -916,7 +916,7 @@ def _is_orchestrator_monitoring_cycle(names: list[str]) -> bool:
 
 def _instruction_skill_setup_in_progress(state: "LoopState") -> bool:
     hints = {h.strip().lower() for h in (state.hints or []) if h and h.strip()}
-    return "setup:instruction_skill" in hints
+    return "setup:instruction_skill" in hints or "setup:native_skill" in hints
 
 
 def _diverse_bash_signatures(state: "LoopState", window: int) -> bool:

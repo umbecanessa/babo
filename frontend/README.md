@@ -2,7 +2,7 @@
 
 Angular UI for chat, projects, memory, brain dashboard, and integrations.
 
-Full product docs: [docs/index.md](../docs/index.md) · [Documentation site](https://umbecanessa.github.io/babo/)
+Full product docs: [docs/index.md](../docs/index.md) · [Documentation site](https://babo.agency/getting-started/)
 
 ## Development
 

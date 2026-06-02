@@ -171,6 +171,7 @@ async def test_block_delegatable_done_without_delegate(workspace: Path, store: P
     tool._store = store
     tool._team_manager = MagicMock()
     tool._team_manager.list_teams.return_value = []
+    tool.set_orchestration_profile_fn(lambda: "orchestrated")
     result = await tool.execute(
         {
             "action": "update",
@@ -182,6 +183,92 @@ async def test_block_delegatable_done_without_delegate(workspace: Path, store: P
     )
     assert result.is_error
     assert "delegatable" in result.content.lower()
+
+
+@pytest.mark.asyncio
+async def test_solo_profile_allows_done_without_delegate(
+    workspace: Path, store: PlanStore,
+):
+    plan = Plan(
+        id="plan_solo",
+        title="Solo",
+        status="in_progress",
+        steps=[
+            PlanStep(
+                id="step-1",
+                label="Scaffold",
+                status="pending",
+                delegatable=True,
+            ),
+        ],
+    )
+    store.save(plan)
+    tool = PlanTool(workspace)
+    tool._store = store
+    tool._team_manager = MagicMock()
+    tool._team_manager.list_teams.return_value = []
+    tool.set_orchestration_profile_fn(lambda: "solo_structured")
+    result = await tool.execute(
+        {
+            "action": "update",
+            "plan_id": "plan_solo",
+            "step_id": "step-1",
+            "status": "done",
+            "notes": "Created files via write()",
+        },
+    )
+    assert not result.is_error
+    assert store.load("plan_solo").steps[0].status == "done"
+    assert store.load("plan_solo").steps[0].delegatable is False
+
+
+def test_create_plan_clears_delegatable_in_solo(store: PlanStore):
+    plan = store.create_plan(
+        title="Solo build",
+        steps=[
+            {"label": "Step A", "delegatable": True},
+            {"label": "Step B", "delegatable": True},
+        ],
+        orchestration_profile="solo_structured",
+    )
+    assert all(not s.delegatable for s in plan.steps)
+
+
+@pytest.mark.asyncio
+async def test_continue_work_clears_delegatable_in_solo(
+    workspace: Path, store: PlanStore,
+):
+    source = Plan(
+        id="plan_old",
+        title="Old",
+        status="in_progress",
+        project_dir="proj",
+        steps=[
+            PlanStep(id="step-1", label="Upload UI", status="pending", delegatable=True),
+        ],
+    )
+    target = Plan(
+        id="plan_new",
+        title="New",
+        status="in_progress",
+        project_dir="proj",
+        steps=[PlanStep(id="step-1", label="Scaffold", status="done")],
+    )
+    store.save(source)
+    store.save(target)
+
+    tool = PlanTool(workspace)
+    tool._store = store
+    tool._team_manager = None
+    tool.set_orchestration_profile_fn(lambda: "solo_structured")
+    result = await tool.execute(
+        {"action": "continue_work", "source_plan_id": "plan_old"},
+    )
+    assert not result.is_error
+    active = store.load("plan_new")
+    imported = [s for s in active.steps if s.label == "Upload UI"]
+    assert len(imported) == 1
+    assert imported[0].delegatable is False
 
 
 @pytest.mark.asyncio
@@ -257,6 +344,7 @@ async def test_update_done_with_verified_artifacts_no_delegate(
     tool._store = store
     tool._team_manager = MagicMock()
     tool._team_manager.list_teams.return_value = []
+    tool.set_orchestration_profile_fn(lambda: "orchestrated")
 
     result = await tool.execute(
         {

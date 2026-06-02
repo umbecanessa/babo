@@ -6,6 +6,7 @@ from nls.agentic.orchestration_profile_spec import (
     apply_tool_deny,
     behavioral_domain_visible_for_profile,
     get_profile_spec,
+    is_solo_execution_profile,
     normalize_profile,
     should_auto_mark_delegatable,
 )
@@ -90,6 +91,12 @@ def test_conversational_shows_lookup_behavioral_domains():
 def test_orchestrated_auto_delegatable_three_steps():
     assert should_auto_mark_delegatable("orchestrated", 3)
     assert not should_auto_mark_delegatable("solo_structured", 3)
+
+
+def test_is_solo_execution_profile():
+    assert is_solo_execution_profile("solo_structured")
+    assert not is_solo_execution_profile("orchestrated")
+    assert not is_solo_execution_profile("conversational")
 
 
 def test_normalize_goals_merges_for_solo():

@@ -9,10 +9,12 @@ from unittest.mock import patch
 import pytest
 
 from nls.skills_setup_policy import (
+    build_native_skill_setup_lines,
     format_activation_steps,
     instruction_skill_post_read_nudge,
     instruction_skill_setup_hint,
     is_instruction_only_skill,
+    looks_like_native_skill_authoring,
     skill_configure_absorption_content,
 )
 
@@ -80,3 +82,19 @@ def test_post_read_nudge_python_first_on_windows(_win, tmp_path: Path):
     assert "deploy-*.py" in nudge
     assert "httpx" in nudge
     assert "embeds" in nudge
+
+
+def test_native_skill_authoring_detection():
+    assert looks_like_native_skill_authoring(
+        "we could create a dedicated nls python skill maybe?",
+    )
+    assert not looks_like_native_skill_authoring(
+        "configure the discord-admin bot token",
+    )
+
+
+def test_build_native_skill_setup_lines():
+    lines = build_native_skill_setup_lines()
+    assert any("NATIVE SKILL" in line for line in lines)
+    assert any("nls/skills/bundled" in line for line in lines)
+    assert any("babo.agency" in line for line in lines)

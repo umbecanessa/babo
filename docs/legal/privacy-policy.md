@@ -5,7 +5,7 @@
 
 This Privacy Policy describes how **Babo Agency** (“**we**”, “**us**”, “**our**”) handles information when you use:
 
-- the **Babo** documentation at [GitHub Pages](https://umbecanessa.github.io/babo/) and this repository;
+- the **Babo** documentation at [babo.agency](https://babo.agency/getting-started/) and this repository;
 - the **Babo** desktop application and local agent runtime (open source, MIT);
 - an optional **hosted control plane** we operate (if you choose that instead of self-hosting);
 - integrations you connect (Google Workspace, messaging channels, email, and AI inference providers).
@@ -237,6 +237,6 @@ We may update this policy. We will post the new version at this URL with an upda
 
 **Babo Agency**  
 Email: [cc@umberto.me](mailto:cc@umberto.me)  
-Documentation: [https://umbecanessa.github.io/babo/](https://umbecanessa.github.io/babo/)
+Documentation: [https://babo.agency/getting-started/](https://babo.agency/getting-started/)
 
 For open-source security issues, see the repository’s security policy on GitHub.

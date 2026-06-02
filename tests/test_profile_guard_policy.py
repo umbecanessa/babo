@@ -13,6 +13,7 @@ from nls.agentic.profile_guard_policy import (
     apply_structured_hint_caps,
     em_pre_delegate_blocks_enabled,
     enrich_instruction_skill_hints,
+    enrich_native_skill_hints,
     inject_prompt_structured_hints,
     normalize_goals_for_profile,
     normalize_profile,
@@ -306,3 +307,24 @@ def test_enrich_instruction_skill_skips_duplicate():
     hints = ["setup:instruction_skill"]
     enrich_instruction_skill_hints("configure bot", ["Configure bot"], hints)
     assert hints.count("setup:instruction_skill") == 1
+
+
+def test_enrich_native_skill_hint_for_nls_python_skill():
+    hints: list[str] = []
+    enrich_native_skill_hints(
+        "create a dedicated nls python skill for Discord moderation",
+        ["Build native Discord moderator skill"],
+        hints,
+    )
+    assert "setup:native_skill" in hints
+    assert "setup:instruction_skill" not in hints
+
+
+def test_enrich_instruction_skill_skips_when_native_authoring():
+    hints: list[str] = []
+    enrich_instruction_skill_hints(
+        "configure bot token for nls python skill build",
+        ["Build native skill"],
+        hints,
+    )
+    assert "setup:instruction_skill" not in hints

@@ -714,6 +714,10 @@ class PlanTool:
         self, plan: Plan, step: PlanStep, *, notes: str = "",
     ) -> str | None:
         """Block marking a delegatable step done without delegate completion."""
+        from nls.agentic.orchestration_profile_spec import is_solo_execution_profile
+
+        if is_solo_execution_profile(self._active_orchestration_profile()):
+            return None
         if not step.delegatable:
             return None
         if step.notes and (
@@ -1754,6 +1758,9 @@ class PlanTool:
             if step.status == "failed":
                 failed_for_subplan.append(new_step.id)
 
+        profile = self._active_orchestration_profile()
+        self._store.apply_solo_step_policy(target, profile)
+
         if not imported:
             return ToolResult(
                 content=(
@@ -1822,6 +1829,11 @@ class PlanTool:
 
         next_idx = len(plan.steps) + 1
         step_id = f"step-{next_idx}"
+        from nls.agentic.orchestration_profile_spec import is_solo_execution_profile
+
+        _delegatable = bool(params.get("delegatable", False))
+        if is_solo_execution_profile(self._active_orchestration_profile()):
+            _delegatable = False
         new_step = PlanStep(
             id=step_id,
             label=label,
@@ -1829,7 +1841,7 @@ class PlanTool:
             output_files=params.get("output_files") or [],
             owned_paths=params.get("owned_paths") or [],
             depends_on=params.get("depends_on") or [],
-            delegatable=bool(params.get("delegatable", False)),
+            delegatable=_delegatable,
         )
         plan.steps.append(new_step)
         _path_warnings = self._align_step_paths(plan)
@@ -1908,6 +1920,7 @@ class PlanTool:
             acceptance_criteria=params.get("acceptance_criteria"),
             steps=params.get("steps"),
             scaffolding=params.get("files"),
+            orchestration_profile=self._active_orchestration_profile(),
         )
         if sub is None:
             return ToolResult(
@@ -2511,11 +2524,17 @@ class PlanTool:
 
     def _resolve_plan(self, params: dict[str, Any]) -> Plan | None:
         plan_id = (params.get("plan_id") or "").strip()
-        return self._store.resolve_work_plan(
+        plan = self._store.resolve_work_plan(
             plan_id,
             self._team_manager,
             reopen=True,
         )
+        if plan is None:
+            return None
+        profile = self._active_orchestration_profile()
+        if self._store.apply_solo_step_policy(plan, profile):
+            self._store.save(plan)
+        return plan
 
     def register_output_file(self, file_path: str) -> None:
         """Auto-register a file in the active plan's scaffolding."""

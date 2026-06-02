@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from nls.agentic.orchestration_profile_spec import (
+    is_solo_execution_profile,
     plan_step_delegatable_default,
     should_auto_mark_delegatable,
 )
@@ -973,6 +974,11 @@ class PlanStore:
                     len(plan.steps),
                 )
 
+        if self.apply_solo_step_policy(plan, orchestration_profile):
+            logger.info(
+                "PlanStore: forced non-delegatable steps for solo_structured profile",
+            )
+
         self.ensure_dependency_safety_net(plan)
 
         from nls.agentic.wave_coordination import normalize_plan_step_paths
@@ -980,6 +986,18 @@ class PlanStore:
 
         self.save(plan)
         return plan
+
+    @staticmethod
+    def apply_solo_step_policy(plan: Plan, orchestration_profile: str | None) -> bool:
+        """Force non-delegatable steps in solo execution mode. Returns True if changed."""
+        if not is_solo_execution_profile(orchestration_profile):
+            return False
+        changed = False
+        for step in plan.steps:
+            if step.delegatable:
+                step.delegatable = False
+                changed = True
+        return changed
 
     def ensure_dependency_safety_net(self, plan: Plan) -> int:
         """Fill missing depends_on when the graph is empty or has orphans.
@@ -1040,6 +1058,7 @@ class PlanStore:
         acceptance_criteria: list[str] | None = None,
         steps: list[dict[str, Any]] | None = None,
         scaffolding: dict[str, dict[str, str]] | None = None,
+        orchestration_profile: str = "solo_structured",
     ) -> Plan | None:
         parent = self.load(parent_plan_id)
         if parent is None:
@@ -1060,6 +1079,7 @@ class PlanStore:
             steps=steps,
             scaffolding=scaffolding,
             parent_id=parent_plan_id,
+            orchestration_profile=orchestration_profile,
         )
 
         step.sub_plan_id = sub.id

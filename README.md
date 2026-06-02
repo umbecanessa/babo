@@ -144,7 +144,7 @@ npm start
 
 Open the app, register, create an agent, and start chatting.
 
-See the [documentation](https://umbecanessa.github.io/babo/) for full guides.
+See the [documentation](https://babo.agency/getting-started/) for full guides.
 
 ---
 
@@ -160,7 +160,7 @@ See the [documentation](https://umbecanessa.github.io/babo/) for full guides.
 
 ## Documentation
 
-- **[Documentation](https://umbecanessa.github.io/babo/)** — MkDocs site built from `docs/` on each push to `main`
+- **[Documentation](https://babo.agency/getting-started/)** — MkDocs site at [babo.agency](https://babo.agency/)
 - **[Documentation home](docs/index.md)** — full map (architecture, reference, extension)
 - [Deployment topologies](docs/architecture/deployment-topologies.md) — desktop hub + web relay
 - [Quickstart](docs/getting-started/quickstart.md)
