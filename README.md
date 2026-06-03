@@ -1,10 +1,28 @@
 # Babo
 
+<p align="center">
+  <img src="website/assets/babo.png" alt="Babo" width="120" />
+</p>
+
+<p align="center">
+  <strong>Self-hosted agent OS</strong> — persistent memory, projects & teams, WhatsApp · Telegram · Google.<br />
+  MIT · local-first · no telemetry · <a href="https://babo.agency/">babo.agency</a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/umbecanessa/babo/releases"><strong>Download desktop</strong></a> ·
+  <a href="https://babo.agency/manifesto/">Manifesto</a> ·
+  <a href="https://babo.agency/getting-started/installation/">Docs</a> ·
+  <a href="https://discord.gg/daCKzkv4z2">Discord</a>
+</p>
+
 **A persistent AI agent that works with you — across chat, projects, channels, and tools.**
 
 Babo is a full-stack agent platform: a desktop app, web UI, and self-hostable backend. Each agent has long-term memory, an autonomous agentic loop, project orchestration with sub-agents, and one-click integrations for the channels and tools you already use.
 
 Connect any OpenAI-compatible model (OpenRouter, Ollama, local vLLM, etc.) and run Babo on your machine or your own server.
+
+> **Not just a chat UI** — Babo is closer to an agent runtime with a board, channels, and memory that survives sessions. Compare to general-purpose AI workspaces; we optimize for delegated work and honest local economics. See the [manifesto](https://babo.agency/manifesto/).
 
 ---
 
@@ -101,8 +119,13 @@ Run desktop-only, self-host everything, or mix cloud auth with a local runtime.
 
 ### Desktop (recommended)
 
+**[Download the latest release](https://github.com/umbecanessa/babo/releases)** (Windows / macOS installers from CI).
+
+Or build from source:
+
 ```bash
-cd desktop
+git clone https://github.com/umbecanessa/babo.git
+cd babo/desktop
 npm install
 .\build-local.ps1          # Windows: unpacked app in desktop/release-build/build-*/win-unpacked/
 # or: npm run build && npm run dist:win   # NSIS installer

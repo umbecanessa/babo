@@ -54,6 +54,51 @@ window.BABO_AUDIENCE = {
         "Most work does not need a frontier model every turn. We are building an open-source agent OS for your hardware — persistent memory, real tools, optional cloud — with <a href=\"https://github.com/umbecanessa/neural-ledger-system\">NLS research</a> on stateful inference so cost does not explode as history grows.",
       cta: { href: "manifesto/", label: "Read the full manifesto" },
     },
+    capabilities: {
+      label: "One agent platform",
+      title: "Built for work, not just chat",
+      lead: "MIT · local-first · no telemetry — an agent runtime with memory and channels, not a disposable chat window.",
+      items: [
+        {
+          title: "Agentic runtime",
+          tags: "Plans · Tools · Sub-agents · Sleep",
+          text: "Multi-step loops, verification, and consolidation — work finishes instead of looping forever.",
+        },
+        {
+          title: "Projects & teams",
+          tags: "Kanban · Waves · Delegates",
+          text: "Assign tasks on a board; orchestrator spins up teams and tracks real progress.",
+        },
+        {
+          title: "Persistent memory",
+          tags: "Cryptex · Episodes · Soul",
+          text: "Identity and facts survive sessions — stop re-explaining your life every morning.",
+        },
+        {
+          title: "Channels",
+          tags: "WhatsApp · Telegram · Google · Email",
+          text: "Your PA stack in one brain — connect messaging and workspace in-app.",
+        },
+        {
+          title: "Local inference",
+          tags: "Ollama · vLLM · OpenRouter · BYOK",
+          text: "Your GPU, your LAN box, or your API keys — predictable cost, not a sleeping meter.",
+        },
+        {
+          title: "Brain dashboard",
+          tags: "Signals · Drives · Transparency",
+          text: "See what the agent is doing inside — optional, weird, and useful.",
+        },
+      ],
+    },
+    quickstart: {
+      label: "Quick start",
+      hint: "Desktop installer recommended · self-host or fork when you are ready.",
+      commands: [
+        { label: "Download", value: "github.com/umbecanessa/babo/releases", href: BABO_RELEASES_URL },
+        { label: "Clone", value: "git clone https://github.com/umbecanessa/babo.git", copy: true },
+      ],
+    },
     drift: {
       title: "Built against drift",
       text: "Orchestrator modes, team waves, coordinator policy — work tied to plans and boards, not free-form chat loops that wander and spend.",
@@ -178,6 +223,50 @@ window.BABO_AUDIENCE = {
       snippet:
         "Babo is early access and local-first: one brain for your tasks, email, and messages — no terminal required. The long-term vision is an agent in every home; today you can install the software.",
       cta: { href: "manifesto/", label: "Read the manifesto" },
+    },
+    capabilities: {
+      label: "More than ChatGPT",
+      title: "One app for your week",
+      lead: "Private on your machine · guided setup · no terminal for everyday use.",
+      items: [
+        {
+          title: "Talk & delegate",
+          tags: "Chat · Voice · Tools",
+          text: "Ask in plain language; the agent uses tools and remembers what you meant.",
+        },
+        {
+          title: "Task board",
+          tags: "Kanban · Pickup · Progress",
+          text: "Drop tasks — it picks them up instead of losing them in a thread list.",
+        },
+        {
+          title: "Remembers you",
+          tags: "People · Projects · Facts",
+          text: "Memory that persists across days — not a tab that resets overnight.",
+        },
+        {
+          title: "Your apps",
+          tags: "Gmail · Calendar · WhatsApp",
+          text: "Connect Google and messaging with clicks, not a hacker checklist.",
+        },
+        {
+          title: "On your computer",
+          tags: "Desktop · Private · MIT",
+          text: "Data stays local. Optional Babo Cloud only if you want us to host the boring parts.",
+        },
+        {
+          title: "Early access",
+          tags: "Wizard · Discord · Open source",
+          text: "Rough edges today — improving fast with the community.",
+        },
+      ],
+    },
+    quickstart: {
+      label: "Quick start",
+      hint: "Download the desktop app — the wizard handles Python and setup.",
+      commands: [
+        { label: "Download", value: "github.com/umbecanessa/babo/releases", href: BABO_RELEASES_URL },
+      ],
     },
     drift: null,
     pricing: {

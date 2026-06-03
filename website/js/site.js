@@ -150,6 +150,64 @@
       manifestoCta.textContent = copy.manifesto.cta.label;
     }
 
+    const capLabel = document.getElementById("capabilities-label");
+    const capTitle = document.getElementById("capabilities-title");
+    const capLead = document.getElementById("capabilities-lead");
+    const capGrid = document.getElementById("capabilities-grid");
+    if (copy.capabilities) {
+      if (capLabel) capLabel.textContent = copy.capabilities.label;
+      if (capTitle) capTitle.textContent = copy.capabilities.title;
+      if (capLead) capLead.textContent = copy.capabilities.lead;
+      if (capGrid && copy.capabilities.items) {
+        capGrid.innerHTML = copy.capabilities.items
+          .map(
+            (item) => `
+        <article class="cap-card glass">
+          <h3>${item.title}</h3>
+          <p class="cap-tags">${item.tags}</p>
+          <p class="cap-text">${item.text}</p>
+        </article>`
+          )
+          .join("");
+      }
+    }
+
+    const qsBar = document.getElementById("quickstart-bar");
+    const qsLabel = document.getElementById("quickstart-label");
+    const qsHint = document.getElementById("quickstart-hint");
+    const qsCommands = document.getElementById("quickstart-commands");
+    if (copy.quickstart && qsBar) {
+      qsBar.hidden = false;
+      if (qsLabel) qsLabel.textContent = copy.quickstart.label;
+      if (qsHint) qsHint.textContent = copy.quickstart.hint || "";
+      if (qsCommands && copy.quickstart.commands) {
+        qsCommands.innerHTML = copy.quickstart.commands
+          .map((cmd) => {
+            const inner = cmd.href
+              ? `<a class="quickstart-cmd-value" href="${cmd.href}" target="_blank" rel="noopener noreferrer">${cmd.value}</a>`
+              : `<code class="quickstart-cmd-value">${cmd.value}</code>`;
+            const copyBtn = cmd.copy
+              ? `<button type="button" class="quickstart-copy" data-copy="${cmd.value.replace(/"/g, "&quot;")}" aria-label="Copy command">Copy</button>`
+              : "";
+            return `<div class="quickstart-cmd"><span class="quickstart-cmd-label">${cmd.label}</span>${inner}${copyBtn}</div>`;
+          })
+          .join("");
+        qsCommands.querySelectorAll(".quickstart-copy").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const text = btn.getAttribute("data-copy") || "";
+            navigator.clipboard?.writeText(text).then(() => {
+              btn.textContent = "Copied";
+              setTimeout(() => {
+                btn.textContent = "Copy";
+              }, 1600);
+            });
+          });
+        });
+      }
+    } else if (qsBar) {
+      qsBar.hidden = true;
+    }
+
     const driftSection = document.getElementById("drift");
     if (driftSection) {
       if (copy.drift) {
