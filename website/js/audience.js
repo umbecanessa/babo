@@ -1,5 +1,6 @@
 /** Landing copy per audience — ?audience=innovator|everyday (default: innovator) */
 const BABO_DOWNLOAD_URL = "download/";
+const BABO_RELEASES_URL = BABO_DOWNLOAD_URL;
 
 window.BABO_AUDIENCE = {
   innovator: {
