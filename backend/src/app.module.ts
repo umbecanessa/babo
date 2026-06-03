@@ -16,6 +16,7 @@ import { ChannelsModule } from './channels/channels.module';
 import { RuntimeProxyModule } from './runtime-proxy/runtime-proxy.module';
 import { ClawhubModule } from './clawhub/clawhub.module';
 import { BaboCloudModule } from './babo-cloud/babo-cloud.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 import { PrismaService } from './prisma/prisma.service';
 import * as path from 'path';
 
@@ -66,6 +67,7 @@ function loadOperatorModule(): unknown[] {
     RuntimeProxyModule,
     ClawhubModule,
     BaboCloudModule,
+    AnalyticsModule,
     ...(loadOperatorModule() as never[]),
   ],
 })

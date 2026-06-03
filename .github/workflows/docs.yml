@@ -40,6 +40,7 @@ jobs:
         run: |
           cp website/index.html site/index.html
           cp -r website/css website/js website/assets site/
+          cp -r website/download site/download
           if [ -f website/CNAME ]; then cp website/CNAME site/CNAME; fi
 
       - uses: actions/upload-pages-artifact@v3

@@ -12,12 +12,16 @@ import {
 } from '@nestjs/common';
 import { AdminAuthGuard } from './admin-auth.guard';
 import { AdminService } from './admin.service';
+import { AnalyticsService } from '../analytics/analytics.service';
 import { UpdateRoleDto, AgentEventsQueryDto, AgentFactsQueryDto } from './dto';
 
 @Controller('admin')
 @UseGuards(AdminAuthGuard)
 export class AdminController {
-  constructor(private admin: AdminService) {}
+  constructor(
+    private admin: AdminService,
+    private analytics: AnalyticsService,
+  ) {}
 
   // ===================================================================
   // Stats / Overview
@@ -202,6 +206,13 @@ export class AdminController {
   @Get('analytics/compare')
   compareAgents(@Query('ids') ids: string) {
     return this.admin.proxyCompareAgents(ids);
+  }
+
+  /** Product / UA funnel (landing + desktop setup). Requires BABO_ANALYTICS_ENABLED. */
+  @Get('analytics/funnel')
+  getProductFunnel(@Query('days') days?: string) {
+    const n = days ? parseInt(days, 10) : 30;
+    return this.analytics.getFunnelOverview(Number.isFinite(n) ? n : 30);
   }
 
   // ===================================================================

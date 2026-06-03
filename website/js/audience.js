@@ -1,5 +1,5 @@
 /** Landing copy per audience — ?audience=innovator|everyday (default: innovator) */
-const BABO_RELEASES_URL = "https://github.com/umbecanessa/babo/releases";
+const BABO_DOWNLOAD_URL = "download/";
 
 window.BABO_AUDIENCE = {
   innovator: {
@@ -19,7 +19,7 @@ window.BABO_AUDIENCE = {
       lead:
         "Run the brain on your hardware — Ollama, vLLM, GX10. Persistent memory and real orchestration so agents <strong>drift less</strong> and <strong>burn fewer tokens</strong>. Babo handles the plumbing: WhatsApp, relay, guided onboarding.",
       ctaPrimary: { href: "https://github.com/umbecanessa/babo", label: "Star on GitHub" },
-      ctaSecondary: { href: BABO_RELEASES_URL, label: "Download" },
+      ctaSecondary: { href: BABO_DOWNLOAD_URL, label: "Download" },
       meta: "MIT · Local-first · BYOK or Babo Cloud for the boring parts",
     },
     punchesLabel: "Why builders switch",
@@ -76,7 +76,7 @@ window.BABO_AUDIENCE = {
             "Self-host Nest or desktop-only",
             "WhatsApp, Google, Telegram via your setup",
           ],
-          cta: { href: BABO_RELEASES_URL, label: "Download free" },
+          cta: { href: BABO_DOWNLOAD_URL, label: "Download free" },
           featured: false,
         },
         {
@@ -91,7 +91,7 @@ window.BABO_AUDIENCE = {
             "Remote relay — no port forwarding",
             "Pay-as-you-go overage when you need more",
           ],
-          cta: { href: BABO_RELEASES_URL, label: "Get started" },
+          cta: { href: BABO_DOWNLOAD_URL, label: "Get started" },
           note: "31-day refund on your first month",
           featured: true,
         },
@@ -144,7 +144,7 @@ window.BABO_AUDIENCE = {
       titleGradient: "Go live your life.",
       lead:
         "You already pay for AI subscriptions. Babo is the next step — <strong>one agent</strong> on your computer that remembers you, connects to <strong>Gmail, Google, and messages</strong>, and picks up tasks from a board. Setup walks you through it. No command line. Ever.",
-      ctaPrimary: { href: BABO_RELEASES_URL, label: "Download Babo" },
+      ctaPrimary: { href: BABO_DOWNLOAD_URL, label: "Download Babo" },
       ctaSecondary: { href: "#product", label: "See it work" },
       meta: "Private · On your machine · Guided connect for email & channels",
     },
@@ -198,7 +198,7 @@ window.BABO_AUDIENCE = {
             "Connect Google & messaging yourself",
             "Open source · early access",
           ],
-          cta: { href: BABO_RELEASES_URL, label: "Download free" },
+          cta: { href: BABO_DOWNLOAD_URL, label: "Download free" },
           featured: false,
         },
         {
@@ -213,7 +213,7 @@ window.BABO_AUDIENCE = {
             "WhatsApp & Telegram relay included",
             "No server or DevOps required",
           ],
-          cta: { href: BABO_RELEASES_URL, label: "Start with Babo" },
+          cta: { href: BABO_DOWNLOAD_URL, label: "Start with Babo" },
           note: "31-day refund on your first month",
           featured: true,
         },

@@ -127,6 +127,11 @@ export class ApiService {
     return this.urlsReady;
   }
 
+  /** Resolved NestJS API base (includes `/api` prefix). */
+  getApiBaseUrl(): string {
+    return this.API;
+  }
+
   getCachedAgents(): Agent[] {
     return this.agentsCache;
   }

@@ -23,6 +23,7 @@ import { AdminApiService, type AdminPlatformInfo } from '../../core/admin-api.se
           }
           <a routerLink="/agents" routerLinkActive="active">Agents</a>
           <a routerLink="/usage" routerLinkActive="active">Token usage</a>
+          <a routerLink="/funnel" routerLinkActive="active">Funnel</a>
         </nav>
         <div class="sidebar-foot">
           @if (platform()?.billingEnabled) {

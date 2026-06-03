@@ -207,6 +207,9 @@ const nlsDesktopApi = {
   writeClipboard: (text: string): Promise<void> =>
     ipcRenderer.invoke('clipboard:write', text),
 
+  getLaunchAttributionRef: (): Promise<string | null> =>
+    ipcRenderer.invoke('analytics:launch-ref'),
+
   // ─── System ───────────────────────────────────────────────────
 
   getSystemInfo: (): Promise<{

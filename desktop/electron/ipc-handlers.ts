@@ -392,6 +392,11 @@ export function registerIpcHandlers(
     clipboard.writeText(text);
   });
 
+  ipcMain.handle('analytics:launch-ref', () => {
+    const arg = process.argv.find((a) => a.startsWith('--babo-ref='));
+    return arg ? arg.slice('--babo-ref='.length).trim() : null;
+  });
+
   // ─── System Info ──────────────────────────────────────────────
 
   ipcMain.handle('system:info', () => ({

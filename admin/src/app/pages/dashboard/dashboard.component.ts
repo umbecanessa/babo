@@ -40,6 +40,11 @@ import { formatNumber, runtimeStatusLabel, statusClass } from '../../shared/form
           <div class="stat-value">{{ dash()!.database.apiKeys }}</div>
           <div class="stat-label">API keys</div>
         </div>
+        <div class="glass-card stat-card">
+          <div class="stat-value">→</div>
+          <div class="stat-label">UA funnel</div>
+          <a routerLink="/funnel">Landing & setup</a>
+        </div>
       </div>
 
       <section class="section-label">Inference (Babo Cloud ledger)</section>

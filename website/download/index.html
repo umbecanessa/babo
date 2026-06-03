@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Download Babo</title>
+  <meta name="robots" content="noindex" />
+  <link rel="stylesheet" href="../css/tokens.css" />
+  <link rel="stylesheet" href="../css/site.css" />
+  <style>
+    .download-shell {
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 2rem;
+      text-align: center;
+    }
+    .download-card {
+      max-width: 420px;
+      padding: 2rem;
+      border-radius: 1rem;
+      background: var(--surface-glass, rgba(255,255,255,0.04));
+      border: 1px solid var(--border-subtle, rgba(255,255,255,0.08));
+    }
+    .download-card p { color: var(--text-secondary, #aab); margin: 0.75rem 0 0; }
+  </style>
+</head>
+<body>
+  <div class="download-shell">
+    <div class="download-card">
+      <h1>Taking you to the download…</h1>
+      <p id="download-status">Preparing your install link.</p>
+    </div>
+  </div>
+  <script>
+    window.BABO_DOWNLOAD_REDIRECT = "https://github.com/umbecanessa/babo/releases/latest";
+  </script>
+  <script src="../js/analytics.js"></script>
+  <script src="../js/download.js"></script>
+</body>
+</html>

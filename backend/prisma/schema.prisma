@@ -215,3 +215,36 @@ model StripeWebhookEvent {
 
   @@map("stripe_webhook_events")
 }
+
+model ProductAnalyticsEvent {
+  id         String   @id @default(uuid())
+  name       String
+  source     String
+  installId  String?  @map("install_id")
+  userId     String?  @map("user_id")
+  platform   String?
+  appVersion String?  @map("app_version")
+  properties Json     @default("{}")
+  occurredAt DateTime @map("occurred_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([name, occurredAt])
+  @@index([installId, occurredAt])
+  @@index([userId, occurredAt])
+  @@map("product_analytics_events")
+}
+
+model AnalyticsAttributionHandoff {
+  id               String    @id @default(uuid())
+  ref              String    @unique
+  visitorId        String?   @map("visitor_id")
+  properties       Json      @default("{}")
+  claimedAt        DateTime? @map("claimed_at")
+  claimedInstallId String?   @map("claimed_install_id")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  expiresAt        DateTime  @map("expires_at")
+
+  @@index([claimedInstallId])
+  @@index([createdAt])
+  @@map("analytics_attribution_handoffs")
+}

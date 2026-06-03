@@ -1,7 +1,7 @@
 # Privacy Policy
 
 **Effective date:** 24 May 2026  
-**Last updated:** 24 May 2026
+**Last updated:** 3 June 2026
 
 This Privacy Policy describes how **Babo Agency** (“**we**”, “**us**”, “**our**”) handles information when you use:
 
@@ -36,7 +36,7 @@ If you **self-host** Babo (your own NestJS/backend and data directory), you are 
 | **Google Workspace** | OAuth tokens stored **on your machine** (encrypted when possible). API calls go **Google ↔ your runtime**, not through us for self-host. |
 | **AI models** | Prompts/completions go to **the inference provider you configure** (Ollama, OpenRouter, etc.). Babo Cloud may proxy hosted models through our API. |
 | **Channels** | WhatsApp/Telegram/email traffic flows through providers you connect; Babo Cloud relay may carry message payloads while your desktop is online. |
-| **Website** | Standard server logs; no ad tracking cookies on the marketing site. |
+| **Website** | Hosting logs; optional **anonymous product analytics** when enabled (no ad-tracking cookies). |
 
 ---
 
@@ -66,6 +66,11 @@ If you **self-host** Babo (your own NestJS/backend and data directory), you are 
 **Website**
 
 - Hosting and CDN logs (IP, referrer, pages viewed) from GitHub Pages or our domain host.
+- When we enable **product analytics** on [babo.agency](https://babo.agency/) and Babo Cloud, we collect **anonymous, aggregate funnel events** (e.g. page views, button clicks, onboarding step completion) using a random visitor/install identifier stored in your browser or app — **not** your name or email. We do **not** use Google Analytics or third-party ad trackers on the marketing site. No advertising cookies are set. You can block these requests with browser extensions or network filters; the site and app work without them.
+
+**Desktop app (Babo Cloud only, when enabled)**
+
+- If you use Babo Cloud and we have enabled server-side product analytics, the desktop app may send **anonymous setup funnel events** (e.g. which onboarding step you reached) to our API. Self-hosted backends disable this by default. Events exclude chat content, memory, passwords, and API keys.
 
 ### 3.3 Information from third parties
 
@@ -84,6 +89,7 @@ We use information to:
 - authenticate users and connect channel relays;
 - run integrations you enable (Gmail, Calendar, Drive, Sheets, channels);
 - meter and bill Babo Cloud subscriptions and included model usage;
+- understand how the marketing site and onboarding funnel perform (anonymous product analytics when enabled);
 - diagnose bugs and abuse;
 - comply with law and enforce terms.
 
@@ -180,6 +186,7 @@ We do not share Google user data with third parties except as described in §6 a
 | Babo Cloud account | While account is active; deleted or anonymized after deletion request |
 | Billing records | As required for tax/accounting (Stripe retains per their policy) |
 | Server logs | Limited operational retention (typically days to weeks) |
+| Product analytics events | Aggregated funnel metrics; raw events retained up to **90 days**, then deleted |
 | Local agent data | Until you delete agents or uninstall |
 
 ---

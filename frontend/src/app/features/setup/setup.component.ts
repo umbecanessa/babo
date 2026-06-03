@@ -51,6 +51,8 @@ import { AgentModelService } from '../../core/services/agent-model.service';
 import { isPaidOrComp } from '../../core/models/cloud-subscription.model';
 import { ToastService } from '../../shared/toast/toast.service';
 import { Day1CoachService } from '../../shared/onboarding/day1-coach.service';
+import { AnalyticsService } from '../../core/services/analytics.service';
+import { setupStepName } from '../../core/analytics/setup-steps';
 
 interface SetupConfig {
   inferenceUrl: string;
@@ -148,6 +150,7 @@ export class SetupComponent implements OnInit, OnDestroy {
   billingAlert = signal<{ kind: 'error' | 'warn'; text: string } | null>(null);
   private billingPollTimer: ReturnType<typeof setInterval> | null = null;
   private billingFocusHandler: (() => void) | null = null;
+  private billingActivatedTracked = false;
   setupStage = signal<string>('idle');
   setupProgress = signal(0);
   setupMessage = signal('');
@@ -164,6 +167,7 @@ export class SetupComponent implements OnInit, OnDestroy {
   private preferSignInAfterConfig = false;
   /** Furthest step reached this run — blocks jumping past gaps in the wizard. */
   private highestStepReached = 0;
+  private setupCompletedThisSession = false;
   launching = signal(false);
   launchMessage = signal('Starting agent runtime...');
   launchError = signal<string | null>(null);
@@ -368,6 +372,7 @@ export class SetupComponent implements OnInit, OnDestroy {
     private agentModels: AgentModelService,
     private toast: ToastService,
     private day1Coach: Day1CoachService,
+    private analytics: AnalyticsService,
   ) {
     effect(() => {
       this.logLines();
@@ -481,9 +486,27 @@ export class SetupComponent implements OnInit, OnDestroy {
       }
     };
     window.addEventListener('focus', this.billingFocusHandler);
+
+    this.analytics.captureAttributionFromUrl();
+    await this.analytics.claimAttributionHandoff();
+    this.analytics.track('setup_started', {
+      returning_user: this.returningUser(),
+      venv_ready: this.venvReady(),
+      restored_step: this.step(),
+      attribution_ref: this.analytics.getAttributionRef(),
+    });
+    this.trackSetupStep(this.step());
   }
 
   ngOnDestroy(): void {
+    if (!this.setupCompletedThisSession && this.highestStepReached < 9) {
+      this.analytics.track('setup_abandoned', {
+        step: this.step(),
+        step_name: setupStepName(this.step()),
+        highest_step_reached: this.highestStepReached,
+        highest_step_name: setupStepName(this.highestStepReached),
+      });
+    }
     this.stopBillingSubscriptionPoll();
     if (this.billingFocusHandler) {
       window.removeEventListener('focus', this.billingFocusHandler);
@@ -616,6 +639,7 @@ export class SetupComponent implements OnInit, OnDestroy {
   }
 
   async startSetup(): Promise<void> {
+    this.analytics.track('setup_prepare_started');
     this.setupStage.set('checking');
     this.setupError.set(null);
     this.logLines.set([]);
@@ -624,10 +648,14 @@ export class SetupComponent implements OnInit, OnDestroy {
       await this.nls().setup.start();
       this.setupStage.set('ready');
       this.venvReady.set(true);
+      this.analytics.track('setup_prepare_completed');
       this.maybeAutoAdvanceFromPrepare();
     } catch (err: any) {
       this.setupStage.set('error');
       this.setupError.set(err?.message || 'Setup failed');
+      this.analytics.track('setup_prepare_failed', {
+        error: (err?.message || 'Setup failed').slice(0, 120),
+      });
     } finally {
       this.stopElapsedTimer();
     }
@@ -650,6 +678,7 @@ export class SetupComponent implements OnInit, OnDestroy {
     this.step.set(target);
     this.highestStepReached = Math.max(this.highestStepReached, target);
     this.persistWizardDraft();
+    this.trackSetupStep(target);
     if (target === 7) {
       void this.onEnterBillingStep();
     }
@@ -770,6 +799,7 @@ export class SetupComponent implements OnInit, OnDestroy {
 
   /** Full first-run path: prepare → … → sign-in → billing (if Babo Cloud) → ready → name */
   continueFromWelcome(): void {
+    this.analytics.track('setup_welcome_continue', { path: 'new' });
     this.goToStep(1);
     if (this.setupStage() === 'idle') {
       void this.startSetup();
@@ -780,6 +810,7 @@ export class SetupComponent implements OnInit, OnDestroy {
 
   /** Same setup as Continue; after features, jump to sign-in (placement still suggested). */
   beginSetupWithExistingAccount(): void {
+    this.analytics.track('setup_welcome_continue', { path: 'existing_account' });
     this.preferSignInAfterConfig = true;
     this.continueFromWelcome();
   }
@@ -872,6 +903,10 @@ export class SetupComponent implements OnInit, OnDestroy {
         8000,
       );
     }
+    this.analytics.track('setup_tier_selected', {
+      tier,
+      gx10,
+    });
   }
 
   undoBrainSelection(): void {
@@ -953,8 +988,18 @@ export class SetupComponent implements OnInit, OnDestroy {
     try {
       const scan = await this.nls().capabilities.scanDevice();
       this.scan.set({ ...scan, lan: [] });
+      const vram = scan.device?.vramGb ?? 0;
+      this.analytics.track('setup_device_scanned', {
+        ok: true,
+        vram_bucket: vram >= 12 ? '12gb+' : vram >= 6 ? '6gb+' : 'under_6gb',
+        recommended_tier: this.recommendedBrainTier,
+      });
     } catch (err: any) {
       this.setupError.set(err?.message || 'Scan failed');
+      this.analytics.track('setup_device_scanned', {
+        ok: false,
+        error: (err?.message || 'Scan failed').slice(0, 120),
+      });
     } finally {
       this.scanLoading.set(false);
     }
@@ -1235,6 +1280,14 @@ export class SetupComponent implements OnInit, OnDestroy {
       this.testResult.set({ ok: false, message: err?.message || 'Test failed', latency: 0 });
       this.brainTestedTier.set(p.inference.tier);
     }
+    const result = this.testResult();
+    if (result) {
+      this.analytics.track('setup_inference_test', {
+        tier: p.inference.tier,
+        ok: result.ok,
+        latency_ms: result.latency,
+      });
+    }
     this.testing.set(false);
   }
 
@@ -1364,6 +1417,7 @@ export class SetupComponent implements OnInit, OnDestroy {
     try {
       await this.nls().config.set({ nestjsUrl: url });
       await this.api.whenReady();
+      let didAuth = false;
       if (!this.auth.isAuthenticated()) {
         if (!this.authEmail.trim() || !this.authPassword) {
           this.authError.set('Enter your email and password, or create an account.');
@@ -1382,10 +1436,16 @@ export class SetupComponent implements OnInit, OnDestroy {
         );
         this.auth.applyTokens(tokens, false);
         this.signingIn.set(false);
+        didAuth = true;
       }
       await this.loadPlatformCaps();
       await this.ensureBaboCloudAccess();
       await this.billing.refresh();
+      if (didAuth) {
+        this.analytics.track('setup_auth_success', {
+          mode: this.authAccountMode(),
+        });
+      }
       if (this.requiresSetupSubscription()) {
         this.persistWizardDraft();
         this.goToStep(7);
@@ -1395,6 +1455,10 @@ export class SetupComponent implements OnInit, OnDestroy {
       }
     } catch (err: any) {
       this.authError.set(err?.error?.message || err?.message || 'Could not sign in');
+      this.analytics.track('setup_auth_failed', {
+        mode: this.authAccountMode(),
+        error: (err?.error?.message || err?.message || 'Could not sign in').slice(0, 120),
+      });
     } finally {
       this.savingBackend.set(false);
       this.signingIn.set(false);
@@ -1474,6 +1538,7 @@ export class SetupComponent implements OnInit, OnDestroy {
         this.billingAlert.set({ kind: 'error', text: 'Could not start checkout' });
         return;
       }
+      this.analytics.track('setup_billing_checkout_started');
       this.billingAwaitingPayment.set(true);
       this.startBillingSubscriptionPoll();
     } catch (err: any) {
@@ -1553,6 +1618,10 @@ export class SetupComponent implements OnInit, OnDestroy {
         this.clearWizardDraft();
         this.goToStep(8);
       }
+      if (!this.billingActivatedTracked) {
+        this.billingActivatedTracked = true;
+        this.analytics.track('setup_billing_activated');
+      }
       return true;
     }
     return false;
@@ -1608,6 +1677,7 @@ export class SetupComponent implements OnInit, OnDestroy {
       this.goToStep(7);
       this.startBillingSubscriptionPoll();
     } else {
+      this.analytics.track('setup_billing_canceled');
       this.billingAwaitingPayment.set(false);
       this.stopBillingSubscriptionPoll();
       this.toast.show('Checkout canceled — you can try again when ready.', 'info');
@@ -1683,6 +1753,11 @@ export class SetupComponent implements OnInit, OnDestroy {
       if (this.shouldPrefetchLocalVision(p)) {
         this.startVisionPrefetchInBackground();
       }
+      this.analytics.track('setup_extras_saved', {
+        vision_on: this.ambientVisionOn(),
+        code_search_on: this.codeSearchOn(),
+        voice_tier: this.voiceTier(),
+      });
       this.persistWizardDraft();
       this.suggestBackendFromThinking();
       if (this.preferSignInAfterConfig) {
@@ -1797,6 +1872,11 @@ export class SetupComponent implements OnInit, OnDestroy {
 
       this.clearWizardDraft();
       this.day1Coach.schedule();
+      this.setupCompletedThisSession = true;
+      this.analytics.track('setup_completed', {
+        brain_tier: p?.inference.tier ?? 'unknown',
+        backend_choice: this.backendChoice(),
+      });
       this.launchMessage.set('Opening Babo...');
       await new Promise((r) => setTimeout(r, 400));
       const chatAgentId = agent.runtimeAgentId || agent.id;
@@ -1828,6 +1908,14 @@ export class SetupComponent implements OnInit, OnDestroy {
       clearInterval(this.elapsedTimer);
       this.elapsedTimer = null;
     }
+  }
+
+  private trackSetupStep(step: number): void {
+    this.analytics.track('setup_step_viewed', {
+      step,
+      step_name: setupStepName(step),
+      highest_step_reached: this.highestStepReached,
+    });
   }
 }
 

@@ -17,6 +17,53 @@ export interface AdminPlatformInfo {
   billingProvider: string;
 }
 
+export interface FunnelOverview {
+  enabled: boolean;
+  periodDays: number;
+  message?: string;
+  web: {
+    pageViews: number;
+    uniqueVisitors: number;
+    ctaClicks: number;
+    outboundClicks: number;
+    events: { name: string; source: string; count: number; uniqueVisitors: number }[];
+    ctaByLocation: { location: string; count: number; uniqueVisitors: number }[];
+    audiences: { audience: string; uniqueVisitors: number }[];
+    campaigns: {
+      campaign: string;
+      source: string;
+      pageViews: number;
+      uniqueVisitors: number;
+    }[];
+  } | null;
+  app: {
+    setupStarted: number;
+    setupCompleted: number;
+    setupAbandoned: number;
+    billingActivated: number;
+    events: { name: string; source: string; count: number; uniqueVisitors: number }[];
+    steps: {
+      step: string;
+      views: number;
+      uniqueInstalls: number;
+      dropOffFromPrevious: number | null;
+    }[];
+    completionRate: number | null;
+  } | null;
+  attribution: {
+    handoffsCreated: number;
+    handoffsClaimed: number;
+    claimToSetupStarted: number;
+    claimToCompleted: number;
+    byCampaign: {
+      campaign: string;
+      handoffs: number;
+      claimed: number;
+      completed: number;
+    }[];
+  } | null;
+}
+
 @Injectable({ providedIn: 'root' })
 export class AdminApiService {
   private base = `${environment.apiUrl}/admin`;
@@ -111,6 +158,14 @@ export class AdminApiService {
   billingSubscriptions() {
     return firstValueFrom(
       this.http.get<any>(`${this.base}/billing/subscriptions`),
+    );
+  }
+
+  funnel(days = 30) {
+    return firstValueFrom(
+      this.http.get<FunnelOverview>(`${this.base}/analytics/funnel`, {
+        params: { days: String(days) },
+      }),
     );
   }
 

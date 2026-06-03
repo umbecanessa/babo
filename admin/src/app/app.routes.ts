@@ -55,6 +55,11 @@ export const routes: Routes = [
         loadComponent: () =>
           import('./pages/usage/usage.component').then((m) => m.UsageComponent),
       },
+      {
+        path: 'funnel',
+        loadComponent: () =>
+          import('./pages/funnel/funnel.component').then((m) => m.FunnelComponent),
+      },
     ],
   },
   { path: '**', redirectTo: 'login' },

@@ -450,6 +450,9 @@
       lightbox.setAttribute("aria-hidden", "false");
       document.body.classList.add("lightbox-open");
       lbClose.focus();
+      document.dispatchEvent(
+        new CustomEvent("babo:lightbox-open", { detail: { alt: img.alt || "" } }),
+      );
     }
 
     function closeLightbox() {
