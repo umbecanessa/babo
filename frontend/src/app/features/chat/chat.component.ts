@@ -385,13 +385,38 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
   async refreshProjectProcesses(): Promise<void> {
     if (!this.agentId) return;
     try {
-      const processes = await firstValueFrom(
+      const { processes, agentic_running } = await firstValueFrom(
         this.api.listProjectProcesses(this.agentId),
       );
       this.projectProcesses.set(processes);
+      if (this.agenticActive() && !agentic_running) {
+        this.clearStaleAgenticUi('server_idle');
+      }
     } catch {
       // Runtime may be down or agent evicted from VRAM.
     }
+  }
+
+  /** Drop in-flight agentic UI when the server says the loop already ended. */
+  private clearStaleAgenticUi(reason: string): void {
+    if (!this.agenticActive() && !this.activityStatus() && !this.agenticStopping()) {
+      return;
+    }
+    this.agenticActive.set(false);
+    this.agenticStopping.set(false);
+    this.askUserPending.set(false);
+    this.activityStatus.set('');
+    this.agenticStep.set(0);
+    this.streamingText.set('');
+    this.streamingReasoning.set('');
+    this._pendingIterText = '';
+    this.clearAwaitingResponse();
+    this.lastAgenticResult.update(prev => prev ?? {
+      steps: this.agenticStep(),
+      tools: 0,
+      durationMs: 0,
+      aborted: reason !== 'server_idle',
+    });
   }
 
   toggleProjectProcessesMenu(event: MouseEvent): void {
@@ -486,6 +511,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       this.latestProbeSignals.set(snap.latestProbeSignals);
     }
     this.agenticActive.set(snap.agenticActive ?? false);
+    this.askUserPending.set(snap.askUserPending ?? false);
     this.agenticStep.set(snap.agenticStep ?? 0);
     this.agenticMaxSteps.set(snap.agenticMaxSteps ?? 0);
     this.activityStatus.set(snap.activityStatus ?? '');
@@ -522,6 +548,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       runView: this.runView.persisted(),
       latestProbeSignals: this.latestProbeSignals(),
       agenticActive: this.agenticActive(),
+      askUserPending: this.askUserPending(),
       agenticStep: this.agenticStep(),
       agenticMaxSteps: this.agenticMaxSteps(),
       activityStatus: this.activityStatus(),
@@ -1085,6 +1112,11 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     switch (msg.type) {
       case 'history':
         // Restore conversation history from runtime on connect
+        if (this.agenticActive()) {
+          // Live agentic UI (ask_user cards, in-flight steps) must not be
+          // wiped by transcript replay on reconnect mid-task.
+          break;
+        }
         if (Array.isArray(msg.messages) && msg.messages.length > 0) {
           const restored: ChatMessage[] = [];
           for (const m of msg.messages) {
@@ -1264,14 +1296,9 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
            || statusText.includes('Reconnected')
            || statusText.includes('restarted'))
         ) {
-          this.agenticActive.set(false);
-          this.agenticStopping.set(false);
-          this.askUserPending.set(false);
-          this.activityStatus.set('');
-          this.agenticStep.set(0);
-          this.streamingText.set('');
-          this.streamingReasoning.set('');
-          this.clearAwaitingResponse();
+          if (msg.agentic_running !== true) {
+            this.clearStaleAgenticUi('reconnect');
+          }
         }
 
         if (statusText === 'sleeping') {
@@ -1796,11 +1823,20 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       case 'activity_status': {
         const text = msg.text || msg.message || msg.content || '';
         const elapsed = msg.elapsed_ms || 0;
+        const statusType = msg.status || '';
         if (msg.autonomous) {
           this._updateBackgroundCardDetail(elapsed ? `${text} (${(elapsed / 1000).toFixed(1)}s)` : text);
           break;
         }
-        const statusType = msg.status || '';
+        if (statusType === 'waiting_for_user' || /waiting for your answer/i.test(text)) {
+          this.askUserPending.set(true);
+        }
+        if (!text.trim()) {
+          if (statusType !== 'generating' || !this.agenticActive()) {
+            this.activityStatus.set('');
+          }
+          break;
+        }
         if (elapsed && text) {
           this.activityStatus.set(`${text} (${(elapsed / 1000).toFixed(1)}s)`);
         } else {
@@ -2564,12 +2600,19 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       case 'ask_user': {
         this.clearAwaitingResponse();
         this.askUserPending.set(true);
+        this.activityStatus.set('Waiting for your answer…');
+        const question = msg.question || 'I need more information to continue.';
         this.messages.update(msgs => [...msgs, {
           type: 'ask_user',
-          content: msg.question || 'I need more information to continue.',
+          content: question,
           requestId: msg.request_id || '',
           timestamp: new Date(),
         }]);
+        this.toast.show(
+          question.length > 200 ? `${question.slice(0, 197)}…` : question,
+          'info',
+          0,
+        );
         break;
       }
 
@@ -2594,6 +2637,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
       case 'user_answer': {
         this.askUserPending.set(false);
+        this.activityStatus.set('');
         break;
       }
 

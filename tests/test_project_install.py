@@ -11,10 +11,14 @@ from nls.tools.agent_tools.project_runtime import (
     detect_node_package_manager,
     find_package_json,
     find_requirements_file,
+    format_scaffold_before_install_hint,
+    list_partial_python_scaffolds,
     looks_like_pypi_package_spec,
     parse_pip_requirements_ref,
     resolve_node_install_dir,
     resolve_project_root,
+    resolve_venv_project_root,
+    scaffold_requirements_line,
     split_pip_package_args,
 )
 
@@ -323,3 +327,103 @@ async def test_project_install_accepts_r_flag_in_package(tmp_path: Path):
     })
     assert not result.is_error, result.content
     assert "backend/requirements.txt" in result.content
+
+
+def test_list_partial_python_scaffolds(tmp_path: Path):
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    app = ws / "babo-discord-bot"
+    app.mkdir()
+    (app / "config.py").write_text("x = 1\n", encoding="utf-8")
+
+    found = list_partial_python_scaffolds(str(ws))
+    assert len(found) == 1
+    assert found[0].name == "babo-discord-bot"
+
+
+def test_resolve_venv_project_root_with_install_dir(tmp_path: Path):
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    app = ws / "api"
+    app.mkdir()
+
+    assert resolve_venv_project_root(str(ws), install_dir="api") == str(app)
+
+
+@pytest.mark.asyncio
+async def test_project_install_install_dir_uses_subfolder_venv(tmp_path: Path):
+    pytest.importorskip("pip")
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    app = ws / "babo-discord-bot"
+    app.mkdir()
+    (app / "requirements.txt").write_text("six\n", encoding="utf-8")
+
+    from nls.tools.agent_tools.project_install import ProjectInstallTool
+
+    tool = ProjectInstallTool(str(ws))
+    result = await tool.execute({
+        "package": "six",
+        "install_dir": "babo-discord-bot",
+    })
+    assert not result.is_error, result.content
+    assert "babo-discord-bot" in result.content.replace("\\", "/")
+    venv_python = app / ".venv" / (
+        "Scripts/python.exe" if __import__("sys").platform == "win32" else "bin/python"
+    )
+    assert venv_python.exists()
+    assert not (ws / ".venv").exists()
+
+
+@pytest.mark.asyncio
+async def test_project_install_auto_scaffolds_requirements_with_install_dir(tmp_path: Path):
+    pytest.importorskip("pip")
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    app = ws / "babo-discord-bot"
+    app.mkdir()
+    (app / "config.py").write_text("x = 1\n", encoding="utf-8")
+
+    from nls.tools.agent_tools.project_install import ProjectInstallTool
+
+    tool = ProjectInstallTool(str(ws))
+    result = await tool.execute({
+        "package": "six",
+        "install_dir": "babo-discord-bot",
+    })
+    assert not result.is_error, result.content
+    assert (app / "requirements.txt").read_text(encoding="utf-8").strip() == "six"
+    assert "Auto-created requirements.txt" in result.content
+
+
+@pytest.mark.asyncio
+async def test_project_install_infers_install_dir_from_single_scaffold(tmp_path: Path):
+    pytest.importorskip("pip")
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    app = ws / "babo-discord-bot"
+    app.mkdir()
+    (app / "config.py").write_text("x = 1\n", encoding="utf-8")
+
+    from nls.tools.agent_tools.project_install import ProjectInstallTool
+
+    tool = ProjectInstallTool(str(ws))
+    result = await tool.execute({"package": "six"})
+    assert not result.is_error, result.content
+    assert (app / "requirements.txt").exists()
+    assert (app / ".venv").exists()
+
+
+def test_scaffold_hint_for_partial_python_dir(tmp_path: Path):
+    ws = tmp_path / "workspace"
+    ws.mkdir()
+    app = ws / "babo-discord-bot"
+    app.mkdir()
+    (app / "main.py").write_text("pass\n", encoding="utf-8")
+
+    hint = format_scaffold_before_install_hint(
+        str(ws),
+        partial_scaffolds=list_partial_python_scaffolds(str(ws)),
+    )
+    assert "babo-discord-bot/requirements.txt" in hint
+    assert "install_dir='babo-discord-bot'" in hint

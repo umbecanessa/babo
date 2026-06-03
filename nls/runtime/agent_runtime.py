@@ -1210,9 +1210,58 @@ class AgentRuntime:
             return
 
         enabled = self._get_enabled_skills()
+        enabled_set = set(enabled) if enabled != ["*"] else None
+        seen_names: set[str] = set()
+
+        for name, sk in skill_loader.skills.items():
+            if sk.status != "loaded" or not sk.meta:
+                continue
+            schema = getattr(sk.meta, "config_schema", None) or []
+            if not schema:
+                continue
+            from nls.skills_setup_policy import (
+                bundled_skill_ring_guidance,
+                is_pre_shipped_channel_skill,
+            )
+
+            is_enabled = enabled_set is None or name in enabled_set
+            agent_installed = (sk.path / ".creator").is_file()
+            headline, guidance = bundled_skill_ring_guidance(
+                name,
+                sk.meta.description or "",
+                enabled=is_enabled,
+                config_schema=schema,
+                agent_installed=agent_installed,
+            )
+            salience = 0.7 if is_enabled else 0.85
+            if agent_installed and not is_pre_shipped_channel_skill(name):
+                salience = 0.9
+            domain_area = skill_loader.get_skill_domain(name, sk.meta.description or "")
+            from nls.brain.working_memory import WMSlot
+
+            ring.upsert_slot(
+                domain=f"skill.{name}",
+                content=headline,
+                slot_type="skill",
+                salience=salience,
+                source="skill_loader",
+                position=domain_area,
+                metadata={
+                    "full_instructions": guidance,
+                    "skill_name": name,
+                    "configurable": True,
+                    "enabled": is_enabled,
+                    "agent_installed": agent_installed,
+                    "pre_shipped": is_pre_shipped_channel_skill(name),
+                },
+            )
+            seen_names.add(name)
+
         skill_tuples = skill_loader.instructions_for(enabled)
 
         for name, description, instructions in skill_tuples:
+            if name in seen_names:
+                continue
             domain_area = skill_loader.get_skill_domain(name, description)
             from nls.brain.working_memory import WMSlot
             ring.upsert_slot(
@@ -1224,10 +1273,11 @@ class AgentRuntime:
                 position=domain_area,
                 metadata={"full_instructions": instructions, "skill_name": name},
             )
+            seen_names.add(name)
 
         logger.info(
             "[Agent] agent=%s: populated skills ring with %d skills across %s",
-            self.agent_id, len(skill_tuples), ring.position_ids,
+            self.agent_id, len(seen_names), ring.position_ids,
         )
 
     def _channel_is_connected(self, channel: str) -> bool:
@@ -4482,6 +4532,28 @@ class AgentRuntime:
         from nls.runtime.session import save_conversation_history
         save_conversation_history(self.agent_dir, history, max_turns)
 
+    def load_chat_transcript(self, max_turns: int = 200) -> list[dict]:
+        from nls.runtime.session import load_chat_transcript
+        limit = None if max_turns <= 0 else max_turns * 2
+        return load_chat_transcript(self.agent_dir, limit=limit)
+
+    def record_chat_turn(
+        self,
+        *,
+        user: str | None = None,
+        assistant: str | None = None,
+        reasoning: str | None = None,
+        metadata: dict | None = None,
+    ) -> None:
+        from nls.runtime.session import append_chat_transcript_turn
+        append_chat_transcript_turn(
+            self.agent_dir,
+            user=user,
+            assistant=assistant,
+            reasoning=reasoning,
+            metadata=metadata,
+        )
+
     def load_autonomous_history(self, max_turns: int = 10) -> list[dict]:
         from nls.runtime.session import load_autonomous_history
         return load_autonomous_history(self.agent_dir, max_turns)
@@ -4574,6 +4646,15 @@ class AgentRuntime:
         boost_triage_for_work_continuation(
             triage, user_input, history=history,
         )
+        from nls.agentic.profile_guard_policy import reconcile_triage_continuation_phase
+
+        reconcile_triage_continuation_phase(
+            triage,
+            user_input,
+            history=history,
+            working_memory=self.dual_wm or self.working_memory,
+        )
+        triage.reconcile_orchestration_depth()
         self._apply_triage_to_working_memory(triage)
         logger.info(
             "Agent %s: triage intent=%s profile=%s thinking=%s goals=%s hints=%s",
@@ -4633,16 +4714,24 @@ class AgentRuntime:
         ]
         return filtered or None
 
+    def _ring_working_memory(self) -> Any | None:
+        return self.dual_wm or self.working_memory
+
     def _apply_triage_to_working_memory(self, triage: Any) -> None:
+        from nls.agentic.profile_guard_policy import wm_get_tactical_goal_strings
+
+        wm = self._ring_working_memory()
         goals = getattr(triage, "goals", None) or []
         hints = getattr(triage, "hints", None) or []
-        if goals and self.working_memory is not None:
-            self.working_memory.clear_goals("tactical")
-            for g in goals:
-                self.working_memory.add_goal(
-                    level="tactical", content=g, source="task_extract",
-                )
-        if hints and self.working_memory is not None:
+        if goals and wm is not None:
+            wm_goals = wm_get_tactical_goal_strings(wm)
+            if wm_goals != goals[:5]:
+                wm.clear_goals("tactical")
+                for g in goals:
+                    wm.add_goal(
+                        level="tactical", content=g, source="task_extract",
+                    )
+        if hints and wm is not None:
             _clean_hints: list[str] = []
             for _h in hints:
                 if _HINT_CREDENTIAL_RE.search(_h):
@@ -4659,7 +4748,7 @@ class AgentRuntime:
                     elif "assembly" in _hl:
                         _dom = "Project.Credential.AssemblyAI"
                     try:
-                        self.working_memory.upsert_credential(
+                        wm.upsert_credential(
                             domain=_dom, content=_h,
                             source="task_hints", salience=1.0,
                         )
@@ -4668,7 +4757,7 @@ class AgentRuntime:
                 else:
                     _clean_hints.append(_h)
             if _clean_hints:
-                self.working_memory.upsert_fact(
+                wm.upsert_fact(
                     domain="Task.Hints",
                     content=" | ".join(_clean_hints),
                 )

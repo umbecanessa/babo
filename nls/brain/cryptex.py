@@ -274,6 +274,12 @@ class WMRing:
                 s.content = content
                 s.salience = max(s.salience, salience)
                 s.created_at = time.time()
+                if "access" in kwargs:
+                    s.access = kwargs["access"]
+                if "metadata" in kwargs and kwargs["metadata"]:
+                    merged = dict(s.metadata or {})
+                    merged.update(kwargs["metadata"])
+                    s.metadata = merged
                 return
         self.add_slot(WMSlot(
             slot_type=slot_type, content=content,
@@ -3890,6 +3896,8 @@ class CryptexMemory:
                 NATIVE_SKILL_DOCS_URL,
                 PLATFORM_DOCS_GETTING_STARTED,
                 PLATFORM_DOCS_URL,
+                BABO_GITHUB_REPO_URL,
+                BABO_BUNDLED_SKILLS_GITHUB_TREE,
             )
 
             env_defs = [
@@ -3899,8 +3907,11 @@ class CryptexMemory:
                         f"Platform documentation: {PLATFORM_DOCS_URL}\n"
                         f"Start here: {PLATFORM_DOCS_GETTING_STARTED}\n"
                         f"Native Python skills: {NATIVE_SKILL_DOCS_URL}\n"
+                        f"Public Babo source repo: {BABO_GITHUB_REPO_URL}\n"
+                        f"Bundled skill examples: {BABO_BUNDLED_SKILLS_GITHUB_TREE}\n"
                         "Use web_fetch on these URLs when building unfamiliar "
-                        "platform features — do not guess file layouts."
+                        "platform features — bundled examples are not in the "
+                        "agent workspace unless the user cloned Babo."
                     ),
                 },
                 {

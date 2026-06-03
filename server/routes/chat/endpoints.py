@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -30,8 +31,10 @@ async def list_sessions(agent_id: str, request: Request):
 
     sessions: dict[str, Any] = {}
 
-    # Always include the main conversation
-    main_history = runtime.load_conversation_history(max_turns=2)
+    # Always include the main conversation (thread offload — transcript IO is sync).
+    main_history = await asyncio.to_thread(
+        runtime.load_chat_transcript, max_turns=200,
+    )
     sessions["websocket:main"] = {
         "channel": "websocket",
         "label": "Main Chat",
@@ -88,7 +91,9 @@ async def get_session_history(agent_id: str, session_key: str, request: Request)
         return {"messages": []}
 
     if session_key == "websocket:main":
-        history = runtime.load_conversation_history(max_turns=40)
+        history = await asyncio.to_thread(
+            runtime.load_chat_transcript, max_turns=200,
+        )
     elif session_key.startswith("team:"):
         team_id = session_key.split(":", 1)[1]
         return _build_team_thread(runtime, team_id)
@@ -99,7 +104,11 @@ async def get_session_history(agent_id: str, session_key: str, request: Request)
             return {"messages": []}
         return _build_delegate_thread(runtime, delegate_num)
     else:
-        history = runtime.load_session_history(session_key=session_key, max_turns=40)
+        history = await asyncio.to_thread(
+            runtime.load_session_history,
+            session_key=session_key,
+            max_turns=40,
+        )
 
     chat_msgs = [m for m in history if m.get("role") in ("user", "assistant")]
     return {"messages": chat_msgs}

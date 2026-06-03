@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 LOOKUP_TOOLS = frozenset({
     "read", "web_search", "web_fetch", "clawhub",
     "vision", "memory_search", "memory_get",
+    "chat_history", "email_history",
     "drive_search", "drive_list", "drive_read",
     "calendar_list",
     "plan",
@@ -40,7 +41,7 @@ LOOKUP_TOOLS = frozenset({
 # Discovery / identity tools — do not count as task delivery for implicit exit.
 NON_SUBSTANTIVE_TOOLS = LOOKUP_TOOLS | frozenset({
     "contacts", "list_dir", "glob", "grep", "semantic_search",
-    "discover_tools", "file_history",
+    "discover_tools", "file_history", "chat_history",
 })
 
 
@@ -567,6 +568,15 @@ async def should_complete(
                 hints=state.hints or None,
                 adapter_name=adapter_name,
             )
+            if hooks is not None:
+                from nls.agentic.task_epoch_hygiene import apply_goal_evaluation_to_wm
+
+                apply_goal_evaluation_to_wm(
+                    hooks,
+                    state.goals,
+                    pending,
+                    previous_pending=state.last_pending_indices,
+                )
             state.last_pending_indices = pending
             if pending:
                 state.goal_block_count += 1
@@ -943,35 +953,52 @@ def _instruction_skill_setup_in_progress(state: "LoopState") -> bool:
     return "setup:instruction_skill" in hints or "setup:native_skill" in hints
 
 
+def should_run_prose_eval(state: LoopState) -> bool:
+    """Run prose micro-inference on every prose-only turn during agentic work.
+
+    Pure conversational chat (CHAT mode, zero tool calls) is exempt: one
+    prose reply is the normal deliverable, and the user must speak before
+    another agent message — so duplicate-prose / premature-ask gating is
+    unnecessary there.
+    """
+    if state.consecutive_text_only < 1:
+        return False
+    if not (getattr(state, "_last_iter_text", "") or "").strip():
+        return False
+
+    from nls.agentic.orchestration_profile_spec import get_profile_spec
+
+    spec = get_profile_spec(getattr(state, "orchestration_profile", None))
+    if (
+        spec.profile == "conversational"
+        and state.active_mode == AgentMode.CHAT
+        and state.total_tool_calls == 0
+        and not state.coordinator_mode
+    ):
+        return False
+    return True
+
+
 async def refresh_prose_verdict(
     state: "LoopState",
     vllm_client: Any = None,
     *,
     adapter_name: str | None = None,
 ) -> None:
-    """Run prose micro-inference when the agent has repeated text-only turns."""
+    """Classify the latest prose-only loop iteration via micro-inference."""
     from nls.agentic.goals import evaluate_prose_turn, prose_fingerprint
 
     prose = getattr(state, "_last_iter_text", "") or ""
     if not prose.strip():
         state.last_prose_verdict = ""
         state.prose_show_to_user = True
+        state.prose_gate_active = False
         return
 
-    _err = (state.last_error_preview or "").lower()
-    _needs_eval = (
-        state.consecutive_text_only >= 2
-        or (
-            state.consecutive_text_only >= 1
-            and any(
-                m in _err
-                for m in ("401", "403", "unauthorized", "invalid token", "forbidden")
-            )
-        )
-    )
-    if not _needs_eval:
+    if not should_run_prose_eval(state):
         state.last_prose_verdict = ""
         state.prose_show_to_user = True
+        state.prose_gate_active = False
         return
 
     verdict, show = await evaluate_prose_turn(
@@ -987,6 +1014,9 @@ async def refresh_prose_verdict(
     )
     state.last_prose_verdict = verdict
     state.prose_show_to_user = show
+    state.prose_gate_active = (
+        verdict == "should_continue" and not show
+    )
     fp = prose_fingerprint(prose)
     if fp != state.last_prose_hash:
         state.last_prose_hash = fp
@@ -997,12 +1027,10 @@ async def refresh_prose_verdict(
 
 
 def prose_stream_text(state: "LoopState", response_text: str) -> str:
-    """Suppress duplicate or held prose from reaching the user."""
+    """Suppress held or duplicate prose from reaching the user."""
     text = (response_text or "").strip()
     if not text:
         return ""
-    if state.consecutive_text_only < 2:
-        return response_text or ""
     verdict = getattr(state, "last_prose_verdict", "")
     if verdict == "duplicate":
         return ""
@@ -1089,6 +1117,71 @@ def _detect_assessment_loop(state: "LoopState") -> str | None:
     return _ASSESSMENT_LOOP_NUDGE
 
 
+_SKILL_FILE_RE = re.compile(
+    r"[a-z0-9_-]+-channel[/\\][^\"']+\.py",
+    re.IGNORECASE,
+)
+_SKILL_LOADER_ERR_MARKERS = (
+    "cannot import", "importerror", "router", "register",
+)
+
+
+def _detect_skill_loader_rewrite_stall(state: "LoopState") -> str | None:
+    """skill_install failed then repeated write/edit on channel skill files."""
+    skill_install_errors = state.tool_errors.get("skill_install", 0)
+    history = getattr(state, "tool_history", [])[-12:]
+    had_install_error = skill_install_errors > 0 or any(
+        name == "skill_install" and err for name, err in history
+    )
+    if not had_install_error:
+        return None
+
+    err_blob = (getattr(state, "last_error_preview", "") or "").lower()
+    if not any(m in err_blob for m in _SKILL_LOADER_ERR_MARKERS):
+        install_err_in_actions = any(
+            "skill_install" in (a or "").lower()
+            and any(m in (a or "").lower() for m in _SKILL_LOADER_ERR_MARKERS)
+            for a in (getattr(state, "cumulative_actions", None) or [])[-8:]
+        )
+        if not install_err_in_actions:
+            return None
+
+    sigs = getattr(state, "tool_call_signatures", [])
+    skill_edits = 0
+    for sig in sigs[-8:]:
+        if not (sig.startswith("write:") or sig.startswith("edit:")):
+            continue
+        raw = sig.split(":", 1)[-1]
+        m = re.search(r'"path"\s*:\s*"([^"]+)"', raw)
+        path = m.group(1) if m else raw
+        if _SKILL_FILE_RE.search(path.replace("\\", "/")):
+            skill_edits += 1
+
+    if skill_edits < 2:
+        return None
+
+    logger.info(
+        "[STALL] skill_install error + %d rewrite(s) on channel skill files",
+        skill_edits,
+    )
+    return _stall_nudge_for_state(
+        state,
+        (
+            "skill_install failed on a loader/import error — stop rewriting "
+            "the whole webhook.py or adapter. Fix the specific contract: "
+            "webhook.py must export module-level `router = APIRouter(...)`, "
+            "register() must import cleanly, startup should be async if it "
+            "starts background tasks. Edit surgically, retry skill_install, "
+            "then skill_configure — do not loop full-file rewrites."
+        ),
+        (
+            "Loader import error + repeated skill file rewrites detected. "
+            "Export `router` at module level, fix __init__.py imports, "
+            "retry skill_install once fixed."
+        ),
+    )
+
+
 def detect_stall(state: "LoopState", config: "LoopConfig") -> str | None:
     """Detect stall patterns and return a nudge message if stuck.
 
@@ -1097,6 +1190,9 @@ def detect_stall(state: "LoopState", config: "LoopConfig") -> str | None:
     _assessment = _detect_assessment_loop(state)
     if _assessment:
         return _assessment
+    _skill_rewrite = _detect_skill_loader_rewrite_stall(state)
+    if _skill_rewrite:
+        return _skill_rewrite
     # Pattern 0: exact same tool+args repeated 3+ times (even if successful)
     # Exempt orchestrator monitoring calls (e.g. team(inspect) on same team).
     _MONITORING_TOOL_NAMES = frozenset({

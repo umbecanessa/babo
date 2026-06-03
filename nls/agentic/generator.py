@@ -634,6 +634,9 @@ async def generate(
             prompt_tokens=_usage.get("prompt_tokens", 0),
             completion_tokens=_usage.get("completion_tokens", 0),
             total_tokens=_usage.get("total_tokens", 0),
+            finish_reason=getattr(
+                vllm_client, "last_stream_finish_reason", "",
+            ) or "",
         )
 
     except Exception as exc:

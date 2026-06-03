@@ -86,8 +86,12 @@ class LoopHooks:
     wm_set_plan_position: Callable[[str], None] | None = None
     wm_push_instructions: Callable[[list[str]], None] | None = None
     wm_push_task_goals: Callable[[list[str]], None] | None = None
+    wm_begin_task_epoch: Callable[..., None] | None = None
+    """Begin a new task epoch (session WM rotation) when goals materially change."""
     wm_refresh_todo_board: Callable[[], None] | None = None
     guardrails_registry: Any | None = None
+    wm_mark_task_goal_done: Callable[[str], bool] | None = None
+    wm_prune_supporting_facts_for_goal: Callable[[str], int] | None = None
 
     # --- Compaction hook ---
     on_compaction: Callable[[Any], None] | None = None
@@ -483,6 +487,27 @@ def build_hooks(
             g.level == "tactical" and g.source == "task_extract"
             for g in goals
         )
+
+    def wm_begin_task_epoch_legacy(
+        *,
+        loop_id: str,
+        goals: list[str],
+        dispatch_source: str,
+    ) -> None:
+        from nls.agentic.task_epoch_hygiene import begin_task_epoch
+
+        begin_task_epoch(
+            None,
+            working_memory,
+            loop_id=loop_id,
+            goals=list(goals or []),
+            dispatch_source=dispatch_source or "user",
+        )
+
+    def wm_prune_supporting_facts_for_goal_legacy(goal: str) -> int:
+        from nls.agentic.task_epoch_hygiene import prune_supporting_facts_for_goal
+
+        return prune_supporting_facts_for_goal(None, working_memory, goal)
 
     def tick_hypo(elapsed: float) -> None:
         if hypothalamus is not None:
@@ -1042,7 +1067,9 @@ def build_hooks(
         wm_get_context=wm_get_context,
         wm_activate=wm_activate,
         wm_push_task_goals=wm_push_task_goals,
+        wm_begin_task_epoch=wm_begin_task_epoch_legacy,
         wm_mark_task_goal_done=wm_mark_task_goal_done,
+        wm_prune_supporting_facts_for_goal=wm_prune_supporting_facts_for_goal_legacy,
         wm_has_pending_task_goals=wm_has_pending_task_goals,
         wm_push_goals=wm_push_goals,
         wm_set_plan_position=wm_set_plan_position,
@@ -1094,7 +1121,7 @@ def build_config_v4(agent_config: dict[str, Any]) -> Any:
         result_max_chars=cfg.get("result_max_chars", 20_000),
         anchor_tool_result_min_chars=cfg.get("anchor_tool_result_min_chars", 4_000),
         relay_compact_message_chars=cfg.get("relay_compact_message_chars", 32_000),
-        max_new_tokens=cfg.get("max_new_tokens", 4_096),
+        max_new_tokens=cfg.get("max_new_tokens", 16_000),
         compaction_timeout=cfg.get("compaction_timeout", 45.0),
         temperature=cfg.get("temperature", 1.0),
         top_p=cfg.get("top_p", 0.95),
@@ -1478,6 +1505,45 @@ def build_hooks_v4(
             _ring_wm.set_todo_board("\n".join(lines))
         except Exception:
             pass
+
+    def _wm_begin_task_epoch(
+        *,
+        loop_id: str,
+        goals: list[str],
+        dispatch_source: str,
+    ) -> None:
+        from nls.agentic.task_epoch_hygiene import begin_task_epoch
+
+        begin_task_epoch(
+            dual_wm,
+            working_memory,
+            loop_id=loop_id,
+            goals=list(goals or []),
+            dispatch_source=dispatch_source or "user",
+        )
+
+    def _wm_prune_supporting_facts_for_goal(goal: str) -> int:
+        from nls.agentic.task_epoch_hygiene import prune_supporting_facts_for_goal
+
+        return prune_supporting_facts_for_goal(dual_wm, working_memory, goal)
+
+    def _wm_mark_task_goal_done_cryptex(substring: str) -> bool:
+        if _ring_wm is None:
+            return False
+        if not isinstance(substring, str):
+            return False
+        remover = getattr(_ring_wm, "remove_goals_where", None)
+        if not callable(remover):
+            return False
+        removed = remover(
+            lambda g: (
+                getattr(g, "level", "") == "tactical"
+                and getattr(g, "source", "") == "task_extract"
+                and isinstance(getattr(g, "content", None), str)
+                and substring.lower() in g.content.lower()
+            ),
+        )
+        return len(removed) > 0
 
     # ----- Goals & Hints -----
 
@@ -2516,6 +2582,9 @@ def build_hooks_v4(
         wm_set_plan_position=_wm_set_plan_position,
         wm_push_instructions=_wm_push_instructions,
         wm_push_task_goals=_wm_push_task_goals,
+        wm_begin_task_epoch=_wm_begin_task_epoch,
+        wm_mark_task_goal_done=_wm_mark_task_goal_done_cryptex,
+        wm_prune_supporting_facts_for_goal=_wm_prune_supporting_facts_for_goal,
         wm_refresh_todo_board=_wm_refresh_todo_board,
         on_compaction=_on_compaction,
         ans_tool_learning=_ans_tool_learning,

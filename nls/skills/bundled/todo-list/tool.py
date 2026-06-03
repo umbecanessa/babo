@@ -186,6 +186,18 @@ class TodoTool:
     # Actions
     # ------------------------------------------------------------------
 
+    def _redirect_existing_todo(self, existing: Any, *, reason: str) -> ToolResult:
+        """Return existing todo id instead of failing on duplicate add."""
+        return ToolResult(
+            content=(
+                f"Todo add skipped ({reason}) — use existing "
+                f"[{existing.id}]: {existing.title} (status={existing.status}).\n"
+                f"Next: todo(action='update', id='{existing.id}', "
+                f"status='in_progress', notes='...') — do NOT add again."
+            ),
+            is_error=False,
+        )
+
     async def _add(self, params: dict[str, Any]) -> ToolResult:
         title = params.get("title", "").strip()
         if not title:
@@ -193,7 +205,7 @@ class TodoTool:
 
         description = params.get("description", "").strip()
 
-        # Duplicate guard: reject exact match or high fuzzy similarity.
+        # Duplicate guard: redirect to existing item instead of hard failure.
         title_lower = title.lower()
         title_tokens = set(title_lower.split())
         for existing in self._store.list_items():
@@ -201,27 +213,14 @@ class TodoTool:
                 continue
             existing_lower = existing.title.lower()
             if existing_lower == title_lower:
-                return ToolResult(
-                    content=(
-                        f"Duplicate: an active todo already exists with this "
-                        f"title — [{existing.id}] {existing.title} "
-                        f"(status={existing.status}). Use that one instead, "
-                        f"or pick a more specific title."
-                    ),
-                    is_error=True,
-                )
+                return self._redirect_existing_todo(existing, reason="duplicate title")
             existing_tokens = set(existing_lower.split())
             if title_tokens and existing_tokens:
                 jaccard = len(title_tokens & existing_tokens) / len(title_tokens | existing_tokens)
                 if jaccard >= 0.6:
-                    return ToolResult(
-                        content=(
-                            f"Near-duplicate: an active todo is very similar — "
-                            f"[{existing.id}] {existing.title} "
-                            f"(status={existing.status}, similarity={jaccard:.0%}). "
-                            f"Use that one instead, or pick a clearly different title."
-                        ),
-                        is_error=True,
+                    return self._redirect_existing_todo(
+                        existing,
+                        reason=f"near-duplicate ({jaccard:.0%} similar)",
                     )
 
         status = params.get("status", "inbox")

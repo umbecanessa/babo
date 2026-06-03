@@ -15,11 +15,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import Any
 
 from .base import ToolResult
 
 logger = logging.getLogger(__name__)
+
+_STALE_SECONDS = 30.0
+_BUFFER_CHANNELS = ("user", "agent", None)
 
 
 class ScreenshotTool:
@@ -63,6 +67,24 @@ class ScreenshotTool:
             "required": [],
         }
 
+    def _buffered_context(self) -> str:
+        """Read VC buffer — user desktop first, then agent/browser, then any."""
+        for channel in _BUFFER_CHANNELS:
+            ctx = self._vc.get_visual_context(channel=channel)
+            if ctx:
+                return ctx
+        return ""
+
+    def _latest_event_age(self) -> float | None:
+        buf = getattr(self._vc, "buffer", None)
+        latest = getattr(buf, "latest", None)
+        if latest is None:
+            return None
+        ts = getattr(latest, "timestamp", None)
+        if ts is None:
+            return None
+        return max(0.0, time.time() - float(ts))
+
     async def execute(
         self,
         params: dict[str, Any],
@@ -71,19 +93,34 @@ class ScreenshotTool:
         question: str = params.get("question", "").strip()
 
         try:
-            # Try fresh context first
-            ctx = self._vc.get_visual_context(channel="tool")
-            if not ctx:
-                # Buffer empty — wait a moment for an in-flight capture
-                await asyncio.sleep(1.5)
-                ctx = self._vc.get_visual_context(channel="tool")
+            ctx = self._buffered_context()
+            age = self._latest_event_age()
+            stale = age is None or age > _STALE_SECONDS
+
+            if (not ctx or stale) and hasattr(self._vc, "look_now"):
+                try:
+                    fresh = await self._vc.look_now(question=question)
+                    if fresh:
+                        ctx = fresh
+                except Exception as exc:
+                    logger.debug("Screenshot look_now fallback failed: %s", exc)
 
             if not ctx:
+                await asyncio.sleep(1.5)
+                ctx = self._buffered_context()
+
+            if not ctx:
+                buf = getattr(getattr(self._vc, "buffer", None), "__len__", lambda: 0)()
+                logger.warning(
+                    "ScreenshotTool: empty buffer after retry (buffer_len=%s)",
+                    buf() if callable(buf) else 0,
+                )
                 return ToolResult(
                     content=(
                         "No screen capture available yet. "
                         "The Visual Cortex may still be starting up or "
-                        "no display is connected. Try again in a few seconds."
+                        "no display is connected. Try again in a few seconds, "
+                        "or use eyes(action='look') for a one-shot capture."
                     ),
                     is_error=True,
                 )

@@ -35,6 +35,13 @@ __all__ = [
     "normalize_goals_for_profile",
     "apply_structured_hint_caps",
     "reconcile_triage_orchestration_depth",
+    "reconcile_triage_continuation_phase",
+    "looks_like_credential_continuation_turn",
+    "infer_bundled_channel_skill_name",
+    "wm_get_tactical_goal_strings",
+    "wm_has_orchestration_activity",
+    "infer_continuation_profile_from_wm",
+    "upgrade_profile_for_continuation",
 ]
 
 # Machine-readable hint tokens triage may emit (language-agnostic downstream).
@@ -60,6 +67,35 @@ HINT_NATIVE_SKILL_SETUP = frozenset({
     "setup:native_skill",
 })
 
+HINT_CONFIGURE_BUNDLED = frozenset({
+    "setup:configure_bundled",
+})
+
+HINT_CONTINUATION_CREDENTIAL = frozenset({
+    "continuation:credential",
+})
+
+HINT_CONTINUATION_CONFIGURE = frozenset({
+    "continuation:configure_not_build",
+})
+
+HINT_SETUP_CONFLICT = HINT_INSTRUCTION_SKILL_SETUP | HINT_NATIVE_SKILL_SETUP
+
+_DISCORD_BOT_TOKEN_RE = re.compile(
+    r"\b(?:Bot\s+)?[MN][A-Za-z0-9]{20,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{20,}\b",
+)
+
+_TELEGRAM_BOT_TOKEN_RE = re.compile(
+    r"\b\d{8,10}:[A-Za-z0-9_-]{30,}\b",
+)
+
+_ASSISTANT_ASKED_CREDENTIAL_RE = re.compile(
+    r"\b(?:bot\s+token|paste\s+(?:your|the)|provide\s+(?:your|the)|"
+    r"send\s+(?:me\s+)?(?:your|the)|need\s+(?:your|the)\s+(?:token|credential)|"
+    r"waiting\s+for\s+(?:your|the)|share\s+(?:your|the)|looks\s+like\s+MT)\b",
+    re.IGNORECASE,
+)
+
 _CONFIGURE_INTENT_RE = re.compile(
     r"\b(configure|set\s*up)\s+(?:the\s+)?(?:skill|bot|integration|channel|installed)\b"
     r"|\b(?:skill|bot|integration)\s+(?:token|setup|configure|credentials?)\b"
@@ -69,6 +105,96 @@ _CONFIGURE_INTENT_RE = re.compile(
 )
 
 EM_COLD_START_GOAL_THRESHOLD = 3
+
+_PROFILE_ORDER = ("conversational", "solo_structured", "orchestrated")
+
+
+def _profile_rank(profile: str) -> int:
+    try:
+        return _PROFILE_ORDER.index(normalize_profile(profile))
+    except ValueError:
+        return 1
+
+
+def _max_profile(a: str, b: str) -> str:
+    return _PROFILE_ORDER[max(_profile_rank(a), _profile_rank(b))]
+
+
+def wm_get_tactical_goal_strings(working_memory: Any | None) -> list[str]:
+    """Read persisted tactical goals from Cryptex/WM."""
+    if working_memory is None:
+        return []
+    try:
+        return [
+            str(getattr(g, "content", g)).strip()
+            for g in working_memory.get_goals()
+            if getattr(g, "level", "") == "tactical"
+            and isinstance(getattr(g, "content", None), str)
+            and str(g.content).strip()
+        ]
+    except Exception:
+        return []
+
+
+def wm_has_orchestration_activity(working_memory: Any | None) -> bool:
+    """True when WM shows active teams, coordinator work, or pending escalations."""
+    if working_memory is None:
+        return False
+    try:
+        orch_teams = getattr(working_memory, "orch_get_active_teams", None)
+        if callable(orch_teams) and orch_teams():
+            return True
+        wake_fn = getattr(working_memory, "get_orchestration_wake_lines", None)
+        if callable(wake_fn):
+            for line in wake_fn():
+                low = line.lower()
+                if line.startswith("Team ") and "last team" not in low:
+                    return True
+                if "coordinator phase:" in low and "idle" not in low:
+                    return True
+                if "pending escalation" in low:
+                    return True
+    except Exception:
+        pass
+    return False
+
+
+def infer_continuation_profile_from_wm(
+    working_memory: Any | None,
+    current_profile: str,
+    *,
+    post_restart_task: bool = False,
+) -> str:
+    """Upgrade orchestration depth from WM continuity; never downgrade."""
+    current = normalize_profile(current_profile)
+    floor = current
+
+    if wm_has_orchestration_activity(working_memory):
+        floor = _max_profile(floor, "orchestrated")
+    else:
+        tactical = wm_get_tactical_goal_strings(working_memory)
+        if tactical and current == "conversational":
+            floor = _max_profile(floor, "solo_structured")
+        elif len(tactical) >= EM_COLD_START_GOAL_THRESHOLD:
+            floor = _max_profile(floor, "solo_structured")
+
+    if post_restart_task and _profile_rank(floor) <= _profile_rank("conversational"):
+        floor = "solo_structured"
+    return floor
+
+
+def upgrade_profile_for_continuation(
+    current_profile: str,
+    working_memory: Any | None = None,
+    *,
+    post_restart_task: bool = False,
+) -> str:
+    """Never downgrade profile; lift conversational using WM when available."""
+    return infer_continuation_profile_from_wm(
+        working_memory,
+        current_profile,
+        post_restart_task=post_restart_task,
+    )
 
 
 def em_pre_delegate_blocks_enabled(
@@ -167,6 +293,9 @@ def reconcile_triage_orchestration_depth(
     team_forbidden = bool(tokens & HINT_FORBID_TEAM)
     n_goals = len(goals)
 
+    if tokens & HINT_CONTINUATION_CONFIGURE:
+        return p, hints
+
     if explicit_solo or n_goals < EM_COLD_START_GOAL_THRESHOLD:
         return p, hints
 
@@ -183,6 +312,286 @@ def reconcile_triage_orchestration_depth(
         return "orchestrated", cleaned
 
     return p, hints
+
+
+def _last_assistant_message(history: list[dict] | None) -> str:
+    if not history:
+        return ""
+    for turn in reversed(history):
+        if turn.get("role") == "assistant":
+            return turn.get("content") or ""
+    return ""
+
+
+def infer_bundled_channel_skill_name(
+    text: str,
+    *,
+    default_platform: str = "telegram",
+) -> str:
+    """Pre-shipped bundled channel skill slug (telegram/whatsapp/email only)."""
+    from nls.skills_setup_policy import infer_pre_shipped_channel_skill
+
+    name = infer_pre_shipped_channel_skill(text)
+    if name:
+        return name
+    return f"{default_platform}-channel"
+
+
+def looks_like_credential_continuation_turn(
+    user_input: str,
+    *,
+    history: list[dict] | None = None,
+) -> bool:
+    """User pasted a credential after assistant asked, or message is token-only."""
+    ui = (user_input or "").strip()
+    if not ui:
+        return False
+    has_token = bool(
+        _DISCORD_BOT_TOKEN_RE.search(ui)
+        or _TELEGRAM_BOT_TOKEN_RE.search(ui)
+    )
+    if not has_token:
+        return False
+    last_asst = _last_assistant_message(history)
+    if last_asst and _ASSISTANT_ASKED_CREDENTIAL_RE.search(last_asst):
+        return True
+    recent = ui
+    if history:
+        for turn in history[-6:]:
+            if turn.get("role") in ("user", "assistant"):
+                recent += "\n" + (turn.get("content") or "")[:400]
+    if _TASK_CONTEXT_RE.search(recent) and len(ui) < 160:
+        return True
+    return False
+
+
+def _post_restart_channel_context(recent_text: str) -> tuple[str, str, bool]:
+    """Return (skill_name, platform, is_pre_shipped) for post-restart continuation."""
+    from nls.skills_setup_policy import (
+        infer_channel_platform,
+        infer_pre_shipped_channel_skill,
+        is_pre_shipped_channel_skill,
+    )
+
+    pre_shipped = infer_pre_shipped_channel_skill(recent_text)
+    platform = infer_channel_platform(recent_text) or "discord"
+    if pre_shipped and is_pre_shipped_channel_skill(pre_shipped):
+        return pre_shipped, platform, True
+    skill_name = pre_shipped or f"{platform}-channel"
+    return skill_name, platform, False
+
+
+def _post_restart_fallback_goals(skill_name: str, platform: str, *, pre_shipped: bool) -> list[str]:
+    if pre_shipped:
+        return [
+            f"Verify {skill_name} skill loaded after restart",
+            f"Configure {skill_name} with saved credentials if needed",
+            f"Verify {platform} channel connection with a smoke test",
+        ]
+    return [
+        f"Verify {skill_name} skill loaded after restart",
+        f"Configure {skill_name} with saved credentials if needed",
+        "Verify inbound listener starts on skill startup",
+    ]
+
+
+def reconcile_triage_continuation_phase(
+    triage: Any,
+    user_input: str,
+    *,
+    history: list[dict] | None = None,
+    working_memory: Any | None = None,
+) -> None:
+    """Repair triage when the user continues setup with credentials, not greenfield build."""
+    ui = (user_input or "").strip()
+    recent_for_restart = ui
+    if history:
+        for turn in history[-12:]:
+            if turn.get("role") in ("user", "assistant"):
+                recent_for_restart += "\n" + (turn.get("content") or "")[:500]
+    if (
+        _POST_RESTART_RE.search(ui)
+        and (
+            _TASK_CONTEXT_RE.search(recent_for_restart)
+            or "skill review" in recent_for_restart.lower()
+            or "discord-channel" in recent_for_restart.lower()
+        )
+    ):
+        goals = list(getattr(triage, "goals", None) or [])
+        if not goals:
+            wm_goals = wm_get_tactical_goal_strings(working_memory)
+            if wm_goals:
+                goals = wm_goals
+            else:
+                skill_name, platform, pre_shipped = _post_restart_channel_context(
+                    recent_for_restart,
+                )
+                goals = _post_restart_fallback_goals(
+                    skill_name, platform, pre_shipped=pre_shipped,
+                )
+        triage.intent = "TASK_THINK"
+        triage.thinking = True
+        triage.profile = upgrade_profile_for_continuation(
+            getattr(triage, "profile", "") or "solo_structured",
+            working_memory,
+            post_restart_task=True,
+        )
+        triage.goals = goals[:5]
+        hints = list(getattr(triage, "hints", None) or [])
+        hint_tokens = {h.strip().lower() for h in hints if h and h.strip()}
+        _, _, pre_shipped_channel = _post_restart_channel_context(recent_for_restart)
+        setup_token = (
+            "setup:configure_bundled" if pre_shipped_channel else "setup:native_skill"
+        )
+        for token in ("continuation:configure_not_build", setup_token):
+            if token not in hint_tokens:
+                hints.append(token)
+        triage.hints = hints
+        logger.info(
+            "Turn triage continuation reconcile: post-restart channel setup "
+            "profile=%s wm_goals=%d",
+            triage.profile,
+            len(wm_get_tactical_goal_strings(working_memory)),
+        )
+        return
+
+    hints = list(getattr(triage, "hints", None) or [])
+    hint_tokens = {h.strip().lower() for h in hints if h and h.strip()}
+
+    credential_continuation = (
+        bool(hint_tokens & HINT_CONTINUATION_CREDENTIAL)
+        or looks_like_credential_continuation_turn(user_input, history=history)
+    )
+
+    recent_text = (user_input or "").strip()
+    if history:
+        for turn in history[-8:]:
+            if turn.get("role") in ("user", "assistant"):
+                recent_text += "\n" + (turn.get("content") or "")[:500]
+
+    from nls.skills_setup_policy import (
+        infer_channel_platform,
+        infer_pre_shipped_channel_skill,
+        is_pre_shipped_channel_skill,
+    )
+
+    pre_shipped_skill = infer_pre_shipped_channel_skill(recent_text)
+    channel_platform = infer_channel_platform(recent_text)
+    is_agent_native_channel = (
+        credential_continuation
+        and pre_shipped_skill is None
+        and channel_platform == "discord"
+    )
+
+    wants_configure_bundled = bool(
+        hint_tokens & HINT_CONFIGURE_BUNDLED
+        or (
+            credential_continuation
+            and pre_shipped_skill is not None
+            and is_pre_shipped_channel_skill(pre_shipped_skill)
+        )
+    )
+
+    if is_agent_native_channel:
+        skill_name = "discord-channel"
+        if channel_platform and channel_platform != "discord":
+            skill_name = f"{channel_platform}-channel"
+        cleaned = [
+            h for h in hints
+            if h.strip().lower() not in (
+                HINT_SETUP_CONFLICT | HINT_CONFIGURE_BUNDLED
+            )
+        ]
+        for token in (
+            "continuation:credential",
+            "continuation:configure_not_build",
+            "setup:native_skill",
+        ):
+            if token not in {h.strip().lower() for h in cleaned}:
+                cleaned.append(token)
+        cleaned.append(
+            f"Agent-native channel skill — finish skill_install for '{skill_name}', "
+            "ensure webhook.py exports module-level router, then skill_configure; "
+            "do NOT use setup:configure_bundled (pre-shipped channels only)"
+        )
+        goals = list(getattr(triage, "goals", None) or [])
+        if credential_continuation or not goals:
+            goals = [
+                f"Fix and skill_install '{skill_name}' from workspace until loaded",
+                f"Configure {skill_name} via skill_configure with provided credentials",
+                "Verify inbound listener starts on skill startup",
+            ]
+        triage.intent = "TASK_THINK"
+        triage.thinking = True
+        triage.profile = upgrade_profile_for_continuation(
+            getattr(triage, "profile", "") or "solo_structured",
+            working_memory,
+        )
+        triage.goals = goals[:5]
+        triage.hints = cleaned
+        logger.info(
+            "Turn triage continuation reconcile: agent-native channel skill=%s",
+            skill_name,
+        )
+        return
+
+    if not wants_configure_bundled:
+        return
+
+    skill_name = pre_shipped_skill or infer_bundled_channel_skill_name(recent_text)
+    cleaned = [
+        h for h in hints
+        if h.strip().lower() not in HINT_SETUP_CONFLICT
+    ]
+    if "setup:configure_bundled" not in {
+        h.strip().lower() for h in cleaned
+    }:
+        cleaned.append("setup:configure_bundled")
+    if credential_continuation and "continuation:credential" not in {
+        h.strip().lower() for h in cleaned
+    }:
+        cleaned.append("continuation:credential")
+    if "continuation:configure_not_build" not in {
+        h.strip().lower() for h in cleaned
+    }:
+        cleaned.append("continuation:configure_not_build")
+    cleaned.append(
+        f"Use skill_configure(skill_name='{skill_name}') — bundled skill exists; "
+        "do NOT scaffold or skill_install from scratch"
+    )
+
+    goals = list(getattr(triage, "goals", None) or [])
+    if credential_continuation or not goals:
+        goals = [
+            f"Configure {skill_name} with the provided credentials via skill_configure",
+            f"Enable {skill_name} for this agent if not already enabled",
+            "Verify channel connection with a smoke test",
+        ]
+    elif goals and hint_tokens & HINT_SETUP_CONFLICT:
+        goals = [
+            f"Configure {skill_name} via skill_configure (not greenfield build)",
+            *[
+                g for g in goals
+                if "scaffold" not in g.lower()
+                and "author" not in g.lower()
+                and "skill.md" not in g.lower()
+            ][:2],
+        ] or goals
+
+    triage.intent = "TASK_THINK"
+    triage.thinking = True
+    triage.profile = upgrade_profile_for_continuation(
+        getattr(triage, "profile", "") or "solo_structured",
+        working_memory,
+    )
+    triage.goals = goals[:5]
+    triage.hints = cleaned
+    logger.info(
+        "Turn triage continuation reconcile: credential=%s skill=%s goals=%d",
+        credential_continuation,
+        skill_name,
+        len(triage.goals),
+    )
 
 
 _PROSE_ONLY_TOOL_DENY = frozenset({
@@ -225,7 +634,14 @@ _EXECUTION_MODE_RE = re.compile(
 )
 _CONTINUATION_RE = re.compile(
     r"^\s*(?:ok\s+done|done|proceed(?:\s+then)?|continue|retry|go\s+ahead|"
-    r"try\s+again|yes|yep|please\s+do)\s*[.!?]?\s*$",
+    r"try\s+again|yes|yep|please\s+do|ok\s+server\s+restarted|"
+    r"server\s+restarted(?:\s+successfully)?)\s*[.!?]?\s*$",
+    re.IGNORECASE,
+)
+
+_POST_RESTART_RE = re.compile(
+    r"\b(?:server\s+restarted|restart(?:ed)?\s+(?:complete|done|successfully)|"
+    r"skill\(s\)\s+loaded)\b",
     re.IGNORECASE,
 )
 _TASK_CONTEXT_RE = re.compile(
@@ -277,6 +693,25 @@ def boost_triage_for_work_continuation(
     ui = (user_input or "").strip()
     if not ui:
         return
+    if looks_like_credential_continuation_turn(ui, history=history):
+        triage.intent = "TASK_THINK"
+        triage.thinking = True
+        hints = list(triage.hints or [])
+        hint_tokens = {h.strip().lower() for h in hints if h}
+        recent = ui
+        if history:
+            for turn in history[-6:]:
+                if turn.get("role") in ("user", "assistant"):
+                    recent += "\n" + (turn.get("content") or "")[:400]
+        from nls.skills_setup_policy import infer_pre_shipped_channel_skill
+
+        if infer_pre_shipped_channel_skill(recent):
+            if "setup:configure_bundled" not in hint_tokens:
+                hints.append("setup:configure_bundled")
+        elif "setup:native_skill" not in hint_tokens:
+            hints.append("setup:native_skill")
+        triage.hints = hints
+        return
     surface = conversational_tool_surface(
         ui, history=history, intent=getattr(triage, "intent", ""),
     )
@@ -296,10 +731,21 @@ def boost_triage_for_work_continuation(
         triage.goals = ["Continue the in-progress task"]
     hints = list(triage.hints or [])
     hint_tokens = {h.strip().lower() for h in hints if h}
-    if has_task_context and not (hint_tokens & HINT_NATIVE_SKILL_SETUP):
-        from nls.skills_setup_policy import looks_like_native_skill_authoring
+    if looks_like_credential_continuation_turn(ui, history=history):
+        if "setup:configure_bundled" not in hint_tokens:
+            hints.append("setup:configure_bundled")
+        triage.hints = hints
+        return
+    if has_task_context and not (hint_tokens & HINT_SETUP_CONFLICT):
+        from nls.skills_setup_policy import (
+            looks_like_active_channel_integration,
+            looks_like_native_skill_authoring,
+        )
 
-        if looks_like_native_skill_authoring(recent_text):
+        if (
+            looks_like_active_channel_integration(recent_text)
+            or looks_like_native_skill_authoring(recent_text)
+        ):
             if "setup:native_skill" not in hint_tokens:
                 hints.append("setup:native_skill")
         elif "setup:instruction_skill" not in hint_tokens:
@@ -328,8 +774,13 @@ def enrich_instruction_skill_hints(
     if tokens & (HINT_INSTRUCTION_SKILL_SETUP | HINT_NATIVE_SKILL_SETUP):
         return
     blob = f"{user_input or ''} {' '.join(goals or [])}"
-    from nls.skills_setup_policy import looks_like_native_skill_authoring
+    from nls.skills_setup_policy import (
+        looks_like_active_channel_integration,
+        looks_like_native_skill_authoring,
+    )
 
+    if looks_like_active_channel_integration(blob):
+        return
     if looks_like_native_skill_authoring(blob):
         return
     if not _CONFIGURE_INTENT_RE.search(blob):
@@ -348,18 +799,41 @@ def enrich_native_skill_hints(
 ) -> None:
     """Add setup:native_skill when user asks to build a bundled/native Python skill."""
     tokens = {h.strip().lower() for h in hints if h and h.strip()}
-    if tokens & (HINT_INSTRUCTION_SKILL_SETUP | HINT_NATIVE_SKILL_SETUP):
+    if tokens & (
+        HINT_SETUP_CONFLICT
+        | HINT_CONFIGURE_BUNDLED
+        | HINT_CONTINUATION_CREDENTIAL
+        | HINT_CONTINUATION_CONFIGURE
+    ):
         return
     blob = f"{user_input or ''} {' '.join(goals or [])}"
     from nls.skills_setup_policy import (
+        BABO_GITHUB_REPO_URL,
+        CHANNEL_INTEGRATION_DOCS_URL,
         NATIVE_SKILL_DOCS_URL,
+        babo_bundled_skill_github_ref,
+        infer_channel_platform,
+        looks_like_active_channel_integration,
         looks_like_native_skill_authoring,
     )
 
-    if not looks_like_native_skill_authoring(blob):
+    if not (
+        looks_like_active_channel_integration(blob)
+        or looks_like_native_skill_authoring(blob)
+    ):
         return
     hints.append("setup:native_skill")
-    hints.append(
-        f"Native NLS skill: scaffold nls/skills/bundled/{{name}}/ with register() — "
-        f"see {NATIVE_SKILL_DOCS_URL}"
-    )
+    platform = infer_channel_platform(blob)
+    if looks_like_active_channel_integration(blob):
+        channel = platform or "discord"
+        hints.append(
+            f"Active {channel} channel: native bundled {channel}-channel plugin "
+            f"(not standalone bot/OpenClaw) — {CHANNEL_INTEGRATION_DOCS_URL} · "
+            f"examples: {babo_bundled_skill_github_ref('telegram-channel')} · "
+            f"repo: {BABO_GITHUB_REPO_URL}"
+        )
+    else:
+        hints.append(
+            f"Native NLS skill: scaffold data/skills/{{name}}/ with register() — "
+            f"{NATIVE_SKILL_DOCS_URL} · source: {BABO_GITHUB_REPO_URL}"
+        )

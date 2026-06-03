@@ -1057,6 +1057,17 @@
 }
 
 // --- Agentic input mode ---
+.ask-user-composer-banner {
+  margin: 0 0 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(251, 191, 36, 0.25);
+  background: rgba(251, 191, 36, 0.08);
+  color: rgba(251, 191, 36, 0.95);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
 .input-wrapper.agentic-active {
   border-color: var(--text-muted);
 

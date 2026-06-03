@@ -115,6 +115,13 @@ class ConnectionManager:
         """Check if any client is connected for this agent."""
         return bool(self._connections.get(agent_id))
 
+    def agentic_running(self, agent_id: str) -> bool:
+        """True when any WS for *agent_id* has a foreground agentic loop active."""
+        for ws in self._connections.get(agent_id, ()):
+            if getattr(ws.state, "agentic_running", False):
+                return True
+        return False
+
     def connected_agents(self) -> list[str]:
         """Return list of agent_ids with active connections."""
         return [aid for aid, conns in self._connections.items() if conns]

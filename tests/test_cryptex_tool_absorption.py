@@ -49,6 +49,21 @@ def test_trigger_specs_and_map_present():
     assert len(CRYPTEX_TRIGGER_SPECS) >= 20
     assert "team" in TOOL_CRYPTEX_TRIGGERS
     assert "communicate" in TOOL_CRYPTEX_TRIGGERS
+    assert "skill_install" in str(TOOL_CRYPTEX_TRIGGERS)
+
+
+def test_skill_install_absorption():
+    cryptex = _make_test_cryptex()
+    absorb_orchestrator_tool_result(
+        cryptex,
+        "skill_install",
+        {"source_path": "discord-channel", "name": "discord-channel"},
+        "Installed and loaded NLS skill 'discord-channel'",
+        False,
+    )
+    skills = cryptex._rings["skills"].get_active_slots()
+    assert any(s.domain == "Skill:discord-channel" for s in skills)
+    assert any("discord-channel" in s.content for s in skills)
 
 
 def test_team_approve_rotates_verification_focus():

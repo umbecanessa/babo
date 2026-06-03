@@ -24,8 +24,20 @@ export class ProjectService {
     this.teams().filter(t => t.status === 'created'),
   );
 
+  /** True once any REST payload arrived — used to avoid a full-page spinner. */
+  hasAnyData = computed(
+    () =>
+      this.teams().length > 0
+      || this.items().length > 0
+      || this.lists().length > 0,
+  );
+
+  private static readonly LOAD_TIMEOUT_MS = 10_000;
+
   private agentId = '';
   private wsSub?: Subscription;
+  private loadGeneration = 0;
+  private loadTimeout?: ReturnType<typeof setTimeout>;
 
   private readonly runView = inject(RunViewService);
 
@@ -38,48 +50,111 @@ export class ProjectService {
     this.agentId = agentId;
     this.runView.bindAgent(agentId);
     this.loadData();
-    this.subscribeWs();
+    // Let REST responses start before replaying buffered WS events.
+    queueMicrotask(() => this.subscribeWs());
   }
 
   destroy(): void {
+    this.loadGeneration++;
+    this.clearLoadTimeout();
     this.wsSub?.unsubscribe();
   }
 
   loadData(): void {
+    const gen = ++this.loadGeneration;
+    this.clearLoadTimeout();
     this.loading.set(true);
     this.error.set('');
 
+    let pending = 3;
+    let itemsLoaded = false;
+    let anySuccess = false;
+
+    const finishLoad = (opts?: { error?: boolean }) => {
+      if (gen !== this.loadGeneration) return;
+      pending = Math.max(0, pending - 1);
+      if (opts?.error && !anySuccess && pending === 0) {
+        this.error.set('Could not load project data. Is the agent running?');
+      }
+      if (pending === 0 || anySuccess) {
+        this.loading.set(false);
+        this.clearLoadTimeout();
+      }
+    };
+
+    this.loadTimeout = setTimeout(() => {
+      if (gen !== this.loadGeneration) return;
+      this.loading.set(false);
+      if (!anySuccess && !this.hasAnyData()) {
+        this.error.set('Could not load project data. Is the agent running?');
+      }
+    }, ProjectService.LOAD_TIMEOUT_MS);
+
     this.api.getTeams(this.agentId, true).subscribe({
       next: (res) => {
+        if (gen !== this.loadGeneration) return;
+        anySuccess = true;
         const teams = res.teams || [];
         this.teams.set(teams);
         this.runView.hydrateTeams(teams);
         this.autoLoadTimeline(teams);
+        this.loading.set(false);
       },
-      error: () => this.teams.set([]),
+      error: () => {
+        if (gen !== this.loadGeneration) return;
+        this.teams.set([]);
+        finishLoad({ error: true });
+      },
+      complete: () => finishLoad(),
     });
 
     this.api.getTodoLists(this.agentId).subscribe({
-      next: (res) => this.lists.set(res.lists || []),
-      error: () => this.lists.set([]),
+      next: (res) => {
+        if (gen !== this.loadGeneration) return;
+        anySuccess = true;
+        this.lists.set(res.lists || []);
+        this.loading.set(false);
+      },
+      error: () => {
+        if (gen !== this.loadGeneration) return;
+        this.lists.set([]);
+        finishLoad({ error: true });
+      },
+      complete: () => finishLoad(),
     });
 
     this.api.getTodoItems(this.agentId).subscribe({
       next: (res) => {
+        if (gen !== this.loadGeneration) return;
+        anySuccess = true;
+        itemsLoaded = true;
         const items = (res.items || []) as TodoItem[];
         this.items.set(items);
         this.loading.set(false);
         this.loadPlansForItems(items);
-        // If timeline wasn't loaded from teams, try from items
         if (!this.timeline()) {
           this.autoLoadTimeline(this.teams());
         }
       },
       error: () => {
-        this.error.set('Could not load project data. Is the agent running?');
-        this.loading.set(false);
+        if (gen !== this.loadGeneration) return;
+        finishLoad({ error: true });
+      },
+      complete: () => {
+        if (gen === this.loadGeneration && !itemsLoaded && anySuccess) {
+          // Teams/lists loaded; todo items failed — still show the page.
+          this.loading.set(false);
+        }
+        finishLoad({ error: !itemsLoaded && !anySuccess });
       },
     });
+  }
+
+  private clearLoadTimeout(): void {
+    if (this.loadTimeout) {
+      clearTimeout(this.loadTimeout);
+      this.loadTimeout = undefined;
+    }
   }
 
   refreshTeams(): void {

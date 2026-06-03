@@ -72,7 +72,7 @@ _RESEARCH_TOOLS = frozenset({
     "read", "list_dir", "web_search", "web_fetch",
     "screenshot", "offer_download",
     "grep", "glob", "semantic_search",
-    "file_history",
+    "file_history", "chat_history",
 })
 _FILE_TOOLS = frozenset({
     "write", "edit", "delete_file", "move_file",
@@ -578,6 +578,12 @@ class AgenticHooks:
     wm_mark_task_goal_done: Callable[[str], bool] | None = None
     """Mark a tactical task goal as done (by substring match).
     Returns True if a goal was matched and removed."""
+
+    wm_begin_task_epoch: Callable[..., None] | None = None
+    """Rotate session-scoped WM when a new user/channel task starts."""
+
+    wm_prune_supporting_facts_for_goal: Callable[[str], int] | None = None
+    """Remove session facts that supported a completed goal."""
 
     wm_has_pending_task_goals: Callable[[], bool] | None = None
     """Return True if there are still pending tactical task goals."""
@@ -2021,7 +2027,7 @@ class LoopConfig:
     relay_compact_message_chars: int = 32_000
 
     # --- Generation (Qwen3.5 recommended: thinking/general) ---
-    max_new_tokens: int = 4_096
+    max_new_tokens: int = 16_000
     compaction_timeout: float = 45.0
     temperature: float = 1.0
     top_p: float = 0.95
@@ -2157,6 +2163,9 @@ class LoopState:
     last_error_preview: str = ""
     stall_nudges_given: int = 0
 
+    # Per-path truncated write/edit attempts (output budget stalls)
+    truncated_write_attempts: dict[str, int] = field(default_factory=dict)
+
     # Sub-agent budget pacing (worker loops only)
     budget_milestones_sent: set = field(default_factory=set)
     read_heavy_nudge_sent: bool = False
@@ -2211,11 +2220,12 @@ class LoopState:
     # automatically after the agent delivers its response.
     _pre_responding_mode: "AgentMode | None" = None
 
-    # Prose-only turn evaluation (micro-inference on 2nd+ consecutive prose)
+    # Prose-only turn evaluation (micro-inference on every prose-only turn)
     _last_iter_text: str = ""
     last_prose_hash: str = ""
     last_prose_verdict: str = ""
     prose_show_to_user: bool = True
+    prose_gate_active: bool = False
 
     # Backward compat property
     @property
@@ -2392,3 +2402,4 @@ class GenerationResult:
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
+    finish_reason: str = ""

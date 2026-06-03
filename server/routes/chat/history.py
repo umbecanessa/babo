@@ -46,6 +46,29 @@ def _strip_internal_blocks(text: str) -> str:
     return _SKILL_ONBOARDING_RE.sub("", text)
 
 
+def record_visible_chat_turn(
+    runtime,
+    *,
+    user: str | None = None,
+    assistant: str | None = None,
+    reasoning: str | None = None,
+    metadata: dict | None = None,
+) -> None:
+    """Persist a user-visible turn for UI transcript restore."""
+    record = getattr(runtime, "record_chat_turn", None)
+    if not callable(record):
+        return
+    try:
+        record(
+            user=_strip_internal_blocks(user) if user else None,
+            assistant=assistant,
+            reasoning=reasoning,
+            metadata=metadata,
+        )
+    except Exception:
+        logger.debug("record_visible_chat_turn failed", exc_info=True)
+
+
 def _save_agentic_history(
     history: list[dict],
     result,

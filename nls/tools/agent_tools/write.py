@@ -206,23 +206,43 @@ class WriteTool:
         params: dict[str, Any],
         signal: asyncio.Event | None = None,
     ) -> ToolResult:
-        path_str = params.get("path", "")
-        content = self._unescape_content(params.get("content", ""))
+        from .tool_path_args import (
+            build_write_missing_content_error,
+            normalize_tool_path_arg,
+            recover_write_tool_args,
+        )
+        from .file_ledger import append_must_read_scaffold_hint
+
+        raw_path = params.get("path", "")
+        path_str, content_raw = recover_write_tool_args(params)
 
         if not path_str:
+            if content_raw is not None:
+                return ToolResult(
+                    content=(
+                        "Error: 'path' is required for write(). "
+                        "You passed content but no path — add path='relative/file.py' "
+                        "as a separate field."
+                    ),
+                    is_error=True,
+                )
             return ToolResult(content="Error: 'path' is required.", is_error=True)
 
-        if "content" not in params:
+        if content_raw is None:
+            from .tool_path_args import CONTENT_ARG_KEYS
+
+            raw_path_str = raw_path if isinstance(raw_path, str) else str(raw_path)
+            content_key_absent = not any(k in params for k in CONTENT_ARG_KEYS)
             return ToolResult(
-                content=(
-                    "Error: 'content' is required for write(). "
-                    "Pass path and content as separate fields — not JSON inside path."
+                content=build_write_missing_content_error(
+                    raw_path_str,
+                    resolved_path=path_str or None,
+                    content_key_absent=content_key_absent,
                 ),
                 is_error=True,
             )
 
-        from .tool_path_args import normalize_tool_path_arg
-        from .file_ledger import append_must_read_scaffold_hint
+        content = self._unescape_content(content_raw)
 
         path_str, path_err = normalize_tool_path_arg(
             path_str, cwd=self._effective_cwd, key="path",

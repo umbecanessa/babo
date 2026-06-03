@@ -57,6 +57,212 @@ def resolve_data_skills_dir() -> Path | None:
     return None
 
 
+_SKIP_SKILL_SCAN_DIR_NAMES = frozenset({
+    ".git", ".venv", "venv", "node_modules", "__pycache__",
+    ".pytest_cache", "dist", "build", "browser_profile",
+})
+
+
+def resolve_runtime_data_dir(*, fallback: str | Path | None = None) -> Path:
+    """Canonical writable Babo data root (``NLS_DATA_DIR`` or server settings)."""
+    env_dir = os.environ.get("NLS_DATA_DIR", "").strip()
+    if env_dir:
+        return Path(env_dir)
+    try:
+        from server.main import app
+
+        settings = getattr(app.state, "settings", None)
+        if settings is not None:
+            return Path(settings.data_dir)
+    except Exception:
+        pass
+    if fallback:
+        return Path(fallback)
+    return Path("data")
+
+
+def is_skill_package_dir(path: Path) -> bool:
+    """True when ``path`` looks like an installable skill package."""
+    if not path.is_dir():
+        return False
+    return (path / "__init__.py").is_file() or (path / "SKILL.md").is_file()
+
+
+def iter_skill_package_dirs(root: Path) -> list[Path]:
+    """Find skill packages under a scan root (``data/skills/`` or agent workspace)."""
+    if not root.is_dir():
+        return []
+    found: list[Path] = []
+
+    def _maybe_add(entry: Path) -> None:
+        if not entry.is_dir() or entry.name in _SKIP_SKILL_SCAN_DIR_NAMES:
+            return
+        if is_skill_package_dir(entry):
+            found.append(entry)
+
+    nested = root / "skills"
+    if nested.is_dir():
+        for entry in sorted(nested.iterdir()):
+            _maybe_add(entry)
+
+    for entry in sorted(root.iterdir()):
+        if entry.name == "skills":
+            continue
+        _maybe_add(entry)
+    return found
+
+
+def resolve_skill_scan_roots(
+    *,
+    data_dir: str | Path | None = None,
+    workspace: str | Path | None = None,
+) -> list[tuple[Path, str]]:
+    """Return ``(directory, source_label)`` pairs for restart/skill discovery."""
+    roots: list[tuple[Path, str]] = []
+    seen: set[str] = set()
+
+    def _add(path: Path | None, label: str) -> None:
+        if path is None or not path.is_dir():
+            return
+        try:
+            key = str(path.resolve()).lower()
+        except OSError:
+            key = str(path).lower()
+        if key in seen:
+            return
+        roots.append((path, label))
+        seen.add(key)
+
+    _add(resolve_data_skills_dir(), "data")
+    runtime_data = resolve_runtime_data_dir(fallback=data_dir)
+    _add(runtime_data / "skills", "data")
+    if workspace:
+        _add(Path(workspace), "workspace")
+    return roots
+
+
+def skill_package_mtime(path: Path) -> float:
+    """Newest mtime of the skill package marker files."""
+    best = 0.0
+    for name in ("__init__.py", "SKILL.md"):
+        f = path / name
+        if f.is_file():
+            try:
+                best = max(best, f.stat().st_mtime)
+            except OSError:
+                pass
+    return best
+
+
+def pick_skill_package_candidate(
+    name: str,
+    candidates: list[tuple[Path, str]],
+) -> tuple[Path, str] | None:
+    """Choose the best on-disk copy when the same slug appears in multiple roots."""
+    if not candidates:
+        return None
+    if len(candidates) == 1:
+        return candidates[0]
+
+    by_source: dict[str, Path] = {}
+    for path, source in candidates:
+        by_source[source] = path
+
+    data_path = by_source.get("data")
+    workspace_path = by_source.get("workspace")
+    if data_path is not None and workspace_path is not None:
+        if skill_package_mtime(workspace_path) > skill_package_mtime(data_path):
+            return workspace_path, "workspace_newer"
+        return data_path, "data"
+    return candidates[0]
+
+
+def pre_shipped_channel_skills() -> frozenset[str]:
+    """Channel plugins shipped with Babo and configured via skill_configure."""
+    from nls.tools.skill_manager import PRE_SHIPPED_CHANNEL_SKILLS
+
+    return PRE_SHIPPED_CHANNEL_SKILLS
+
+
+def is_pre_shipped_channel_skill(skill_name: str) -> bool:
+    return skill_name.strip().lower() in pre_shipped_channel_skills()
+
+
+def infer_pre_shipped_channel_skill(text: str) -> str | None:
+    """Map user text to a pre-shipped channel skill, or None (e.g. discord = agent-native)."""
+    low = (text or "").lower()
+    if "whatsapp" in low:
+        return "whatsapp-channel"
+    if "telegram" in low:
+        return "telegram-channel"
+    if "email" in low and "gmail" not in low:
+        return "email-channel"
+    platform = infer_channel_platform(text)
+    if platform in ("telegram", "whatsapp"):
+        return f"{platform}-channel"
+    return None
+
+
+def format_skill_load_error_message(
+    skill_name: str,
+    err: str,
+    *,
+    dest: Path | None = None,
+) -> str:
+    """Actionable skill_install reload failure text for the agent."""
+    lines = [
+        f"Skill '{skill_name}' did not load.",
+        f"Error: {err}",
+    ]
+    if dest is not None:
+        lines.insert(1, f"Install path: {dest}")
+    low = (err or "").lower()
+    if "cannot import name 'router'" in low or (
+        "router" in low and "import" in low
+    ):
+        lines.extend([
+            "",
+            "Loader contract: webhook.py MUST export module-level "
+            "`router = APIRouter(...)` because register() imports "
+            "`from .webhook import router` or uses webhook.router.",
+            "Fix webhook.py — do not rewrite the whole skill in a loop.",
+        ])
+    if "nonetype" in low and "await" in low:
+        lines.append(
+            "Startup hook must be `async def startup()` (or return nothing "
+            "from sync startup) — the loader invokes lifecycle hooks safely "
+            "but sync hooks that spawn tasks should use async def."
+        )
+    if "register" in low and "import" in low:
+        lines.append(
+            "Check __init__.py: export SkillMeta as `meta` and "
+            "`def register(app, ctx)` with no import errors in submodules."
+        )
+    if "_load_known_senders" in low:
+        lines.append(
+            "Adapter calls _load_known_senders() but the method is missing — "
+            "copy it from nls/skills/bundled/telegram-channel/adapter.py "
+            "(or iterate self._agent_configs in startup like Telegram)."
+        )
+    if "list_agent_ids" in low:
+        lines.append(
+            "Use ctx.load_all_agent_configs().keys() or self._agent_configs "
+            "in startup — not ctx.list_agent_ids() unless you know SkillContext "
+            "provides it."
+        )
+    if "startup hook failed" in low or "startup" in low and "hook" in low:
+        lines.append(
+            "Startup hook failed — fix adapter.startup() before request_restart; "
+            "the skill will show loaded in UI but will not connect to Discord."
+        )
+    lines.extend([
+        "",
+        "Fix the skill under workspace/, then retry skill_install. "
+        "Do not call task_complete until status=loaded.",
+    ])
+    return "\n".join(lines)
+
+
 def skill_dir(slug: str) -> Path | None:
     """Installed skill directory, or None if not on disk."""
     base = resolve_data_skills_dir()
@@ -284,6 +490,84 @@ def instruction_skill_post_read_nudge(skill_md_path: str) -> str | None:
     return base + "\n" + "\n".join(_instruction_skill_post_read_extra(slug, p.parent))
 
 
+def build_configure_bundled_setup_lines(
+    *,
+    skill_name: str,
+    channel_platform: str | None = None,
+    enabled: bool | None = None,
+) -> list[str]:
+    """System lines injected at loop start for setup:configure_bundled turns."""
+    platform = (channel_platform or infer_channel_platform(skill_name) or "").strip()
+    lines = [
+        "[CONFIGURE BUNDLED SKILL] The server already ships this plugin — "
+        "use skill_configure, NOT native skill authoring or skill_install from scratch.",
+        f"First: skill_configure(skill_name='{skill_name}') to inspect missing fields.",
+        "Then: skill_configure(skill_name='...', config={{bot_token: '...', ...}}) "
+        "with values the user provided in chat.",
+        "Do NOT scaffold nls/skills/bundled/, rebuild __init__.py, or read cleanup-backup "
+        "folders under data/ as the active install path.",
+    ]
+    if enabled is False:
+        lines.append(
+            f"'{skill_name}' is loaded on the server but NOT enabled for this agent — "
+            "configure it, then enable via skill manager / enabled_skills.json."
+        )
+    if platform:
+        lines.append(
+            f"Active {platform} channel reference: {babo_bundled_skill_github_ref(skill_name)} · "
+            f"{CHANNEL_INTEGRATION_DOCS_URL}"
+        )
+    return lines
+
+
+def bundled_skill_ring_guidance(
+    skill_name: str,
+    description: str,
+    *,
+    enabled: bool,
+    config_schema: list[Any] | None = None,
+    agent_installed: bool = False,
+) -> tuple[str, str]:
+    """Cryptex skills-ring slot content for a configurable channel/native skill."""
+    if is_pre_shipped_channel_skill(skill_name):
+        kind = "Pre-shipped channel skill"
+        action = f"skill_configure(skill_name='{skill_name}')"
+    elif agent_installed:
+        kind = "Agent-installed native skill"
+        action = (
+            f"skill_configure(skill_name='{skill_name}') after skill_install loads; "
+            "webhook.py must export module-level router"
+        )
+    else:
+        kind = "Configurable native skill"
+        action = f"skill_configure(skill_name='{skill_name}')"
+    status = "enabled" if enabled else "NOT enabled for this agent"
+    headline = f"{skill_name}: {description} [{status}]"
+    schema_keys = [
+        getattr(f, "key", None) or (f.get("key") if isinstance(f, dict) else None)
+        for f in (config_schema or [])
+    ]
+    schema_keys = [k for k in schema_keys if k]
+    detail_lines = [
+        f"{kind} — {action}.",
+    ]
+    if agent_installed and not is_pre_shipped_channel_skill(skill_name):
+        detail_lines.append(
+            "Built via workspace + skill_install — not a pre-shipped Babo channel."
+        )
+    elif is_pre_shipped_channel_skill(skill_name):
+        detail_lines.append(
+            "Pre-shipped Babo channel (telegram/whatsapp/email) — do not skill_install from scratch."
+        )
+    if schema_keys:
+        detail_lines.append(f"Schema fields: {', '.join(schema_keys[:8])}")
+    if not enabled:
+        detail_lines.append(
+            "Enable this skill for the agent after configuration succeeds."
+        )
+    return headline, "\n".join(detail_lines)
+
+
 def build_instruction_skill_setup_lines(
     skills_base: Path,
     *,
@@ -296,6 +580,16 @@ def build_instruction_skill_setup_lines(
         "SKILL.md once. Do NOT use skill_configure (bundled NLS channel "
         "skills with config_schema only). Do NOT use contacts() for "
         "Discord/CLI instruction skills.",
+        "When you need a bot token, API key, or password from the user: "
+        "call ask_user() and stop — do NOT ask in prose-only text during "
+        "the loop. Never invent or assume credentials the user has not "
+        "provided in this conversation.",
+        "ClawHub/OpenClaw/AgentSkill packages are OK to search, read, and use "
+        "for one-shot API or setup docs. For always-on inbound messages "
+        "(live moderator, listen/respond when tagged), build a native bundled "
+        f"channel plugin per {CHANNEL_INTEGRATION_DOCS_URL} (reference "
+        f"{babo_bundled_skill_github_ref('telegram-channel')}) — not a standalone "
+        "discord.py project or OpenClaw gateway.",
         "After reading SKILL.md: execute skill subcommands (run.ps1 / .sh) — "
         "do not loop on jq/WSL/curl.exe.exe diagnostics.",
     ]
@@ -373,6 +667,38 @@ PLATFORM_DOCS_URL = "https://babo.agency/"
 PLATFORM_DOCS_GETTING_STARTED = "https://babo.agency/getting-started/"
 NATIVE_SKILL_DOCS_SLUG = "extension/add-bundled-skill"
 NATIVE_SKILL_DOCS_URL = f"{PLATFORM_DOCS_URL}{NATIVE_SKILL_DOCS_SLUG}/"
+CHANNEL_INTEGRATION_DOCS_SLUG = "extension/add-channel-integration"
+CHANNEL_INTEGRATION_DOCS_URL = f"{PLATFORM_DOCS_URL}{CHANNEL_INTEGRATION_DOCS_SLUG}/"
+BABO_GITHUB_REPO_URL = "https://github.com/umbecanessa/babo"
+BABO_GITHUB_DEFAULT_BRANCH = "main"
+BABO_BUNDLED_SKILLS_GITHUB_TREE = (
+    f"{BABO_GITHUB_REPO_URL}/tree/{BABO_GITHUB_DEFAULT_BRANCH}/nls/skills/bundled"
+)
+
+
+def babo_github_tree_path(repo_relative_path: str) -> str:
+    """Browse URL for a path inside the public Babo repo."""
+    slug = (repo_relative_path or "").strip().strip("/")
+    if not slug:
+        return BABO_GITHUB_REPO_URL
+    return f"{BABO_GITHUB_REPO_URL}/tree/{BABO_GITHUB_DEFAULT_BRANCH}/{slug}"
+
+
+def babo_github_raw_path(repo_relative_path: str) -> str:
+    """Raw file URL for web_fetch/read when the repo is not on disk."""
+    slug = (repo_relative_path or "").strip().strip("/")
+    return (
+        f"https://raw.githubusercontent.com/umbecanessa/babo/"
+        f"{BABO_GITHUB_DEFAULT_BRANCH}/{slug}"
+    )
+
+
+def babo_bundled_skill_github_ref(skill_name: str) -> str:
+    """Human + fetchable reference for a bundled skill example."""
+    slug = (skill_name or "").strip().strip("/")
+    tree = babo_github_tree_path(f"nls/skills/bundled/{slug}")
+    init_py = babo_github_raw_path(f"nls/skills/bundled/{slug}/__init__.py")
+    return f"{tree} (e.g. web_fetch {init_py})"
 
 
 def platform_doc_url(path: str = "") -> str:
@@ -396,9 +722,37 @@ _NATIVE_SKILL_AUTHORING_RE = re.compile(
     re.IGNORECASE,
 )
 
+_ACTIVE_CHANNEL_INTEGRATION_RE = re.compile(
+    r"\b(?:always|active|live)\s+(?:reading|listening|monitor|moderat)"
+    r"|\b(?:discord|telegram|whatsapp)\s+(?:moderator|mod\b)"
+    r"|\bbecome\s+(?:an?\s+)?(?:active|live)\b"
+    r"|\bmoderate\s+when\b"
+    r"|\binteract\s+when\s+tagged\b"
+    r"|\brespond\s+when\s+(?:tagged|mentioned)\b"
+    r"|\bin\s+every\s+channel\b"
+    r"|\bmessage\s+channel\b.*\b(?:listen|moderat)",
+    re.IGNORECASE,
+)
+
+
+def looks_like_active_channel_integration(text: str) -> bool:
+    """True when the user wants always-on inbound channel connectivity."""
+    return bool(_ACTIVE_CHANNEL_INTEGRATION_RE.search(text or ""))
+
+
+def infer_channel_platform(text: str) -> str | None:
+    """Best-effort channel name from user text (discord, telegram, whatsapp)."""
+    low = (text or "").lower()
+    for name in ("discord", "telegram", "whatsapp"):
+        if name in low:
+            return name
+    return None
+
 
 def looks_like_native_skill_authoring(text: str) -> bool:
     """True when the user wants a native Python NLS skill, not ClawHub/SKILL.md only."""
+    if looks_like_active_channel_integration(text):
+        return True
     return bool(_NATIVE_SKILL_AUTHORING_RE.search(text or ""))
 
 
@@ -415,23 +769,47 @@ def native_skill_authoring_summary() -> str:
         "- Loader discovers by directory name on server start — no manual import list\n"
         f"- Platform docs: {PLATFORM_DOCS_GETTING_STARTED}\n"
         f"- Native skill guide: {NATIVE_SKILL_DOCS_URL}\n"
-        "- Use web_fetch on those URLs when unsure — do not guess file layouts.\n"
+        f"- Public Babo source repo: {BABO_GITHUB_REPO_URL}\n"
+        f"- Bundled skill examples (GitHub): {BABO_BUNDLED_SKILLS_GITHUB_TREE}\n"
+        "Use web_fetch on docs URLs and GitHub raw URLs when unsure — bundled "
+        "examples are usually NOT in the agent workspace (only if the user "
+        "cloned Babo). Do not search the user's GitHub for Babo source.\n"
         "- Do NOT use skill_configure for greenfield authoring — that configures "
         "existing bundled channel skills. Use write/edit to scaffold files.\n"
-        "- Copy patterns from nls/skills/bundled/ (e.g. telegram-channel, mcp-client)."
+        f"- Reference patterns from {babo_bundled_skill_github_ref('telegram-channel')} "
+        "and sibling folders under nls/skills/bundled/.\n"
+        "- ACTIVE CHANNEL (always-on listen/respond/moderate): build or extend a "
+        "native bundled channel plugin (discord-channel, telegram-channel, etc.) — see "
+        f"{CHANNEL_INTEGRATION_DOCS_URL}. ClawHub/OpenClaw skills are fine for "
+        "research and one-shot API calls; do NOT use a standalone discord.py "
+        "bot repo or OpenClaw gateway as the primary Babo integration path."
     )
 
 
-def build_native_skill_setup_lines() -> list[str]:
+def build_native_skill_setup_lines(
+    *,
+    channel_platform: str | None = None,
+) -> list[str]:
     """System lines injected at loop start for setup:native_skill turns."""
-    return [
+    lines = [
         "[NATIVE SKILL AUTHORING] " + native_skill_authoring_summary().replace(
             "\n", " ",
         ),
         (
-            "Workflow: web_fetch the native skill guide if needed, read bundled "
-            "examples under nls/skills/bundled/, scaffold __init__.py + modules, "
-            "add config.schema.json if credentials needed, then verify imports. "
+            "Workflow: web_fetch docs/GitHub examples, scaffold in workspace, "
+            "verify imports, then skill_install(source_path='<folder>') to copy "
+            f"into data/skills/, reload, and enable — no manual cp/restart. "
             f"Docs: {NATIVE_SKILL_DOCS_URL}"
         ),
     ]
+    platform = (channel_platform or "").strip().lower()
+    if platform:
+        lines.append(
+            f"[ACTIVE {platform.upper()} CHANNEL] Scaffold workspace/"
+            f"{platform}-channel/ (adapter.py + __init__.py with register), "
+            f"then skill_install(source_path='{platform}-channel'). "
+            f"Channel guide: {CHANNEL_INTEGRATION_DOCS_URL}. "
+            f"Reference {babo_bundled_skill_github_ref('telegram-channel')} "
+            f"from {BABO_GITHUB_REPO_URL}."
+        )
+    return lines

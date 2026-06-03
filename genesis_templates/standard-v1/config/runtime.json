@@ -51,6 +51,7 @@
       "use_v2": true,
       "use_v2_description": "When true, uses the 6-tool agentic loop (read, write, edit, bash, web_search, web_fetch) instead of the legacy 51-tool system.",
       "max_iterations": 40,
+      "max_new_tokens": 16000,
       "max_tool_calls_per_step": 5,
       "cortisol_redirect_threshold": 0.55,
       "cortisol_redirect_description": "Cortisol level that injects a 'try a different approach' prompt. v1.3: raised from 0.45 \u2014 agentic loops fire many tools rapidly; normal exploration errors were hitting old threshold too fast.",

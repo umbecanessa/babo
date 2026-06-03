@@ -105,3 +105,105 @@ def normalize_path_fields_in_args(
         if err is None:
             args[k] = normalized
     return args
+
+
+CONTENT_ARG_KEYS = ("content", "text", "body", "file_content", "data")
+
+
+def extract_content_arg(params: dict[str, Any]) -> str | None:
+    """Return file content from standard or alternate parameter keys."""
+    for key in CONTENT_ARG_KEYS:
+        value = params.get(key)
+        if isinstance(value, str):
+            return value
+    return None
+
+
+def _decode_json_string_fragment(raw: str) -> str | None:
+    """Best-effort decode of a JSON string value, including truncated tails."""
+    if not raw:
+        return None
+    cleaned = raw.rstrip()
+    while cleaned.endswith(('"', "}", ",")):
+        cleaned = cleaned[:-1].rstrip()
+    if cleaned.endswith("\\"):
+        cleaned = cleaned[:-1]
+    try:
+        decoded = json.loads(f'"{cleaned}"')
+        if isinstance(decoded, str):
+            return decoded
+    except json.JSONDecodeError:
+        pass
+    text = cleaned.replace("\\n", "\n").replace("\\t", "\t").replace('\\"', '"')
+    text = text.replace("\\\\", "\\")
+    return text or None
+
+
+def unwrap_embedded_write_args(raw: str) -> tuple[str | None, str | None]:
+    """When the model stuffs write() JSON into ``path``, extract path and content."""
+    if not isinstance(raw, str):
+        return None, None
+    sv = raw.strip()
+    if not sv.startswith("{"):
+        return None, None
+
+    path = unwrap_embedded_json_path(sv, "path")
+    content_match = re.search(r'"content"\s*:\s*"(.*)', sv, re.DOTALL)
+    if not content_match:
+        return path, None
+
+    content = _decode_json_string_fragment(content_match.group(1))
+    return path, content
+
+
+def build_write_missing_content_error(
+    raw_path: str,
+    *,
+    resolved_path: str | None = None,
+    content_key_absent: bool = False,
+) -> str:
+    """Actionable error when write() has a path but no content."""
+    target = resolved_path
+    if not target and isinstance(raw_path, str):
+        target = unwrap_embedded_json_path(raw_path, "path")
+    if target is None and isinstance(raw_path, str) and raw_path.strip():
+        target = raw_path.strip()
+
+    lines = [
+        "Error: 'content' is required for write().",
+        "Pass path and content as separate top-level fields — not JSON inside path.",
+    ]
+    embedded_json_path = isinstance(raw_path, str) and raw_path.strip().startswith("{")
+    if embedded_json_path or content_key_absent:
+        lines.append(
+            "This often happens when the tool call is truncated at the output token "
+            "limit while writing a large file (only the opening JSON fragment arrives)."
+        )
+        if target and not target.strip().startswith("{"):
+            lines.append(f"Target file: {target}")
+        lines.extend([
+            "Retry strategy:",
+            "  1. write() a short stub (~30–80 lines) first,",
+            "  2. then use edit() to add sections, or split into multiple smaller writes.",
+            "Do not nest {\"path\": ..., \"content\": ...} inside the path field.",
+        ])
+    return "\n".join(lines)
+
+
+def recover_write_tool_args(params: dict[str, Any]) -> tuple[str, str | None]:
+    """Normalize path/content from common malformed write() payloads."""
+    raw_path = params.get("path", "")
+    if not isinstance(raw_path, str):
+        raw_path = str(raw_path or "")
+
+    content = extract_content_arg(params)
+    path_str = raw_path.strip()
+
+    if content is None and path_str.startswith("{"):
+        embedded_path, embedded_content = unwrap_embedded_write_args(path_str)
+        if embedded_path:
+            path_str = embedded_path
+        if embedded_content is not None:
+            content = embedded_content
+
+    return path_str, content

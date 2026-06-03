@@ -19,6 +19,7 @@ from __future__ import annotations
 import asyncio
 import importlib
 import importlib.util
+import inspect
 import json
 import logging
 import os
@@ -282,6 +283,30 @@ class BridgeManager:
                 pass
         self._log_files.clear()
 
+    async def stop_bridges_for_skill(self, skill_name: str) -> None:
+        """Terminate bridge sidecars for one skill (before reload/reinstall)."""
+        prefix = f"{skill_name}:"
+        for key in list(self._processes):
+            if not key.startswith(prefix):
+                continue
+            proc = self._processes.pop(key, None)
+            if proc is not None:
+                try:
+                    proc.terminate()
+                    proc.wait(timeout=5)
+                    logger.info("Bridge '%s' stopped for skill reload", key)
+                except Exception:
+                    try:
+                        proc.kill()
+                    except Exception:
+                        pass
+            fh = self._log_files.pop(key, None)
+            if fh is not None:
+                try:
+                    fh.close()
+                except Exception:
+                    pass
+
     def is_running(self, skill_name: str, bridge_name: str) -> bool:
         key = f"{skill_name}:{bridge_name}"
         proc = self._processes.get(key)
@@ -312,6 +337,30 @@ class SkillLoader:
         self._skills: dict[str, LoadedSkill] = {}
         self._bridge_manager = BridgeManager()
         self._skills_dir.mkdir(parents=True, exist_ok=True)
+
+    @staticmethod
+    async def _invoke_lifecycle_hook(
+        hook: Any,
+        *,
+        skill_name: str,
+        hook_kind: str,
+    ) -> None:
+        """Run startup/shutdown hooks whether sync or async."""
+        try:
+            if inspect.iscoroutinefunction(hook):
+                await hook()
+                return
+            result = hook()
+            if inspect.isawaitable(result):
+                await result
+        except Exception as exc:
+            logger.error(
+                "%s hook failed for skill '%s': %s",
+                hook_kind.capitalize(),
+                skill_name,
+                exc,
+                exc_info=True,
+            )
 
     @property
     def skills(self) -> dict[str, LoadedSkill]:
@@ -997,17 +1046,60 @@ class SkillLoader:
 
         logger.info("Installing deps for skill '%s'", skill_dir.name)
         try:
-            subprocess.check_call(
+            proc = subprocess.run(
                 [sys.executable, "-m", "pip", "install", "-r", str(req_file)],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                capture_output=True,
+                text=True,
                 timeout=120,
             )
+            if proc.returncode != 0:
+                stderr = (proc.stderr or proc.stdout or "").strip()
+                tail = stderr[-2000:] if stderr else f"exit {proc.returncode}"
+                raise RuntimeError(
+                    f"pip install -r requirements.txt failed for skill "
+                    f"'{skill_dir.name}': {tail}"
+                )
             importlib.invalidate_caches()
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(
+                f"pip install -r requirements.txt timed out for skill "
+                f"'{skill_dir.name}'"
+            ) from exc
+        except RuntimeError:
+            raise
         except Exception as exc:
             raise RuntimeError(
                 f"Failed to install dependencies for skill '{skill_dir.name}': {exc}"
             ) from exc
+
+    async def stop_skill_lifecycle(self, sk: LoadedSkill) -> None:
+        """Stop bridges and run shutdown hooks for a loaded skill."""
+        if not sk.context:
+            await self._bridge_manager.stop_bridges_for_skill(sk.name)
+            return
+        await self._bridge_manager.stop_bridges_for_skill(sk.name)
+        for hook in sk.context.shutdown_hooks:
+            await self._invoke_lifecycle_hook(
+                hook, skill_name=sk.name, hook_kind="shutdown",
+            )
+
+    async def start_skill_lifecycle(self, sk: LoadedSkill) -> None:
+        """Start bridges, startup hooks, and schedules for a loaded skill."""
+        if not sk.context or sk.status != "loaded":
+            return
+        bridges: list[SkillBridge] = []
+        if sk.meta and sk.meta.bridges:
+            bridges.extend(sk.meta.bridges)
+        if sk.context.bridges:
+            bridges.extend(sk.context.bridges)
+        if bridges:
+            await self._bridge_manager.start_bridges(sk.name, sk.path, bridges)
+            await self._bridge_manager.wait_healthy(bridges)
+        for hook in sk.context.startup_hooks:
+            await self._invoke_lifecycle_hook(
+                hook, skill_name=sk.name, hook_kind="startup",
+            )
+        self._register_skill_jobs(sk)
 
     # ── Lifecycle ──────────────────────────────────────────────
 
@@ -1029,13 +1121,9 @@ class SkillLoader:
                     await self._bridge_manager.wait_healthy(bridges)
 
                 for hook in sk.context.startup_hooks:
-                    try:
-                        await hook()
-                    except Exception as exc:
-                        logger.error(
-                            "Startup hook failed for skill '%s': %s",
-                            sk.name, exc, exc_info=True,
-                        )
+                    await self._invoke_lifecycle_hook(
+                        hook, skill_name=sk.name, hook_kind="startup",
+                    )
 
                 self._register_skill_jobs(sk)
 
@@ -1094,13 +1182,9 @@ class SkillLoader:
         for sk in self._skills.values():
             if sk.context and sk.status == "loaded":
                 for hook in sk.context.shutdown_hooks:
-                    try:
-                        await hook()
-                    except Exception as exc:
-                        logger.error(
-                            "Shutdown hook failed for skill '%s': %s",
-                            sk.name, exc, exc_info=True,
-                        )
+                    await self._invoke_lifecycle_hook(
+                        hook, skill_name=sk.name, hook_kind="shutdown",
+                    )
 
     # ── Reload ─────────────────────────────────────────────────
 
@@ -1124,6 +1208,8 @@ class SkillLoader:
         importlib.invalidate_caches()
 
         old = self._skills.pop(name, None)
+        if old is not None:
+            await self.stop_skill_lifecycle(old)
         source = old.meta.source if old and old.meta else "local"
         fmt = self._detect_format(skill_dir)
 
@@ -1137,6 +1223,9 @@ class SkillLoader:
         sk = self._skills.get(name)
         if sk is None:
             raise RuntimeError(f"Skill '{name}' not found after reload")
+
+        if sk.status == "loaded":
+            await self.start_skill_lifecycle(sk)
 
         logger.info(
             "Skill '%s' reloaded — status=%s format=%s error=%s",

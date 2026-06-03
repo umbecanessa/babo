@@ -208,8 +208,20 @@ _TURN_TRIAGE_SYSTEM_BASE = (
     "  orchestration:solo — user explicitly says work solo, no wave orchestration\n"
     "  setup:instruction_skill — configuring an installed ClawHub/AgentSkill "
     "(SKILL.md + bash; NOT skill_configure)\n"
-    "  setup:native_skill — authoring a native Python NLS skill "
-    "(nls/skills/bundled/ + register(); NOT ClawHub-only)\n"
+    "  setup:configure_bundled — configure a pre-shipped Babo channel skill "
+    "(telegram-channel, whatsapp-channel, email-channel) via skill_configure; "
+    "NOT agent-authored skills (e.g. discord-channel is built via skill_install)\n"
+    "  setup:native_skill — authoring a NEW native Python NLS skill from scratch "
+    "(nls/skills/bundled/ + register(); NOT skill_configure on existing bundled skills)\n"
+    "  continuation:credential — user pasted a token/key after assistant asked; "
+    "finish configuration, do NOT rebuild\n"
+    "  continuation:configure_not_build — prior turn completed or paused waiting for "
+    "credentials; configure existing bundled skill, not scaffold\n"
+    "  lookup:chat_history — user references an EARLIER conversation turn, "
+    "prior decision, or something said/discussed before (ANY language). "
+    "Use when they ask what was discussed, what you said earlier, to continue "
+    "a past topic, etc. NOT for repeating the immediately previous reply "
+    "in the current short thread (goals=[] recap is enough).\n"
     "Also plain-language hints are allowed ('be thorough', etc.).\n"
     "DEFERRED: post-task channel delivery "
     '{"channel":"whatsapp|telegram|email|chat","instruction":"..."}.\n\n'
@@ -229,6 +241,13 @@ _TURN_TRIAGE_SYSTEM_BASE = (
     "forbids sub-agents or teams in their message.\n"
     "- PRD/spec + end-to-end build → orchestrated, hints=[], NEVER forbid:team.\n"
     "- Credentials/API keys in the message are for USE in the task → TASK, not CHAT.\n"
+    "- User pastes bot token/API key alone after assistant asked for it → TASK_THINK, "
+    "solo_structured. Pre-shipped channel (telegram/whatsapp/email): hints "
+    "continuation:credential + setup:configure_bundled + skill_configure. "
+    "Agent-native channel (discord): hints continuation:credential + setup:native_skill; "
+    "goals mention skill_install + skill_configure — NEVER setup:configure_bundled.\n"
+    "- Configuring a pre-shipped Babo channel skill (telegram/whatsapp/email bot token) "
+    "→ solo_structured, hint setup:configure_bundled; use skill_configure.\n"
     "- Configuring/setup of an installed ClawHub or AgentSkill package "
     "(bot token, env vars, running SKILL.md scripts) → solo_structured, "
     "hint setup:instruction_skill; goals mention read SKILL.md + verify, "
@@ -241,7 +260,11 @@ _TURN_TRIAGE_SYSTEM_BASE = (
     "- 'Check Wikipedia for X' / 'search ClawHub for Discord' / quick lookup "
     "→ conversational (web_search/browser/clawhub).\n"
     "- Single-step execution (one file, one command, setup task) → solo_structured.\n"
-    "- Recap/clarification of prior assistant output → CHAT, goals=[].\n"
+    "- Recap/clarification of prior assistant output in the current thread "
+    "→ CHAT, goals=[].\n"
+    "- Reference to an earlier session/decision/topic not in context → "
+    "CHAT or TASK as appropriate, goals=[] or task goals, "
+    'hint lookup:chat_history (works in any language).\n'
     "- User starts conversational but will need SKILL.md + bash setup → conversational "
     "with hint setup:instruction_skill; agent may adopt solo_structured mid-loop.\n\n"
     "Examples:\n"
@@ -275,6 +298,19 @@ _TURN_TRIAGE_SYSTEM_BASE = (
     '{"intent":"TASK_THINK","thinking":true,"profile":"solo_structured",'
     '"goals":["Build ICF platform end-to-end"],'
     '"hints":["forbid:team","orchestration:solo"],"deferred":[]}\n\n'
+    'User: "What did we decide about the Discord native skill?"\n'
+    '{"intent":"CHAT_THINK","thinking":true,"profile":"conversational",'
+    '"goals":[],"hints":["lookup:chat_history"],"deferred":[]}\n\n'
+    'User: "Di cosa avevamo parlato ieri per il server Discord?"\n'
+    '(Italian — same: references prior chat)\n'
+    '{"intent":"CHAT_THINK","thinking":true,"profile":"conversational",'
+    '"goals":[],"hints":["lookup:chat_history"],"deferred":[]}\n\n'
+    'User: "MTA...xyz.AbC...defG" (prior assistant: "Paste your Telegram bot token")\n'
+    '{"intent":"TASK_THINK","thinking":true,"profile":"solo_structured",'
+    '"goals":["Configure telegram-channel with provided bot token via skill_configure",'
+    '"Enable telegram-channel for this agent","Verify Telegram connection"],'
+    '"hints":["continuation:credential","setup:configure_bundled",'
+    '"continuation:configure_not_build"],"deferred":[]}\n\n'
     'User: "[attached prd.md] Read PRD, create repo, build full platform end-to-end"\n'
     'WRONG (do not output): profile solo_structured or hints forbid:team.\n'
     'RIGHT:\n'
@@ -357,8 +393,9 @@ _PROSE_EVAL_SYSTEM = (
     "- deliverable_done: agent reports verified success and the deliverable "
     "is complete (even if task_complete was not called).\n"
     "- should_continue: agent should keep working with tools; prose is "
-    "premature status or incomplete.\n\n"
-    "show_to_user: false for duplicate; true otherwise when exiting.\n"
+    "premature status or incomplete. Set show_to_user to false to hold it.\n\n"
+    "show_to_user: false when holding premature prose (should_continue) or "
+    "duplicate; true when exiting on awaiting_user_input or deliverable_done.\n"
     "Return ONLY the JSON object."
 )
 
@@ -778,7 +815,7 @@ def _heuristic_prose_verdict(
             if "?" in text[-400:] or "please" in text_low:
                 return "awaiting_user_input", True
 
-    return "should_continue", True
+    return "should_continue", False
 
 
 async def evaluate_prose_turn(
@@ -795,8 +832,8 @@ async def evaluate_prose_turn(
 ) -> tuple[ProseVerdict, bool]:
     """Classify a prose-only turn; returns (verdict, show_to_user)."""
     prose = (prose or "").strip()
-    if consecutive_text_only < 2 and not last_error:
-        return "should_continue", True
+    if not prose:
+        return "should_continue", False
 
     fp = prose_fingerprint(prose)
     if prior_prose_hash and fp == prior_prose_hash and consecutive_text_only >= 2:
@@ -856,7 +893,13 @@ async def evaluate_prose_turn(
                     "should_continue",
                     "duplicate",
                 ):
-                    return verdict, bool(show) if verdict != "duplicate" else False
+                    if verdict == "should_continue":
+                        show = bool(parsed.get("show_to_user", False))
+                    elif verdict == "duplicate":
+                        show = False
+                    else:
+                        show = bool(parsed.get("show_to_user", True))
+                    return verdict, show
         except Exception as exc:
             err_str = str(exc).lower()
             if attempt == 0 and any(

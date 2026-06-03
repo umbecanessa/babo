@@ -460,3 +460,14 @@ class AgentReadIndex:
 
 def tier1_eligible(size: int) -> bool:
     return size >= _TIER1_MIN_BYTES
+
+
+def tier1_should_serve(
+    prior: ReadIndexEntry,
+    *,
+    current_loop_id: str = "",
+) -> bool:
+    """Return False when the agent re-reads the same version in one loop."""
+    if not current_loop_id or not prior.loop_id:
+        return True
+    return prior.loop_id != current_loop_id

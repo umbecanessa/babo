@@ -310,6 +310,7 @@
         [streamingReasoning]="streamingReasoning()"
         [awaitingResponse]="awaitingResponse()"
         [agenticActive]="agenticActive()"
+        [askUserPending]="askUserPending()"
         [agentId]="agentId"
         (drowsyAction)="onDrowsyAction($event)"
         (expandBrowser)="onExpandBrowser($event)"
@@ -422,6 +423,11 @@
         </div>
       @if (agenticActive()) {
         <!-- Agentic mode: guidance + stop -->
+        @if (askUserPending()) {
+          <div class="ask-user-composer-banner">
+            Reply below — the agent is waiting for your answer before it can continue.
+          </div>
+        }
         <div class="input-wrapper agentic-active">
           <button (click)="fileInput.click()" class="attach-btn" title="Attach files">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -433,7 +439,7 @@
             (keydown)="onKeyDown($event)"
             (input)="adjustTextareaHeight()"
             rows="1"
-            placeholder="Send guidance to the agent while it works..."
+            placeholder="{{ askUserPending() ? 'Type your answer…' : 'Send guidance to the agent while it works...' }}"
             class="chat-textarea"
           ></textarea>
           @if (inputText.trim() || pendingAttachments().length) {

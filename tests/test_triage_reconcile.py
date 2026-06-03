@@ -46,3 +46,18 @@ def test_turn_triage_reconcile_method():
     triage.reconcile_orchestration_depth()
     assert triage.profile == "orchestrated"
     assert triage.hints == []
+
+
+def test_reconcile_depth_skips_upgrade_on_continuation_hint():
+    profile, hints = reconcile_triage_orchestration_depth(
+        profile="solo_structured",
+        goals=[
+            "Configure telegram-channel after restart",
+            "Verify token saved",
+            "Smoke test inbound",
+        ],
+        hints=["forbid:team", "continuation:configure_not_build"],
+        intent="TASK_THINK",
+    )
+    assert profile == "solo_structured"
+    assert "forbid:team" in hints

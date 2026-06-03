@@ -361,3 +361,7 @@ class SkillContext:
                 except Exception as exc:
                     logger.warning("Failed to read agent config %s: %s", f, exc)
         return configs
+
+    def list_agent_ids(self) -> list[str]:
+        """Agent IDs with per-agent config files for this skill."""
+        return list(self.load_all_agent_configs().keys())

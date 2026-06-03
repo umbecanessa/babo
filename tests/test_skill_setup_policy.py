@@ -9,11 +9,17 @@ from unittest.mock import patch
 import pytest
 
 from nls.skills_setup_policy import (
+    BABO_GITHUB_REPO_URL,
     build_native_skill_setup_lines,
+    babo_bundled_skill_github_ref,
+    babo_github_raw_path,
+    babo_github_tree_path,
     format_activation_steps,
     instruction_skill_post_read_nudge,
     instruction_skill_setup_hint,
     is_instruction_only_skill,
+    infer_channel_platform,
+    looks_like_active_channel_integration,
     looks_like_native_skill_authoring,
     skill_configure_absorption_content,
 )
@@ -98,3 +104,32 @@ def test_build_native_skill_setup_lines():
     assert any("NATIVE SKILL" in line for line in lines)
     assert any("nls/skills/bundled" in line for line in lines)
     assert any("babo.agency" in line for line in lines)
+
+
+def test_active_channel_integration_detection():
+    msg = (
+        "I would love you to become an active moderator, always reading, "
+        "always listening, interact when tagged on Discord"
+    )
+    assert looks_like_active_channel_integration(msg)
+    assert infer_channel_platform(msg) == "discord"
+    assert looks_like_native_skill_authoring(msg)
+
+
+def test_build_native_skill_setup_lines_discord_channel():
+    lines = build_native_skill_setup_lines(channel_platform="discord")
+    assert any("discord-channel" in line for line in lines)
+    assert any("add-channel-integration" in line for line in lines)
+    assert any(BABO_GITHUB_REPO_URL in line for line in lines)
+    assert any("telegram-channel" in line for line in lines)
+
+
+def test_babo_github_reference_helpers():
+    tree = babo_github_tree_path("nls/skills/bundled/telegram-channel")
+    assert tree.startswith(BABO_GITHUB_REPO_URL)
+    assert "telegram-channel" in tree
+    raw = babo_github_raw_path("nls/skills/bundled/telegram-channel/__init__.py")
+    assert raw.startswith("https://raw.githubusercontent.com/umbecanessa/babo/")
+    ref = babo_bundled_skill_github_ref("telegram-channel")
+    assert BABO_GITHUB_REPO_URL in ref
+    assert "web_fetch" in ref

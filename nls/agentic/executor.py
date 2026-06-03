@@ -234,7 +234,31 @@ async def _handle_ask_user(
     question = args.get("question", "What do you need?")
     await emit(on_event, AgentEvent(
         EventType.ASK_USER,
-        {"question": question, "tool_call_id": tool_call_id, "iteration": iteration},
+        {
+            "question": question,
+            "tool_call_id": tool_call_id,
+            "request_id": tool_call_id,
+            "iteration": iteration,
+        },
+    ))
+    # The question often lives only in tool args (visible text truncates before
+    # the call). Mirror it in chat via communicate + status so the UI cannot
+    # miss a silent 5-minute copilot_queue wait.
+    await emit(on_event, AgentEvent(
+        EventType.COMMUNICATE,
+        {
+            "message": question,
+            "iteration": iteration,
+            "user_facing": True,
+        },
+    ))
+    await emit(on_event, AgentEvent(
+        EventType.STATUS,
+        {
+            "message": "Waiting for your answer\u2026",
+            "status": "waiting_for_user",
+            "elapsed_ms": 0,
+        },
     ))
 
     if hooks.copilot_queue is None:

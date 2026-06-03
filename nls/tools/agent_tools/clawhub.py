@@ -243,6 +243,7 @@ class ClawHubTool:
     def _upsert_skill_wm(self, slug: str, description: str) -> None:
         """Store a brief skill summary in working memory."""
         try:
+            from nls.agentic.task_epoch_hygiene import session_slot_kwargs
             from nls.skills_setup_policy import resolve_data_skills_dir, skill_md_path
 
             runtime = self._get_runtime()
@@ -255,15 +256,31 @@ class ClawHubTool:
                 elif base is not None:
                     path_hint = f" Skills dir: {base / slug}."
                 summary = description[:300].strip()
-                runtime.dual_wm.upsert_fact(
+                content = (
+                    f"Installed skill '{slug}'. {summary}{path_hint} "
+                    f"ClawHub reference only during native skill authoring — "
+                    f"do not treat as the primary integration path."
+                )
+                dual_wm = runtime.dual_wm
+                from nls.brain.cryptex import CryptexMemory, RING_SKILLS
+
+                if isinstance(dual_wm, CryptexMemory):
+                    ring = dual_wm.get_ring(RING_SKILLS)
+                    if ring is not None:
+                        ring.upsert_slot(
+                            domain=f"Skill.{slug}",
+                            content=content,
+                            slot_type="fact",
+                            salience=0.75,
+                            source="clawhub",
+                            **session_slot_kwargs(slot_class="tool_activation"),
+                        )
+                        return
+                dual_wm.upsert_fact(
                     domain=f"Skill.{slug}",
-                    content=(
-                        f"Installed skill '{slug}'. {summary}{path_hint} "
-                        f"This is an INSTRUCTION skill — read SKILL.md and use "
-                        f"bash/read/write; do NOT use skill_configure."
-                    ),
+                    content=content,
                     source="clawhub",
-                    salience=0.8,
+                    salience=0.75,
                 )
         except Exception:
             logger.debug("Failed to upsert skill WM fact for %s", slug)

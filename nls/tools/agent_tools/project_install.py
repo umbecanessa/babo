@@ -24,12 +24,16 @@ from .project_runtime import (
     detect_node_package_manager,
     ensure_project_venv,
     format_project_root_hint,
+    format_scaffold_before_install_hint,
+    list_partial_python_scaffolds,
     list_workspace_project_candidates,
     looks_like_pypi_package_spec,
     parse_pip_requirements_ref,
     resolve_node_install_dir,
     resolve_project_root,
     resolve_python_requirements_path,
+    resolve_venv_project_root,
+    scaffold_requirements_line,
     split_pip_package_args,
 )
 from .server_install import _BLOCKED_PACKAGES, _CLI_NOT_PYTHON
@@ -109,6 +113,9 @@ class ProjectInstallTool:
             "Pass package= for one library, omit package to install from "
             "requirements.txt (root or backend/requirements.txt in monorepos), "
             "or set requirements_file= explicitly.\n"
+            "Order: write requirements.txt in the app folder first, then "
+            "project_install(install_dir='<folder>') — or pass package= with "
+            "install_dir= to auto-create requirements.txt.\n"
             "- Node: runs npm/pnpm/yarn in the nearest package.json from your "
             "CWD, or pass install_dir= for a specific folder (any name).\n"
             "Use this for libraries your generated app needs (e.g. "
@@ -185,11 +192,33 @@ class ProjectInstallTool:
                 requirements_file = req_from_package
             package = ""
 
+        workspace = Path(self._workspace_root).resolve()
+        partial_scaffolds = list_partial_python_scaffolds(self._workspace_root)
+        if (
+            not install_dir
+            and package
+            and not requirements_file
+            and len(partial_scaffolds) == 1
+        ):
+            install_dir = partial_scaffolds[0].name
+
         project_root = resolve_project_root(
             effective_cwd,
             self._workspace_root,
             plan_project_dir=plan_dir or None,
         )
+        if not project_root and install_dir:
+            sub = (workspace / install_dir.strip("/\\")).resolve()
+            if sub.is_dir():
+                project_root = str(workspace)
+            else:
+                return ToolResult(
+                    content=(
+                        f"Error: install_dir '{install_dir}' does not exist.\n"
+                        f"{format_scaffold_before_install_hint(str(workspace), install_dir=install_dir)}"
+                    ),
+                    is_error=True,
+                )
         if not project_root:
             candidates = list_workspace_project_candidates(self._workspace_root)
             hint = format_project_root_hint(
@@ -197,6 +226,11 @@ class ProjectInstallTool:
                 candidates,
                 plan_project_dir=plan_dir,
             )
+            if partial_scaffolds and not candidates:
+                hint = format_scaffold_before_install_hint(
+                    self._workspace_root,
+                    partial_scaffolds=partial_scaffolds,
+                )
             return ToolResult(
                 content=(
                     "Error: No project root found from current directory.\n"
@@ -222,15 +256,28 @@ class ProjectInstallTool:
         )
 
         if ecosystem == "auto":
-            detected = detect_ecosystem(
-                project_root, **_rt_kw, package=package or None,
-            )
+            if package:
+                install_target = (
+                    (Path(project_root) / install_dir).resolve()
+                    if install_dir
+                    else Path(project_root)
+                )
+                if (
+                    (install_target / "package.json").is_file()
+                    and not looks_like_pypi_package_spec(package)
+                ):
+                    detected = "node"
+                else:
+                    detected = "python"
+            else:
+                detected = detect_ecosystem(
+                    project_root, **_rt_kw, package=None,
+                )
             if detected == "unknown":
                 return ToolResult(
                     content=(
                         f"Error: Could not detect ecosystem in {project_root}.\n"
-                        "Add package.json or requirements.txt, cd into the target "
-                        "folder, or pass ecosystem= with install_dir=."
+                        f"{format_scaffold_before_install_hint(self._workspace_root, install_dir=install_dir)}"
                     ),
                     is_error=True,
                 )
@@ -247,6 +294,11 @@ class ProjectInstallTool:
             )
 
         if ecosystem == "python":
+            venv_root = resolve_venv_project_root(
+                project_root,
+                install_dir=install_dir or None,
+            )
+            scaffolded = scaffold_requirements_line(Path(venv_root), package)
             req_path, req_err = resolve_python_requirements_path(
                 project_root,
                 effective_cwd,
@@ -256,20 +308,42 @@ class ProjectInstallTool:
                 plan_project_dir=plan_dir or None,
             )
             if req_err and not package:
-                return ToolResult(content=f"Error: {req_err}", is_error=True)
+                order_hint = format_scaffold_before_install_hint(
+                    self._workspace_root,
+                    install_dir=install_dir,
+                )
+                return ToolResult(
+                    content=f"Error: {req_err}\n{order_hint}",
+                    is_error=True,
+                )
             if not package:
                 if req_path is not None:
                     return await self._install_python_requirements(
-                        project_root, str(req_path),
+                        project_root,
+                        str(req_path),
+                        venv_root=venv_root,
                     )
                 return ToolResult(
                     content=(
-                        "Error: no requirements file found. Create requirements.txt "
-                        "or pass install_dir= / requirements_file=."
+                        "Error: no requirements file found. "
+                        f"{format_scaffold_before_install_hint(self._workspace_root, install_dir=install_dir)}"
                     ),
                     is_error=True,
                 )
-            return await self._install_python(project_root, package)
+            extra = ""
+            if scaffolded:
+                extra = (
+                    f"\nAuto-created {scaffolded.relative_to(Path(venv_root)).as_posix()} "
+                    f"with {package.strip()}."
+                )
+            result = await self._install_python(
+                project_root,
+                package,
+                venv_root=venv_root,
+            )
+            if extra and not result.is_error:
+                result = ToolResult(content=result.content + extra)
+            return result
 
         if ecosystem == "node":
             node_root, node_err = resolve_node_install_dir(
@@ -299,7 +373,10 @@ class ProjectInstallTool:
         self,
         project_root: str,
         package: str,
+        *,
+        venv_root: str | None = None,
     ) -> ToolResult:
+        venv_root = venv_root or project_root
         base_name = (
             package.split(">=")[0]
             .split("<=")[0]
@@ -323,12 +400,12 @@ class ProjectInstallTool:
                 is_error=True,
             )
 
-        bin_dir, python_exe = ensure_project_venv(project_root)
+        bin_dir, python_exe = ensure_project_venv(venv_root)
         if not python_exe:
             return ToolResult(
                 content=(
                     f"Error: Could not create or find project venv under "
-                    f"{project_root}/.venv"
+                    f"{venv_root}/.venv"
                 ),
                 is_error=True,
             )
@@ -414,7 +491,7 @@ class ProjectInstallTool:
         return ToolResult(
             content=(
                 f"{summary}\n"
-                f"Project: {project_root}\n"
+                f"Project: {venv_root}\n"
                 f"Python: {python_exe}"
                 f"{verify}\n\n"
                 "bash `python` in this project directory uses the same venv."
@@ -425,13 +502,16 @@ class ProjectInstallTool:
         self,
         project_root: str,
         requirements_path: str,
+        *,
+        venv_root: str | None = None,
     ) -> ToolResult:
-        bin_dir, python_exe = ensure_project_venv(project_root)
+        venv_root = venv_root or project_root
+        bin_dir, python_exe = ensure_project_venv(venv_root)
         if not python_exe:
             return ToolResult(
                 content=(
                     f"Error: Could not create or find project venv under "
-                    f"{project_root}/.venv"
+                    f"{venv_root}/.venv"
                 ),
                 is_error=True,
             )
@@ -500,7 +580,7 @@ class ProjectInstallTool:
         return ToolResult(
             content=(
                 f"{summary}\n"
-                f"Project: {project_root}\n"
+                f"Project: {venv_root}\n"
                 f"Python: {python_exe}\n"
                 f"Requirements: {rel}\n\n"
                 "bash `python` in this project directory uses the same venv."

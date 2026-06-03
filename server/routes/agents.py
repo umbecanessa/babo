@@ -181,9 +181,14 @@ async def list_project_processes(agent_id: str, request: Request):
         raise HTTPException(status_code=404, detail="Agent not found")
 
     runtime = request.app.state.agent_manager.get_runtime(agent_id)
+    cm = getattr(request.app.state, "connection_manager", None)
+    agentic_running = cm.agentic_running(agent_id) if cm else False
     if runtime is None:
-        return {"processes": []}
-    return {"processes": runtime.list_project_processes()}
+        return {"processes": [], "agentic_running": agentic_running}
+    return {
+        "processes": runtime.list_project_processes(),
+        "agentic_running": agentic_running,
+    }
 
 
 @router.delete("/{agent_id}/processes/{pid}")

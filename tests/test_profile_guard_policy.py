@@ -328,3 +328,25 @@ def test_enrich_instruction_skill_skips_when_native_authoring():
         hints,
     )
     assert "setup:instruction_skill" not in hints
+
+
+def test_enrich_native_skill_hint_for_active_discord_moderator():
+    hints: list[str] = []
+    enrich_native_skill_hints(
+        "become an active moderator on Discord, always listening when tagged",
+        ["Discord moderator bot"],
+        hints,
+    )
+    assert "setup:native_skill" in hints
+    assert any("discord-channel" in h for h in hints)
+    assert any("github.com/umbecanessa/babo" in h for h in hints)
+
+
+def test_enrich_instruction_skips_active_channel():
+    hints: list[str] = []
+    enrich_instruction_skill_hints(
+        "always listening Discord moderator when tagged",
+        ["Discord moderator"],
+        hints,
+    )
+    assert "setup:instruction_skill" not in hints

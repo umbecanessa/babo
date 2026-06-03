@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Literal
 
 logger = logging.getLogger(__name__)
@@ -43,7 +44,7 @@ _RESEARCH_TOOLS = frozenset({
     "browser", "web_search", "web_fetch", "vision", "screenshot", "eyes",
 })
 _SKILL_TOOLS = frozenset({
-    "discover_tools", "skill_configure", "clawhub", "crystallize",
+    "discover_tools", "skill_configure", "skill_install", "clawhub", "crystallize",
 })
 _STAKEHOLDER_TOOLS = frozenset({"communicate", "ask_user", "contacts"})
 
@@ -124,7 +125,7 @@ TOOL_CRYPTEX_TRIGGERS: dict[str, dict[str, str]] = {
     "todo": {"*": "tactical_goals→checklist delta"},
     "scheduler|poller": {"*": "orchestration→next wake"},
     "request_restart|server_install": {"*": "environment→runtime"},
-    "skill_configure|discover_tools|clawhub|crystallize": {"*": "skills / tools_mcp"},
+    "skill_configure|discover_tools|skill_install|clawhub|crystallize": {"*": "skills / tools_mcp"},
     "browser|web_search|web_fetch": {"*": "knowledge (delegate); thin skip (EM+delegates)"},
     "grep|glob|list_dir|semantic_search": {"*": "skip EM when delegates active"},
 }
@@ -185,6 +186,7 @@ def _upsert_slot(
     salience: float = 0.9,
     slot_type: str = "fact",
     source: str = "tool",
+    **kwargs: Any,
 ) -> None:
     ring = _ring(cryptex, ring_id)
     if ring is None:
@@ -210,6 +212,7 @@ def _upsert_slot(
             salience=salience,
             source=source,
             position=pos,
+            **kwargs,
         )
         if rotate:
             ring.rotate(pos)
@@ -591,7 +594,11 @@ def _handle_runtime_orchestrator(
     elif tool_name in _SKILL_TOOLS:
         action = str(args.get("action") or "").strip().lower()
         skill_slug = str(
-            args.get("skill_name") or args.get("slug") or args.get("query") or ""
+            args.get("skill_name")
+            or args.get("name")
+            or args.get("slug")
+            or args.get("query")
+            or ""
         ).strip()
         custom_content: str | None = None
 
@@ -614,6 +621,16 @@ def _handle_runtime_orchestrator(
                 elif base is not None:
                     prefix += f" Path: {base / skill_slug}."
                 custom_content = f"{prefix} {result_str[:200]}".strip()
+        elif tool_name == "skill_install" and not is_error:
+            slug = skill_slug
+            if not slug:
+                src = str(args.get("source_path") or "").strip()
+                if src:
+                    slug = Path(src).name.lower()
+            custom_content = (
+                f"Native skill '{slug or 'unknown'}' installed to data/skills/ "
+                f"and enabled. {result_str[:220]}"
+            ).strip()
 
         if custom_content is not None:
             slot_content = custom_content[:400]
@@ -700,23 +717,32 @@ def _handle_research_orchestrator_thin(
     result_str: str,
     is_error: bool,
 ) -> None:
+    from nls.agentic.task_epoch_hygiene import (
+        research_domain_key,
+        session_slot_kwargs,
+    )
     from nls.brain.cryptex import RING_PROJECT_FACTS
 
+    domain = research_domain_key(tool_name, args)
+    session_kw = session_slot_kwargs(slot_class="research_snapshot")
     if is_error:
+        err_domain = domain.replace("Research:", "ResearchError:", 1)
         _upsert_slot(
             cryptex,
             RING_PROJECT_FACTS,
-            f"ResearchError:{tool_name}",
+            err_domain,
             f"{_research_label(tool_name, args)} failed: {result_str[:200]}",
             salience=_research_fact_salience(cryptex, is_error=True),
+            **session_kw,
         )
         return
     _upsert_slot(
         cryptex,
         RING_PROJECT_FACTS,
-        f"Research:{tool_name}",
+        domain,
         f"{_research_label(tool_name, args)}: {result_str[:120]}",
         salience=_research_fact_salience(cryptex, is_error=False),
+        **session_kw,
     )
 
 

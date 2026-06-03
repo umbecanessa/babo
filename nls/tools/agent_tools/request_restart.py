@@ -33,9 +33,15 @@ def is_restart_requested() -> bool:
 class RequestRestartTool:
     """Propose a server restart after creating/modifying skills."""
 
-    def __init__(self, data_dir: str = "", agent_id: str = "") -> None:
+    def __init__(
+        self,
+        data_dir: str = "",
+        agent_id: str = "",
+        workspace: str = "",
+    ) -> None:
         self._data_dir = data_dir
         self._agent_id = agent_id
+        self._workspace = workspace
 
     @property
     def name(self) -> str:
@@ -77,12 +83,14 @@ class RequestRestartTool:
                 is_error=True,
             )
 
-        data_dir = Path(self._data_dir) if self._data_dir else Path("data")
-        skills_dir = data_dir / "skills"
+        from nls.skills_setup_policy import resolve_runtime_data_dir
 
-        new_skills = self._scan_new_skills(skills_dir)
+        data_dir = resolve_runtime_data_dir(fallback=self._data_dir or None)
+        skills_dir = data_dir / "skills"
+        skills_dir.mkdir(parents=True, exist_ok=True)
+
+        new_skills = self._scan_new_skills(data_dir, skills_dir)
         if not new_skills:
-            # Check if any skills have load errors — tell the agent
             error_msg = ""
             try:
                 from server.main import app as _app
@@ -108,11 +116,18 @@ class RequestRestartTool:
                 content=(
                     "No new or modified skills found in the skills directory. "
                     "Make sure you created your skill package with an __init__.py "
-                    f"in {skills_dir}/ before requesting a restart."
+                    f"in {skills_dir}/ (runtime) or under your agent workspace "
+                    f"({self._workspace or 'workspace/'}) before requesting a restart."
                     + error_msg
                 ),
                 is_error=True,
             )
+
+        skill_names = [s["name"] for s in new_skills]
+        await self._stage_workspace_skills(skills_dir, new_skills)
+        preflight_err = await self._preflight_skill_loads(skills_dir, skill_names)
+        if preflight_err:
+            return ToolResult(content=preflight_err, is_error=True)
 
         review_id = str(uuid.uuid4())[:8]
         review = {
@@ -131,7 +146,6 @@ class RequestRestartTool:
             json.dumps(review, indent=2), encoding="utf-8",
         )
 
-        skill_names = [s["name"] for s in new_skills]
         logger.info(
             "request_restart: review %s created for skills %s (reason=%s)",
             review_id, skill_names, reason,
@@ -154,10 +168,98 @@ class RequestRestartTool:
             stop_loop=True,
         )
 
-    def _scan_new_skills(self, skills_dir: Path) -> list[dict[str, Any]]:
+    async def _preflight_skill_loads(
+        self,
+        skills_dir: Path,
+        skill_names: list[str],
+    ) -> str | None:
+        """Reload candidate skills before review; block restart if any fail."""
+        try:
+            from server.main import app as _app
+            from nls.skills_setup_policy import format_skill_load_error_message
+
+            sl = getattr(_app.state, "skill_loader", None)
+            if sl is None:
+                return None
+            failures: list[str] = []
+            for name in skill_names:
+                sk_dir = skills_dir / name
+                if not (sk_dir / "__init__.py").is_file():
+                    continue
+                loaded = await sl.reload_skill(name)
+                if loaded is None or loaded.status != "loaded":
+                    err = getattr(loaded, "error", None) or "unknown load error"
+                    failures.append(
+                        format_skill_load_error_message(
+                            name, str(err), dest=sk_dir,
+                        )
+                    )
+            if failures:
+                return (
+                    "Cannot request restart — skill preflight load failed:\n\n"
+                    + "\n\n".join(failures)
+                )
+        except Exception as exc:
+            logger.warning("request_restart preflight failed: %s", exc)
+        return None
+
+    async def _stage_workspace_skills(
+        self,
+        skills_dir: Path,
+        new_skills: list[dict[str, Any]],
+    ) -> None:
+        """Copy workspace-only (or newer workspace) packages into data/skills before preflight."""
+        from nls.tools.agent_tools.skill_install import _copy_skill_tree
+
+        for info in new_skills:
+            source = info.get("scan_source", "data")
+            if source not in ("workspace", "workspace_newer"):
+                continue
+            src = Path(info.get("scan_path", ""))
+            if not src.is_dir():
+                continue
+            dest = skills_dir / info["name"]
+            try:
+                _copy_skill_tree(src, dest)
+                if self._agent_id:
+                    creator = dest / ".creator"
+                    creator.write_text(self._agent_id, encoding="utf-8")
+                info["scan_source"] = "data"
+                logger.info(
+                    "request_restart: staged workspace skill %s → %s",
+                    info["name"],
+                    dest,
+                )
+            except OSError as exc:
+                logger.warning(
+                    "request_restart: failed staging %s from workspace: %s",
+                    info["name"],
+                    exc,
+                )
+
+    def _scan_new_skills(
+        self,
+        data_dir: Path,
+        skills_dir: Path,
+    ) -> list[dict[str, Any]]:
         """Find skills that are new or modified since the server loaded them."""
-        if not skills_dir.is_dir():
+        from nls.skills_setup_policy import (
+            iter_skill_package_dirs,
+            pick_skill_package_candidate,
+            resolve_skill_scan_roots,
+        )
+
+        scan_roots = resolve_skill_scan_roots(
+            data_dir=data_dir,
+            workspace=self._workspace or None,
+        )
+        if not scan_roots:
             return []
+
+        by_name: dict[str, list[tuple[Path, str]]] = {}
+        for root, source in scan_roots:
+            for entry in iter_skill_package_dirs(root):
+                by_name.setdefault(entry.name, []).append((entry, source))
 
         loaded_names: set[str] = set()
         known_names: set[str] = set()
@@ -184,14 +286,13 @@ class RequestRestartTool:
             pass
 
         new_skills = []
-        for entry in sorted(skills_dir.iterdir()):
-            if not entry.is_dir():
+        for name in sorted(by_name):
+            picked = pick_skill_package_candidate(name, by_name[name])
+            if picked is None:
                 continue
+            entry, scan_source = picked
             has_init = (entry / "__init__.py").exists()
             has_skill_md = (entry / "SKILL.md").exists()
-            if not has_init and not has_skill_md:
-                continue
-            name = entry.name
             is_clawhub = (entry / ".clawhub").exists()
             if name in known_names:
                 # ClawHub-installed skills that were installed after server
@@ -210,6 +311,12 @@ class RequestRestartTool:
                             continue
                     except Exception:
                         continue
+                elif scan_source in ("workspace", "workspace_newer"):
+                    logger.info(
+                        "request_restart: skill %s from %s included in review",
+                        name,
+                        scan_source,
+                    )
                 else:
                     # Non-ClawHub skill known to the loader. Check mtime.
                     try:
@@ -233,7 +340,12 @@ class RequestRestartTool:
                     except Exception:
                         continue
 
-            skill_info: dict[str, Any] = {"name": name, "files": []}
+            skill_info: dict[str, Any] = {
+                "name": name,
+                "files": [],
+                "scan_source": scan_source,
+                "scan_path": str(entry),
+            }
             for f in sorted(entry.rglob("*")):
                 if f.is_file() and f.name != ".disabled":
                     skill_info["files"].append({
@@ -279,5 +391,10 @@ def _trigger_shutdown() -> None:
 def create_request_restart_tool(
     data_dir: str = "",
     agent_id: str = "",
+    workspace: str = "",
 ) -> RequestRestartTool:
-    return RequestRestartTool(data_dir=data_dir, agent_id=agent_id)
+    return RequestRestartTool(
+        data_dir=data_dir,
+        agent_id=agent_id,
+        workspace=workspace,
+    )

@@ -1218,6 +1218,9 @@ async def run_loop(
     from nls.agentic.profile_guard_policy import enrich_native_skill_hints
     enrich_native_skill_hints(user_input, state.goals, state.hints)
 
+    from nls.agentic.task_epoch_hygiene import reconcile_goals_with_hints
+    state.goals = reconcile_goals_with_hints(state.goals, state.hints)
+
     if _deferred_actions:
         from .goals import deferred_actions_to_goal_strings
 
@@ -1225,7 +1228,9 @@ async def run_loop(
             if _dg not in state.goals:
                 state.goals.append(_dg)
 
-    _is_user_dispatch = (dispatch_source or "user") == "user"
+    from nls.agentic.task_epoch_hygiene import is_fresh_task_dispatch
+
+    _is_user_dispatch = is_fresh_task_dispatch(dispatch_source)
     _wm_goals_fn = getattr(hooks, "wm_get_tactical_goals", None)
     if not (_is_user_dispatch and state.goals):
         sync_goals_from_wm(state, _wm_goals_fn)
@@ -1264,6 +1269,17 @@ async def run_loop(
 
         state.goals = normalize_goals_for_profile(state.goals, _profile)
 
+    _wm_begin_epoch = getattr(hooks, "wm_begin_task_epoch", None)
+    if _wm_begin_epoch and _is_user_dispatch:
+        try:
+            _wm_begin_epoch(
+                loop_id=state.loop_id,
+                goals=list(state.goals),
+                dispatch_source=dispatch_source or "user",
+            )
+        except Exception:
+            logger.debug("wm_begin_task_epoch failed", exc_info=True)
+
     # Push fresh task goals/instructions into WM (clears stale slots).
     _wm_push_task_goals = getattr(hooks, "wm_push_task_goals", None)
     if hooks.wm_push_instructions and (state.goals or state.hints):
@@ -1272,6 +1288,8 @@ async def run_loop(
             for g in state.goals:
                 _instr_items.append(g)
             for h in state.hints:
+                if h.startswith("lookup:"):
+                    continue
                 if h not in _instr_items and not _CREDENTIAL_RE.search(h):
                     _instr_items.append(h)
             if _instr_items:
@@ -1305,15 +1323,36 @@ async def run_loop(
     _hint_tokens = {h.strip().lower() for h in state.hints if h and h.strip()}
     if "setup:native_skill" in _hint_tokens:
         try:
-            from nls.skills_setup_policy import build_native_skill_setup_lines
+            from nls.skills_setup_policy import (
+                build_native_skill_setup_lines,
+                infer_channel_platform,
+            )
 
+            _platform = infer_channel_platform(
+                f"{user_input} {' '.join(state.goals or [])}",
+            )
             context.append({
                 "role": "system",
-                "content": "\n".join(build_native_skill_setup_lines()),
+                "content": "\n".join(
+                    build_native_skill_setup_lines(
+                        channel_platform=_platform,
+                    ),
+                ),
             })
         except Exception:
             pass
-    elif "setup:instruction_skill" in _hint_tokens:
+    if "lookup:chat_history" in _hint_tokens:
+        context.append({
+            "role": "system",
+            "content": (
+                "The user is referencing an earlier conversation turn. "
+                "Older chat is stored in chat_transcript.jsonl and is NOT "
+                "in your automatic context. "
+                "Call chat_history(action='search', query='<keywords>') "
+                "before answering from memory."
+            ),
+        })
+    if "setup:instruction_skill" in _hint_tokens:
         try:
             from nls.skills_setup_policy import resolve_data_skills_dir
 
@@ -1335,6 +1374,34 @@ async def run_loop(
                     "role": "system",
                     "content": "\n".join(_setup_lines),
                 })
+        except Exception:
+            pass
+    if "setup:configure_bundled" in _hint_tokens:
+        try:
+            from nls.agentic.profile_guard_policy import infer_bundled_channel_skill_name
+            from nls.skills_setup_policy import (
+                build_configure_bundled_setup_lines,
+                infer_pre_shipped_channel_skill,
+            )
+
+            _blob = f"{user_input} {' '.join(state.goals or [])}"
+            _skill_name = infer_pre_shipped_channel_skill(_blob) or infer_bundled_channel_skill_name(_blob)
+            for _h in state.hints or []:
+                _hl = (_h or "").lower()
+                if "skill_configure(skill_name='" in _hl:
+                    _m = re.search(r"skill_configure\(skill_name='([^']+)'", _h, re.I)
+                    if _m:
+                        _skill_name = _m.group(1)
+                        break
+            context.append({
+                "role": "system",
+                "content": "\n".join(
+                    build_configure_bundled_setup_lines(
+                        skill_name=_skill_name,
+                        channel_platform=_skill_name.replace("-channel", ""),
+                    ),
+                ),
+            })
         except Exception:
             pass
 
@@ -1799,6 +1866,35 @@ async def run_loop(
         context.append(msg)
 
         if first_tool_calls:
+            _requested = {
+                tc.get("function", {}).get("name", "")
+                for tc in first_tool_calls
+            }
+            _requested.discard("")
+            if _requested and state.active_mode == AgentMode.CHAT:
+                from nls.agentic.orchestration_policy import (
+                    build_tool_policy_inputs,
+                    resolve_allowed_tools,
+                )
+
+                _inputs = build_tool_policy_inputs(
+                    state.active_mode,
+                    state,
+                    delegate_manager,
+                    set(state.unlocked_tools),
+                    hooks,
+                )
+                _allowed = resolve_allowed_tools(_inputs)
+                if _requested - _allowed:
+                    state.active_mode = AgentMode.EXECUTING
+                    invalidate_tool_policy_cache(state)
+                    logger.info(
+                        "[LOOP:%s] first_tool_calls promoted CHAT→EXECUTING "
+                        "for tools=%s",
+                        state.loop_id,
+                        sorted(_requested - _allowed),
+                    )
+
             results, digest_count = await execute_tools(
                 first_tool_calls, tools, config, state,
                 abort_signal=abort_signal,
@@ -2203,6 +2299,23 @@ async def run_loop(
         from nls.agentic.evaluator import inject_subagent_pacing_nudges
         inject_subagent_pacing_nudges(state, config, context)
 
+        if getattr(state, "prose_gate_active", False):
+            context.append({
+                "role": "system",
+                "content": (
+                    "[PROSE GATE] Your previous prose-only reply was held "
+                    "(not shown to the user) because this task still needs "
+                    "tool action. Continue with tools now. If you need "
+                    "information or credentials from the user, call "
+                    "ask_user() — do not ask in prose or assume they already "
+                    "answered."
+                ),
+            })
+            logger.info(
+                "[LOOP:%s] iter %d: PROSE GATE nudge injected",
+                state.loop_id, state.iteration,
+            )
+
         # --- Stall detection: "I'm stuck" nudge ---
         from nls.agentic.evaluator import detect_stall
         _stall_msg = detect_stall(state, config)
@@ -2527,6 +2640,17 @@ async def run_loop(
             "total_tokens": response.total_tokens,
         })
 
+        from nls.agentic.generation_budget import (
+            analyze_generation_budget,
+            build_file_tool_recovery_nudge,
+            build_thinking_length_nudge,
+            clear_truncated_write_attempt,
+            extract_file_tool_target,
+            record_truncated_file_events,
+            should_suppress_error_recovery,
+        )
+        _budget = analyze_generation_budget(response, config)
+
         _gen_log: dict[str, Any] = {
             "event": "generation", "loop_id": state.loop_id,
             "iteration": state.iteration,
@@ -2541,6 +2665,23 @@ async def run_loop(
             "cumulative_completion_tokens": state.total_completion_tokens,
             "cumulative_total_tokens": state.total_tokens,
         }
+        if response.finish_reason:
+            _gen_log["finish_reason"] = response.finish_reason
+        if _budget.output_budget_exhausted:
+            _gen_log["output_budget_exhausted"] = True
+        if _budget.truncated_file_tools:
+            _gen_log["truncated_file_tools"] = _budget.truncated_file_tools
+        if _budget.truncated_file_events:
+            _gen_log["truncated_file_events"] = [
+                {
+                    "tool": e.tool_name,
+                    "path": e.target_path[:120],
+                    "kind": e.kind,
+                }
+                for e in _budget.truncated_file_events
+            ]
+        if _budget.thinking_budget_exhausted:
+            _gen_log["thinking_budget_exhausted"] = True
         if response.tool_calls:
             _gen_log["tool_calls"] = [
                 {
@@ -2652,6 +2793,15 @@ async def run_loop(
 
         if response.tool_calls:
             state.consecutive_text_only = 0
+            _iter_tool_names = [
+                tc.get("function", {}).get("name", "")
+                for tc in response.tool_calls
+            ]
+            if "ask_user" in _iter_tool_names:
+                state.prose_gate_active = False
+
+            _truncated_file_nudge: str | None = None
+            _file_recovery_injected = False
 
             # Auto-focus VC on browser during browser tool calls.
             # Note: the push/pop window is brief (< 2s) so the VC background
@@ -2685,6 +2835,11 @@ async def run_loop(
                 delegate_manager=delegate_manager,
                 response_has_text=bool(response.text and len(response.text.strip()) > 50),
             )
+
+            if state.prose_gate_active and any(
+                not getattr(r, "is_error", False) for r in results
+            ):
+                state.prose_gate_active = False
 
             if _pushed_vc_browser_focus:
                 try:
@@ -2735,6 +2890,16 @@ async def run_loop(
                 state.cumulative_actions.append(
                     f"{_tool_name}{_action_hint}: {_status_tag}"
                 )
+
+                if (
+                    _tool_name == "write"
+                    and not getattr(result, "is_error", False)
+                ):
+                    _ok_path = extract_file_tool_target(_tool_name, _args_raw)
+                    if _ok_path:
+                        clear_truncated_write_attempt(
+                            state.truncated_write_attempts, _ok_path,
+                        )
 
                 # Update loop state ref for Cryptex ring priority
                 if _lstate_ref is not None:
@@ -3034,6 +3199,34 @@ async def run_loop(
                             "discover_tools unlocked: %s", _newly_unlocked,
                         )
 
+            if _budget.truncated_file_events:
+                _attempts = record_truncated_file_events(
+                    state.truncated_write_attempts,
+                    _budget.truncated_file_events,
+                )
+                _truncated_file_nudge = build_file_tool_recovery_nudge(
+                    _budget.truncated_file_events,
+                    config.max_new_tokens,
+                    state.truncated_write_attempts,
+                )
+                _file_recovery_injected = True
+                logger.info(
+                    "[LOOP:%s] iter %d: FILE_RECOVERY nudge (events=%d, "
+                    "attempts=%s, completion_tokens=%d max=%d)",
+                    state.loop_id,
+                    state.iteration,
+                    len(_budget.truncated_file_events),
+                    _attempts,
+                    response.completion_tokens,
+                    config.max_new_tokens,
+                )
+
+            if _truncated_file_nudge:
+                context.append({
+                    "role": "system",
+                    "content": _truncated_file_nudge,
+                })
+
             # Supersede immediately after tool batch — next generate() sees thin context.
             _apply_context_supersession_pass(
                 context,
@@ -3052,7 +3245,9 @@ async def run_loop(
             if state.consecutive_errors >= 2:
                 from nls.agentic.evaluator import Directive, get_directive_message
                 _recovery = get_directive_message(Directive.ERROR_RECOVERY)
-                if _recovery:
+                if _recovery and not should_suppress_error_recovery(
+                    _file_recovery_injected,
+                ):
                     context.append({"role": "system", "content": _recovery})
                     from nls.agentic.skill_discovery_boost import (
                         trigger_skill_discovery_boost,
@@ -3066,6 +3261,14 @@ async def run_loop(
                     logger.info(
                         "[LOOP:%s] iter %d: ERROR_RECOVERY directive "
                         "(consecutive_errors=%d)",
+                        state.loop_id, state.iteration,
+                        state.consecutive_errors,
+                    )
+                elif _recovery and _file_recovery_injected:
+                    logger.info(
+                        "[LOOP:%s] iter %d: ERROR_RECOVERY suppressed "
+                        "(file recovery nudge already injected, "
+                        "consecutive_errors=%d)",
                         state.loop_id, state.iteration,
                         state.consecutive_errors,
                     )
@@ -4169,6 +4372,30 @@ async def run_loop(
             # substantive (>150 chars) and we already have tool results,
             # prompt the model to surface its conclusion as visible text
             # instead of wasting iterations on stall nudges.
+            if _budget.thinking_budget_exhausted:
+                logger.info(
+                    "[LOOP:%s] iter %d: THINKING_BUDGET_EXhausted nudge "
+                    "(finish_reason=%s thinking_len=%d completion_tokens=%d)",
+                    state.loop_id,
+                    state.iteration,
+                    response.finish_reason,
+                    len(response.thinking),
+                    response.completion_tokens,
+                )
+                _reasoning_trajectory = ""
+                context.append({
+                    "role": "system",
+                    "content": build_thinking_length_nudge(
+                        len(response.thinking),
+                        config.max_new_tokens,
+                    ),
+                })
+                state.consecutive_text_only = 0
+                await emit(on_event, AgentEvent(
+                    EventType.TURN_END, {"iteration": state.iteration},
+                ))
+                continue
+
             _thinking_has_answer = (
                 not response.text
                 and response.thinking
@@ -4797,7 +5024,17 @@ async def run_loop(
     result.deferred_actions = _deferred_actions
 
     await emit(on_event, AgentEvent(
-        EventType.AGENT_END, {"result": result.exit_reason},
+        EventType.AGENT_END,
+        {
+            "result": result.exit_reason,
+            "exit_reason": result.exit_reason,
+            "iterations": result.iterations,
+            "total_tool_calls": result.total_tool_calls,
+            "aborted": result.aborted,
+            "abort_reason": result.abort_reason,
+            "duration_ms": round(result.total_duration_ms, 1),
+            "final_response": result.final_response,
+        },
     ))
 
     return result

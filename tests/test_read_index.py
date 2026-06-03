@@ -5,7 +5,7 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from nls.tools.agent_tools.read_index import AgentReadIndex, tier1_eligible
+from nls.tools.agent_tools.read_index import AgentReadIndex, tier1_eligible, tier1_should_serve
 
 
 def test_make_cache_key_stable():
@@ -84,3 +84,19 @@ def test_format_cache_hit_includes_recovery():
         assert "offset=" in msg
         assert "force=true" in msg
         assert entry.cache_key in msg
+
+
+def test_tier1_skip_same_loop_reread():
+    with tempfile.TemporaryDirectory() as td:
+        idx = AgentReadIndex(Path(td))
+        entry = idx.record_read(
+            "src/main.py",
+            mtime=1.0,
+            size=9000,
+            lines=100,
+            reader="orchestrator",
+            loop_id="loop-a",
+        )
+        assert tier1_should_serve(entry, current_loop_id="loop-b")
+        assert not tier1_should_serve(entry, current_loop_id="loop-a")
+        assert tier1_should_serve(entry, current_loop_id="")

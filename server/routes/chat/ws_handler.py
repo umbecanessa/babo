@@ -51,6 +51,7 @@ from .history import (
     _salvage_agentic_context,
     _save_agentic_history_v2,
     _strip_internal_blocks,
+    record_visible_chat_turn,
 )
 
 logger = logging.getLogger(__name__)
@@ -128,6 +129,7 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
         await websocket.send_json({
             "type": "status",
             "agent_status": "alive",
+            "agentic_running": getattr(websocket.state, "agentic_running", False),
             "agent_name": status.get("agent_name") or runtime.agent_name or None,
             "facts_in_memory": nls.get("facts_in_memory", 0),
             "turn_count": nls.get("turn_count", 0),
@@ -143,9 +145,7 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
             "nls": nls,
         })
 
-        chat_history = [
-            m for m in history if m.get("role") in ("user", "assistant")
-        ]
+        chat_history = runtime.load_chat_transcript(max_turns=200)
         if chat_history:
             await websocket.send_json({
                 "type": "history",
@@ -291,6 +291,11 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                         _wake_asst["reasoning"] = _wake_reasoning
                     history.append(_wake_asst)
                     runtime.save_conversation_history(history)
+                    record_visible_chat_turn(
+                        runtime,
+                        assistant=final_wake,
+                        reasoning=_wake_reasoning or None,
+                    )
 
                     try:
                         _birth_flag.write_text(
@@ -747,6 +752,12 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                     if len(history) > 40:
                         history = history[-40:]
                     runtime.save_conversation_history(history)
+                    record_visible_chat_turn(
+                        runtime,
+                        user=user_input,
+                        assistant=_stopped if _stopped != "Stopped." else None,
+                        reasoning=_initial_thinking or None,
+                    )
                     if consciousness_scheduler is not None:
                         consciousness_scheduler.on_user_message_complete(agent_id)
                     continue
@@ -858,6 +869,12 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                     if len(history) > 40:
                         history = history[-40:]
                     runtime.save_conversation_history(history)
+                    record_visible_chat_turn(
+                        runtime,
+                        user=user_input,
+                        assistant=regen_response,
+                        reasoning=_regen_reasoning or None,
+                    )
 
                     if consciousness_scheduler is not None:
                         consciousness_scheduler.on_user_message_complete(
@@ -993,6 +1010,12 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                     if len(history) > 40:
                         history = history[-40:]
                     runtime.save_conversation_history(history)
+                    record_visible_chat_turn(
+                        runtime,
+                        user=user_input,
+                        assistant=regen_response,
+                        reasoning=_regen2_thinking or None,
+                    )
 
                     if consciousness_scheduler is not None:
                         consciousness_scheduler.on_user_message_complete(
@@ -1028,6 +1051,7 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
 
                     agentic_abort.clear()
                     websocket.state.agentic_running = True
+                    websocket.state._agentic_complete_sent = False
 
                     browser_pending: dict[str, asyncio.Future] = {}
 
@@ -1359,6 +1383,23 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                         if len(history) > 40:
                             history = history[-40:]
                         runtime.save_conversation_history(history)
+                        from .helpers import _build_agentic_metadata
+
+                        _agentic_final_text = (
+                            agentic_result.final_response or ""
+                        ).strip()
+                        _transcript_meta = _build_agentic_metadata(agentic_result)
+                        if _eager_events:
+                            _built = _transcript_meta.get("events") or []
+                            if not _built or len(_built) < len(_eager_events):
+                                _transcript_meta["events"] = list(_eager_events)
+                        record_visible_chat_turn(
+                            runtime,
+                            user=_strip_internal_blocks(user_input),
+                            assistant=_agentic_final_text or None,
+                            reasoning=_initial_thinking or None,
+                            metadata=_transcript_meta,
+                        )
 
                         try:
                             _agentic_final = agentic_result.final_response or ""
@@ -1400,32 +1441,20 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                                     _wm_final = runtime.working_memory.get_summary()
                                 except Exception:
                                     pass
-                            await websocket.send_json({
-                                "type": "agentic_complete",
-                                "total_steps": agentic_result.iterations,
-                                "total_tool_calls": agentic_result.total_tool_calls,
-                                "aborted": agentic_result.aborted,
-                                "abort_reason": agentic_result.abort_reason,
-                                "exit_reason": getattr(
-                                    agentic_result, "exit_reason", "",
-                                ) or "",
-                                "duration_ms": round(agentic_result.total_duration_ms, 1),
-                                "hormones": _live_hormones,
-                                "working_memory": _wm_final,
-                                "final_response": _agentic_final,
-                                "nls": {
-                                    "hormones": _live_hormones,
-                                    "heartbeat": _live_hb,
-                                    "facts_in_memory": (
-                                        runtime.domain_db.fact_count()
-                                        if runtime.domain_db else 0
-                                    ),
-                                },
-                            })
-
-                            await websocket.send_json({
-                                "type": "activity_status", "text": "",
-                            })
+                            if not getattr(
+                                websocket.state, "_agentic_complete_sent", False,
+                            ):
+                                await _send_foreground_agentic_complete(
+                                    websocket,
+                                    runtime,
+                                    agentic_result,
+                                    _agentic_final,
+                                    _live_hormones,
+                                    _live_hb,
+                                    _wm_final,
+                                )
+                            else:
+                                websocket.state._agentic_complete_sent = False
 
                             if agentic_result.name_update:
                                 await websocket.send_json({
@@ -1715,6 +1744,12 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                     runtime.save_session_history(history, session_key=_sk)
                 else:
                     runtime.save_conversation_history(history)
+                record_visible_chat_turn(
+                    runtime,
+                    user=user_input,
+                    assistant=_final_resp,
+                    reasoning=_reasoning or None,
+                )
 
                 if result_dict.get("sleep_request"):
                     await websocket.send_json({
@@ -1815,6 +1850,12 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                 if len(history) > 40:
                     history = history[-40:]
                 runtime.save_conversation_history(history)
+                record_visible_chat_turn(
+                    runtime,
+                    user=user_input,
+                    assistant=result_dict.get("response", full_response),
+                    reasoning=_reasoning or None,
+                )
 
                 # Reset post-completion drive cooldown after any chat turn
                 # (not just full agentic loops) so the DMN doesn't fire
@@ -1848,7 +1889,10 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                     "Agent %s: finally-block save (history_len=%d)",
                     agent_id, len(history),
                 )
-                runtime.save_conversation_history(history)
+                _persist = [
+                    m for m in history if m.get("role") != "system"
+                ]
+                runtime.save_conversation_history(_persist)
                 runtime.save_state()
             except (OSError, FileNotFoundError):
                 logger.info(
@@ -1858,6 +1902,44 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
 
 
 # ─── Agentic event dispatcher ───────────────────────────────────
+
+async def _send_foreground_agentic_complete(
+    websocket: WebSocket,
+    runtime: Any,
+    agentic_result: Any,
+    final_response: str,
+    live_hormones: dict,
+    live_hb: dict,
+    working_memory: Any = None,
+) -> None:
+    """Push agentic_complete + clear activity status to the chat client."""
+    await websocket.send_json({
+        "type": "agentic_complete",
+        "total_steps": agentic_result.iterations,
+        "total_tool_calls": agentic_result.total_tool_calls,
+        "aborted": agentic_result.aborted,
+        "abort_reason": agentic_result.abort_reason,
+        "exit_reason": getattr(agentic_result, "exit_reason", "") or "",
+        "duration_ms": round(agentic_result.total_duration_ms, 1),
+        "hormones": live_hormones,
+        "working_memory": working_memory,
+        "final_response": final_response,
+        "nls": {
+            "hormones": live_hormones,
+            "heartbeat": live_hb,
+            "facts_in_memory": (
+                runtime.domain_db.fact_count()
+                if runtime.domain_db else 0
+            ),
+        },
+    })
+    await websocket.send_json({
+        "type": "activity_status",
+        "text": "",
+        "status": "",
+    })
+    websocket.state._agentic_complete_sent = True
+
 
 async def _dispatch_agentic_event(
     event,
@@ -2133,9 +2215,15 @@ async def _dispatch_agentic_event(
         await websocket.send_json({
             "type": "ask_user",
             "question": data.get("question", ""),
-            "request_id": data.get("request_id", ""),
+            "request_id": data.get("request_id", "") or data.get("tool_call_id", ""),
             "iteration": data.get("iteration", 0),
         })
+        if not _sa_tag:
+            await websocket.send_json({
+                "type": "activity_status",
+                "text": "Waiting for your answer\u2026",
+                "status": "waiting_for_user",
+            })
 
     elif etype == "communicate":
         await websocket.send_json({
@@ -2158,6 +2246,19 @@ async def _dispatch_agentic_event(
         await websocket.send_json({
             "type": "user_answer",
             "content": data.get("answer", ""),
+        })
+        if not _sa_tag:
+            await websocket.send_json({
+                "type": "activity_status",
+                "text": "",
+                "status": "",
+            })
+
+    elif etype == "turn_start" and not _sa_tag:
+        await websocket.send_json({
+            "type": "activity_status",
+            "text": "Thinking\u2026",
+            "status": "generating",
         })
 
     elif etype == "turn_end":
@@ -2251,4 +2352,55 @@ async def _dispatch_agentic_event(
             logger.warning(
                 "Agent %s: eager save failed: %s",
                 agent_id, _es,
+            )
+
+        if not getattr(websocket.state, "_agentic_complete_sent", False):
+            _live_hormones = {}
+            if runtime.hypothalamus is not None:
+                _live_hormones = {
+                    n: round(h.level, 3)
+                    for n, h in runtime.hypothalamus.hormones.items()
+                }
+            _live_hb = {}
+            if hasattr(runtime, "self_state") and runtime.self_state:
+                ss = runtime.self_state
+                _live_hb = {
+                    "bpm": round(getattr(ss, "bpm", 0.0), 2),
+                    "energy": round(getattr(ss, "energy", 1.0), 3),
+                    "mood_label": getattr(ss, "mood_label", "neutral"),
+                    "engagement": round(getattr(ss, "engagement", 0.0), 3),
+                    "bonding": round(getattr(ss, "bonding", 0.0), 3),
+                }
+            _wm_final = None
+            if runtime.working_memory is not None:
+                try:
+                    _wm_final = runtime.working_memory.get_summary()
+                except Exception:
+                    pass
+            _final = (data.get("final_response") or "").strip()
+            _abort_reason = data.get("abort_reason", "") or data.get("result", "")
+            _exit = data.get("exit_reason", "") or _abort_reason
+            _aborted = bool(data.get("aborted", False))
+            if not _aborted and _exit not in (
+                "task_complete", "tool_requested_stop", "orchestrator_terminated",
+                "awaiting_delegates", "idle_monitor_yield", "post_launch_yield",
+                "coordinator_burn", "monitor_iter_cap", "idle_monitor",
+                "wake_token_budget", "checkback_suppressed", "",
+            ):
+                _aborted = True
+            await _send_foreground_agentic_complete(
+                websocket,
+                runtime,
+                type("_AgenticEndResult", (), {
+                    "iterations": data.get("iterations", 0),
+                    "total_tool_calls": data.get("total_tool_calls", 0),
+                    "aborted": _aborted,
+                    "abort_reason": _abort_reason,
+                    "exit_reason": _exit,
+                    "total_duration_ms": data.get("duration_ms", 0),
+                })(),
+                _final,
+                _live_hormones,
+                _live_hb,
+                _wm_final,
             )

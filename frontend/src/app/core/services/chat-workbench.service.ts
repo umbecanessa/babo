@@ -341,6 +341,13 @@ export class ChatWorkbenchService {
     this._streamLane = 'chat';
   }
 
+  private _removeEntry(correlationKey: string): void {
+    if (!correlationKey) return;
+    this.entries.update((list) =>
+      list.filter((e) => e.correlationKey !== correlationKey),
+    );
+  }
+
   private _upsert(
     correlationKey: string,
     partial: Partial<WorkbenchEntry> & {
@@ -452,6 +459,21 @@ export class ChatWorkbenchService {
           const cid = tc.call_id || '';
           if (cid) this._toolMetaByCallId.delete(cid);
         }
+        break;
+      }
+
+      case 'ask_user': {
+        if (isSubAgent) break;
+        const question = (msg.question || '').trim();
+        this._removeEntry(`${corrNs}agentic`);
+        this._upsert(`${corrNs}ask-user`, {
+          lane,
+          kind: 'activity',
+          title: 'Waiting for your answer',
+          subtitle: question.slice(0, 200) || 'Agent needs input to continue',
+          status: 'running',
+          toolLabel: 'Input',
+        });
         break;
       }
 
@@ -816,12 +838,33 @@ export class ChatWorkbenchService {
 
       case 'activity_status': {
         const text = (msg.text || msg.message || msg.content || '').trim();
-        if (!text) break;
+        const statusType = msg.status || '';
+        if (!text) {
+          if (statusType === 'generating') break;
+          this._removeEntry(`${corrNs}agentic`);
+          this._removeEntry(`${corrNs}activity-status`);
+          break;
+        }
         const formatted = parseAgentMessageText(text);
         const teamId = formatted.chips.find((c) => c.label === 'Team')?.value;
         const isCrunching = /crunching\s+data/i.test(text);
+        const isWaiting = statusType === 'waiting_for_user'
+          || /waiting for your answer/i.test(text);
         const isOrchestratorPing =
           formatted.chips.some((c) => c.label === 'Check-in') || !!teamId;
+
+        if (isWaiting) {
+          this._removeEntry(`${corrNs}agentic`);
+          this._upsert(`${corrNs}activity-status`, {
+            lane,
+            kind: 'activity',
+            title: 'Waiting for your answer',
+            subtitle: text.slice(0, 160),
+            status: 'running',
+            toolLabel: 'Input',
+          });
+          break;
+        }
 
         if (isCrunching) {
           this._upsert(`${corrNs}agentic`, {

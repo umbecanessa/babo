@@ -25,6 +25,7 @@ export interface ChatUiSnapshot {
     ts: Date;
   } | null;
   agenticActive: boolean;
+  askUserPending?: boolean;
   agenticStep: number;
   agenticMaxSteps: number;
   activityStatus: string;

@@ -308,10 +308,18 @@ export class ApiService {
     return this.http.get<AgentRuntimeStatus>(`${this.RUNTIME}/agents/${agentId}`);
   }
 
-  listProjectProcesses(agentId: string): Observable<ProjectProcess[]> {
+  listProjectProcesses(agentId: string): Observable<{
+    processes: ProjectProcess[];
+    agentic_running: boolean;
+  }> {
     return this.http
-      .get<{ processes: ProjectProcess[] }>(`${this.RUNTIME}/agents/${agentId}/processes`)
-      .pipe(map(res => res.processes || []));
+      .get<{ processes: ProjectProcess[]; agentic_running?: boolean }>(
+        `${this.RUNTIME}/agents/${agentId}/processes`,
+      )
+      .pipe(map(res => ({
+        processes: res.processes || [],
+        agentic_running: res.agentic_running ?? false,
+      })));
   }
 
   killProjectProcess(agentId: string, pid: number): Observable<ProjectProcess[]> {

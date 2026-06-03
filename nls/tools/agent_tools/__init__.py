@@ -221,6 +221,7 @@ from .offer_download import OfferDownloadTool, create_offer_download_tool
 from .poller import PollerTool, create_poller_tool
 from .read import ReadTool, create_read_tool
 from .request_restart import RequestRestartTool, create_request_restart_tool
+from .skill_install import SkillInstallTool, create_skill_install_tool
 from .scheduler import (
     SchedulerTool,
     SchedulerManager,
@@ -331,7 +332,16 @@ def create_coding_tools(
         create_offer_download_tool(cwd),
         create_server_install_tool(),
         create_project_install_tool(cwd, shared_cwd=shared_cwd),
-        create_request_restart_tool(data_dir=data_dir, agent_id=agent_id),
+        create_request_restart_tool(
+            data_dir=data_dir,
+            agent_id=agent_id,
+            workspace=cwd,
+        ),
+        create_skill_install_tool(
+            workspace=cwd,
+            data_dir=data_dir or "",
+            agent_id=agent_id or "",
+        ),
         create_discover_tools_tool(),
     ]
 
@@ -454,6 +464,7 @@ __all__ = [
     "create_server_install_tool",
     "create_project_install_tool",
     "create_request_restart_tool",
+    "create_skill_install_tool",
     "create_scheduler_tool",
     "create_poller_tool",
     "create_coding_tools",

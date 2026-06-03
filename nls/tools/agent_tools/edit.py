@@ -30,6 +30,12 @@ from typing import Any
 from .base import ToolResult
 from .write import _NLS_INTERNAL_PATTERN, _resolve_path
 
+# Guardrails — fuzzy matching is O(n * search_lines) and runs on the asyncio
+# thread unless execute() offloads to a worker (see _execute_sync).
+_MAX_OLD_TEXT_CHARS = 24_000
+_MAX_WINDOW_SEARCH_LINES = 80
+_MAX_BEST_MATCH_LINES = 120
+
 
 # ---------------------------------------------------------------------------
 # Text normalization helpers
@@ -106,7 +112,11 @@ def _fuzzy_find(content: str, search: str) -> tuple[bool, int, int, str]:
     search_len = len(search_lines)
     _AUTO_ACCEPT_RATIO = 0.90
 
-    if search_len >= 2 and len(content_lines) >= search_len:
+    if (
+        search_len >= 2
+        and len(content_lines) >= search_len
+        and search_len <= _MAX_WINDOW_SEARCH_LINES
+    ):
         best_ratio = 0.0
         best_start = -1
         for i in range(len(content_lines) - search_len + 1):
@@ -160,6 +170,10 @@ def _best_match_snippet(
 
     if not search_lines or not content_lines:
         return "", 0.0, 0
+
+    if search_len > _MAX_BEST_MATCH_LINES:
+        search_len = _MAX_BEST_MATCH_LINES
+        search_lines = search_lines[:search_len]
 
     best_ratio = 0.0
     best_start = 0
@@ -306,14 +320,28 @@ class EditTool:
         params: dict[str, Any],
         signal: asyncio.Event | None = None,
     ) -> ToolResult:
+        # File IO + difflib run synchronously — offload so the runtime event
+        # loop stays responsive and asyncio.wait_for() can enforce timeouts.
+        return await asyncio.to_thread(self._execute_sync, params)
+
+    def _execute_sync(self, params: dict[str, Any]) -> ToolResult:
         path_str = params.get("path", "")
         old_text = self._unescape(params.get("old_text", ""))
         new_text = self._unescape(params.get("new_text", ""))
 
         if not path_str:
             return ToolResult(content="Error: 'path' is required.", is_error=True)
-        if not old_text:
+        if not old_text or not old_text.strip():
             return ToolResult(content="Error: 'old_text' is required.", is_error=True)
+        if len(old_text) > _MAX_OLD_TEXT_CHARS:
+            return ToolResult(
+                content=(
+                    f"Error: old_text is {len(old_text):,} chars (max "
+                    f"{_MAX_OLD_TEXT_CHARS:,}). Use a smaller unique snippet, "
+                    "or write() for large rewrites."
+                ),
+                is_error=True,
+            )
 
         from .tool_path_args import normalize_tool_path_arg
         from .file_ledger import append_must_read_scaffold_hint

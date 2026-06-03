@@ -19,6 +19,11 @@ BUNDLED_SKILLS: list[str] = [
     "whatsapp-channel", "todo-list", "mcp-client",
 ]
 
+# Pre-shipped channel plugins configured via skill_configure (not agent-authored).
+PRE_SHIPPED_CHANNEL_SKILLS: frozenset[str] = frozenset({
+    "telegram-channel", "whatsapp-channel", "email-channel",
+})
+
 
 def _enabled_path(agent_dir: Path) -> Path:
     return agent_dir / "enabled_skills.json"

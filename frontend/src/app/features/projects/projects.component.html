@@ -158,11 +158,11 @@
 
     <!-- Content area -->
 
-    @if (svc.loading()) {
+    @if (svc.loading() && !svc.hasAnyData()) {
 
       <div class="loading-state">Loading project data...</div>
 
-    } @else if (svc.error()) {
+    } @else if (svc.error() && !svc.hasAnyData()) {
 
       <div class="error-state">
 

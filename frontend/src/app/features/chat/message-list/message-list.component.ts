@@ -45,6 +45,7 @@ export class MessageListComponent implements OnChanges, AfterViewChecked, OnDest
   @Input() streamingReasoning = '';
   @Input() awaitingResponse = false;
   @Input() agenticActive = false;
+  @Input() askUserPending = false;
   @Input() agentId = '';
   @Output() drowsyAction = new EventEmitter<'confirm' | 'deny'>();
   @Output() expandBrowser = new EventEmitter<any>();
@@ -185,7 +186,8 @@ export class MessageListComponent implements OnChanges, AfterViewChecked, OnDest
       changes['streamingText'] ||
       changes['streamingReasoning'] ||
       changes['awaitingResponse'] ||
-      changes['agenticActive']
+      changes['agenticActive'] ||
+      changes['askUserPending']
     ) {
       if (this.scrollPinnedToBottom) {
         this.scrollToBottomAfterView = true;
@@ -320,9 +322,15 @@ export class MessageListComponent implements OnChanges, AfterViewChecked, OnDest
   /** True when the agentic planning indicator should display. */
   get showGenerationIndicator(): boolean {
     return this.agenticActive
+      && !this.askUserPending
       && !this.streamingText?.trim()
       && !this.streamingReasoning?.trim()
       && this.isLastMessageAgenticIteration();
+  }
+
+  /** True while ask_user is blocking the loop. */
+  get showAskUserIndicator(): boolean {
+    return this.agenticActive && this.askUserPending;
   }
 
   /** True after the user sends until tokens or a reply arrive. */
@@ -353,10 +361,15 @@ export class MessageListComponent implements OnChanges, AfterViewChecked, OnDest
 
   /** True when any in-flight indicator should display. */
   get showPendingIndicator(): boolean {
-    return this.showAwaitingIndicator || this.showGenerationIndicator;
+    return this.showAskUserIndicator
+      || this.showAwaitingIndicator
+      || this.showGenerationIndicator;
   }
 
   get pendingLabel(): string {
+    if (this.showAskUserIndicator) {
+      return 'Waiting for your answer…';
+    }
     if (this.showGenerationIndicator) {
       return this.generationLabel;
     }

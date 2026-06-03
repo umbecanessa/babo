@@ -255,6 +255,35 @@ class ReadTool:
             )
 
         if not path.is_file():
+            hint = ""
+            if path.is_dir():
+                init_py = path / "__init__.py"
+                skill_md = path / "SKILL.md"
+                hint_lines = [
+                    f"Error: Not a file (path is a directory): {path_str}",
+                    f"Resolved to: {path}",
+                ]
+                if skill_md.is_file():
+                    hint_lines.append(
+                        f"Tip: Skill packages use SKILL.md — read(path='{skill_md}')"
+                    )
+                elif init_py.is_file():
+                    hint_lines.append(
+                        f"Tip: Native skill folder — read(path='{init_py}') or use "
+                        f"list_dir(path='{path}')"
+                    )
+                else:
+                    hint_lines.append(
+                        f"Tip: Use list_dir(path='{path}') to see contents, then read a file inside."
+                    )
+                hint_lines.append(
+                    "Bundled channel skills (discord-channel, etc.) are configured via "
+                    "skill_configure — not by reading the directory tree under data/."
+                )
+                return ToolResult(
+                    content="\n".join(hint_lines),
+                    is_error=True,
+                )
             return ToolResult(
                 content=f"Error: Not a file: {path_str}",
                 is_error=True,
@@ -723,7 +752,7 @@ class ReadTool:
 
         version = None
         if self._read_index is not None:
-            from .read_index import tier1_eligible
+            from .read_index import tier1_eligible, tier1_should_serve
 
             version = self._read_index.content_version(path)
             if version is not None and not force and _max_chars is None:
@@ -761,7 +790,9 @@ class ReadTool:
                         limit=int(limit) if limit is not None else None,
                         max_chars=_max_chars,
                     )
-                    if prior is not None:
+                    if prior is not None and tier1_should_serve(
+                        prior, current_loop_id=self._loop_id,
+                    ):
                         preview = None
                         line_count = prior.lines
                         try:

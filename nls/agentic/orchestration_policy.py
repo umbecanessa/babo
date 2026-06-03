@@ -155,7 +155,7 @@ POST_LAUNCH_TOOLS = frozenset({
 PARTIAL_COMPLETION_REVIEW_TOOLS = frozenset({
     "team", "await_delegates", "communicate", "switch_mode",
     "delegate_status", "scheduler", "read", "list_dir", "glob",
-    "grep", "file_history", "plan",
+    "grep", "file_history", "chat_history", "plan",
 })
 
 # Babysitting-only tools (used for idle/burn detection).

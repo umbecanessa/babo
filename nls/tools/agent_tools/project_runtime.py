@@ -486,6 +486,89 @@ def resolve_project_root(
     return None
 
 
+def list_partial_python_scaffolds(workspace_root: str) -> list[Path]:
+    """Subdirs with Python work but no dependency manifest yet."""
+    workspace = Path(workspace_root).resolve()
+    found: list[Path] = []
+    try:
+        for child in sorted(workspace.iterdir()):
+            if not child.is_dir() or child.name.startswith("."):
+                continue
+            if child.name in _DEP_INSTALL_IGNORE_DIRS:
+                continue
+            if any((child / m).is_file() for m in _PYTHON_MARKERS):
+                continue
+            if (child / "package.json").is_file():
+                continue
+            if list(child.glob("*.py"))[:1]:
+                found.append(child)
+    except OSError:
+        pass
+    return found
+
+
+def resolve_venv_project_root(
+    project_root: str,
+    *,
+    install_dir: str | None = None,
+) -> str:
+    """Directory that owns ``.venv`` for this install (may differ from monorepo root)."""
+    if not install_dir:
+        return project_root
+    root = Path(project_root).resolve()
+    return str((root / install_dir.strip("/\\")).resolve())
+
+
+def scaffold_requirements_line(project_dir: Path, package: str) -> Path | None:
+    """Create requirements.txt with *package* when missing. Returns path or None."""
+    text = (package or "").strip()
+    if not text or parse_pip_requirements_ref(text):
+        return None
+    req = project_dir / "requirements.txt"
+    if req.is_file():
+        return None
+    try:
+        project_dir.mkdir(parents=True, exist_ok=True)
+        req.write_text(f"{text}\n", encoding="utf-8")
+        return req
+    except OSError:
+        return None
+
+
+def format_scaffold_before_install_hint(
+    workspace_root: str,
+    *,
+    partial_scaffolds: list[Path] | None = None,
+    install_dir: str = "",
+) -> str:
+    """Tell the model the correct scaffold → install order."""
+    scaffolds = partial_scaffolds or list_partial_python_scaffolds(workspace_root)
+    if install_dir:
+        return (
+            f"Create {install_dir}/requirements.txt first (list dependencies), "
+            f"then project_install(install_dir='{install_dir}') — or pass "
+            f"package= with install_dir= to auto-create requirements.txt."
+        )
+    if len(scaffolds) == 1:
+        name = scaffolds[0].name
+        return (
+            f"Order: 1) write {name}/requirements.txt  "
+            f"2) project_install(install_dir='{name}'). "
+            f"Or project_install(package='...', install_dir='{name}') to "
+            f"auto-scaffold requirements.txt."
+        )
+    if scaffolds:
+        names = ", ".join(p.name for p in scaffolds[:4])
+        return (
+            f"Order: write requirements.txt in the target folder ({names}), "
+            f"then project_install(install_dir='<folder>')."
+        )
+    return (
+        "Scaffold the project first (requirements.txt or package.json), "
+        "then project_install()."
+    )
+
+
 def format_project_root_hint(
     workspace_root: str,
     candidates: list[Path],
@@ -501,6 +584,12 @@ def format_project_root_hint(
             "files there, then retry project_install."
         )
     if not candidates:
+        partial = list_partial_python_scaffolds(workspace_root)
+        if partial:
+            return format_scaffold_before_install_hint(
+                workspace_root,
+                partial_scaffolds=partial,
+            )
         return (
             "Scaffold the project first (package.json, requirements.txt, or "
             "pyproject.toml), or set plan project_dir before installing."
