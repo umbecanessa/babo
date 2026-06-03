@@ -367,13 +367,6 @@ export class AdminService {
       users: dash.database.users,
       agents: dash.database.agents,
       apiKeys: dash.database.apiKeys,
-      system: {
-        status: dash.runtime.status,
-        reachable: dash.runtime.reachable,
-        model: dash.runtime.model,
-        agents: dash.runtime.agents,
-        analytics: dash.runtime.analytics,
-      },
     };
   }
 
@@ -428,48 +421,6 @@ export class AdminService {
     });
     const userMap = new Map(users.map((u) => [u.id, u.email]));
 
-    let runtime = {
-      reachable: false,
-      status: 'unreachable' as string,
-      raw: null as any,
-      analytics: null as any,
-      model: null as any,
-      agents: null as any,
-      sleepQueue: null as any,
-      consciousness: null as any,
-    };
-
-    try {
-      const [health, analytics] = await Promise.all([
-        this.runtime.getHealth(),
-        this.fetchRuntimeAdmin('/admin/analytics/overview').catch(() => null),
-      ]);
-      runtime = {
-        reachable: true,
-        status: health?.status ?? 'unknown',
-        raw: health,
-        analytics,
-        model: health?.model ?? null,
-        agents: health?.agents ?? null,
-        sleepQueue: health?.sleep_queue ?? null,
-        consciousness: health?.consciousness ?? null,
-      };
-    } catch {
-      // leave defaults
-    }
-
-    const recentAgents = await Promise.all(
-      recentDbAgents.map(async (a) => {
-        let live: any = { reachable: false };
-        try {
-          live = { reachable: true, ...(await this.runtime.getAgent(a.runtimeAgentId)) };
-        } catch {
-          live = { reachable: false, status: 'unreachable' };
-        }
-        return { ...a, live };
-      }),
-    );
-
     const usage24h = await this.prisma.inferenceUsage.aggregate({
       where: {
         createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
@@ -498,22 +449,13 @@ export class AdminService {
           totalTokens: usage24h._sum.totalTokens ?? 0,
         },
       },
-      runtime: {
-        reachable: runtime.reachable,
-        status: runtime.status,
-        model: runtime.model,
-        agents: runtime.agents,
-        analytics: runtime.analytics,
-        sleepQueue: runtime.sleepQueue,
-        consciousness: runtime.consciousness,
-      },
       topUsersByTokens: byUserRaw.map((row) => ({
         userId: row.userId,
         email: userMap.get(row.userId) ?? null,
         requestCount: row._count._all,
         totalTokens: row._sum.totalTokens ?? 0,
       })),
-      recentAgents,
+      recentAgents: recentDbAgents,
     };
   }
 

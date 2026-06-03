@@ -64,7 +64,7 @@ Static output in `admin/dist/admin/browser/`. Serve behind nginx or nest static 
 |--------|------|-------------|
 | GET | `/api/admin/setup/status` | Public — `{ needsSetup, hasAdmin, userCount, canClaimExisting, setupMode }` |
 | POST | `/api/admin/setup` | Public (once) — bootstrap first admin |
-| GET | `/api/admin/stats` | Dashboard counts + runtime health |
+| GET | `/api/admin/stats` | Dashboard counts (users, agents, API keys) |
 | GET | `/api/admin/users` | All users |
 | GET | `/api/admin/users/:id/usage` | Per-user token ledger |
 | GET | `/api/admin/usage` | Fleet token usage summary |

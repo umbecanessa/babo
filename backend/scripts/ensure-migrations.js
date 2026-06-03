@@ -1,6 +1,10 @@
 /**
  * Railway startup: recover from failed Prisma migrations and baseline when the
  * schema was created via db push (migrations here are incremental only).
+ *
+ * Important: run `migrate deploy` before marking migrations as applied. Older
+ * versions marked pending migrations as applied on existing DBs without running
+ * SQL, which skipped new tables (e.g. product analytics).
  */
 const { execSync } = require('child_process');
 const fs = require('fs');
@@ -10,6 +14,15 @@ const { PrismaClient } = require('@prisma/client');
 function run(cmd) {
   console.log(`[migrations] ${cmd}`);
   execSync(cmd, { stdio: 'inherit', env: process.env });
+}
+
+function runOrThrow(cmd) {
+  try {
+    run(cmd);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function listMigrationDirs() {
@@ -59,15 +72,27 @@ async function main() {
           run(`npx prisma migrate resolve --applied ${m}`);
         }
       }
-    } else if (pending.length > 0) {
-      console.log(
-        `[migrations] Baseline ${pending.length} pending migration(s) on existing schema`,
-      );
-      for (const m of pending) {
-        run(`npx prisma migrate resolve --applied ${m}`);
-      }
+      run('npx prisma migrate deploy');
+      return;
     }
 
+    if (pending.length > 0) {
+      console.log(`[migrations] ${pending.length} pending migration(s) on existing database`);
+    }
+
+    const deployed = runOrThrow('npx prisma migrate deploy');
+    if (deployed) return;
+
+    if (pending.length === 0) {
+      throw new Error('[migrations] migrate deploy failed with no pending migrations');
+    }
+
+    console.warn(
+      '[migrations] migrate deploy failed; baseline resolve for legacy db-push schema, then retry',
+    );
+    for (const m of pending) {
+      run(`npx prisma migrate resolve --applied ${m}`);
+    }
     run('npx prisma migrate deploy');
   } finally {
     await prisma.$disconnect();
