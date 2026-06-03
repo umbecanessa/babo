@@ -62,6 +62,19 @@ Babo is **MIT**. You can self-host, fork, audit, and run without us. Commercial 
 
 Orchestration, Kanban pickup, coordinator policy, verification gates — less theatre, less drift, fewer tokens burned re-explaining the same job. The agent should **finish work**, not impress you with prose.
 
+### 6. Extensible platform — plug-in capabilities
+
+Babo is built as a **platform**, not a fixed app. The runtime is designed so builders can add:
+
+- **Native NLS skills** — Python packages under `nls/skills/` with tools, webhooks, config, and onboarding (`register(app, ctx)`).
+- **Agent tools** — programmatic capabilities in the agentic loop (files, shell, plan, team, custom tools).
+- **Channel integrations** — new messaging surfaces (webhook → NestJS → desktop relay).
+- **MCP & ClawHub** — attach external tool servers and community skill packages; **crystallize** proven skills into native modules.
+
+Ship a dedicated skill for your stack, a new channel for your org, or a tool that only your agents need — then plug it in. That extensibility is central for innovators and self-hosters who outgrow one-size-fits-all AI workspaces.
+
+See the [Extension guide](extension/index.md).
+
 ---
 
 ## Babo and NLS

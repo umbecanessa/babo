@@ -18,7 +18,7 @@ window.BABO_AUDIENCE = {
       title: "Stop paying",
       titleGradient: "per thought.",
       lead:
-        "Run the brain on your hardware — Ollama, vLLM, GX10. Persistent memory and real orchestration so agents <strong>drift less</strong> and <strong>burn fewer tokens</strong>. Babo handles the plumbing: WhatsApp, relay, guided onboarding.",
+        "An <strong>extensible agent platform</strong> on your hardware — Ollama, vLLM, GX10. Native skills, channels, and tools plug in; persistent memory and orchestration so agents <strong>drift less</strong> and <strong>burn fewer tokens</strong>.",
       ctaPrimary: { href: "https://github.com/umbecanessa/babo", label: "Star on GitHub" },
       ctaSecondary: { href: BABO_DOWNLOAD_URL, label: "Download" },
       meta: "MIT · Local-first · BYOK or Babo Cloud for the boring parts",
@@ -35,8 +35,8 @@ window.BABO_AUDIENCE = {
         text: "Plans, Kanban, memory, sleep. The agent remembers the job instead of re-processing your life story every turn.",
       },
       {
-        title: "You run the model. We can host the wiring.",
-        text: "BYO weights + optional Babo Cloud / relay for channels and hosted inference. OpenClaw-class depth without solo DevOps.",
+        title: "Extend it — plug-in capabilities",
+        text: "Ship native NLS skills, agent tools, and new channels in Python. MCP and ClawHub install community packages; crystallize the ones you rely on. A platform, not a frozen app.",
       },
     ],
     productLead: "Real early-access UI — chat, board, integrations, brain.",
@@ -58,7 +58,7 @@ window.BABO_AUDIENCE = {
     capabilities: {
       label: "One agent platform",
       title: "Built for work, not just chat",
-      lead: "MIT · local-first · no telemetry — an agent runtime with memory and channels, not a disposable chat window.",
+      lead: "MIT · local-first · no telemetry — an extensible agent platform: memory, channels, and programmatic skills you can add.",
       items: [
         {
           title: "Agentic runtime",
@@ -86,11 +86,23 @@ window.BABO_AUDIENCE = {
           text: "Your GPU, your LAN box, or your API keys — predictable cost, not a sleeping meter.",
         },
         {
-          title: "Brain dashboard",
-          tags: "Signals · Drives · Transparency",
-          text: "See what the agent is doing inside — optional, weird, and useful.",
+          title: "Extensible platform",
+          tags: "Native skills · Agent tools · Channels · MCP",
+          text: "Bundled skills register tools, webhooks, and config — add Gmail-scale integrations or niche capabilities in code, then plug them in.",
         },
       ],
+    },
+    platform: {
+      label: "Platform",
+      title: "Build new capabilities — we ship the runtime",
+      text: "Babo is designed as an open agent platform, not a closed feature bundle. Contributors and power users add native Python skills, programmatic agent tools, and channel integrations that load into the same loop, memory, and relay stack.",
+      stack: [
+        "Bundled skills — tools + APIs + onboarding in nls/skills/",
+        "Agent tools — new loop capabilities (bash, plan, team, yours)",
+        "Channels — WhatsApp-style surfaces via NestJS webhooks + relay",
+        "MCP & ClawHub — external and community packages, crystallize to native",
+      ],
+      cta: { href: "extension/", label: "Read the extension guide" },
     },
     quickstart: {
       label: "Quick start",
@@ -170,6 +182,8 @@ window.BABO_AUDIENCE = {
       "Kanban pickup",
       "WhatsApp · Telegram",
       "Open source · MIT",
+      "Native skills · MCP",
+      "Extension guide",
       "NLS research",
     ],
   },

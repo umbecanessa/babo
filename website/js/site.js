@@ -208,6 +208,30 @@
       qsBar.hidden = true;
     }
 
+    const platformSection = document.getElementById("platform");
+    if (platformSection) {
+      if (copy.platform) {
+        platformSection.classList.remove("hidden");
+        const pl = document.getElementById("platform-label");
+        const pt = document.getElementById("platform-title");
+        const px = document.getElementById("platform-text");
+        const pc = document.getElementById("platform-cta");
+        const ps = document.getElementById("platform-stack");
+        if (pl && copy.platform.label) pl.textContent = copy.platform.label;
+        if (pt) pt.textContent = copy.platform.title;
+        if (px) px.textContent = copy.platform.text;
+        if (pc && copy.platform.cta) {
+          pc.href = copy.platform.cta.href;
+          pc.textContent = copy.platform.cta.label;
+        }
+        if (ps && copy.platform.stack) {
+          ps.innerHTML = copy.platform.stack.map((line) => `<li>${line}</li>`).join("");
+        }
+      } else {
+        platformSection.classList.add("hidden");
+      }
+    }
+
     const driftSection = document.getElementById("drift");
     if (driftSection) {
       if (copy.drift) {
@@ -315,7 +339,9 @@
     card.classList.add("reveal");
     card.style.transitionDelay = `${0.08 + i * 0.1}s`;
   });
+  const platformPanel = document.querySelector("#platform .platform-panel");
   const driftPanel = document.querySelector("#drift .drift-panel");
+  if (platformPanel) platformPanel.classList.add("reveal");
   if (driftPanel) driftPanel.classList.add("reveal");
   document.querySelector(".contribute-panel")?.classList.add("reveal");
 
