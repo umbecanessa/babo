@@ -28,6 +28,10 @@
       [attr.aria-selected]="activeTab() === 'background'" (click)="setTab('background')">
       Background <span class="wb-tab-badge">{{ counts().background }}</span>
     </button>
+    <button type="button" role="tab" class="wb-tab" [class.active]="activeTab() === 'channel'"
+      [attr.aria-selected]="activeTab() === 'channel'" (click)="setTab('channel')">
+      Channels <span class="wb-tab-badge">{{ counts().channel }}</span>
+    </button>
   </div>
 
   <div class="wb-body">

@@ -240,7 +240,9 @@ class SessionRouter:
             "file": path.name,
         })
         if metadata:
-            for k in ("channel", "sender", "subject"):
+            for k in (
+                "channel", "sender", "subject", "reply_target", "channel_name",
+            ):
                 if k in metadata:
                     entry[k] = metadata[k]
         elif "channel" not in entry:
@@ -526,17 +528,38 @@ class ChannelRegistry:
         message: str,
         **kwargs: Any,
     ) -> bool:
-        """Send a message to the channel implied by *session_key*.
+        """Send a message to the channel implied by *session_key*."""
+        from nls.skills.surface_send import resolve_surface_target, get_session_meta
 
-        Parses the channel name and target from the session key format
-        ``channel:type:identifier``.
-        """
-        parts = session_key.split(":")
-        if len(parts) < 2:
-            return False
-        channel = parts[0]
-        target = parts[-1] if len(parts) >= 3 else ""
-        return await self.send(channel, target, message, **kwargs)
+        runtime_agent_id = kwargs.pop("agent_id", None)
+        meta: dict[str, Any] = {}
+        if runtime_agent_id:
+            try:
+                from server.main import app
+                am = getattr(app.state, "agent_manager", None)
+                rt = am.get_runtime(runtime_agent_id) if am else None
+                if rt is not None:
+                    meta = get_session_meta(rt, session_key)
+            except Exception:
+                pass
+
+        target = resolve_surface_target(session_key, meta)
+        if target is None:
+            parts = session_key.split(":")
+            if len(parts) < 2:
+                return False
+            channel = parts[0]
+            target_id = parts[-1] if len(parts) >= 3 else ""
+            return await self.send(channel, target_id, message, **kwargs)
+
+        return await self.send(
+            target.channel,
+            target.reply_target,
+            message,
+            agent_id=runtime_agent_id,
+            **target.send_kwargs,
+            **kwargs,
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -1,5 +1,13 @@
 import { normalizeWorkbenchFilePath } from '../../../core/services/activity-format.util';
 
+/** Reject path traversal and path separators in a single workspace entry name. */
+export function sanitizeWorkspaceEntryName(name: string): string {
+  const trimmed = (name || '').trim();
+  if (!trimmed) return '';
+  if (/[/\\]/.test(trimmed) || trimmed.includes('..')) return '';
+  return trimmed.replace(/[\0<>:"|?*]/g, '');
+}
+
 /** Resolve the on-disk workspace root for an agent (desktop shell). */
 export function resolveAgentWorkspacePath(agentId: string): string {
   if (!agentId) return '';

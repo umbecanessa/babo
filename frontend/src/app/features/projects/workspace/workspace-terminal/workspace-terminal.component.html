@@ -1,0 +1,10 @@
+<div class="terminal-panel">
+  <div class="terminal-header">
+    <span class="terminal-title">Shell</span>
+    @if (cwd) {
+      <span class="terminal-cwd">{{ cwd }}</span>
+    }
+    <button type="button" class="close-btn" title="Close shell" (click)="closePanel()">&times;</button>
+  </div>
+  <div #host class="terminal-host"></div>
+</div>

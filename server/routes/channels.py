@@ -60,6 +60,33 @@ async def list_threads(agent_id: str, request: Request):
     return {"threads": threads}
 
 
+@router.post("/{agent_id}/send")
+async def send_to_thread(agent_id: str, request: Request):
+    """Operator outbound send on a surface session (Discord, Telegram, …)."""
+    body = await request.json()
+    session_key = body.get("session_key", "")
+    content = body.get("content", "")
+    attachments = body.get("attachments") or []
+
+    if not session_key or not (content or attachments):
+        raise HTTPException(status_code=400, detail="session_key and content required")
+
+    runtime = _get_runtime(request, agent_id)
+    from nls.skills.surface_send import send_surface_message
+
+    result = await send_surface_message(
+        request.app,
+        runtime,
+        agent_id,
+        session_key,
+        content,
+        attachments=attachments,
+    )
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result.get("error", "send failed"))
+    return result
+
+
 @router.get("/{agent_id}/threads/{session_key:path}/history")
 async def thread_history(agent_id: str, session_key: str, request: Request):
     """Load conversation history for a specific thread."""

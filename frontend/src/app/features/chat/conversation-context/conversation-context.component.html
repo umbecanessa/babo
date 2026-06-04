@@ -1,0 +1,36 @@
+<div class="ctx-panel">
+  @if (isHome()) {
+    <div class="ctx-block">
+      <h4 class="ctx-title">Private desk</h4>
+      <p class="ctx-body">Messages here stay on your desktop. Nothing is sent to Discord, email, or other connected surfaces unless Babo uses a channel tool explicitly.</p>
+    </div>
+  } @else if (isSurface()) {
+    <div class="ctx-block">
+      <h4 class="ctx-title">{{ thread!.channel | titlecase }} conversation</h4>
+      <dl class="ctx-dl">
+        <dt>Thread</dt>
+        <dd>{{ thread!.label }}</dd>
+        @if (thread!.sender) {
+          <dt>Last speaker</dt>
+          <dd>{{ thread!.sender }}</dd>
+        }
+        @if (thread!.subject) {
+          <dt>Subject</dt>
+          <dd>{{ thread!.subject }}</dd>
+        }
+        @if (isGroup()) {
+          <dt>Type</dt>
+          <dd>Shared channel / group</dd>
+        } @else {
+          <dt>Type</dt>
+          <dd>Direct message</dd>
+        }
+        <dt>Session</dt>
+        <dd class="ctx-mono">{{ thread!.key }}</dd>
+      </dl>
+      <a class="ctx-link" [routerLink]="toolsLink()" [queryParams]="{ skill: thread!.channel + '-channel' }">
+        Configure in Tools →
+      </a>
+    </div>
+  }
+</div>

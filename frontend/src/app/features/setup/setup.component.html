@@ -138,6 +138,7 @@
             </div>
             @if (localModelFit(); as fit) {
               <div class="model-fit-panel">
+                <p class="model-fit-gpu-line">{{ fitGpuHeadline(fit) }}</p>
                 <p class="model-fit-head">
                   @if (fit.localViable) {
                     Models that fit this PC
@@ -150,12 +151,20 @@
                   <p class="small-muted">{{ fit.error }}</p>
                 }
                 @if (fit.recommendations.length) {
+                  <p class="small-muted">Tap a model for Ollama setup steps.</p>
                   <ul class="model-fit-list">
                     @for (m of fit.recommendations; track m.modelId) {
                       <li>
-                        <span class="fit-level" [class]="m.fitLevel">{{ fitLevelLabel(m.fitLevel) }}</span>
-                        <strong>{{ m.displayName }}</strong>
-                        <span class="model-fit-id">{{ m.modelId }}</span>
+                        <button
+                          type="button"
+                          class="model-fit-choice"
+                          [class.selected]="isSelectedLocalModel(m.modelId)"
+                          (click)="openLocalModelSetup(m)"
+                        >
+                          <span class="fit-level" [class]="m.fitLevel">{{ fitLevelLabel(m.fitLevel) }}</span>
+                          <strong>{{ m.displayName }}</strong>
+                          <span class="model-fit-id">{{ m.modelId }}</span>
+                        </button>
                       </li>
                     }
                   </ul>
@@ -306,6 +315,11 @@
               <p class="panel-hint">
                 @if (brainTier() === 'self_local') {
                   Start Ollama on this PC, then test the connection.
+                  @if (localModelFit()?.recommendations?.length) {
+                    <button type="button" class="link-btn inline-link" (click)="openThinkingLocalSetup()">
+                      Set up Ollama for your recommended model
+                    </button>
+                  }
                 } @else {
                   Use your vLLM or OpenAI-compatible server (port 8000), not Ollama’s 11434.
                 }
@@ -720,11 +734,21 @@
         <div class="form-group sheet-field">
           <label>SSH user</label>
           <input type="text" [(ngModel)]="lanSshUser" placeholder="ubuntu" autocomplete="username" />
-          <span class="hint">Required for GPU scan. Use user@host above or set user here.</span>
+          <span class="hint">Required for GPU scan. Use user@host above, or set user + password here.</span>
         </div>
         <div class="form-group sheet-field">
           <label>SSH port</label>
           <input type="text" [(ngModel)]="lanSshPort" placeholder="22" inputmode="numeric" />
+        </div>
+        <div class="form-group sheet-field">
+          <label>SSH password</label>
+          <input
+            type="password"
+            [(ngModel)]="lanSshPassword"
+            placeholder="Optional — if you log in with a password"
+            autocomplete="off"
+          />
+          <span class="hint">Use when this PC doesn’t have an SSH key on the server. Not saved to disk.</span>
         </div>
         <div class="form-group sheet-field">
           <label>GPU worker secret</label>
@@ -756,7 +780,7 @@
           @if (lanModelFit(); as lanFit) {
             <div class="model-fit-panel lan">
               <p class="model-fit-head">
-                {{ lanFit.gpuName }} · {{ lanFit.vramGb }} GB VRAM
+                {{ fitGpuHeadline(lanFit) }}
                 @if (lanFit.host) {
                   <span class="model-fit-host">@ {{ lanFit.host }}</span>
                 }
@@ -765,12 +789,15 @@
                 <p class="small-muted warn">{{ lanFit.error }}</p>
               }
               @if (lanFit.recommendations.length) {
+                <p class="small-muted">Tap a model for server setup tips.</p>
                 <ul class="model-fit-list">
                   @for (m of lanFit.recommendations; track m.modelId) {
                     <li>
-                      <span class="fit-level" [class]="m.fitLevel">{{ fitLevelLabel(m.fitLevel) }}</span>
-                      <strong>{{ m.displayName }}</strong>
-                      <span class="model-fit-id">{{ m.modelId }}</span>
+                      <button type="button" class="model-fit-choice" (click)="openLanModelGuide(m)">
+                        <span class="fit-level" [class]="m.fitLevel">{{ fitLevelLabel(m.fitLevel) }}</span>
+                        <strong>{{ m.displayName }}</strong>
+                        <span class="model-fit-id">{{ m.modelId }}</span>
+                      </button>
                     </li>
                   }
                 </ul>
@@ -791,6 +818,129 @@
             </ul>
           }
           <button class="action-btn full" type="button" (click)="showLanSheet.set(false)">Done</button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- Local Ollama setup sheet -->
+  @if (showLocalModelSetup() && setupModel(); as model) {
+    <div class="sheet-backdrop" (click)="closeLocalModelSetup()">
+      <div class="sheet sheet-local-setup" (click)="$event.stopPropagation()">
+        <h3>Set up {{ model.displayName }}</h3>
+        <p class="small-muted sheet-lead">
+          Babo uses <strong>Ollama</strong> on this PC. Follow these steps, then choose this model for chat.
+        </p>
+        <div class="local-setup-steps">
+          <div class="setup-step" [class.done]="ollamaStatus()?.installed">
+            <p class="setup-step-head">
+              <span>1. Install Ollama</span>
+              @if (ollamaStatus()?.installed) {
+                <span class="pill ok">Installed</span>
+              } @else {
+                <span class="pill">Not found</span>
+              }
+            </p>
+            <p class="setup-step-body">
+              Download and run the installer for Windows. Ollama adds itself to your PATH.
+            </p>
+            <button type="button" class="action-btn secondary full" (click)="openOllamaDownload()">
+              Download Ollama
+            </button>
+          </div>
+          <div class="setup-step" [class.done]="ollamaStatus()?.running">
+            <p class="setup-step-head">
+              <span>2. Start Ollama</span>
+              @if (ollamaStatusLoading()) {
+                <span class="pill">Checking…</span>
+              } @else if (ollamaStatus()?.running) {
+                <span class="pill ok">Running</span>
+              } @else {
+                <span class="pill">Not running</span>
+              }
+            </p>
+            <p class="setup-step-body">
+              Open Ollama from the Start menu, or run <code>ollama serve</code> in a terminal.
+              @if (ollamaStatus()?.message && !ollamaStatus()?.running) {
+                {{ ollamaStatus()!.message }}
+              }
+            </p>
+            <button type="button" class="action-btn secondary full" (click)="refreshOllamaStatus()" [disabled]="ollamaStatusLoading()">
+              {{ ollamaStatusLoading() ? 'Checking…' : 'Check again' }}
+            </button>
+          </div>
+          <div class="setup-step" [class.done]="setupModelAlreadyPulled()">
+            <p class="setup-step-head">
+              <span>3. Download model</span>
+              @if (setupModelAlreadyPulled()) {
+                <span class="pill ok">Ready</span>
+              }
+            </p>
+            <p class="setup-step-body">
+              Pull <code>{{ model.modelId }}</code> — this can take several minutes depending on size.
+            </p>
+            <button
+              type="button"
+              class="action-btn secondary full"
+              (click)="pullSetupModel()"
+              [disabled]="ollamaPulling() || !ollamaStatus()?.installed"
+            >
+              {{ ollamaPulling() ? 'Downloading…' : 'Download ' + model.modelId }}
+            </button>
+            @if (ollamaPullProgress()) {
+              <pre class="setup-progress">{{ ollamaPullProgress() }}</pre>
+            }
+            @if (ollamaPullError()) {
+              <p class="small-muted warn">{{ ollamaPullError() }}</p>
+            }
+          </div>
+        </div>
+        <div class="sheet-actions">
+          <button
+            class="action-btn full"
+            type="button"
+            (click)="confirmLocalModelSetup()"
+          >
+            Use this model
+          </button>
+          <button class="action-btn secondary full" type="button" (click)="closeLocalModelSetup()">Close</button>
+        </div>
+      </div>
+    </div>
+  }
+
+  <!-- LAN model guide sheet -->
+  @if (showLanModelGuide() && setupModel(); as model) {
+    <div class="sheet-backdrop" (click)="closeLanModelGuide()">
+      <div class="sheet sheet-local-setup" (click)="$event.stopPropagation()">
+        <h3>{{ model.displayName }} on your server</h3>
+        <p class="small-muted sheet-lead">
+          LAN chat uses a <strong>vLLM</strong> or OpenAI-compatible server on port <strong>8000</strong>, not Ollama.
+        </p>
+        <div class="local-setup-steps">
+          <div class="setup-step">
+            <p class="setup-step-head"><span>1. SSH into the server</span></p>
+            <p class="setup-step-body">
+              Use the host and SSH user from above. Confirm <code>nvidia-smi</code> shows your GPU.
+            </p>
+          </div>
+          <div class="setup-step">
+            <p class="setup-step-head"><span>2. Run vLLM with this model</span></p>
+            <p class="setup-step-body">
+              Serve <code>{{ model.modelId }}</code> on port 8000 (OpenAI-compatible API). Example:
+              <code>vllm serve {{ model.modelId }} --host 0.0.0.0 --port 8000</code>
+            </p>
+          </div>
+          <div class="setup-step">
+            <p class="setup-step-head"><span>3. Connect in Babo</span></p>
+            <p class="setup-step-body">
+              Choose <strong>My server</strong> in setup and set the address to
+              <code>http://&lt;server-ip&gt;:8000</code>, then test the connection.
+            </p>
+          </div>
+        </div>
+        <div class="sheet-actions">
+          <button class="action-btn full" type="button" (click)="closeLanModelGuide()">Got it</button>
         </div>
       </div>
     </div>

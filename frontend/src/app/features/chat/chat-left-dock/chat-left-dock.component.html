@@ -1,0 +1,39 @@
+<div class="left-dock" [class.open]="panels.leftDockOpen()">
+  <div class="left-dock-tabs" role="tablist">
+    <button
+      type="button"
+      role="tab"
+      class="left-dock-tab"
+      [class.active]="panels.leftDock() === 'workbench'"
+      (click)="selectTab('workbench')"
+    >
+      Workbench
+    </button>
+    <button
+      type="button"
+      role="tab"
+      class="left-dock-tab"
+      [class.active]="panels.leftDock() === 'browser'"
+      (click)="selectTab('browser')"
+    >
+      Browser
+    </button>
+  </div>
+
+  <div class="left-dock-body">
+    @if (panels.leftDock() === 'workbench') {
+      <app-chat-workbench [agentId]="agentId" />
+    }
+    <div
+      class="browser-pane"
+      [class.visible]="panels.leftDock() === 'browser'"
+      [class.cdp-host]="panels.leftDock() !== 'browser'"
+    >
+      <app-agent-browser
+        [command]="browserCommand"
+        (commandResult)="browserResult.emit($event)"
+        (collapseRequest)="collapseBrowser.emit()"
+      />
+    </div>
+  </div>
+</div>

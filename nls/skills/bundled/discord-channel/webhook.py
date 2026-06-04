@@ -7,6 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 
+from nls.skills.bundled.discord-channel.adapter import _channel_display_name
 from nls.skills.channel_adapter_util import broadcast_channel_event, strip_signal_tags
 
 logger = logging.getLogger(__name__)
@@ -55,9 +56,18 @@ async def discord_inbound(agent_id: str, request: Request):
     if normalized is None:
         return {"ok": True, "status": "skip"}
 
+    cfg = adapter._agent_cfg(agent_id)
+    channel_id = normalized["metadata"]["channel_id"]
+    normalized["metadata"]["channel_name"] = _channel_display_name(cfg, channel_id)
+
     raw_for_policy = message if message.get("author") else (body.get("d") or {})
-    if not adapter.should_respond(raw_for_policy, agent_id=agent_id):
-        return {"ok": True, "status": "policy_rejected"}
+    skip_reason = adapter.explain_policy_block(raw_for_policy, agent_id=agent_id)
+    if skip_reason:
+        from nls.skills.bundled.discord-channel.adapter import broadcast_channel_policy_skip
+
+        logger.info("Discord webhook [%s]: policy rejected — %s", agent_id, skip_reason)
+        broadcast_channel_policy_skip(app, agent_id, normalized, reason=skip_reason)
+        return {"ok": True, "status": "policy_rejected", "reason": skip_reason}
 
     adapter.register_known_sender(normalized["sender_id"], agent_id)
     session_key = normalized["session_key"]
@@ -65,11 +75,14 @@ async def discord_inbound(agent_id: str, request: Request):
     channel_id = normalized["metadata"]["channel_id"]
     sender_name = normalized["sender_name"]
 
+    from nls.skills.surface_send import channel_session_metadata
+
+    session_meta = channel_session_metadata(normalized)
     history = runtime.load_session_history(session_key)
     runtime.save_session_history(
         history + [{"role": "user", "content": text or "[empty]"}],
         session_key=session_key,
-        metadata={"channel": "discord", "sender": sender_name},
+        metadata=session_meta,
     )
     broadcast_channel_event(app, agent_id, "discord", normalized, direction="inbound")
 
@@ -99,7 +112,7 @@ async def discord_inbound(agent_id: str, request: Request):
             history.append({"role": "assistant", "content": clean})
             runtime.save_session_history(
                 history, session_key=session_key,
-                metadata={"channel": "discord", "sender": sender_name},
+                metadata=session_meta,
             )
             await adapter.send(channel_id, clean, agent_id=agent_id)
             broadcast_channel_event(

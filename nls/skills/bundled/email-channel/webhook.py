@@ -284,6 +284,9 @@ async def _handle_conversation(
 
     history = runtime.load_session_history(session_key)
 
+    from nls.skills.surface_send import channel_session_metadata
+    session_meta = channel_session_metadata(normalized)
+
     _broadcast_channel_event(app, agent_id, normalized, response="", direction="inbound")
 
     try:
@@ -304,7 +307,7 @@ async def _handle_conversation(
         if response_text:
             runtime.save_session_history(
                 history, session_key=session_key,
-                metadata={"channel": "email", "sender": sender, "subject": subject},
+                metadata=session_meta,
             )
 
             clean_response = _strip_signal_tags(response_text)

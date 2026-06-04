@@ -24,8 +24,16 @@ $glass-border: var(--glass-border);
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 8px;
   padding: 10px 12px;
   border-bottom: 1px solid var(--overlay-2);
+  flex-shrink: 0;
+}
+
+.explorer-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
   flex-shrink: 0;
 }
 
@@ -61,6 +69,11 @@ $glass-border: var(--glass-border);
   &:disabled {
     opacity: 0.35;
     cursor: default;
+  }
+
+  &.active {
+    background: rgba(129, 140, 248, 0.18);
+    color: var(--accent-primary);
   }
 }
 

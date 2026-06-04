@@ -1,0 +1,66 @@
+<nav class="conv-nav" [class.collapsed]="collapsed" aria-label="Conversations">
+  @if (!collapsed) {
+    <button
+      type="button"
+      class="conv-nav-item"
+      [class.active]="isActive('websocket:main')"
+      (click)="onSelect('websocket:main')"
+    >
+      <span class="conv-nav-icon">◉</span>
+      <span class="conv-nav-label">Home</span>
+    </button>
+
+    @if (panels.inboxBadge() > 0) {
+      <button type="button" class="conv-nav-inbox" (click)="openInbox.emit()">
+        <span class="conv-nav-icon">📥</span>
+        <span class="conv-nav-label">Inbox</span>
+        <span class="conv-nav-badge">{{ panels.inboxBadge() }}</span>
+      </button>
+    }
+
+    @for (group of conversations.groupedThreads(); track group.channel) {
+      @if (group.channel !== 'websocket' || group.threads.length > 1) {
+        <div class="conv-nav-group">
+          <div class="conv-nav-group-header">{{ group.label }}</div>
+          @for (t of group.threads; track t.key) {
+            @if (t.key !== 'websocket:main' || group.channel === 'websocket') {
+              <button
+                type="button"
+                class="conv-nav-item"
+                [class.active]="isActive(t.key)"
+                [attr.data-channel]="t.channel"
+                (click)="onSelect(t.key)"
+              >
+                <span class="conv-nav-dot" [attr.data-channel]="t.channel"></span>
+                <span class="conv-nav-label">{{ t.label }}</span>
+                @if (unreadCount(t)) {
+                  <span class="conv-nav-unread"></span>
+                }
+              </button>
+            }
+          }
+        </div>
+      }
+    }
+
+    <div class="conv-nav-divider"></div>
+    <button type="button" class="conv-nav-item conv-nav-new" (click)="newBranch.emit()">
+      <span class="conv-nav-icon">+</span>
+      <span class="conv-nav-label">New branch</span>
+    </button>
+  } @else {
+    <button
+      type="button"
+      class="conv-nav-icon-btn"
+      [class.active]="isActive('websocket:main')"
+      title="Home"
+      (click)="onSelect('websocket:main')"
+    >◉</button>
+    @if (panels.inboxBadge() > 0) {
+      <button type="button" class="conv-nav-icon-btn inbox" title="Inbox" (click)="openInbox.emit()">
+        📥
+        <span class="conv-nav-badge-sm">{{ panels.inboxBadge() }}</span>
+      </button>
+    }
+  }
+</nav>

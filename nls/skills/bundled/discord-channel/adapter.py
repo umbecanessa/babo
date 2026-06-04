@@ -43,6 +43,57 @@ _PERM_HISTORY = 65536
 _BOT_PERMS = _PERM_VIEW | _PERM_SEND | _PERM_HISTORY
 
 
+def discord_setup_gaps(cfg: dict[str, Any]) -> list[str]:
+    """Human-readable blockers after token connect (Tools UI + agent follow-up)."""
+    gaps: list[str] = []
+    if not str(cfg.get("owner_identity", "")).strip():
+        gaps.append("owner_identity")
+    listening = effective_channel_ids(cfg)
+    if not listening:
+        gaps.append("at least one channel listening in scope")
+    dm = str(cfg.get("dm_policy", "disabled")).lower()
+    if dm == "disabled" and not listening:
+        gaps.append("interaction policy (channels or DMs via interaction_mode)")
+    return gaps
+
+
+def _channel_display_name(cfg: dict[str, Any], channel_id: str) -> str:
+    scoped = (cfg.get("scoped_channels") or {}).get("channels") or {}
+    entry = scoped.get(channel_id)
+    if isinstance(entry, dict) and entry.get("name"):
+        return str(entry["name"])
+    return channel_id
+
+
+def broadcast_channel_policy_skip(
+    app: Any,
+    agent_id: str,
+    normalized: dict[str, Any],
+    *,
+    reason: str,
+) -> None:
+    """Surface ignored inbound messages in Activity (channel not scoped / policy)."""
+    cm = getattr(app.state, "connection_manager", None)
+    if cm is None:
+        return
+    meta = normalized.get("metadata") or {}
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(cm.broadcast(agent_id, {
+            "type": "channel_event",
+            "channel": "discord",
+            "direction": "skipped",
+            "skip_reason": reason,
+            "sender": normalized.get("sender_name", "?"),
+            "content": normalized.get("content", ""),
+            "content_preview": (normalized.get("content") or "")[:100],
+            "session_key": normalized.get("session_key", ""),
+            "channel_name": meta.get("channel_name", ""),
+        }))
+    except Exception:
+        pass
+
+
 class DiscordSendTool:
     def __init__(self, adapter: DiscordAdapter, agent_id: str | None = None) -> None:
         self._adapter = adapter
@@ -181,7 +232,12 @@ class DiscordSetupTool:
         bot_id = str(me.get("id", ""))
         bot_username = str(me.get("username", ""))
         self._adapter.update_config(
-            {"bot_token": token, "enabled": True, "bot_id": bot_id},
+            {
+                "bot_token": token,
+                "enabled": True,
+                "bot_id": bot_id,
+                "bot_username": bot_username,
+            },
             agent_id=agent_id,
         )
         self._adapter._bot_ids[agent_id] = bot_id
@@ -203,13 +259,29 @@ class DiscordSetupTool:
             self._adapter.start_local_gateway(agent_id)
             relay_note = " Local Gateway started (no NESTJS_URL)."
 
-        await self._adapter.sync_channels_from_platform(agent_id)
+        await self._adapter.sync_channels_from_platform(agent_id, auto_enable=True)
+
+        cfg = self._adapter._agent_cfg(agent_id)
+        gaps = discord_setup_gaps(cfg)
+        if gaps:
+            gap_text = "; ".join(gaps)
+            return ToolResult(
+                content=(
+                    f"Discord token saved as @{bot_username} (id={bot_id}).{relay_note}\n"
+                    "SETUP_INCOMPLETE — bot is connected but cannot reply in guild channels yet.\n"
+                    f"Still needed: {gap_text}\n"
+                    "Next: ask_user() for owner username, then skill_configure("
+                    "skill_name='discord-channel', interaction_mode='owner_plus_shared' "
+                    "or 'shared_only', config={'owner_identity': '...'}, owner_confirm=true).\n"
+                    "Confirm channel scope in Tools → Discord if #general is not listening."
+                ),
+            )
 
         return ToolResult(
             content=(
-                f"Discord connected as {bot_username} (id={bot_id}).{relay_note} "
-                "Call skill_configure(skill_name='discord-channel') for owner, DM policy, "
-                "and channel scope."
+                f"Discord connected as @{bot_username} (id={bot_id}).{relay_note} "
+                "SETUP_COMPLETE for guild channels. "
+                "Call skill_configure(skill_name='discord-channel') if owner or DM policy still missing."
             ),
         )
 
@@ -607,6 +679,13 @@ class DiscordAdapter:
         if normalized is None:
             return
         if not self.should_respond(message, agent_id=agent_id):
+            reason = self.explain_policy_block(message, agent_id=agent_id) or "policy blocked"
+            logger.info("Discord [%s]: policy skip — %s", agent_id, reason)
+            try:
+                from server.main import app
+                broadcast_channel_policy_skip(app, agent_id, normalized, reason=reason)
+            except Exception:
+                pass
             return
         await self._process_inbound(agent_id, normalized, message)
 
@@ -878,6 +957,25 @@ class DiscordAdapter:
             return self.normalize_gateway_message(payload, agent_id)
         return None
 
+    def explain_policy_block(
+        self,
+        message: dict[str, Any],
+        agent_id: str | None = None,
+    ) -> str | None:
+        """Return skip reason when should_respond is False."""
+        if self.should_respond(message, agent_id=agent_id):
+            return None
+        cfg = self._agent_cfg(agent_id)
+        cid = str(message.get("channel_id") or "")
+        if message.get("guild_id") is None:
+            return "DM policy blocked this sender"
+        if cid not in effective_channel_ids(cfg):
+            return (
+                f"#{_channel_display_name(cfg, cid)} not listening — "
+                "enable in Tools → Discord → Channel scope"
+            )
+        return "mention required or sender not allowed"
+
     def should_respond(self, message: dict[str, Any], agent_id: str | None = None) -> bool:
         from nls.runtime.channels import PolicyEnforcer
 
@@ -997,11 +1095,14 @@ class DiscordAdapter:
         channel_id = normalized["metadata"]["channel_id"]
         sender_name = normalized["sender_name"]
 
+        from nls.skills.surface_send import channel_session_metadata
+
+        session_meta = channel_session_metadata(normalized)
         history = runtime.load_session_history(session_key)
         runtime.save_session_history(
             history + [{"role": "user", "content": text or "[empty]"}],
             session_key=session_key,
-            metadata={"channel": "discord", "sender": sender_name},
+            metadata=session_meta,
         )
         broadcast_channel_event(app, agent_id, "discord", normalized, direction="inbound")
 
@@ -1028,7 +1129,7 @@ class DiscordAdapter:
             history.append({"role": "assistant", "content": clean})
             runtime.save_session_history(
                 history, session_key=session_key,
-                metadata={"channel": "discord", "sender": sender_name},
+                metadata=session_meta,
             )
             await self.send(channel_id, clean, agent_id=agent_id)
             broadcast_channel_event(

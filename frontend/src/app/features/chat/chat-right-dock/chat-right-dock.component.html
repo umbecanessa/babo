@@ -1,0 +1,51 @@
+<aside class="right-dock" [class.open]="panels.rightDockOpen()">
+  <div class="right-dock-tabs" role="tablist">
+    <button
+      type="button"
+      role="tab"
+      class="right-dock-tab"
+      [class.active]="panels.rightDock() === 'live'"
+      (click)="selectTab('live')"
+    >
+      Live
+    </button>
+    <button
+      type="button"
+      role="tab"
+      class="right-dock-tab"
+      [class.active]="panels.rightDock() === 'inbox'"
+      (click)="selectTab('inbox')"
+    >
+      Inbox
+      @if (panels.inboxBadge() > 0) {
+        <span class="right-dock-badge">{{ panels.inboxBadge() }}</span>
+      }
+    </button>
+    <button
+      type="button"
+      role="tab"
+      class="right-dock-tab"
+      [class.active]="panels.rightDock() === 'context'"
+      (click)="selectTab('context')"
+    >
+      Context
+    </button>
+  </div>
+
+  <div class="right-dock-body">
+    @if (panels.rightDock() === 'live') {
+      <app-signal-sidebar
+        [metadata]="metadata"
+        [agent]="agent"
+        [daydreams]="daydreams"
+        [activities]="activities"
+        [connectedChannels]="connectedChannels"
+        (channelThreadSelect)="channelThreadSelect.emit($event)"
+      />
+    } @else if (panels.rightDock() === 'inbox') {
+      <app-chat-inbox (selectSession)="onInboxSelect($event)" />
+    } @else if (panels.rightDock() === 'context') {
+      <app-conversation-context [thread]="activeThread" [agentId]="agentId" />
+    }
+  </div>
+</aside>

@@ -65,6 +65,8 @@ export interface ModelFitSnapshot {
   host?: string;
   gpuName: string;
   vramGb: number;
+  unifiedMemory?: boolean;
+  memoryLabel?: string;
   localViable: boolean;
   engine: 'llmfit' | 'heuristic';
   recommendations: ModelFitRecommendationRow[];

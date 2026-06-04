@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, AfterViewInit, signal, computed, ViewChild, ElementRef, AfterViewChecked } from '@angular/core';
+import { Component, OnInit, OnDestroy, AfterViewInit, signal, computed, ViewChild, ElementRef, AfterViewChecked, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
@@ -27,11 +27,9 @@ import { filterNewLearnTags, labelTags, parseTags, parseThinking } from '../../s
 import { Agent } from '../../core/models/agent.model';
 import { MessageListComponent } from './message-list/message-list.component';
 import { SignalSidebarComponent, ActivityKind } from './signal-sidebar/signal-sidebar.component';
-import { AgentBrowserComponent } from './agent-browser/agent-browser.component';
 import { GoogleConnectModalComponent } from '../../shared/google-connect-modal/google-connect-modal.component';
 import { PlatformIntegrationsService } from '../../core/services/platform-integrations.service';
 import { googleUsesByo } from '../../core/services/platform-integrations.util';
-import { ChatWorkbenchComponent } from './chat-workbench/chat-workbench.component';
 import { RunPanelComponent } from './run-panel/run-panel.component';
 import { RunViewService } from '../../core/services/run-view.service';
 import { AgentWorkspaceContextService } from '../../core/services/agent-workspace-context.service';
@@ -46,13 +44,36 @@ import {
   isUserFacingOrchestrationMessage,
   isSilentOrchestrationExit,
 } from './orchestration-ui.util';
+import { ChatPanelService } from '../../core/services/chat-panel.service';
+import { ConversationService } from '../../core/services/conversation.service';
+import { composerDestination } from '../../core/services/composer-destination.util';
+import { ChatLeftDockComponent } from './chat-left-dock/chat-left-dock.component';
+import { ChatRightDockComponent } from './chat-right-dock/chat-right-dock.component';
+import { ConversationNavComponent } from './conversation-nav/conversation-nav.component';
+import { ConversationBreadcrumbComponent } from './conversation-breadcrumb/conversation-breadcrumb.component';
+import { ChatInboxComponent } from './chat-inbox/chat-inbox.component';
+import { ConversationContextComponent } from './conversation-context/conversation-context.component';
 
 export { agenticAbortLabel } from './orchestration-ui.util';
 
 @Component({
   selector: 'app-chat',
   standalone: true,
-  imports: [CommonModule, FormsModule, MessageListComponent, SignalSidebarComponent, AgentBrowserComponent, GoogleConnectModalComponent, ChatWorkbenchComponent, RunPanelComponent, ChatModelPickerComponent],
+  imports: [
+    CommonModule,
+    FormsModule,
+    MessageListComponent,
+    SignalSidebarComponent,
+    GoogleConnectModalComponent,
+    RunPanelComponent,
+    ChatModelPickerComponent,
+    ChatLeftDockComponent,
+    ChatRightDockComponent,
+    ConversationNavComponent,
+    ConversationBreadcrumbComponent,
+    ChatInboxComponent,
+    ConversationContextComponent,
+  ],
   templateUrl: './chat.component.html',
   styleUrl: './chat.component.scss',
 })
@@ -67,7 +88,10 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
   agentOnline = signal(true);
   messages = signal<ChatMessage[]>([]);
   inputText = '';
+  /** @deprecated Use panels.rightDockOpen(); kept for snapshot restore bridge. */
   sidebarOpen = signal(ChatComponent.readNeuralSidebarPreference());
+  readonly panels = inject(ChatPanelService);
+  readonly conversations = inject(ConversationService);
   streamingText = signal('');
   streamingReasoning = signal('');
   /** True after the user sends until the agent shows streaming or a reply. */
@@ -126,8 +150,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
   // Google Workspace connect modal (triggered by agent or UI)
   googleModalOpen = signal(false);
 
-  // In-app browser state
-  browserExpanded = signal(false);
+  // In-app browser state (left dock tab)
   browserCommand = signal<any>(null);
 
   // File attachment state
@@ -135,62 +158,10 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
   isDragOver = signal(false);
   fileUploading = signal(false);
 
-  // Thread switcher state
+  // Thread / conversation state
   currentThread = signal<string>('websocket:main');
-  activeThreads = signal<{ key: string; label: string; channel: string; sender?: string; subject?: string }[]>([
-    { key: 'websocket:main', label: 'Main Chat', channel: 'websocket' },
-  ]);
-  threadDropdownOpen = signal(false);
-
-  /** Threads grouped by channel for the dropdown UI */
-  groupedThreads = computed(() => {
-    const threads = this.activeThreads();
-    const groups: { channel: string; label: string; icon: string; threads: typeof threads }[] = [];
-    const channelOrder = ['websocket', 'email', 'telegram', 'whatsapp', 'discord', 'slack'];
-    const channelLabels: Record<string, string> = {
-      websocket: 'Direct',
-      email: 'Email',
-      telegram: 'Telegram',
-      whatsapp: 'WhatsApp',
-      discord: 'Discord',
-      slack: 'Slack',
-    };
-    const channelIcons: Record<string, string> = {
-      websocket: 'chat',
-      email: 'email',
-      telegram: 'telegram',
-      whatsapp: 'whatsapp',
-      discord: 'discord',
-      slack: 'slack',
-    };
-
-    for (const ch of channelOrder) {
-      const chThreads = threads.filter(t => t.channel === ch);
-      if (chThreads.length > 0) {
-        groups.push({
-          channel: ch,
-          label: channelLabels[ch] || ch,
-          icon: channelIcons[ch] || 'chat',
-          threads: chThreads,
-        });
-      }
-    }
-    // Any channels not in the predefined order
-    const known = new Set(channelOrder);
-    const extra = threads.filter(t => !known.has(t.channel));
-    if (extra.length > 0) {
-      const byChannel = new Map<string, typeof threads>();
-      for (const t of extra) {
-        const arr = byChannel.get(t.channel) || [];
-        arr.push(t);
-        byChannel.set(t.channel, arr);
-      }
-      for (const [ch, chThreads] of byChannel) {
-        groups.push({ channel: ch, label: ch, icon: 'chat', threads: chThreads });
-      }
-    }
-    return groups;
-  });
+  readonly activeThreads = computed(() => this.conversations.threads());
+  readonly groupedThreads = computed(() => this.conversations.groupedThreads());
 
   /** Messages filtered by the currently selected thread */
   filteredMessages = computed(() => {
@@ -213,8 +184,10 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
   /** Active thread metadata for context banners */
   activeThreadMeta = computed(() => {
     const key = this.currentThread();
-    return this.activeThreads().find(t => t.key === key) || null;
+    return this.conversations.threads().find(t => t.key === key) || null;
   });
+
+  composerDest = computed(() => composerDestination(this.activeThreadMeta()));
 
   /** Connected channel names for the sidebar status strip */
   connectedChannels = computed(() => {
@@ -295,6 +268,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
             this.ws.connect();
             this.ws.joinAgent(this.agentId);
             this.loadPersistedThreads();
+            this.syncInboxBadge();
           }
         },
         error: () => this.agentOnline.set(false),
@@ -303,6 +277,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       this.ws.connect();
       this.ws.joinAgent(this.agentId);
       this.loadPersistedThreads();
+      this.syncInboxBadge();
     }
 
     // Restore background task activity card if one was running before navigation
@@ -526,8 +501,14 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       snap.workbenchEntries ?? [],
       snap.workbenchDensity,
     );
+    if (snap.workbenchOpen) {
+      this.panels.openLeft('workbench');
+    }
     if (snap.sidebarOpen != null) {
       this.sidebarOpen.set(snap.sidebarOpen);
+      if (snap.sidebarOpen) {
+        this.panels.openRight('live');
+      }
     }
   }
 
@@ -558,10 +539,10 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       activityStatus: this.activityStatus(),
       agenticStopping: this.agenticStopping(),
       backgroundTaskActive: this.backgroundTaskActive(),
-      workbenchOpen: this.workbench.panelOpen(),
+      workbenchOpen: this.panels.leftDock() === 'workbench',
       workbenchEntries: this.workbench.snapshotState().entries,
       workbenchDensity: this.workbench.snapshotState().density,
-      sidebarOpen: this.sidebarOpen(),
+      sidebarOpen: this.panels.rightDockOpen(),
     });
   }
 
@@ -581,6 +562,35 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     if (text) displayParts.push(text);
 
     const threadKey = this.currentThread();
+    const dest = this.composerDest();
+    const surfaceSend =
+      dest.mode === 'surface'
+      && !this.agenticActive()
+      && !this.askUserPending();
+
+    if (surfaceSend) {
+      const meta = this.activeThreadMeta();
+      this.messages.update(msgs => [...msgs, {
+        type: 'channel_outbound' as const,
+        content: displayParts.join('\n') || '(attachment)',
+        channel: meta?.channel || dest.surface || '',
+        sender: 'You',
+        sessionKey: threadKey,
+        timestamp: new Date(),
+        attachments: attachments.length > 0
+          ? attachments.map(a => ({ name: a.name, path: a.path, mime_type: a.mime_type, size: a.size }))
+          : undefined,
+      }]);
+      this.ws.sendChannelMessage(
+        text || 'Please see the attached files.',
+        threadKey,
+        attachments.length > 0 ? attachments : undefined,
+      );
+      this.inputText = '';
+      this.pendingAttachments.set([]);
+      setTimeout(() => this.resetTextareaHeight(), 0);
+      return;
+    }
 
     // Add user message with attachments stored separately (rendered as chips)
     this.messages.update(msgs => [...msgs, {
@@ -752,11 +762,49 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
   }
 
   toggleSidebar() {
-    this.sidebarOpen.update(v => {
-      const next = !v;
-      ChatComponent.persistNeuralSidebarPreference(next);
-      return next;
-    });
+    this.panels.toggleRight('live');
+    this.sidebarOpen.set(this.panels.rightDockOpen());
+    ChatComponent.persistNeuralSidebarPreference(this.panels.rightDockOpen());
+  }
+
+  toggleWorkbenchPanel(): void {
+    this.panels.toggleLeft('workbench');
+    if (this.panels.leftDock() === 'workbench') {
+      this.workbench.openPanel();
+    } else {
+      this.workbench.closePanel();
+    }
+  }
+
+  toggleBrowserPanel(): void {
+    this.panels.toggleLeft('browser');
+  }
+
+  toggleInboxPanel(): void {
+    this.panels.toggleRight('inbox');
+    this.syncInboxBadge();
+  }
+
+  toggleContextPanel(): void {
+    this.panels.toggleRight('context');
+  }
+
+  toggleFocusMode(): void {
+    this.panels.toggleFocusMode();
+  }
+
+  openInboxFromNav(): void {
+    this.panels.openRight('inbox');
+    this.syncInboxBadge();
+  }
+
+  onInboxSelect(sessionKey: string): void {
+    this.switchThread(sessionKey);
+    this.panels.openRight('inbox');
+  }
+
+  private syncInboxBadge(): void {
+    this.panels.setInboxBadge(this.conversations.inboxBadge());
   }
 
   private static readNeuralSidebarPreference(): boolean {
@@ -785,6 +833,11 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
   openBottomSheet() {
     this.bottomSheetOpen.set(true);
+    this.panels.setMobileSheetTab(this.panels.mobileSheetTab());
+  }
+
+  setMobileSheetTab(tab: 'live' | 'inbox' | 'context'): void {
+    this.panels.setMobileSheetTab(tab);
   }
 
   closeBottomSheet() {
@@ -1487,6 +1540,25 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         break;
       }
 
+      case 'channel_send_result': {
+        if (!msg.ok) {
+          this.toast.show(msg.error || 'Failed to send on channel', 'error');
+          this.messages.update(msgs => {
+            const sk = msg.session_key as string;
+            const reversed = [...msgs];
+            for (let i = reversed.length - 1; i >= 0; i--) {
+              const m = reversed[i] as { type?: string; sessionKey?: string; content?: string };
+              if (m.type === 'channel_outbound' && m.sessionKey === sk) {
+                reversed.splice(i, 1);
+                break;
+              }
+            }
+            return reversed;
+          });
+        }
+        break;
+      }
+
       case 'drowsy': {
         // Agent is drowsy and requesting permission to sleep.
         // Show as an amber-bordered bubble with action buttons.
@@ -1538,6 +1610,8 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
           content: `Agent starting task (up to ${msg.max_steps || 15} steps)`,
           timestamp: new Date(),
         }]);
+        this.panels.onAgenticStart();
+        this.workbench.openPanel();
         break;
       }
 
@@ -2612,6 +2686,19 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
           requestId: msg.request_id || '',
           timestamp: new Date(),
         }]);
+        if (typeof msg.source === 'string' && msg.source.startsWith('user:channel')) {
+          const sk = msg.session_key || msg.sessionKey || this.currentThread();
+          this.conversations.addInboxItem({
+            sessionKey: sk,
+            kind: 'ask_user',
+            preview: question.slice(0, 120),
+            channel: sk.split(':')[0] || 'channel',
+            timestamp: new Date(),
+            priority: 100,
+          });
+          this.panels.onAskUserFromChannel();
+          this.syncInboxBadge();
+        }
         this.toast.show(
           question.length > 200 ? `${question.slice(0, 197)}…` : question,
           'info',
@@ -2962,7 +3049,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         request_id: msg.browserRequestId || '',
       });
     }
-    this.browserExpanded.set(true);
+    this.panels.onBrowserNavigate();
   }
 
   onOpenUrl(url: string): void {
@@ -2972,11 +3059,13 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       url,
       request_id: '',
     });
-    this.browserExpanded.set(true);
+    this.panels.onBrowserNavigate();
   }
 
   collapseBrowser(): void {
-    this.browserExpanded.set(false);
+    if (this.panels.leftDock() === 'browser') {
+      this.panels.closeLeft();
+    }
   }
 
   onMessageFeedback(event: {
@@ -3008,40 +3097,23 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
   // -- Thread switcher ----------------------------------------------------
 
-  activeThreadLabel(): string {
-    const current = this.currentThread();
-    const thread = this.activeThreads().find(t => t.key === current);
-    return thread?.label || 'Main Chat';
-  }
-
-  activeThreadIcon(): string {
-    const current = this.currentThread();
-    const thread = this.activeThreads().find(t => t.key === current);
-    return thread?.channel || 'websocket';
-  }
-
-  threadCount(): number {
-    return this.activeThreads().length;
-  }
-
-  toggleThreadDropdown(): void {
-    this.threadDropdownOpen.update(v => !v);
-  }
-
   switchThread(key: string): void {
     this.currentThread.set(key);
-    this.threadDropdownOpen.set(false);
+    this.conversations.markThreadRead(key);
+    this.syncInboxBadge();
+    const meta = this.conversations.threads().find(t => t.key === key);
+    const isSurface = !!meta && meta.channel !== 'websocket';
+    this.panels.maybeOpenContextForSurface(isSurface, key);
     this.loadThreadHistory(key);
   }
 
   createNewThread(): void {
     const id = Date.now().toString(36);
     const key = `websocket:thread:${id}`;
-    const count = this.activeThreads().filter(t => t.channel === 'websocket').length;
-    const label = `Thread ${count}`;
-    this.activeThreads.update(threads => [...threads, { key, label, channel: 'websocket' }]);
-    this.currentThread.set(key);
-    this.threadDropdownOpen.set(false);
+    const count = this.conversations.threads().filter(t => t.channel === 'websocket').length;
+    const label = `Branch ${count}`;
+    this.conversations.addBranch(label, key);
+    this.switchThread(key);
   }
 
   /** Restore thread list from the runtime's persisted session index. */
@@ -3062,47 +3134,13 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
           if (channel === 'team' || channel === 'delegate') continue;
           const sender = meta?.sender || '';
           const subject = meta?.subject || '';
-          const label = subject
-            ? subject.replace(/^re:\s*/i, '').substring(0, 40)
-            : sender
-              ? (channel === 'telegram' ? `@${sender}` : sender)
-              : this.labelFromSessionKey(key, channel);
+          const label = this.conversations.labelFromSessionKey(key, channel, { sender, subject });
           restored.push({ key, label, channel, sender, subject });
         }
-        if (restored.length > 0) {
-          this.activeThreads.update(threads => {
-            const existingKeys = new Set(threads.map(t => t.key));
-            const newThreads = restored.filter(r => !existingKeys.has(r.key));
-            return [...threads, ...newThreads];
-          });
-        }
+        this.conversations.setThreadsFromRestore(restored);
       },
       error: () => {},
     });
-  }
-
-  private labelFromSessionKey(key: string, channel: string): string {
-    const parts = key.split(':');
-    switch (channel) {
-      case 'email': {
-        const threadId = parts.slice(2).join(':') || 'Thread';
-        return `Re: ${threadId.substring(0, 30)}`;
-      }
-      case 'telegram':
-        return parts[2] ? `@${parts[2]}` : 'DM';
-      case 'whatsapp':
-        return parts[2] || 'Chat';
-      case 'discord':
-        return parts[1] === 'dm' ? (parts[2] || 'DM') : (parts[2] || 'Channel');
-      case 'slack':
-        return parts[1] === 'dm' ? (parts[2] || 'DM') : (parts[2] || 'Channel');
-      case 'websocket': {
-        const idx = this.activeThreads().filter(t => t.channel === 'websocket').length;
-        return parts[2] ? `Thread ${parts[2].substring(0, 8)}` : `Thread ${idx}`;
-      }
-      default:
-        return parts.slice(1).join(':') || 'Thread';
-    }
   }
 
   private loadThreadHistory(sessionKey: string): void {
@@ -3113,7 +3151,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       ? `${(window as any).nls?.runtimeUrl || 'http://127.0.0.1:9222'}/sessions/${this.agentId}/${encodeURIComponent(sessionKey)}`
       : `${this.api.apiBase}/agents/${this.agentId}/sessions/${encodeURIComponent(sessionKey)}`;
 
-    const threadMeta = this.activeThreads().find(t => t.key === sessionKey);
+    const threadMeta = this.conversations.threads().find(t => t.key === sessionKey);
     const isChannel = threadMeta && threadMeta.channel !== 'websocket';
 
     this.http.get<any>(url).subscribe({
@@ -3156,27 +3194,73 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     const sessionKey = event.session_key || '';
     if (!sessionKey) return;
 
-    const existing = this.activeThreads().find(t => t.key === sessionKey);
+    const existing = this.conversations.threads().find(t => t.key === sessionKey);
+    let threadLabel = existing?.label || '';
     if (!existing) {
-      const label = this.buildThreadLabel(channel, event);
-      this.activeThreads.update(threads => [
-        ...threads,
-        { key: sessionKey, label, channel, sender: event.sender || '', subject: event.subject || '' },
-      ]);
+      threadLabel = this.conversations.buildThreadLabel(channel, event);
+      this.conversations.upsertThread({
+        key: sessionKey,
+        label: threadLabel,
+        channel,
+        sender: event.sender || '',
+        subject: event.subject || '',
+      });
     } else if (!existing.subject && event.subject) {
-      this.activeThreads.update(threads =>
-        threads.map(t => t.key === sessionKey ? { ...t, subject: event.subject, sender: event.sender || t.sender } : t)
-      );
+      this.conversations.upsertThread({
+        ...existing,
+        subject: event.subject,
+        sender: event.sender || existing.sender,
+      });
     }
 
     const sender = event.sender || channel;
     const direction = event.direction || 'inbound';
     const inboundContent = event.content || event.content_preview || '';
 
+    if (direction === 'skipped') {
+      const reason = event.skip_reason || 'Policy blocked this message';
+      this.conversations.addInboxItem({
+        sessionKey,
+        kind: 'skipped',
+        preview: reason,
+        sender,
+        channel,
+        conversationLabel: threadLabel,
+        timestamp: new Date(),
+        priority: 30,
+      });
+      this.panels.suggestInbox();
+      this.syncInboxBadge();
+      this.messages.update(msgs => [...msgs, {
+        type: 'channel_skipped',
+        content: reason,
+        channel,
+        sender,
+        subject: event.subject || '',
+        sessionKey,
+        timestamp: new Date(),
+      }]);
+      return;
+    }
+
     // Only show the inbound bubble on the "inbound" direction event.
     // The later "response" event re-sends the same content field —
     // we must not create a second bubble from it.
     if (inboundContent && direction === 'inbound') {
+      this.conversations.addInboxItem({
+        sessionKey,
+        kind: 'inbound',
+        preview: inboundContent.slice(0, 120),
+        sender,
+        channel,
+        conversationLabel: threadLabel,
+        timestamp: new Date(),
+        priority: 60,
+      });
+      if (this.currentThread() !== sessionKey) {
+        this.panels.suggestInbox();
+      }
+      this.syncInboxBadge();
       this.messages.update(msgs => {
         // Dedup: skip if we already have this exact inbound message
         const alreadyShown = msgs.some(m =>
@@ -3201,8 +3285,24 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       });
     }
     if (event.response) {
+      this.conversations.addInboxItem({
+        sessionKey,
+        kind: 'outbound',
+        preview: String(event.response).slice(0, 120),
+        sender,
+        channel,
+        conversationLabel: threadLabel,
+        timestamp: new Date(),
+        priority: 10,
+        read: true,
+      });
       this.messages.update(msgs => {
-        // Same dedup for assistant messages that were loaded as plain 'assistant' type
+        const alreadyShown = msgs.some(m =>
+          m.type === 'channel_outbound'
+          && (m as any).sessionKey === sessionKey
+          && m.content === event.response
+        );
+        if (alreadyShown) return msgs;
         const deduped = msgs.filter(m =>
           !(m.type === 'assistant' && (m as any).sessionKey === sessionKey && m.content === event.response)
         );
@@ -3236,21 +3336,5 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       'STRESS LEVEL: cortisol=',
     ];
     return patterns.some(p => t.includes(p));
-  }
-
-  private buildThreadLabel(channel: string, event: any): string {
-    const sender = event.sender || '';
-    switch (channel) {
-      case 'telegram':
-        return sender ? `@${sender}` : 'DM';
-      case 'whatsapp':
-        return sender || 'Chat';
-      case 'email': {
-        const subj = event.subject || '';
-        return subj ? `Re: ${subj.replace(/^re:\s*/i, '').substring(0, 40)}` : sender || 'Thread';
-      }
-      default:
-        return sender || 'Thread';
-    }
   }
 }

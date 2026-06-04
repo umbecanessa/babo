@@ -5,6 +5,7 @@ import {
   WorkbenchEntry,
   WorkbenchLane,
 } from '../../../core/services/chat-workbench.service';
+import { ChatPanelService } from '../../../core/services/chat-panel.service';
 import { AgentWorkspaceContextService } from '../../../core/services/agent-workspace-context.service';
 import {
   fileChipParts,
@@ -28,7 +29,7 @@ import {
 } from '../../../core/services/workbench-error.util';
 import { AnsiPipe } from '../../../shared/pipes/ansi.pipe';
 
-export type WorkbenchTab = 'all' | 'chat' | 'background';
+export type WorkbenchTab = 'all' | 'chat' | 'background' | 'channel';
 
 import {
   WORKBENCH_DENSITY_LABELS,
@@ -62,6 +63,7 @@ export class ChatWorkbenchComponent {
 
   private readonly host = inject(ElementRef<HTMLElement>);
   readonly workbench = inject(ChatWorkbenchService);
+  private readonly panels = inject(ChatPanelService);
   private readonly workspaceNav = inject(WorkspaceNavService);
   private readonly workspaceCtx = inject(AgentWorkspaceContextService);
 
@@ -72,14 +74,17 @@ export class ChatWorkbenchComponent {
     const list = this.workbench.filteredEntries();
     let chat = 0;
     let background = 0;
+    let channel = 0;
     for (const e of list) {
-      if (e.lane === 'background') {
+      if (e.surface) {
+        channel++;
+      } else if (e.lane === 'background') {
         background++;
       } else {
         chat++;
       }
     }
-    return { all: list.length, chat, background };
+    return { all: list.length, chat, background, channel };
   });
 
   readonly visibleEntries = computed(() => {
@@ -89,8 +94,11 @@ export class ChatWorkbenchComponent {
     if (tab === 'all') {
       return sorted;
     }
+    if (tab === 'channel') {
+      return sorted.filter((e) => !!e.surface);
+    }
     const lane: WorkbenchLane = tab === 'background' ? 'background' : 'chat';
-    return sorted.filter((e) => e.lane === lane);
+    return sorted.filter((e) => !e.surface && e.lane === lane);
   });
 
   readonly displayItems = computed(() =>
@@ -269,6 +277,7 @@ export class ChatWorkbenchComponent {
 
   close(): void {
     this.workbench.closePanel();
+    this.panels.closeLeft();
   }
 
   densityLabel(): string {

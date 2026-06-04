@@ -108,6 +108,7 @@ export interface ChatMessage {
     | 'delegate_card'
     | 'channel_inbound'
     | 'channel_outbound'
+    | 'channel_skipped'
     | 'connection_request'
     | 'probe_signal'
     | 'team_created'
@@ -341,6 +342,22 @@ export class WebSocketService {
       this.currentAgentId.set(null);
       this.syncConnectedSignal();
     }
+  }
+
+  sendChannelMessage(
+    content: string,
+    sessionKey: string,
+    attachments?: Array<{ name: string; path: string; mime_type: string; size: number }>,
+  ): void {
+    const payload: Record<string, unknown> = {
+      type: 'channel_send',
+      content,
+      session_key: sessionKey,
+    };
+    if (attachments?.length) {
+      payload['attachments'] = attachments;
+    }
+    this.sendPayload(payload);
   }
 
   sendMessage(content: string, sessionKey?: string, model?: string): void {

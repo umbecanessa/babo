@@ -19,6 +19,7 @@
            [class.reach-out-row]="msg.type === 'reach_out'"
            [class.channel-inbound-row]="msg.type === 'channel_inbound'"
            [class.channel-outbound-row]="msg.type === 'channel_outbound'"
+           [class.channel-skipped-row]="msg.type === 'channel_skipped'"
            [class.drowsy-row]="msg.type === 'drowsy'"
            [class.agentic-row]="msg.type === 'agentic_start' || msg.type === 'agentic_iteration' || msg.type === 'agentic_complete' || msg.type === 'turn_thinking' || msg.type === 'tool_output_chunk' || msg.type === 'tool_progress' || msg.type === 'browser_navigation' || msg.type === 'copilot_ack' || msg.type === 'ask_user'"
            [class.activity-row]="msg.type === 'activity_status'"
@@ -700,6 +701,15 @@
               @if (msg.subject) {
                 <span class="channel-subject">{{ msg.subject }}</span>
               }
+            </div>
+            <div class="channel-content">{{ msg.content }}</div>
+          </div>
+
+        } @else if (msg.type === 'channel_skipped') {
+          <div class="channel-bubble channel-skipped">
+            <div class="channel-indicator">
+              <span class="channel-icon">⏭</span>
+              <span class="channel-reply-label">skipped on {{ msg.channel }}</span>
             </div>
             <div class="channel-content">{{ msg.content }}</div>
           </div>

@@ -51,6 +51,16 @@ class FileEditRequest(BaseModel):
     replace_all: bool = False
 
 
+class MkdirRequest(BaseModel):
+    path: str
+    recursive: bool = True
+
+
+class FileWriteBytesRequest(BaseModel):
+    path: str
+    content_base64: str
+
+
 # ── Endpoints ─────────────────────────────────────────────────────
 
 
@@ -99,6 +109,51 @@ async def write_file(body: FileWriteRequest):
     return {
         "message": result.text,
         "metadata": result.metadata,
+    }
+
+
+@router.post("/mkdir")
+async def mkdir(body: MkdirRequest):
+    """Create a directory."""
+    from pathlib import Path as P
+
+    if ".." in body.path.replace("\\", "/").split("/"):
+        raise HTTPException(status_code=400, detail="Invalid path")
+
+    dir_path = P(body.path)
+    try:
+        dir_path.mkdir(parents=body.recursive, exist_ok=True)
+    except FileExistsError:
+        if not dir_path.is_dir():
+            raise HTTPException(status_code=400, detail=f"Path exists and is not a directory: {body.path}")
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    return {"message": "Directory created", "path": str(dir_path)}
+
+
+@router.post("/write-bytes")
+async def write_file_bytes(body: FileWriteBytesRequest):
+    """Write binary file content from base64."""
+    import base64
+    from pathlib import Path as P
+
+    if ".." in body.path.replace("\\", "/").split("/"):
+        raise HTTPException(status_code=400, detail="Invalid path")
+
+    file_path = P(body.path)
+    try:
+        data = base64.b64decode(body.content_base64)
+        file_path.parent.mkdir(parents=True, exist_ok=True)
+        file_path.write_bytes(data)
+    except (ValueError, OSError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    return {
+        "message": "File written",
+        "metadata": {"path": str(file_path), "size": len(data), "append": False},
     }
 
 

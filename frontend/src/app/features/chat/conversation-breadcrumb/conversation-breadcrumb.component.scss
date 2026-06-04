@@ -1,0 +1,21 @@
+.conv-crumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 16px 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.conv-crumb-seg {
+  &.current {
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+}
+
+.conv-crumb-sep {
+  opacity: 0.5;
+  user-select: none;
+}

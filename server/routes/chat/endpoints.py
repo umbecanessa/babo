@@ -238,6 +238,33 @@ async def chat_relay(request: Request):
         return JSONResponse({"error": "Agent not loaded"}, status_code=404)
 
     try:
+        from nls.skills.surface_send import is_surface_session_key, send_surface_message
+
+        if is_surface_session_key(session_key):
+            result = await send_surface_message(
+                request.app,
+                runtime,
+                agent_id,
+                session_key,
+                content,
+            )
+            if not result.get("ok"):
+                return JSONResponse(
+                    {"error": result.get("error", "send failed")},
+                    status_code=400,
+                )
+            status = runtime.get_status()
+            nls = _build_nls_metadata(
+                status, signals=status.get("recent_signals", []),
+            )
+            return {
+                "response": content,
+                "agent_id": agent_id,
+                "session_key": session_key,
+                "nls": nls,
+                "channel_send": True,
+            }
+
         history = runtime.load_session_history(session_key=session_key, max_turns=20)
 
         result = await runtime.process_message_async(content, history=history)

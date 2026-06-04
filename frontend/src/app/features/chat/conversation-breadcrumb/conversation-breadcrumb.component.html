@@ -1,0 +1,8 @@
+<nav class="conv-crumb" aria-label="Conversation location">
+  @for (crumb of crumbs; track crumb.label; let last = $last) {
+    <span class="conv-crumb-seg" [class.current]="last">{{ crumb.label }}</span>
+    @if (!last) {
+      <span class="conv-crumb-sep">›</span>
+    }
+  }
+</nav>

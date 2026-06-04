@@ -102,10 +102,13 @@ async def telegram_inbound(agent_id: str, request: Request):
 
     history = runtime.load_session_history(session_key)
 
+    from nls.skills.surface_send import channel_session_metadata
+    session_meta = channel_session_metadata(normalized)
+
     runtime.save_session_history(
         history + [{"role": "user", "content": text or "[media]"}],
         session_key=session_key,
-        metadata={"channel": "telegram", "sender": sender_name},
+        metadata=session_meta,
     )
 
     _broadcast_channel_event(app, agent_id, normalized, response="", direction="inbound")
@@ -151,7 +154,7 @@ async def telegram_inbound(agent_id: str, request: Request):
         if clean_response:
             runtime.save_session_history(
                 history, session_key=session_key,
-                metadata={"channel": "telegram", "sender": sender_name},
+                metadata=session_meta,
             )
             await adapter.send(chat_id, clean_response, agent_id=agent_id)
 

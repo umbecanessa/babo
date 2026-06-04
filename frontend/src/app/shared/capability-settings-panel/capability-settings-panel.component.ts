@@ -52,6 +52,7 @@ export class CapabilitySettingsPanelComponent implements OnInit {
   lanHost = '';
   lanSshUser = '';
   lanSshPort = '';
+  lanSshPassword = '';
   lanProbing = signal(false);
   lanModelFitLoading = signal(false);
 
@@ -202,11 +203,16 @@ export class CapabilitySettingsPanelComponent implements OnInit {
     return u || undefined;
   }
 
-  lanSshOptions(): { user?: string; port?: number } | undefined {
+  lanSshOptions(): { user?: string; port?: number; password?: string } | undefined {
     const user = this.resolvedLanSshUser();
     if (!user) return undefined;
     const port = parseInt(this.lanSshPort.trim(), 10);
-    return { user, port: Number.isFinite(port) && port > 0 ? port : undefined };
+    const password = this.lanSshPassword.trim();
+    return {
+      user,
+      port: Number.isFinite(port) && port > 0 ? port : undefined,
+      password: password || undefined,
+    };
   }
 
   fitLevelLabel(level: string): string {
@@ -220,6 +226,22 @@ export class CapabilitySettingsPanelComponent implements OnInit {
       default:
         return level;
     }
+  }
+
+  fitGpuHeadline(fit: ModelFitSnapshot): string {
+    if (fit.memoryLabel?.trim()) {
+      return `${fit.gpuName} · ${fit.memoryLabel.trim()}`;
+    }
+    const gb = fit.vramGb;
+    const mem =
+      Number.isFinite(gb) && gb > 0
+        ? fit.unifiedMemory
+          ? `${gb} GB unified memory`
+          : `${gb} GB VRAM`
+        : fit.unifiedMemory
+          ? 'Unified memory'
+          : 'VRAM unknown';
+    return `${fit.gpuName} · ${mem}`;
   }
 
   async runLanProbe(): Promise<void> {

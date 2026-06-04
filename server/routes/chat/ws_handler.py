@@ -349,12 +349,16 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
 
             if msg.get("type") == "user_answer":
                 answer = msg.get("content", "").strip()
+                session_key = msg.get("session_key", "websocket:main")
                 if answer:
                     from nls.skills.channel_processing import (
                         try_feed_autonomous_answer,
+                        try_feed_pending_answer,
                     )
 
-                    fed = try_feed_autonomous_answer(agent_id, answer)
+                    fed = try_feed_pending_answer(agent_id, session_key, answer)
+                    if not fed:
+                        fed = try_feed_autonomous_answer(agent_id, answer)
                     if not fed:
                         try:
                             copilot_queue.put_nowait(answer)
@@ -366,6 +370,7 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                             await websocket.send_json({
                                 "type": "user_answer",
                                 "content": answer,
+                                "session_key": session_key,
                             })
                         except Exception:
                             pass
@@ -375,16 +380,63 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                         )
                 continue
 
+            if msg.get("type") == "channel_send":
+                session_key = msg.get("session_key", "")
+                content = msg.get("content", "").strip()
+                attachments = msg.get("attachments") or []
+                if session_key and (content or attachments):
+                    from nls.skills.surface_send import send_surface_message
+
+                    result = await send_surface_message(
+                        app,
+                        runtime,
+                        agent_id,
+                        session_key,
+                        content,
+                        attachments=attachments,
+                    )
+                    await websocket.send_json({
+                        "type": "channel_send_result",
+                        "ok": result.get("ok", False),
+                        "session_key": session_key,
+                        "error": result.get("error"),
+                        "channel": result.get("channel"),
+                    })
+                continue
+
             _ch_type = msg.get("channel_type", "")
             if _ch_type:
                 runtime._channel_type = _ch_type
 
             user_input = msg.get("content", "").strip()
-            if not user_input:
+            if not user_input and not (msg.get("attachments") or []):
                 continue
 
             # Session / thread routing
             session_key = msg.get("session_key", "websocket:main")
+
+            if msg.get("type") == "message":
+                from nls.skills.surface_send import (
+                    is_surface_session_key,
+                    send_surface_message,
+                )
+                if is_surface_session_key(session_key):
+                    result = await send_surface_message(
+                        app,
+                        runtime,
+                        agent_id,
+                        session_key,
+                        user_input,
+                        attachments=msg.get("attachments") or [],
+                    )
+                    await websocket.send_json({
+                        "type": "channel_send_result",
+                        "ok": result.get("ok", False),
+                        "session_key": session_key,
+                        "error": result.get("error"),
+                        "channel": result.get("channel"),
+                    })
+                    continue
             prev_sk = getattr(websocket.state, "session_key", "websocket:main")
             if session_key != prev_sk:
                 if session_key == "websocket:main":

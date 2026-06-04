@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { Observable, from, of } from 'rxjs';
-import { map } from 'rxjs/operators';
+import { Observable, from, of, forkJoin, throwError } from 'rxjs';
+import { map, switchMap, catchError } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 import { PlatformService } from './platform.service';
 
@@ -160,6 +160,74 @@ export class FilesystemService {
     });
   }
 
+  /** Create a directory (optionally recursive). */
+  mkdir(dirPath: string, recursive = true): Observable<{ message: string; path: string }> {
+    if (this.platform.isElectron) {
+      if (nls()?.mkdir) {
+        return from(nls().mkdir(dirPath, recursive) as Promise<void>).pipe(
+          map(() => ({ message: 'Directory created', path: dirPath })),
+        );
+      }
+      return throwError(() => new Error('Folder creation requires a desktop app update'));
+    }
+
+    return this.http.post<{ message: string; path: string }>(`${this.API}/fs/mkdir`, {
+      path: dirPath,
+      recursive,
+    });
+  }
+
+  /** Write binary file from base64 payload. */
+  writeFileBytes(filePath: string, contentBase64: string): Observable<WriteFileResponse> {
+    if (this.platform.isElectron) {
+      if (nls()?.writeFileBytes) {
+        return from(nls().writeFileBytes(filePath, contentBase64) as Promise<void>).pipe(
+          map(() => ({
+            message: 'File written',
+            metadata: { path: filePath, size: 0, append: false },
+          })),
+        );
+      }
+      return throwError(() => new Error('Binary upload requires a desktop app update'));
+    }
+
+    return this.http.post<WriteFileResponse>(`${this.API}/fs/write-bytes`, {
+      path: filePath,
+      content_base64: contentBase64,
+    });
+  }
+
+  /** Upload browser File objects into a workspace directory. */
+  uploadFiles(targetDir: string, files: File[]): Observable<void> {
+    if (!files.length) {
+      return of(undefined);
+    }
+
+    const tasks = files.map((file) => {
+      const rel = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name;
+      const destPath = this.joinPathSegments(targetDir, rel);
+      const parent = destPath.replace(/[/\\][^/\\]+$/, '');
+
+      const write$ = file.type.startsWith('text/') || this.isLikelyTextFile(file.name)
+        ? from(file.text()).pipe(
+            switchMap((content) => this.writeFile(destPath, content)),
+          )
+        : from(file.arrayBuffer()).pipe(
+            switchMap((buf) => this.writeFileBytes(destPath, this.arrayBufferToBase64(buf))),
+          );
+
+      if (parent && parent !== destPath) {
+        return this.mkdir(parent, true).pipe(
+          catchError(() => of(null)),
+          switchMap(() => write$),
+        );
+      }
+      return write$;
+    });
+
+    return forkJoin(tasks).pipe(map(() => undefined));
+  }
+
   /** Get a directory tree (text representation). */
   getTree(path: string, depth = 3, glob = ''): Observable<any> {
     let params = new HttpParams().set('path', path).set('depth', String(depth));
@@ -197,9 +265,40 @@ export class FilesystemService {
     return this.http.get<SearchResult>(`${this.API}/fs/search`, { params });
   }
 
-  /** Join path segments (works on both Windows and Unix). */
-  private joinPath(base: string, name: string): string {
+  /** Join one segment to a base path. */
+  joinPath(base: string, name: string): string {
+    return this.joinPathSegments(base, name);
+  }
+
+  /** Join base + relative path (may contain nested segments). */
+  joinPathSegments(base: string, relative: string): string {
     const sep = base.includes('\\') ? '\\' : '/';
-    return base.endsWith(sep) ? base + name : base + sep + name;
+    const normalized = (relative || '').replace(/\\/g, sep);
+    const parts = normalized.split(sep).filter((p) => p && p !== '.' && p !== '..');
+    let current = base.replace(/[/\\]+$/, '');
+    for (const part of parts) {
+      current = current.endsWith(sep) ? current + part : current + sep + part;
+    }
+    return current;
+  }
+
+  private arrayBufferToBase64(buf: ArrayBuffer): string {
+    const bytes = new Uint8Array(buf);
+    const chunkSize = 0x8000;
+    let binary = '';
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+    }
+    return btoa(binary);
+  }
+
+  private isLikelyTextFile(name: string): boolean {
+    const ext = name.split('.').pop()?.toLowerCase() || '';
+    const textExts = new Set([
+      'txt', 'md', 'json', 'yaml', 'yml', 'xml', 'html', 'htm', 'css', 'scss',
+      'js', 'jsx', 'ts', 'tsx', 'py', 'rb', 'go', 'rs', 'java', 'c', 'cpp', 'h',
+      'cs', 'php', 'sh', 'bat', 'ps1', 'sql', 'toml', 'ini', 'env', 'csv', 'svg',
+    ]);
+    return textExts.has(ext) || !ext;
   }
 }

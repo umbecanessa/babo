@@ -24,7 +24,14 @@ import { ExplorerNode } from '../workspace.models';
 export class WorkspaceExplorerComponent implements OnInit, OnChanges {
   @Input({ required: true }) rootPath = '';
   @Input() activePath = '';
+  @Input() shellOpen = false;
+  @Input() busy = false;
   @Output() fileOpen = new EventEmitter<string>();
+  @Output() createFile = new EventEmitter<void>();
+  @Output() createFolder = new EventEmitter<void>();
+  @Output() uploadFiles = new EventEmitter<void>();
+  @Output() uploadFolder = new EventEmitter<void>();
+  @Output() toggleShell = new EventEmitter<void>();
 
   tree = signal<ExplorerNode[]>([]);
   loading = signal(false);

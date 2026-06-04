@@ -146,6 +146,141 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  min-height: 0;
+}
+
+.chat-workspace {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.conv-nav-desktop {
+  flex-shrink: 0;
+}
+
+.chat-center-column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+
+  > app-run-panel {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 0 20px;
+  }
+}
+
+.conversation-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--glass-border);
+  flex-shrink: 0;
+
+  app-conversation-breadcrumb {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+.nav-rail-toggle {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+
+  &:hover {
+    background: var(--overlay-2);
+    color: var(--text-primary);
+  }
+}
+
+.composer-destination-hint {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  padding: 0 12px 4px;
+  letter-spacing: 0.02em;
+}
+
+.panel-header-btn {
+  position: relative;
+  gap: 4px;
+
+  &.pulse {
+    animation: inbox-pulse 1.5s ease-in-out infinite;
+  }
+}
+
+.panel-header-badge {
+  font-size: 0.6rem;
+  font-weight: 700;
+  background: var(--accent-danger);
+  color: #fff;
+  border-radius: 999px;
+  padding: 0 5px;
+  min-width: 16px;
+  line-height: 1.4;
+}
+
+.left-dock-backdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 44;
+  background: var(--backdrop-scrim);
+}
+
+.mobile-sheet-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--glass-border);
+  flex-shrink: 0;
+}
+
+.mobile-sheet-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 10px 8px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+
+  &.active {
+    color: var(--accent-primary);
+    border-bottom-color: var(--accent-primary);
+  }
+}
+
+.chat-layout.focus-mode {
+  .conv-nav-desktop {
+    display: none;
+  }
+}
+
+@keyframes inbox-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.65; }
+}
+
+@media (max-width: 768px) {
+  .conv-nav-desktop {
+    display: none;
+  }
 }
 
 // --- Offline state ---

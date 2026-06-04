@@ -34,6 +34,11 @@ import {
 } from './model-fit';
 import type { LanSshOptions } from './model-fit-types';
 import {
+  getOllamaStatus,
+  pullOllamaModel,
+  OLLAMA_DOWNLOAD_URL,
+} from './ollama-setup';
+import {
   exportDebugArtifact,
   exportFullDebugBundle,
   listDebugArtifacts,
@@ -138,6 +143,7 @@ export function registerIpcHandlers(
           const lanFit = await modelFitRemote(host, {
             user: sshUser.trim(),
             port: sshOptions?.port,
+            password: sshOptions?.password?.trim() || undefined,
           });
           scan.modelFit = { ...scan.modelFit, lan: toModelFitSnapshot(lanFit) };
         } catch (err) {
@@ -176,6 +182,18 @@ export function registerIpcHandlers(
   ipcMain.handle('capabilities:test-inference', async (_event, url: string, apiKey?: string) => {
     return testInferenceEndpoint(url, apiKey);
   });
+
+  ipcMain.handle('capabilities:ollama-status', async (_event, baseUrl?: string) => {
+    return getOllamaStatus(baseUrl);
+  });
+
+  ipcMain.handle('capabilities:ollama-pull', async (event, modelTag: string) => {
+    return pullOllamaModel(modelTag, (line) => {
+      event.sender.send('capabilities:ollama-pull-progress', line);
+    });
+  });
+
+  ipcMain.handle('capabilities:ollama-download-url', async () => OLLAMA_DOWNLOAD_URL);
 
   ipcMain.handle('capabilities:prefetch-vision', async () => {
     if (!venv.isReady()) {
@@ -360,6 +378,20 @@ export function registerIpcHandlers(
       await permissions.require('filesystem.write', permissions.filesystemScope(filePath));
       await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
       await fs.promises.writeFile(filePath, content, 'utf-8');
+    },
+  );
+
+  ipcMain.handle('fs:mkdir', async (_event, dirPath: string, recursive = true) => {
+    await permissions.require('filesystem.write', permissions.filesystemScope(dirPath));
+    await fs.promises.mkdir(dirPath, { recursive });
+  });
+
+  ipcMain.handle(
+    'fs:writeFileBytes',
+    async (_event, filePath: string, contentBase64: string) => {
+      await permissions.require('filesystem.write', permissions.filesystemScope(filePath));
+      await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+      await fs.promises.writeFile(filePath, Buffer.from(contentBase64, 'base64'));
     },
   );
 

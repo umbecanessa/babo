@@ -638,6 +638,7 @@ class WhatsAppAdapter:
             "attachments": attachments,
             "metadata": {
                 "phone": phone,
+                "jid": phone_jid,
                 "timestamp": msg.get("timestamp", ""),
                 "raw": msg,
             },

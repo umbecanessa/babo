@@ -76,10 +76,12 @@ async def slack_inbound(agent_id: str, request: Request):
     sender_name = normalized["sender_name"]
 
     history = runtime.load_session_history(session_key)
+    from nls.skills.surface_send import channel_session_metadata
+    session_meta = channel_session_metadata(normalized)
     runtime.save_session_history(
         history + [{"role": "user", "content": text or "[empty]"}],
         session_key=session_key,
-        metadata={"channel": "slack", "sender": sender_name},
+        metadata=session_meta,
     )
     broadcast_channel_event(app, agent_id, "slack", normalized, direction="inbound")
 
@@ -107,7 +109,7 @@ async def slack_inbound(agent_id: str, request: Request):
             history.append({"role": "assistant", "content": clean})
             runtime.save_session_history(
                 history, session_key=session_key,
-                metadata={"channel": "slack", "sender": sender_name},
+                metadata=session_meta,
             )
             await adapter.send(
                 channel_id, clean, agent_id=agent_id, thread_ts=thread_ts or None,

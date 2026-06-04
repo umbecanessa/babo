@@ -19,6 +19,7 @@ def _load_adapter_module(skill_dir: str):
 
 
 DiscordAdapter = _load_adapter_module("discord-channel").DiscordAdapter
+discord_setup_gaps = _load_adapter_module("discord-channel").discord_setup_gaps
 SlackAdapter = _load_adapter_module("slack-channel").SlackAdapter
 
 
@@ -76,6 +77,40 @@ def test_discord_blocks_unscoped_guild_channel():
         "mentions": [{"id": "999"}],
     }
     assert adapter.should_respond(msg, agent_id="agent-1") is False
+
+
+def test_discord_explain_policy_block_mention_required():
+    adapter = _discord_adapter({
+        "dm_policy": "disabled",
+        "scoped_channels": {
+            "channels": {
+                "555": {"id": "555", "name": "general", "effective_enabled": True},
+            },
+            "guilds": {},
+        },
+        "groups": {"555": {"require_mention": True, "allow_from": ["*"]}},
+    })
+    msg = {
+        "author": {"id": "222", "username": "user"},
+        "channel_id": "555",
+        "guild_id": "777",
+        "content": "hello without mention",
+        "mentions": [],
+    }
+    assert adapter.should_respond(msg, agent_id="agent-1") is False
+    assert adapter.explain_policy_block(msg, agent_id="agent-1") == "mention required or sender not allowed"
+
+
+def test_discord_setup_gaps_after_token_only():
+    cfg = {
+        "bot_token": "x",
+        "enabled": True,
+        "dm_policy": "disabled",
+        "scoped_channels": {"channels": {}, "guilds": {}},
+    }
+    gaps = discord_setup_gaps(cfg)
+    assert "owner_identity" in gaps
+    assert "at least one channel listening in scope" in gaps
 
 
 def test_slack_normalize_app_mention():

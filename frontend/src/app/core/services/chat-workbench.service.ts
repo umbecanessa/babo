@@ -59,6 +59,8 @@ export interface WorkbenchEntry {
   /** Clickable file chips (read/write/edit/list_dir, …) */
   filePaths?: string[];
   chips?: ActivityChip[];
+  /** External surface (discord, telegram, …) when work originated from a channel. */
+  surface?: string;
 }
 
 const MAX_ENTRIES = 250;
@@ -67,6 +69,21 @@ const DETAIL_KEEP = 6000;
 
 function newId(): string {
   return `wb-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function surfaceFromRuntimeMsg(msg: any): string | undefined {
+  const src = typeof msg?.source === 'string' ? msg.source : '';
+  if (src.startsWith('user:channel:')) {
+    return src.split(':')[2] || undefined;
+  }
+  if (src.startsWith('channel:')) {
+    return src.split(':')[1] || undefined;
+  }
+  const sk = msg?.session_key || msg?.sessionKey || '';
+  if (sk && sk !== 'websocket:main' && !sk.startsWith('websocket:')) {
+    return sk.split(':')[0] || undefined;
+  }
+  return undefined;
 }
 
 /**
@@ -404,6 +421,8 @@ export class ChatWorkbenchService {
     const dlgNum = delegateNumberFromMessage(msg);
     const lane: WorkbenchLane = msg.autonomous === true ? 'background' : 'chat';
     const corrNs = isSubAgent ? `sa${dlgNum || 0}-` : '';
+    const surface = surfaceFromRuntimeMsg(msg);
+    const surfaceFields = surface ? { surface } : {};
 
     switch (t) {
       case 'agentic_start':
@@ -417,6 +436,7 @@ export class ChatWorkbenchService {
             : `Up to ${msg.max_steps || 15} steps`,
           status: 'running',
           toolLabel: 'Task',
+          ...surfaceFields,
         });
         break;
 
@@ -435,6 +455,7 @@ export class ChatWorkbenchService {
             subtitle: bgSubtitle,
             status: 'running',
             toolLabel: 'Task',
+            ...surfaceFields,
           });
           break;
         }
@@ -453,6 +474,7 @@ export class ChatWorkbenchService {
             status: 'ok',
             toolLabel: 'Step',
             delegateNumber: dlgNum,
+            ...surfaceFields,
           });
         }
         for (const tc of toolCalls) {
@@ -473,6 +495,7 @@ export class ChatWorkbenchService {
           subtitle: question.slice(0, 200) || 'Agent needs input to continue',
           status: 'running',
           toolLabel: 'Input',
+          ...surfaceFields,
         });
         break;
       }

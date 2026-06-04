@@ -524,10 +524,13 @@ class TelegramAdapter:
 
             history = runtime.load_session_history(session_key)
 
+            from nls.skills.surface_send import channel_session_metadata
+            session_meta = channel_session_metadata(normalized)
+
             runtime.save_session_history(
                 history + [{"role": "user", "content": text or "[media]"}],
                 session_key=session_key,
-                metadata={"channel": "telegram", "sender": sender_name},
+                metadata=session_meta,
             )
 
             from nls.skills.channel_processing import (
@@ -562,7 +565,7 @@ class TelegramAdapter:
                 history.append({"role": "assistant", "content": clean_response})
                 runtime.save_session_history(
                     history, session_key=session_key,
-                    metadata={"channel": "telegram", "sender": sender_name},
+                    metadata=session_meta,
                 )
                 await self.send(chat_id, clean_response, agent_id=agent_id)
 

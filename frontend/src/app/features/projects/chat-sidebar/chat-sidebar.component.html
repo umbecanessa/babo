@@ -1,21 +1,29 @@
 <div class="chat-sidebar">
-  <!-- Header -->
   <div class="sidebar-header">
     <select class="thread-select" [ngModel]="activeThread()" (ngModelChange)="selectThread($event)">
-      @for (thread of threads(); track thread.id) {
-        <option [value]="thread.id">{{ thread.label }}</option>
+      @for (thread of websocketThreads(); track thread.key) {
+        <option [value]="thread.key">{{ thread.label }}</option>
       }
     </select>
+    <button class="icon-btn" type="button" title="New branch" (click)="createNewBranch()">+</button>
     <button class="close-btn" (click)="close.emit()" title="Close">&times;</button>
   </div>
 
-  <!-- Messages -->
+  @if (surfaceThreadCount() > 0) {
+    <a class="surface-banner" [routerLink]="['/chat', agentId]">
+      {{ surfaceThreadCount() }} channel thread{{ surfaceThreadCount() === 1 ? '' : 's' }} — open in Chat
+    </a>
+  }
+
   <div class="messages">
     @if (loadingHistory()) {
       <div class="empty-chat">Loading conversation...</div>
-    } @else if (messages().length === 0) {
+    } @else if (messages().length === 0 && !streamingText()) {
       <div class="empty-chat">
-        No messages yet. Chat with the orchestrator &mdash; project context is injected automatically.
+        Private desk chat — project context is injected automatically.
+        @if (composerHint().hint) {
+          <span class="composer-hint">{{ composerHint().hint }}</span>
+        }
       </div>
     } @else {
       @for (msg of messages(); track $index) {
@@ -26,21 +34,28 @@
           }
         </div>
       }
+      @if (streamingText()) {
+        <div class="msg msg-assistant">
+          <div class="msg-bubble streaming" [innerHTML]="streamingText() | markdown"></div>
+        </div>
+      }
     }
   </div>
 
-  <!-- Input -->
   <div class="sidebar-input">
-    <input
-      class="chat-input"
-      [ngModel]="input()"
-      (ngModelChange)="updateInput($event)"
-      placeholder="Message..."
-      (keydown)="onKeydown($event)"
-      [disabled]="sending()"
-    />
-    <button class="send-btn" (click)="send()" [disabled]="!input().trim() || sending()">
-      @if (sending()) { &hellip; } @else { Send }
-    </button>
+    <span class="input-hint">{{ composerHint().hint }}</span>
+    <div class="input-row">
+      <input
+        class="chat-input"
+        [ngModel]="input()"
+        (ngModelChange)="updateInput($event)"
+        [placeholder]="composerHint().placeholder"
+        (keydown)="onKeydown($event)"
+        [disabled]="sending()"
+      />
+      <button class="send-btn" (click)="send()" [disabled]="!input().trim() || sending()">
+        @if (sending()) { &hellip; } @else { Send }
+      </button>
+    </div>
   </div>
 </div>

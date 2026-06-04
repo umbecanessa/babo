@@ -19,6 +19,8 @@ import type {
   CapabilityProfile,
   CapabilityScan,
   CapabilityTier,
+  ModelFitRecommendationRow,
+  ModelFitSnapshot,
 } from './capability-profile.model';
 import {
   formatBackendReachabilityMessage,
@@ -53,6 +55,7 @@ import { ToastService } from '../../shared/toast/toast.service';
 import { Day1CoachService } from '../../shared/onboarding/day1-coach.service';
 import { AnalyticsService } from '../../core/services/analytics.service';
 import { setupStepName } from '../../core/analytics/setup-steps';
+import { openExternalUrl } from '../../core/services/billing-return.util';
 
 interface SetupConfig {
   inferenceUrl: string;
@@ -67,6 +70,14 @@ interface ExpRow {
   label: string;
   value: string;
   ok: boolean;
+}
+
+interface OllamaSetupStatus {
+  installed: boolean;
+  running: boolean;
+  url: string;
+  message: string;
+  models: string[];
 }
 
 @Component({
@@ -180,10 +191,22 @@ export class SetupComponent implements OnInit, OnDestroy {
   /** SSH user for remote GPU scan (e.g. ubuntu). Host can be user@ip or ip + this field. */
   lanSshUser = '';
   lanSshPort = '';
+  /** In-memory only — never persisted to disk */
+  lanSshPassword = '';
   lanGpuSecret = '';
   lanProbing = signal(false);
   lanModelFitLoading = signal(false);
   showLanAdvanced = signal(false);
+  showLocalModelSetup = signal(false);
+  showLanModelGuide = signal(false);
+  setupModel = signal<ModelFitRecommendationRow | null>(null);
+  setupModelTarget = signal<'local' | 'lan'>('local');
+  selectedLocalModelId = signal<string | null>(null);
+  ollamaStatus = signal<OllamaSetupStatus | null>(null);
+  ollamaStatusLoading = signal(false);
+  ollamaPulling = signal(false);
+  ollamaPullProgress = signal('');
+  ollamaPullError = signal<string | null>(null);
 
   ambientVisionOn = signal(false);
   codeSearchOn = signal(true);
@@ -1042,13 +1065,15 @@ export class SetupComponent implements OnInit, OnDestroy {
     return u || undefined;
   }
 
-  lanSshOptions(): { user?: string; port?: number } | undefined {
+  lanSshOptions(): { user?: string; port?: number; password?: string } | undefined {
     const user = this.resolvedLanSshUser();
     if (!user) return undefined;
     const port = parseInt(this.lanSshPort.trim(), 10);
+    const password = this.lanSshPassword.trim();
     return {
       user,
       port: Number.isFinite(port) && port > 0 ? port : undefined,
+      password: password || undefined,
     };
   }
 
@@ -1143,11 +1168,148 @@ export class SetupComponent implements OnInit, OnDestroy {
     }
   }
 
+  fitMemoryLabel(fit: ModelFitSnapshot): string {
+    if (fit.memoryLabel?.trim()) return fit.memoryLabel.trim();
+    const gb = fit.vramGb;
+    if (Number.isFinite(gb) && gb > 0) {
+      return fit.unifiedMemory ? `${gb} GB unified memory` : `${gb} GB VRAM`;
+    }
+    return fit.unifiedMemory ? 'Unified memory' : 'VRAM unknown';
+  }
+
+  fitGpuHeadline(fit: ModelFitSnapshot): string {
+    return `${fit.gpuName} · ${this.fitMemoryLabel(fit)}`;
+  }
+
+  isSelectedLocalModel(modelId: string): boolean {
+    return this.selectedLocalModelId() === modelId;
+  }
+
+  async openLocalModelSetup(model: ModelFitRecommendationRow): Promise<void> {
+    this.setupModel.set(model);
+    this.setupModelTarget.set('local');
+    this.showLocalModelSetup.set(true);
+    this.ollamaPullProgress.set('');
+    this.ollamaPullError.set(null);
+    await this.refreshOllamaStatus();
+  }
+
+  openLanModelGuide(model: ModelFitRecommendationRow): void {
+    this.setupModel.set(model);
+    this.setupModelTarget.set('lan');
+    this.showLanModelGuide.set(true);
+  }
+
+  closeLocalModelSetup(): void {
+    this.showLocalModelSetup.set(false);
+  }
+
+  closeLanModelGuide(): void {
+    this.showLanModelGuide.set(false);
+  }
+
+  async refreshOllamaStatus(): Promise<void> {
+    this.ollamaStatusLoading.set(true);
+    try {
+      const status = (await this.nls().capabilities.getOllamaStatus()) as OllamaSetupStatus;
+      this.ollamaStatus.set(status);
+    } catch {
+      this.ollamaStatus.set(null);
+    } finally {
+      this.ollamaStatusLoading.set(false);
+    }
+  }
+
+  async openOllamaDownload(): Promise<void> {
+    try {
+      const url = (await this.nls().capabilities.getOllamaDownloadUrl()) as string;
+      openExternalUrl(url);
+    } catch {
+      openExternalUrl('https://ollama.com/download');
+    }
+  }
+
+  setupModelAlreadyPulled(): boolean {
+    const model = this.setupModel();
+    const status = this.ollamaStatus();
+    if (!model || !status?.models?.length) return false;
+    const tag = model.modelId.trim().toLowerCase();
+    return status.models.some((m) => {
+      const name = m.trim().toLowerCase();
+      return name === tag || name.startsWith(`${tag}:`);
+    });
+  }
+
+  async pullSetupModel(): Promise<void> {
+    const model = this.setupModel();
+    if (!model || this.ollamaPulling()) return;
+    this.ollamaPulling.set(true);
+    this.ollamaPullProgress.set('');
+    this.ollamaPullError.set(null);
+    try {
+      const result = await this.nls().capabilities.pullOllamaModel(
+        model.modelId,
+        (line: string) => {
+          this.ollamaPullProgress.update((prev) => {
+            const next = prev ? `${prev}\n${line}` : line;
+            const lines = next.split('\n');
+            return lines.slice(-4).join('\n');
+          });
+        },
+      );
+      if (!result.ok) {
+        this.ollamaPullError.set(result.message);
+      } else {
+        await this.refreshOllamaStatus();
+      }
+    } catch (err: any) {
+      this.ollamaPullError.set(err?.message || 'Download failed');
+    } finally {
+      this.ollamaPulling.set(false);
+    }
+  }
+
+  confirmLocalModelSetup(): void {
+    const model = this.setupModel();
+    if (!model) return;
+    this.selectedLocalModelId.set(model.modelId);
+    const p = this.profile();
+    if (p) {
+      p.inference.tier = 'self_local';
+      p.inference.url = 'http://127.0.0.1:11434';
+      p.inference.model = model.modelId;
+      p.inference.reason = `You chose ${model.displayName} for this PC`;
+      this.profile.set({ ...p });
+      this.applyProfileToUi(p);
+    }
+    this.showLocalModelSetup.set(false);
+  }
+
+  openThinkingLocalSetup(): void {
+    const p = this.profile();
+    const fromProfile = p?.inference.model?.trim();
+    const fit = this.localModelFit();
+    const rec =
+      fit?.recommendations.find((m) => m.modelId === fromProfile) ??
+      fit?.recommendations.find((m) => m.modelId === this.selectedLocalModelId()) ??
+      fit?.recommendations[0];
+    if (rec) {
+      void this.openLocalModelSetup(rec);
+    }
+  }
+
   async applyRecommendationsAndContinue(): Promise<void> {
     const s = this.scan();
     if (!s) return;
     const gpuSecret = this.lanGpuSecret.trim() || this.config.gpuWorkerSecret || '';
     const recommended = await this.nls().capabilities.recommend(s, gpuSecret);
+    const picked = this.selectedLocalModelId()?.trim();
+    if (picked) {
+      recommended.inference.tier = 'self_local';
+      recommended.inference.url = 'http://127.0.0.1:11434';
+      recommended.inference.model = picked;
+      recommended.inference.reason = `You chose ${picked} for this PC`;
+    }
     this.profile.set(recommended);
     this.applyProfileToUi(recommended);
     if (recommended.inference.tier === 'self_lan') {

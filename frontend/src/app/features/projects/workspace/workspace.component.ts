@@ -7,25 +7,28 @@ import {
   ViewChild,
   signal,
   HostListener,
+  ElementRef,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FilesystemService } from '../../../core/services/filesystem.service';
 import { ToastService } from '../../../shared/toast/toast.service';
 import { WorkspaceExplorerComponent } from './workspace-explorer/workspace-explorer.component';
 import { WorkspaceEditorComponent } from './workspace-editor/workspace-editor.component';
+import { WorkspaceTerminalComponent } from './workspace-terminal/workspace-terminal.component';
 import { EditorTab } from './workspace.models';
 import { AgentWorkspaceContextService } from '../../../core/services/agent-workspace-context.service';
 import {
   buildWorkspaceFilePathCandidates,
   isAbsoluteFilesystemPath,
   resolveAgentWorkspacePath,
+  sanitizeWorkspaceEntryName,
 } from './workspace-path.util';
 import { languageFromFileName } from './language.util';
 
 @Component({
   selector: 'app-workspace',
   standalone: true,
-  imports: [CommonModule, WorkspaceExplorerComponent, WorkspaceEditorComponent],
+  imports: [CommonModule, WorkspaceExplorerComponent, WorkspaceEditorComponent, WorkspaceTerminalComponent],
   templateUrl: './workspace.component.html',
   styleUrl: './workspace.component.scss',
 })
@@ -35,11 +38,16 @@ export class WorkspaceComponent implements OnInit, OnChanges {
   @Input() initialFilePath = '';
 
   @ViewChild(WorkspaceEditorComponent) editorPanel?: WorkspaceEditorComponent;
+  @ViewChild(WorkspaceExplorerComponent) explorerPanel?: WorkspaceExplorerComponent;
+  @ViewChild('fileUploadInput') fileUploadInput?: ElementRef<HTMLInputElement>;
+  @ViewChild('folderUploadInput') folderUploadInput?: ElementRef<HTMLInputElement>;
 
   rootPath = signal('');
   tabs = signal<EditorTab[]>([]);
   activePath = signal('');
   explorerWidth = signal(260);
+  shellOpen = signal(false);
+  uploading = signal(false);
 
   private resizing = false;
   private resizeStartX = 0;
@@ -242,6 +250,83 @@ export class WorkspaceComponent implements OnInit, OnChanges {
       error: (err) => {
         const detail = err?.error?.detail || err?.message || 'Failed to save file';
         this.toast.show(detail, 'error');
+      },
+    });
+  }
+
+  toggleShell(): void {
+    this.shellOpen.update((v) => !v);
+  }
+
+  promptNewFile(): void {
+    const name = window.prompt('New file name', 'untitled.txt');
+    const safe = sanitizeWorkspaceEntryName(name || '');
+    if (!safe) {
+      if (name) this.toast.show('Invalid file name', 'error');
+      return;
+    }
+    const path = this.fs.joinPath(this.rootPath(), safe);
+    this.fs.writeFile(path, '').subscribe({
+      next: () => {
+        this.explorerPanel?.refresh();
+        this.openFile(path);
+        this.toast.show('File created', 'info');
+      },
+      error: (err) => {
+        this.toast.show(err?.error?.detail || err?.message || 'Failed to create file', 'error');
+      },
+    });
+  }
+
+  promptNewFolder(): void {
+    const name = window.prompt('New folder name', 'newfolder');
+    const safe = sanitizeWorkspaceEntryName(name || '');
+    if (!safe) {
+      if (name) this.toast.show('Invalid folder name', 'error');
+      return;
+    }
+    const path = this.fs.joinPath(this.rootPath(), safe);
+    this.fs.mkdir(path, true).subscribe({
+      next: () => {
+        this.explorerPanel?.refresh();
+        this.toast.show('Folder created', 'info');
+      },
+      error: (err) => {
+        this.toast.show(err?.error?.detail || err?.message || 'Failed to create folder', 'error');
+      },
+    });
+  }
+
+  triggerFileUpload(): void {
+    this.fileUploadInput?.nativeElement.click();
+  }
+
+  triggerFolderUpload(): void {
+    this.folderUploadInput?.nativeElement.click();
+  }
+
+  onFilesSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const files = input.files ? Array.from(input.files) : [];
+    input.value = '';
+    if (!files.length) return;
+    this.uploadSelectedFiles(files);
+  }
+
+  private uploadSelectedFiles(files: File[]): void {
+    const root = this.rootPath();
+    if (!root) return;
+
+    this.uploading.set(true);
+    this.fs.uploadFiles(root, files).subscribe({
+      next: () => {
+        this.uploading.set(false);
+        this.explorerPanel?.refresh();
+        this.toast.show(`Uploaded ${files.length} item${files.length === 1 ? '' : 's'}`, 'info');
+      },
+      error: (err) => {
+        this.uploading.set(false);
+        this.toast.show(err?.error?.detail || err?.message || 'Upload failed', 'error');
       },
     });
   }

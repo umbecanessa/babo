@@ -69,6 +69,11 @@
       flex: 0;
     }
 
+    .password-input {
+      flex: 1;
+      min-width: 100%;
+    }
+
     &.actions {
       align-items: center;
     }

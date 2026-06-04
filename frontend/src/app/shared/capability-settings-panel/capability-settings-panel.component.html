@@ -39,6 +39,16 @@
         <input type="text" [(ngModel)]="lanSshUser" placeholder="SSH user" />
         <input type="text" [(ngModel)]="lanSshPort" placeholder="22" class="port-input" />
       </div>
+      <div class="form-row">
+        <input
+          type="password"
+          [(ngModel)]="lanSshPassword"
+          placeholder="SSH password (optional)"
+          autocomplete="off"
+          class="password-input"
+        />
+      </div>
+      <p class="panel-muted ssh-password-hint">Password is used only for this scan — not saved.</p>
       <div class="form-row actions">
         <button type="button" class="link-btn" (click)="runLanProbe()" [disabled]="lanProbing() || !lanHost.trim()">
           {{ lanProbing() ? 'Probing…' : 'Find services' }}
@@ -54,7 +64,7 @@
       </div>
       @if (lanModelFit(); as lanFit) {
         <ul class="model-fit-list compact">
-          <li class="gpu-line">{{ lanFit.gpuName }} · {{ lanFit.vramGb }} GB VRAM</li>
+          <li class="gpu-line">{{ fitGpuHeadline(lanFit) }}</li>
           @if (lanFit.error) {
             <li class="warn">{{ lanFit.error }}</li>
           }

@@ -100,7 +100,7 @@ const nlsDesktopApi = {
     probeLan: (
       host: string,
       gpuWorkerSecret?: string,
-      sshOptions?: { user?: string; port?: number },
+      sshOptions?: { user?: string; port?: number; password?: string },
       preserveModelFit?: { local?: unknown; lan?: unknown },
     ): Promise<any> =>
       ipcRenderer.invoke(
@@ -116,7 +116,7 @@ const nlsDesktopApi = {
 
     modelFitRemote: (
       host: string,
-      sshOptions?: { user?: string; port?: number },
+      sshOptions?: { user?: string; port?: number; password?: string },
     ): Promise<any> =>
       ipcRenderer.invoke('capabilities:model-fit-remote', host, sshOptions),
 
@@ -134,6 +134,29 @@ const nlsDesktopApi = {
 
     applyProfile: (profile: any): Promise<any> =>
       ipcRenderer.invoke('capabilities:apply-profile', profile),
+
+    getOllamaStatus: (baseUrl?: string): Promise<any> =>
+      ipcRenderer.invoke('capabilities:ollama-status', baseUrl),
+
+    pullOllamaModel: (
+      modelTag: string,
+      onProgress?: (line: string) => void,
+    ): Promise<{ ok: boolean; message: string }> => {
+      const listener = (_: unknown, line: string) => onProgress?.(line);
+      if (onProgress) {
+        ipcRenderer.on('capabilities:ollama-pull-progress', listener);
+      }
+      return ipcRenderer
+        .invoke('capabilities:ollama-pull', modelTag)
+        .finally(() => {
+          if (onProgress) {
+            ipcRenderer.removeListener('capabilities:ollama-pull-progress', listener);
+          }
+        });
+    },
+
+    getOllamaDownloadUrl: (): Promise<string> =>
+      ipcRenderer.invoke('capabilities:ollama-download-url'),
   },
 
   // ─── Runtime (Agent runtime process) ──────────────────────────
@@ -194,6 +217,12 @@ const nlsDesktopApi = {
 
   writeFile: (filePath: string, content: string): Promise<void> =>
     ipcRenderer.invoke('fs:writeFile', filePath, content),
+
+  mkdir: (dirPath: string, recursive?: boolean): Promise<void> =>
+    ipcRenderer.invoke('fs:mkdir', dirPath, recursive ?? true),
+
+  writeFileBytes: (filePath: string, contentBase64: string): Promise<void> =>
+    ipcRenderer.invoke('fs:writeFileBytes', filePath, contentBase64),
 
   readDir: (
     dirPath: string,

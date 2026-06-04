@@ -44,4 +44,6 @@ export interface ModelFitResult {
 export interface LanSshOptions {
   user?: string;
   port?: number;
+  /** Optional — used when SSH keys are not set up on this PC */
+  password?: string;
 }
