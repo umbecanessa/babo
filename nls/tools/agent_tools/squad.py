@@ -266,3 +266,159 @@ class SquadTool:
 
 
 class SquadEscalateTool:
+    """Member → lead escalation (wake lead with structured reason)."""
+
+    def __init__(self, squad_manager: Any, caller_agent_id: str) -> None:
+        self._sm = squad_manager
+        self._caller = caller_agent_id
+
+    @property
+    def name(self) -> str:
+        return "squad_escalate"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Escalate to your squad lead when blocked by trust, policy, or an incident.\n"
+            "Members only — the lead should use squad() or owner channels instead."
+        )
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "required": ["reason"],
+            "properties": {
+                "reason": {
+                    "type": "string",
+                    "description": "Short escalation reason (e.g. policy, tool_denied, incident).",
+                },
+                "context": {
+                    "type": "string",
+                    "description": "Optional detail for the lead (what happened, what you need).",
+                },
+            },
+        }
+
+    async def execute(self, **kwargs: Any) -> ToolResult:
+        import json
+
+        reason = (kwargs.get("reason") or "").strip()
+        if not reason:
+            return ToolResult(content="reason is required", is_error=True)
+        try:
+            result = self._sm.escalate(
+                self._caller,
+                reason=reason,
+                context=(kwargs.get("context") or "").strip(),
+            )
+            return ToolResult(content=json.dumps(result, indent=2))
+        except Exception as exc:
+            logger.warning("squad_escalate failed: %s", exc, exc_info=True)
+            return ToolResult(content=str(exc), is_error=True)
+
+
+class SquadMessageTool:
+    """Internal squad peer messaging."""
+
+    def __init__(self, squad_manager: Any, caller_agent_id: str) -> None:
+        self._sm = squad_manager
+        self._caller = caller_agent_id
+
+    @property
+    def name(self) -> str:
+        return "squad_message"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Send an internal note to another squad member or broadcast to the squad.\n"
+            "High/urgent priority may wake idle targets. Not a replacement for Discord."
+        )
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "required": ["message"],
+            "properties": {
+                "message": {"type": "string", "description": "Message body."},
+                "to_agent_id": {
+                    "type": "string",
+                    "description": "Target member agent ID; omit to broadcast to all other members.",
+                },
+                "priority": {
+                    "type": "string",
+                    "enum": ["normal", "high", "urgent"],
+                    "description": "Delivery priority (high/urgent may wake idle targets).",
+                },
+            },
+        }
+
+    async def execute(self, **kwargs: Any) -> ToolResult:
+        import json
+
+        message = (kwargs.get("message") or "").strip()
+        if not message:
+            return ToolResult(content="message is required", is_error=True)
+        try:
+            result = self._sm.squad_message(
+                self._caller,
+                message=message,
+                to_agent_id=(kwargs.get("to_agent_id") or "").strip(),
+                priority=(kwargs.get("priority") or "normal").strip(),
+            )
+            return ToolResult(content=json.dumps(result, indent=2))
+        except Exception as exc:
+            logger.warning("squad_message failed: %s", exc, exc_info=True)
+            return ToolResult(content=str(exc), is_error=True)
+
+
+class SquadReportDoneTool:
+    """Member reports completion of an approved squad todo."""
+
+    def __init__(self, squad_manager: Any, caller_agent_id: str) -> None:
+        self._sm = squad_manager
+        self._caller = caller_agent_id
+
+    @property
+    def name(self) -> str:
+        return "squad_report_done"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Mark an approved squad todo complete and notify the lead.\n"
+            "Use after finishing work assigned from the squad inbox."
+        )
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "required": ["todo_id"],
+            "properties": {
+                "todo_id": {"type": "string", "description": "Todo ID to mark done."},
+                "squad_id": {
+                    "type": "string",
+                    "description": "Squad ID (optional if you belong to one).",
+                },
+            },
+        }
+
+    async def execute(self, **kwargs: Any) -> ToolResult:
+        import json
+
+        todo_id = (kwargs.get("todo_id") or "").strip()
+        if not todo_id:
+            return ToolResult(content="todo_id is required", is_error=True)
+        try:
+            result = self._sm.report_done(
+                self._caller,
+                todo_id=todo_id,
+                squad_id=(kwargs.get("squad_id") or "").strip(),
+            )
+            return ToolResult(content=json.dumps(result, indent=2))
+        except Exception as exc:
+            logger.warning("squad_report_done failed: %s", exc, exc_info=True)
+            return ToolResult(content=str(exc), is_error=True)
