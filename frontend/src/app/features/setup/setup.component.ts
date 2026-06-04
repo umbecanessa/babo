@@ -48,7 +48,7 @@ import {
 import { ApiKeyService } from '../../core/services/api-key.service';
 import { BillingService } from '../../core/services/billing.service';
 import { AgentModelService } from '../../core/services/agent-model.service';
-import { isPaidOrComp } from '../../core/models/cloud-subscription.model';
+import { isPaidOrComp, CLOUD_BASIC_PRICE_AMOUNT } from '../../core/models/cloud-subscription.model';
 import { ToastService } from '../../shared/toast/toast.service';
 import { Day1CoachService } from '../../shared/onboarding/day1-coach.service';
 import { AnalyticsService } from '../../core/services/analytics.service';
@@ -78,6 +78,7 @@ interface ExpRow {
 })
 /** Screen: 0 welcome → 1 prepare → 2 device → 3 thinking → 4 extras → [5 placement] → 6 sign-in → 7 billing? → 8 ready → 9 name */
 export class SetupComponent implements OnInit, OnDestroy {
+  readonly cloudBasicPriceAmount = CLOUD_BASIC_PRICE_AMOUNT;
   readonly decisionSteps = [
     { id: 'thinking', label: 'Thinking' },
     { id: 'features', label: 'Features' },
@@ -176,8 +177,12 @@ export class SetupComponent implements OnInit, OnDestroy {
   scan = signal<CapabilityScan | null>(null);
   profile = signal<CapabilityProfile | null>(null);
   lanHost = '';
+  /** SSH user for remote GPU scan (e.g. ubuntu). Host can be user@ip or ip + this field. */
+  lanSshUser = '';
+  lanSshPort = '';
   lanGpuSecret = '';
   lanProbing = signal(false);
+  lanModelFitLoading = signal(false);
   showLanAdvanced = signal(false);
 
   ambientVisionOn = signal(false);
@@ -212,7 +217,17 @@ export class SetupComponent implements OnInit, OnDestroy {
     return -1;
   });
 
+  localModelFit = computed(() => this.scan()?.modelFit?.local ?? null);
+  lanModelFit = computed(() => this.scan()?.modelFit?.lan ?? null);
+
   deviceTagline = computed(() => {
+    const fit = this.localModelFit();
+    if (fit?.localViable && fit.recommendations[0]) {
+      return `This PC can run ${fit.recommendations[0].displayName} locally.`;
+    }
+    if (fit && !fit.localViable) {
+      return 'Local chat models are a tight fit — Babo Cloud is recommended.';
+    }
     const vram = this.scan()?.device.vramGb ?? 0;
     if (vram >= 6) {
       return 'Good for running helpers on this computer.';
@@ -987,7 +1002,20 @@ export class SetupComponent implements OnInit, OnDestroy {
     this.scanLoading.set(true);
     try {
       const scan = await this.nls().capabilities.scanDevice();
-      this.scan.set({ ...scan, lan: [] });
+      const prev = this.scan();
+      this.scan.set({
+        ...scan,
+        lan: [],
+        modelFit: {
+          local: scan.modelFit?.local ?? prev?.modelFit?.local,
+          lan: prev?.modelFit?.lan,
+        },
+      });
+      if (scan.modelFit?.local?.localViable) {
+        this.recommendedBrainTier = 'self_local';
+      } else if (scan.modelFit?.local && !scan.modelFit.local.localViable) {
+        this.recommendedBrainTier = 'hosted_babo';
+      }
       const vram = scan.device?.vramGb ?? 0;
       this.analytics.track('setup_device_scanned', {
         ok: true,
@@ -1005,20 +1033,52 @@ export class SetupComponent implements OnInit, OnDestroy {
     }
   }
 
+  resolvedLanSshUser(): string | undefined {
+    const host = this.lanHost.trim();
+    if (host.includes('@')) {
+      return host.split('@')[0]?.trim() || undefined;
+    }
+    const u = this.lanSshUser.trim();
+    return u || undefined;
+  }
+
+  lanSshOptions(): { user?: string; port?: number } | undefined {
+    const user = this.resolvedLanSshUser();
+    if (!user) return undefined;
+    const port = parseInt(this.lanSshPort.trim(), 10);
+    return {
+      user,
+      port: Number.isFinite(port) && port > 0 ? port : undefined,
+    };
+  }
+
   async runLanProbe(): Promise<void> {
     if (!this.lanHost.trim()) return;
     this.lanProbing.set(true);
     const secret = this.lanGpuSecret.trim();
     try {
+      const prev = this.scan();
       const full = (await this.nls().capabilities.probeLan(
         this.lanHost.trim(),
         secret,
+        this.lanSshOptions(),
+        prev?.modelFit,
       )) as CapabilityScan;
-      const device = this.scan()?.device ?? full.device;
-      this.scan.set({ ...full, device });
+      const device = prev?.device ?? full.device;
+      this.scan.set({
+        ...full,
+        device,
+        modelFit: {
+          local: prev?.modelFit?.local ?? full.modelFit?.local,
+          lan: full.modelFit?.lan ?? prev?.modelFit?.lan,
+        },
+      });
       if (
         full.lan.some((s) => s.kind === 'inference' && s.healthy && s.port === 8000)
       ) {
+        this.recommendedBrainTier = 'self_lan';
+      }
+      if (full.modelFit?.lan?.localViable) {
         this.recommendedBrainTier = 'self_lan';
       }
       if (secret) {
@@ -1027,6 +1087,59 @@ export class SetupComponent implements OnInit, OnDestroy {
       }
     } finally {
       this.lanProbing.set(false);
+    }
+  }
+
+  async runLanModelFitOnly(): Promise<void> {
+    if (!this.lanHost.trim() || !this.resolvedLanSshUser()) return;
+    this.lanModelFitLoading.set(true);
+    try {
+      const snap = await this.nls().capabilities.modelFitRemote(
+        this.lanHost.trim(),
+        this.lanSshOptions(),
+      );
+      const prev = this.scan();
+      if (prev) {
+        this.scan.set({
+          ...prev,
+          modelFit: { ...prev.modelFit, lan: snap },
+        });
+      } else {
+        this.scan.set({
+          scannedAt: new Date().toISOString(),
+          device: {
+            platform: 'win32',
+            ramGb: 0,
+            vramGb: snap.vramGb,
+            gpuName: snap.gpuName,
+            hasCuda: true,
+            hasMps: false,
+            hasMlxVlm: false,
+          },
+          lan: [],
+          modelFit: { lan: snap },
+        });
+      }
+      if (snap?.localViable) {
+        this.recommendedBrainTier = 'self_lan';
+      }
+    } catch (err: any) {
+      this.setupError.set(err?.message || 'LAN model scan failed');
+    } finally {
+      this.lanModelFitLoading.set(false);
+    }
+  }
+
+  fitLevelLabel(level: string): string {
+    switch (level) {
+      case 'perfect':
+        return 'Perfect fit';
+      case 'good':
+        return 'Good fit';
+      case 'marginal':
+        return 'Tight fit';
+      default:
+        return level;
     }
   }
 

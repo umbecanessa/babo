@@ -52,10 +52,33 @@ export interface LanServiceProbe {
   detail?: string;
 }
 
+export interface ModelFitRecommendationRow {
+  displayName: string;
+  modelId: string;
+  fitLevel: string;
+  reason: string;
+  runtime?: string;
+}
+
+export interface ModelFitSnapshot {
+  target: 'local' | 'lan';
+  host?: string;
+  gpuName: string;
+  vramGb: number;
+  localViable: boolean;
+  engine: 'llmfit' | 'heuristic';
+  recommendations: ModelFitRecommendationRow[];
+  error?: string;
+}
+
 export interface CapabilityScan {
   scannedAt: string;
   device: DeviceScan;
   lan: LanServiceProbe[];
+  modelFit?: {
+    local?: ModelFitSnapshot;
+    lan?: ModelFitSnapshot;
+  };
 }
 
 /** Optional sub-agent (delegate) chat model; uses `inference` when unset. */
