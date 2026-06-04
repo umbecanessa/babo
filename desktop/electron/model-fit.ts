@@ -15,6 +15,7 @@ import {
   parseNvidiaSmiCsv,
   systemRamGb,
 } from './gpu-memory-probe';
+import { isLocalChatViable, recommendFromCatalog } from './model-fit-catalog';
 import type { ModelFitSnapshot } from './capability-types';
 import type {
   GpuSnapshot,
@@ -294,14 +295,15 @@ export async function buildModelFitResult(
     engine = 'heuristic';
   }
 
-  const localViable = isLocalChatViable(recommendations);
+  const finalRecommendations = recommendations;
+  const localViable = isLocalChatViable(finalRecommendations);
 
   return {
     target,
     host: options?.host ?? gpu.host,
     gpu,
     localViable,
-    recommendations,
+    recommendations: finalRecommendations,
     engine,
   };
 }
