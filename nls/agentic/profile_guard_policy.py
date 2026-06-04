@@ -654,6 +654,7 @@ def boost_triage_for_work_continuation(
     if looks_like_credential_continuation_turn(ui, history=history):
         triage.intent = "TASK_THINK"
         triage.thinking = True
+        reconcile_triage_continuation_phase(triage, ui, history=history)
         return
     surface = conversational_tool_surface(
         ui, history=history, intent=getattr(triage, "intent", ""),
