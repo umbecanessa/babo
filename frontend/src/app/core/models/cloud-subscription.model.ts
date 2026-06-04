@@ -37,7 +37,10 @@ export interface CloudUsageResponse {
   subscription: CloudSubscriptionView;
 }
 
-/** Format cents as USD for display ($5.00). */
+export const CLOUD_BASIC_PRICE_AMOUNT = '$4.99';
+export const CLOUD_BASIC_PRICE_LABEL = '$4.99/mo';
+
+/** Format cents as USD for display. */
 export function formatUsdCents(cents: number): string {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',

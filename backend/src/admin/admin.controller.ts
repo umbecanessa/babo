@@ -86,7 +86,7 @@ export class AdminController {
     return this.admin.revokeLifetimeComp(id);
   }
 
-  /** Dev / pre-Stripe: activate cloud_basic with $5 included usage. */
+  /** Dev / pre-Stripe: activate cloud_basic without Stripe. */
   @Post('users/:id/activate-cloud-basic')
   activateCloudBasic(@Param('id') id: string) {
     return this.admin.activateCloudBasicDev(id);

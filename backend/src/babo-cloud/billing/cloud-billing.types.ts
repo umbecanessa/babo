@@ -25,5 +25,9 @@ export interface SubscriptionView {
   refundEligibleUntil: string | null;
 }
 
-export const DEFAULT_INCLUDED_CREDIT_CENTS = 500;
+/** Platform-only plan — no bundled inference credits. */
+export const DEFAULT_INCLUDED_CREDIT_CENTS = 0;
 export const REFUND_WINDOW_DAYS = 31;
+/** Pay-as-you-go bills upstream cost with no Babo markup (1.0×). */
+export const OVERAGE_COST_MULTIPLIER = 1;
+export const CLOUD_BASIC_MONTHLY_PRICE_LABEL = '$4.99/mo';

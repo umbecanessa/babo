@@ -1,4 +1,9 @@
-import { Inject, Injectable } from '@nestjs/common';
+import {
+  HttpException,
+  HttpStatus,
+  Inject,
+  Injectable,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service';
 import {
@@ -51,6 +56,22 @@ export class EntitlementsService {
     if (!this.cloudMode) return;
     if (placement === 'byok_cloud') return;
     await this.billing.assertCloudAccess(userId);
+
+    if (placement !== 'babo_resold') return;
+
+    const view = await this.billing.getSubscriptionView(userId);
+    if (
+      view.billingExempt ||
+      view.status === 'lifetime_comp' ||
+      view.onDemandEnabled
+    ) {
+      return;
+    }
+
+    throw new HttpException(
+      'Enable pay-as-you-go in Settings → Billing, or add your provider API key.',
+      HttpStatus.PAYMENT_REQUIRED,
+    );
   }
 
   async recordUsage(

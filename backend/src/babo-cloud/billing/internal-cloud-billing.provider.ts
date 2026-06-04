@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { CloudBillingProvider } from './cloud-billing.provider';
 import {
+  CLOUD_BASIC_MONTHLY_PRICE_LABEL,
   DEFAULT_INCLUDED_CREDIT_CENTS,
   REFUND_WINDOW_DAYS,
   SubscriptionView,
@@ -76,7 +77,7 @@ export class InternalCloudBillingProvider implements CloudBillingProvider {
 
     if (sub.status === 'none') {
       throw new HttpException(
-        'Subscribe to Babo Cloud ($6.99/mo) to use hosted models',
+        `Subscribe to Babo Cloud (${CLOUD_BASIC_MONTHLY_PRICE_LABEL}) to use hosted models`,
         HttpStatus.PAYMENT_REQUIRED,
       );
     }
@@ -106,7 +107,7 @@ export class InternalCloudBillingProvider implements CloudBillingProvider {
       sub.usedCreditCents >= sub.includedCreditCents
     ) {
       throw new HttpException(
-        'Included usage exhausted — enable on-demand or wait for renewal',
+        'Included usage exhausted — enable pay-as-you-go or wait for renewal',
         HttpStatus.PAYMENT_REQUIRED,
       );
     }

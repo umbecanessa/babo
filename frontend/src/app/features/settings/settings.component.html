@@ -157,6 +157,113 @@
       </section>
     }
 
+    <!-- Support & Debug -->
+    @if (activeSection() === 'support') {
+      <section class="section">
+        <h3 class="section-title">Support &amp; Debug</h3>
+        <p class="section-desc">
+          Export logs and agent state for troubleshooting. API keys and secrets are redacted
+          in config exports. When support asks for a debug bundle, use
+          Export full debug bundle below.
+        </p>
+
+        <div class="action-row">
+          <button
+            class="btn-primary"
+            type="button"
+            (click)="exportFullDebugBundle()"
+            [disabled]="debugExporting() || debugLoading()"
+          >
+            {{ debugExporting() ? 'Exporting…' : 'Export full debug bundle' }}
+          </button>
+          <button
+            class="btn-secondary"
+            type="button"
+            (click)="loadDebugSummary()"
+            [disabled]="debugLoading()"
+          >
+            {{ debugLoading() ? 'Refreshing…' : 'Refresh' }}
+          </button>
+          <button class="btn-secondary" type="button" (click)="revealUserDataFolder()">
+            Open data folder
+          </button>
+        </div>
+
+        @if (debugUserDataPath()) {
+          <p class="field-hint mono-hint">{{ debugUserDataPath() }}</p>
+        }
+
+        <h4 class="subsection-title">Recent errors</h4>
+        <p class="field-hint">Parsed from runtime, setup, and desktop logs (newest first).</p>
+        @if (debugLoading() && !debugErrors().length) {
+          <p class="field-hint">Loading…</p>
+        } @else if (!debugErrors().length) {
+          <p class="info-pill">No recent errors in logs or runtime status.</p>
+        } @else {
+          <ul class="debug-error-list">
+            @for (err of debugErrors(); track err.id) {
+              <li class="debug-error-item">
+                <span class="debug-error-source">{{ err.source }}</span>
+                @if (err.at) {
+                  <span class="debug-error-at">{{ err.at }}</span>
+                }
+                <pre class="debug-error-msg">{{ err.message }}</pre>
+              </li>
+            }
+          </ul>
+        }
+
+        <h4 class="subsection-title">App logs &amp; config</h4>
+        <div class="debug-artifact-list">
+          @for (item of debugAppArtifacts(); track item.kind) {
+            <div class="debug-artifact-row">
+              <div class="debug-artifact-meta">
+                <span class="debug-artifact-label">{{ item.label }}</span>
+                <span class="debug-artifact-desc">{{ item.description }}</span>
+                <span class="debug-artifact-size">
+                  {{ item.exists ? formatBytes(item.sizeBytes) : 'Not found' }}
+                </span>
+              </div>
+              <button
+                class="btn-secondary btn-compact"
+                type="button"
+                (click)="exportDebugArtifact(item.kind)"
+                [disabled]="!item.exists || debugExporting()"
+              >
+                Export
+              </button>
+            </div>
+          }
+        </div>
+
+        @for (group of debugAgentArtifacts(); track group.agentId) {
+          <h4 class="subsection-title">{{ group.name }}</h4>
+          <p class="field-hint mono-hint">{{ group.agentId }}</p>
+          <div class="debug-artifact-list">
+            @for (item of group.artifacts; track item.kind + item.agentId) {
+              <div class="debug-artifact-row">
+                <div class="debug-artifact-meta">
+                  <span class="debug-artifact-label">{{ item.label }}</span>
+                  <span class="debug-artifact-desc">{{ item.description }}</span>
+                  <span class="debug-artifact-size">
+                    {{ item.exists ? formatBytes(item.sizeBytes) : 'Not found' }}
+                  </span>
+                </div>
+                <button
+                  class="btn-secondary btn-compact"
+                  type="button"
+                  (click)="exportDebugArtifact(item.kind, item.agentId)"
+                  [disabled]="!item.exists || debugExporting()"
+                >
+                  Export
+                </button>
+              </div>
+            }
+          </div>
+        }
+      </section>
+    }
+
     <!-- Permissions -->
     @if (activeSection() === 'permissions') {
       <section class="section">
@@ -197,8 +304,8 @@
     <section class="section">
       <h3 class="section-title">Billing</h3>
       <p class="section-desc">
-        Babo Cloud Basic — <strong>$6.99/mo</strong> with <strong>$5 included</strong> model usage.
-        Checkout uses Stripe (Link supported). No free inference trial.
+        Babo Cloud — <strong>{{ cloudBasicPriceLabel }}</strong> for relay, channels, and hosted integrations.
+        Checkout uses Stripe (Link supported). Model usage is BYOK or optional pay-as-you-go at upstream cost (no Babo markup).
       </p>
 
       @if (subscriptionLoading()) {
@@ -222,9 +329,10 @@
               Hosted models require an active subscription. Your API key on this device (BYOK) still works without a sub.
             </p>
             <ul class="checklist">
-              <li>$6.99/month — billed via Stripe</li>
-              <li>$5 included usage per month (OpenRouter resold)</li>
-              <li>On-demand overage at 1.25× after pool is used</li>
+              <li>{{ cloudBasicPriceLabel }} — billed via Stripe</li>
+              <li>WhatsApp, Telegram, Gmail relay &amp; Google integrations</li>
+              <li>Models via your API key (BYOK) or pay-as-you-go at upstream cost</li>
+              <li>No Babo markup on token usage</li>
             </ul>
             <button
               class="btn-primary"
@@ -232,7 +340,7 @@
               (click)="subscribeToCloud()"
               [disabled]="billingActionLoading()"
             >
-              {{ billingActionLoading() ? 'Opening checkout…' : 'Subscribe — $6.99/mo' }}
+              {{ billingActionLoading() ? 'Opening checkout…' : 'Subscribe — ' + cloudBasicPriceLabel }}
             </button>
           </div>
         } @else {
@@ -277,9 +385,9 @@
             </button>
           </div>
 
-          <h4 class="subsection-title">On-demand usage</h4>
+          <h4 class="subsection-title">Pay-as-you-go models</h4>
           <p class="field-hint">
-            After included usage is exhausted, enable on-demand to continue at 1.25× upstream cost (capped monthly).
+            Optional for Babo-routed models when you are not using BYOK. Billed at upstream cost with no Babo markup (monthly cap applies).
           </p>
           <div class="toggle-group compact">
             <button
@@ -296,9 +404,15 @@
             >Off</button>
           </div>
 
+          @if (onDemandEnabled() && sub.usedCreditCents > 0) {
+            <p class="field-hint">
+              Model usage this period: {{ formatUsd(sub.usedCreditCents) }} (at upstream cost).
+            </p>
+          }
+
           @if (onDemandEnabled()) {
             <div class="field-group">
-              <label class="field-label">Monthly overage spend cap (USD)</label>
+              <label class="field-label">Monthly pay-as-you-go spend cap (USD)</label>
               <input
                 type="number"
                 class="field-input short"
@@ -307,7 +421,7 @@
                 [ngModel]="spendCapInput()"
                 (ngModelChange)="spendCapInput.set($event)"
               />
-              <span class="field-hint">Default $15/mo overage cap beyond included usage.</span>
+              <span class="field-hint">Default $15/mo cap on pay-as-you-go model usage.</span>
               <button
                 class="btn-secondary"
                 type="button"
@@ -322,7 +436,7 @@
           @if (sub.refundEligibleUntil) {
             <p class="field-hint refund-note">
               31-day refund available on your first subscription payment until
-              {{ sub.refundEligibleUntil | date: 'mediumDate' }}. Overage charges are not refundable.
+              {{ sub.refundEligibleUntil | date: 'mediumDate' }}. Pay-as-you-go model charges are not refundable.
             </p>
           }
         }

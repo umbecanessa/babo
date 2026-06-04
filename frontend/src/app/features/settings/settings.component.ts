@@ -23,6 +23,7 @@ import { AgentModelService } from '../../core/services/agent-model.service';
 import { ApiService } from '../../core/services/api.service';
 import { BillingService } from '../../core/services/billing.service';
 import {
+  CLOUD_BASIC_PRICE_LABEL,
   formatUsdCents,
   includedRemainingPercent,
   type CloudSubscriptionView,
@@ -63,6 +64,24 @@ interface PermissionProfile {
   grants: Record<string, boolean>;
 }
 
+interface DebugErrorEntry {
+  id: string;
+  source: string;
+  message: string;
+  at: string | null;
+}
+
+interface DebugArtifactEntry {
+  kind: string;
+  label: string;
+  description: string;
+  agentId?: string;
+  agentName?: string;
+  path: string;
+  exists: boolean;
+  sizeBytes: number;
+}
+
 @Component({
   selector: 'app-settings',
   standalone: true,
@@ -77,6 +96,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
   saving = signal(false);
   appVersion = signal('');
   checkingUpdates = signal(false);
+  readonly cloudBasicPriceLabel = CLOUD_BASIC_PRICE_LABEL;
 
   /** Web-only appearance persisted in NestJS */
   webSettings = signal<WebAppearanceSettings>({
@@ -130,6 +150,13 @@ export class SettingsComponent implements OnInit, OnDestroy {
   permissionProfiles = signal<PermissionProfile[]>([]);
   activePermissionProfile = signal<string | null>(null);
 
+  /** Desktop support / debug */
+  debugLoading = signal(false);
+  debugExporting = signal(false);
+  debugErrors = signal<DebugErrorEntry[]>([]);
+  debugArtifacts = signal<DebugArtifactEntry[]>([]);
+  debugUserDataPath = signal('');
+
   readonly billingEnabled = computed(
     () =>
       !!this.platformCaps()?.baboCloudMode &&
@@ -152,6 +179,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
         ...billingSection,
         { id: 'integrations', label: 'Integrations' },
         { id: 'system', label: 'System' },
+        { id: 'support', label: 'Support & Debug' },
         { id: 'permissions', label: 'Permissions' },
         { id: 'appearance', label: 'Appearance' },
         { id: 'general', label: 'General' },
@@ -237,6 +265,9 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
     if (first === 'integrations' || first === 'billing') {
       void this.loadPlatformIntegrations();
+    }
+    if (first === 'support' && this.platform.isElectron) {
+      void this.loadDebugSummary();
     }
     if (first === 'billing') {
       void this.loadSubscription();
@@ -338,6 +369,9 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
   onSectionChange(sectionId: string): void {
     this.activeSection.set(sectionId);
+    if (sectionId === 'support' && this.platform.isElectron) {
+      void this.loadDebugSummary();
+    }
     if (sectionId === 'integrations') {
       void this.loadPlatformIntegrations();
     }
@@ -639,6 +673,92 @@ export class SettingsComponent implements OnInit, OnDestroy {
       this.toast.show('Permissions reset', 'info', 2000);
     } catch (err: any) {
       this.toast.show(err?.message || 'Could not reset permissions', 'error');
+    }
+  }
+
+  readonly debugAppArtifacts = computed(() =>
+    this.debugArtifacts().filter((a) => !a.agentId),
+  );
+
+  /** Per-agent rows shown in Support & Debug (agent_state is in full bundle only). */
+  readonly debugAgentArtifacts = computed(() => {
+    const byAgent = new Map<string, DebugArtifactEntry[]>();
+    for (const a of this.debugArtifacts()) {
+      if (!a.agentId || a.kind === 'agent_state') continue;
+      const list = byAgent.get(a.agentId) ?? [];
+      list.push(a);
+      byAgent.set(a.agentId, list);
+    }
+    return [...byAgent.entries()].map(([agentId, artifacts]) => ({
+      agentId,
+      name: artifacts[0]?.agentName || agentId.slice(0, 8),
+      artifacts,
+    }));
+  });
+
+  formatBytes(bytes: number): string {
+    if (bytes <= 0) return '—';
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  async loadDebugSummary(): Promise<void> {
+    if (!this.platform.isElectron) return;
+    this.debugLoading.set(true);
+    try {
+      const summary = await this.nls().debug.getSummary();
+      this.debugErrors.set(summary.errors ?? []);
+      this.debugArtifacts.set(summary.artifacts ?? []);
+      this.debugUserDataPath.set(summary.userDataPath ?? '');
+    } catch {
+      this.toast.show('Could not load debug information', 'error');
+    } finally {
+      this.debugLoading.set(false);
+    }
+  }
+
+  async revealUserDataFolder(): Promise<void> {
+    try {
+      await this.nls().debug.revealUserData();
+    } catch {
+      this.toast.show('Could not open data folder', 'error');
+    }
+  }
+
+  async exportDebugArtifact(kind: string, agentId?: string): Promise<void> {
+    this.debugExporting.set(true);
+    try {
+      const result = await this.nls().debug.exportArtifact(kind, agentId);
+      if (result.ok) {
+        this.toast.show(result.message, 'info', 3500);
+      } else if (result.message !== 'Export canceled') {
+        this.toast.show(result.message, 'error', 5000);
+      }
+    } catch (err: any) {
+      this.toast.show(err?.message || 'Export failed', 'error');
+    } finally {
+      this.debugExporting.set(false);
+    }
+  }
+
+  async exportFullDebugBundle(): Promise<void> {
+    this.debugExporting.set(true);
+    try {
+      const result = await this.nls().debug.exportFullBundle();
+      if (result.ok) {
+        this.toast.show(
+          'Debug bundle saved. You can attach it when contacting support.',
+          'info',
+          5000,
+        );
+      } else if (result.message !== 'Export canceled') {
+        this.toast.show(result.message, 'error', 5000);
+      }
+    } catch (err: any) {
+      this.toast.show(err?.message || 'Export failed', 'error');
+    } finally {
+      this.debugExporting.set(false);
     }
   }
 

@@ -121,7 +121,7 @@ window.BABO_AUDIENCE = {
       title: "Open source first. Cloud optional.",
       lead: "Like Home Assistant — the full agent stack is MIT. Pay only if you want Babo to host relay, channels, and resold models.",
       footnote:
-        "BYOK on Babo Cloud: you pay providers directly for inference; the $6.99 platform fee still applies. Overage beyond the included $5 pool is billed pay-as-you-go at 1.25× upstream cost.",
+        "BYOK on Babo Cloud: you pay providers directly for inference; the $4.99 platform fee covers relay and channels. Optional pay-as-you-go routing bills at upstream cost with no Babo markup.",
       plans: [
         {
           name: "Self-host",
@@ -139,15 +139,15 @@ window.BABO_AUDIENCE = {
         },
         {
           name: "Babo Cloud",
-          price: "$6.99",
+          price: "$4.99",
           period: "per month",
           badge: "Optional",
-          description: "We run the boring parts — relay, inbox, default integrations.",
+          description: "We run relay, inbox, and default integrations.",
           features: [
-            "$5 included model usage each month",
+            "WhatsApp, Telegram & Gmail relay included",
             "Google, Gmail & agent inbox included",
             "Remote relay — no port forwarding",
-            "Pay-as-you-go overage when you need more",
+            "Models: BYOK or pay-at-cost (no markup)",
           ],
           cta: { href: BABO_DOWNLOAD_URL, label: "Get started" },
           note: "31-day refund on your first month",
@@ -289,7 +289,7 @@ window.BABO_AUDIENCE = {
       title: "Free on your computer. Cloud if you want easy.",
       lead: "Download Babo at no cost. Babo Cloud is optional — hosted Google, email, WhatsApp relay, and models without running a server.",
       footnote:
-        "No separate fee to connect Gmail or Google Calendar on Babo Cloud. First month refundable within 31 days. Extra model usage beyond the included $5 is billed separately.",
+        "No separate fee to connect Gmail or Google Calendar on Babo Cloud. First month refundable within 31 days. Optional pay-as-you-go model routing bills at upstream cost.",
       plans: [
         {
           name: "Babo Desktop",
@@ -307,14 +307,14 @@ window.BABO_AUDIENCE = {
         },
         {
           name: "Babo Cloud",
-          price: "$6.99",
+          price: "$4.99",
           period: "per month",
           badge: "Easiest path",
-          description: "We handle hosting, email, and model billing.",
+          description: "We handle relay, email, and hosted integrations.",
           features: [
-            "$5 of model usage included monthly",
             "Gmail, Google Calendar & inbox built in",
             "WhatsApp & Telegram relay included",
+            "Models via BYOK or pay-at-cost (no markup)",
             "No server or DevOps required",
           ],
           cta: { href: BABO_DOWNLOAD_URL, label: "Start with Babo" },

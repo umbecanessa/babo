@@ -136,6 +136,34 @@
                 </span>
               </div>
             </div>
+            @if (localModelFit(); as fit) {
+              <div class="model-fit-panel">
+                <p class="model-fit-head">
+                  @if (fit.localViable) {
+                    Models that fit this PC
+                  } @else {
+                    Local chat models
+                  }
+                  <span class="model-fit-engine">{{ fit.engine === 'llmfit' ? 'llmfit' : 'estimate' }}</span>
+                </p>
+                @if (fit.error) {
+                  <p class="small-muted">{{ fit.error }}</p>
+                }
+                @if (fit.recommendations.length) {
+                  <ul class="model-fit-list">
+                    @for (m of fit.recommendations; track m.modelId) {
+                      <li>
+                        <span class="fit-level" [class]="m.fitLevel">{{ fitLevelLabel(m.fitLevel) }}</span>
+                        <strong>{{ m.displayName }}</strong>
+                        <span class="model-fit-id">{{ m.modelId }}</span>
+                      </li>
+                    }
+                  </ul>
+                } @else if (!fit.localViable) {
+                  <p class="small-muted">Use Babo Cloud or a network server for chat.</p>
+                }
+              </div>
+            }
             <button type="button" class="link-btn" (click)="showLanSheet.set(true)">
               I have a server on my network
             </button>
@@ -175,6 +203,8 @@
             Where chat runs.
             @if (lanInferenceFound()) {
               We found a chat server on your network — <strong>My server</strong> is suggested.
+            } @else if (lanModelFit()?.localViable && lanModelFit()!.recommendations[0]) {
+              Your server GPU fits <strong>{{ lanModelFit()!.recommendations[0].displayName }}</strong> — <strong>My server</strong> is suggested.
             }
           </p>
 
@@ -550,18 +580,22 @@
 
           <div class="billing-price-card">
             <div class="billing-price-row">
-              <span class="billing-price-amount">$6.99</span>
+              <span class="billing-price-amount">$4.99</span>
               <span class="billing-price-period">/ month</span>
             </div>
             <p class="billing-price-tagline">
-              <strong>$5 included</strong> model usage every month
+              Relay, channels &amp; hosted integrations — models via BYOK or pay-at-cost
             </p>
           </div>
 
           <ul class="billing-perks">
             <li>
               <span class="perk-check" aria-hidden="true">✓</span>
-              <span>GPT, Claude &amp; Qwen through api.babo.agency</span>
+              <span>WhatsApp, Telegram, Gmail &amp; Google Calendar relay</span>
+            </li>
+            <li>
+              <span class="perk-check" aria-hidden="true">✓</span>
+              <span>Models via your API key or optional pay-as-you-go (no markup)</span>
             </li>
             <li>
               <span class="perk-check" aria-hidden="true">✓</span>
@@ -678,10 +712,19 @@
     <div class="sheet-backdrop" (click)="showLanSheet.set(false)">
       <div class="sheet sheet-lan" (click)="$event.stopPropagation()">
         <h3>Network server</h3>
-        <p class="small-muted sheet-lead">vLLM, Whisper, or vision on your LAN.</p>
+        <p class="small-muted sheet-lead">vLLM, Whisper, or vision on your LAN. Add SSH to see which models fit that machine’s GPU.</p>
         <div class="form-group sheet-field">
           <label>Host</label>
-          <input type="text" [(ngModel)]="lanHost" placeholder="192.168.68.96" />
+          <input type="text" [(ngModel)]="lanHost" placeholder="192.168.68.96 or ubuntu@192.168.68.96" />
+        </div>
+        <div class="form-group sheet-field">
+          <label>SSH user</label>
+          <input type="text" [(ngModel)]="lanSshUser" placeholder="ubuntu" autocomplete="username" />
+          <span class="hint">Required for GPU scan. Use user@host above or set user here.</span>
+        </div>
+        <div class="form-group sheet-field">
+          <label>SSH port</label>
+          <input type="text" [(ngModel)]="lanSshPort" placeholder="22" inputmode="numeric" />
         </div>
         <div class="form-group sheet-field">
           <label>GPU worker secret</label>
@@ -698,10 +741,42 @@
             class="action-btn secondary full"
             type="button"
             (click)="runLanProbe()"
-            [disabled]="lanProbing() || !lanHost.trim()"
+            [disabled]="lanProbing() || lanModelFitLoading() || !lanHost.trim()"
           >
             {{ lanProbing() ? 'Looking…' : 'Find services' }}
           </button>
+          <button
+            class="action-btn secondary full"
+            type="button"
+            (click)="runLanModelFitOnly()"
+            [disabled]="lanProbing() || lanModelFitLoading() || !lanHost.trim() || !resolvedLanSshUser()"
+          >
+            {{ lanModelFitLoading() ? 'Scanning GPU…' : 'Scan GPU & model fit' }}
+          </button>
+          @if (lanModelFit(); as lanFit) {
+            <div class="model-fit-panel lan">
+              <p class="model-fit-head">
+                {{ lanFit.gpuName }} · {{ lanFit.vramGb }} GB VRAM
+                @if (lanFit.host) {
+                  <span class="model-fit-host">@ {{ lanFit.host }}</span>
+                }
+              </p>
+              @if (lanFit.error) {
+                <p class="small-muted warn">{{ lanFit.error }}</p>
+              }
+              @if (lanFit.recommendations.length) {
+                <ul class="model-fit-list">
+                  @for (m of lanFit.recommendations; track m.modelId) {
+                    <li>
+                      <span class="fit-level" [class]="m.fitLevel">{{ fitLevelLabel(m.fitLevel) }}</span>
+                      <strong>{{ m.displayName }}</strong>
+                      <span class="model-fit-id">{{ m.modelId }}</span>
+                    </li>
+                  }
+                </ul>
+              }
+            </div>
+          }
           @if (lanServices().length) {
             <ul class="lan-list">
               @for (s of lanServices(); track s.port + s.kind) {

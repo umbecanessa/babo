@@ -9,6 +9,7 @@ export function isBillingPaywallError(err: unknown): boolean {
     message.includes('subscription required') ||
     message.includes('payment failed') ||
     message.includes('included usage exhausted') ||
+    message.includes('pay-as-you-go') ||
     message.includes('spend cap reached')
   );
 }

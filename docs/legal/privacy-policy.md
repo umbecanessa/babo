@@ -88,7 +88,7 @@ We use information to:
 - provide, maintain, and secure Babo and Babo Cloud;
 - authenticate users and connect channel relays;
 - run integrations you enable (Gmail, Calendar, Drive, Sheets, channels);
-- meter and bill Babo Cloud subscriptions and included model usage;
+- meter and bill Babo Cloud subscriptions and optional pay-as-you-go model usage;
 - understand how the marketing site and onboarding funnel perform (anonymous product analytics when enabled);
 - diagnose bugs and abuse;
 - comply with law and enforce terms.
