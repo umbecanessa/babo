@@ -81,6 +81,36 @@ class SquadEscalation:
 
 
 @dataclass
+class SquadPendingAction:
+    id: str = ""
+    action_type: str = ""  # delete_agent
+    target_agent_id: str = ""
+    requested_by: str = ""
+    title: str = ""
+    description: str = ""
+    status: str = "pending"  # pending, approved, rejected
+    created_at: float = 0.0
+    resolved_at: float = 0.0
+    resolution_note: str = ""
+    delete_squad_on_approve: bool = False
+    payload: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if not self.id:
+            self.id = f"pending_{_short_id()}"
+        if not self.created_at:
+            self.created_at = time.time()
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, d: dict[str, Any]) -> SquadPendingAction:
+        valid = {f for f in cls.__dataclass_fields__}
+        return cls(**{k: v for k, v in d.items() if k in valid})
+
+
+@dataclass
 class Squad:
     id: str = ""
     name: str = ""
@@ -89,6 +119,7 @@ class Squad:
     paused: bool = False
     inbox: list[SquadInboxItem] = field(default_factory=list)
     escalations: list[SquadEscalation] = field(default_factory=list)
+    pending_actions: list[SquadPendingAction] = field(default_factory=list)
     checkback_enabled: bool = True
     checkback_interval_seconds: int = 1800
     proposal_sla_seconds: int = 14400
@@ -126,6 +157,7 @@ class Squad:
         d = asdict(self)
         d["inbox"] = [i.to_dict() for i in self.inbox]
         d["escalations"] = [e.to_dict() for e in self.escalations]
+        d["pending_actions"] = [p.to_dict() for p in self.pending_actions]
         return d
 
     @classmethod
@@ -140,10 +172,19 @@ class Squad:
             for e in (d.get("escalations") or [])
             if isinstance(e, dict)
         ]
-        valid = {f for f in cls.__dataclass_fields__ if f not in ("inbox", "escalations")}
+        pending_actions = [
+            SquadPendingAction.from_dict(p)
+            for p in (d.get("pending_actions") or [])
+            if isinstance(p, dict)
+        ]
+        valid = {
+            f for f in cls.__dataclass_fields__
+            if f not in ("inbox", "escalations", "pending_actions")
+        }
         base = {k: v for k, v in d.items() if k in valid}
         base["inbox"] = inbox
         base["escalations"] = escalations
+        base["pending_actions"] = pending_actions
         return cls(**base)
 
 
@@ -203,6 +244,7 @@ class SquadRegistry:
             json.dumps(squad.to_dict(), indent=2, ensure_ascii=False) + "\n",
             encoding="utf-8",
         )
+        prev = self._squads.get(squad.id)
         self._squads[squad.id] = squad
         for aid in squad.all_member_ids:
             self._agent_index[aid] = squad.id
@@ -262,6 +304,7 @@ class SquadRegistry:
         squad = self.get(squad_id)
         if squad is None:
             raise ValueError(f"Squad {squad_id} not found")
+        old_member_ids = set(squad.all_member_ids)
         if name is not None:
             squad.name = name.strip() or squad.name
         if lead_agent_id is not None:
@@ -272,6 +315,9 @@ class SquadRegistry:
         for aid in squad.all_member_ids:
             if self._agent_index.get(aid) not in (None, squad.id):
                 raise ValueError(f"Agent {aid} already in another squad")
+        for aid in old_member_ids - set(squad.all_member_ids):
+            if self._agent_index.get(aid) == squad.id:
+                self._agent_index.pop(aid, None)
         self.save(squad)
         return squad
 

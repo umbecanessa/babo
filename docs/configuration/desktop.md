@@ -158,6 +158,9 @@ Full list: [Environment (complete)](../reference/environment-complete.md).
 | `setup.log` | First-run / deps sync log |
 | `runtime.log` | uvicorn runtime log |
 | `setup-state.json` | Setup progress hash |
+| `logs/` (Electron) | Desktop main-process log (`electron-log`) |
+
+**Support export:** Settings → **Support & Debug** — export logs, agent transcripts, or a full `.zip` debug bundle (secrets redacted). See [Desktop support & debug export](../guides/desktop-support-debug.md).
 
 ---
 

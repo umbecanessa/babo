@@ -5,6 +5,7 @@ import type {
   CapabilityProfile,
   CapabilityScan,
   CapabilityTier,
+  ModelFitSnapshot,
 } from '../../features/setup/capability-profile.model';
 import {
   CLOUD_PROVIDERS,
@@ -47,6 +48,12 @@ export class CapabilitySettingsPanelComponent implements OnInit {
   scan = signal<CapabilityScan | null>(null);
   scanLoading = signal(false);
   profile = signal<CapabilityProfile | null>(null);
+
+  lanHost = '';
+  lanSshUser = '';
+  lanSshPort = '';
+  lanProbing = signal(false);
+  lanModelFitLoading = signal(false);
 
   ambientVisionOn = signal(false);
   codeSearchOn = signal(true);
@@ -185,11 +192,98 @@ export class CapabilitySettingsPanelComponent implements OnInit {
     }
   }
 
+  localModelFit = () => this.scan()?.modelFit?.local ?? null;
+  lanModelFit = () => this.scan()?.modelFit?.lan ?? null;
+
+  resolvedLanSshUser(): string | undefined {
+    const host = this.lanHost.trim();
+    if (host.includes('@')) return host.split('@')[0]?.trim() || undefined;
+    const u = this.lanSshUser.trim();
+    return u || undefined;
+  }
+
+  lanSshOptions(): { user?: string; port?: number } | undefined {
+    const user = this.resolvedLanSshUser();
+    if (!user) return undefined;
+    const port = parseInt(this.lanSshPort.trim(), 10);
+    return { user, port: Number.isFinite(port) && port > 0 ? port : undefined };
+  }
+
+  fitLevelLabel(level: string): string {
+    switch (level) {
+      case 'perfect':
+        return 'Perfect fit';
+      case 'good':
+        return 'Good fit';
+      case 'marginal':
+        return 'Tight fit';
+      default:
+        return level;
+    }
+  }
+
+  async runLanProbe(): Promise<void> {
+    if (!this.lanHost.trim()) return;
+    this.lanProbing.set(true);
+    try {
+      const prev = this.scan();
+      const full = (await this.nls().capabilities.probeLan(
+        this.lanHost.trim(),
+        undefined,
+        this.lanSshOptions(),
+        prev?.modelFit,
+      )) as CapabilityScan;
+      const device = prev?.device ?? full.device;
+      this.scan.set({
+        ...full,
+        device,
+        modelFit: {
+          local: prev?.modelFit?.local ?? full.modelFit?.local,
+          lan: full.modelFit?.lan ?? prev?.modelFit?.lan,
+        },
+      });
+      const p = this.profile();
+      if (p) {
+        p.scan = this.scan() ?? undefined;
+        this.profile.set({ ...p });
+      }
+      await this.refreshRecommendedTier();
+    } finally {
+      this.lanProbing.set(false);
+    }
+  }
+
+  async runLanModelFit(): Promise<void> {
+    if (!this.lanHost.trim() || !this.resolvedLanSshUser()) return;
+    this.lanModelFitLoading.set(true);
+    try {
+      const snap = (await this.nls().capabilities.modelFitRemote(
+        this.lanHost.trim(),
+        this.lanSshOptions(),
+      )) as ModelFitSnapshot;
+      const prev = this.scan();
+      if (prev) {
+        this.scan.set({ ...prev, modelFit: { ...prev.modelFit, lan: snap } });
+      }
+      await this.refreshRecommendedTier();
+    } finally {
+      this.lanModelFitLoading.set(false);
+    }
+  }
+
   async runDeviceScan(): Promise<void> {
     this.scanLoading.set(true);
     try {
       const scan = await this.nls().capabilities.scanDevice();
-      this.scan.set({ ...scan, lan: this.scan()?.lan ?? [] });
+      const prev = this.scan();
+      this.scan.set({
+        ...scan,
+        lan: prev?.lan ?? [],
+        modelFit: {
+          local: scan.modelFit?.local ?? prev?.modelFit?.local,
+          lan: prev?.modelFit?.lan,
+        },
+      });
       const p = this.profile();
       if (p) {
         p.scan = this.scan() ?? undefined;

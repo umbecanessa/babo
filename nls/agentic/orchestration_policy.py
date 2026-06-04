@@ -453,6 +453,15 @@ def block_tool_call(
             "get_tool_schema",
             "adopt_orchestration_profile",
         ):
+            _hint_tokens = {
+                h.strip().lower()
+                for h in (getattr(state, "hints", None) or [])
+                if h and h.strip()
+            }
+            if tool_name in ("team", "delegate") and "fleet:squad_candidate" in _hint_tokens:
+                from nls.agentic.fleet_triage_policy import fleet_squad_team_block_message
+
+                return fleet_squad_team_block_message()
             _msg = tool_not_allowed_message(
                 tool_name,
                 mode,

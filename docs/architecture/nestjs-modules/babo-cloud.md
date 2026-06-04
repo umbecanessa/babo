@@ -20,11 +20,15 @@ Self-hosters can leave this disabled and use direct OpenAI-compatible endpoints 
 | POST | `/api/gpu/embed` | JWT or `nlsk_` |
 | GET | `/api/cloud/subscription` | JWT — plan + usage |
 | GET | `/api/cloud/usage` | JWT — recent usage rows |
-| POST | `/api/cloud/subscription/activate` | JWT (stub billing) |
+| POST | `/api/billing/checkout` | JWT — Stripe Checkout (when operator loaded) |
+| POST | `/api/billing/portal` | JWT — Stripe Customer Portal |
+| POST | `/api/billing/sync` | JWT — reconcile subscription after checkout |
+| PUT | `/api/billing/on-demand` | JWT — enable/disable pay-as-you-go routing |
+| PUT | `/api/billing/spend-cap` | JWT — monthly pay-as-you-go spend cap |
 | PUT | `/api/cloud/providers/inference/:provider` | JWT |
 | PUT | `/api/cloud/providers/resend` | JWT |
 
-Requires active **trial or subscription** when `BABO_CLOUD_MODE=true`.
+Requires active **subscription** when `BABO_CLOUD_MODE=true`. Platform fee is **$4.99/mo**; model usage is BYOK or optional pay-as-you-go at upstream cost (no Babo markup).
 
 ---
 

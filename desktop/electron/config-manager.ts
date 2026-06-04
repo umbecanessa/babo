@@ -137,6 +137,16 @@ export class ConfigManager {
     return this.config.setupComplete;
   }
 
+  /** Agent runtime data root (`NLS_DATA_DIR` when the runtime is spawned). */
+  getDataDir(): string {
+    const fromEnv = process.env['NLS_DATA_DIR']?.trim();
+    if (fromEnv) return fromEnv;
+    if (app.isPackaged) {
+      return path.join(app.getPath('userData'), 'data');
+    }
+    return path.join(path.resolve(__dirname, '..', '..'), 'data');
+  }
+
   shouldPrefetchVision(): boolean {
     const p = this.config.capabilityProfile;
     if (!p) return false;
@@ -148,9 +158,7 @@ export class ConfigManager {
   }
 
   getRuntimeEnv(): Record<string, string> {
-    const dataDir = app.isPackaged
-      ? path.join(app.getPath('userData'), 'data')
-      : path.join(path.resolve(__dirname, '..', '..'), 'data');
+    const dataDir = this.getDataDir();
 
     const profile =
       this.config.capabilityProfile ?? DEFAULT_CAPABILITY_PROFILE;

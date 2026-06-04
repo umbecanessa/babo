@@ -10,7 +10,7 @@ export interface CloudBillingProvider {
 
   onUserRegistered(userId: string): Promise<void>;
 
-  /** Debit included pool (skip when billingExempt or non-billable placement). */
+  /** Track metered usage for pay-as-you-go (skip when billingExempt or non-billable placement). */
   recordUsage(
     userId: string,
     upstreamCostCents: number,

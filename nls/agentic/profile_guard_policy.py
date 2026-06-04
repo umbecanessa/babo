@@ -59,6 +59,10 @@ HINT_FORBID_PLAN = frozenset({
     "forbid:plan", "orchestration:delegate_only",
 })
 
+HINT_FLEET_SQUAD = frozenset({
+    "fleet:squad_candidate",
+})
+
 HINT_INSTRUCTION_SKILL_SETUP = frozenset({
     "setup:instruction_skill",
 })
@@ -562,6 +566,8 @@ def tools_denied_by_hints(hints: list[str] | None) -> frozenset[str]:
     denied: set[str] = set()
     if tokens & HINT_FORBID_PLAN:
         denied.update({"plan", "todo"})
+    if tokens & HINT_FLEET_SQUAD:
+        denied.update({"team", "delegate"})
     if tokens & HINT_FORBID_TOOLS:
         denied.update(_PROSE_ONLY_TOOL_DENY)
     return frozenset(denied)
@@ -648,21 +654,6 @@ def boost_triage_for_work_continuation(
     if looks_like_credential_continuation_turn(ui, history=history):
         triage.intent = "TASK_THINK"
         triage.thinking = True
-        hints = list(triage.hints or [])
-        hint_tokens = {h.strip().lower() for h in hints if h}
-        recent = ui
-        if history:
-            for turn in history[-6:]:
-                if turn.get("role") in ("user", "assistant"):
-                    recent += "\n" + (turn.get("content") or "")[:400]
-        from nls.skills_setup_policy import infer_pre_shipped_channel_skill
-
-        if infer_pre_shipped_channel_skill(recent):
-            if "setup:configure_bundled" not in hint_tokens:
-                hints.append("setup:configure_bundled")
-        elif "setup:native_skill" not in hint_tokens:
-            hints.append("setup:native_skill")
-        triage.hints = hints
         return
     surface = conversational_tool_surface(
         ui, history=history, intent=getattr(triage, "intent", ""),
@@ -681,28 +672,6 @@ def boost_triage_for_work_continuation(
     is_continuation = bool(_CONTINUATION_RE.match(ui)) and has_task_context
     if is_continuation and not triage.goals:
         triage.goals = ["Continue the in-progress task"]
-    hints = list(triage.hints or [])
-    hint_tokens = {h.strip().lower() for h in hints if h}
-    if looks_like_credential_continuation_turn(ui, history=history):
-        if "setup:configure_bundled" not in hint_tokens:
-            hints.append("setup:configure_bundled")
-        triage.hints = hints
-        return
-    if has_task_context and not (hint_tokens & HINT_SETUP_CONFLICT):
-        from nls.skills_setup_policy import (
-            looks_like_active_channel_integration,
-            looks_like_native_skill_authoring,
-        )
-
-        if (
-            looks_like_active_channel_integration(recent_text)
-            or looks_like_native_skill_authoring(recent_text)
-        ):
-            if "setup:native_skill" not in hint_tokens:
-                hints.append("setup:native_skill")
-        elif "setup:instruction_skill" not in hint_tokens:
-            hints.append("setup:instruction_skill")
-    triage.hints = hints
 
 
 def _message_implies_shell_work(text: str) -> bool:
@@ -721,27 +690,8 @@ def enrich_instruction_skill_hints(
     goals: list[str] | None,
     hints: list[str],
 ) -> None:
-    """Add setup:instruction_skill when user is configuring an AgentSkill/ClawHub pkg."""
-    tokens = {h.strip().lower() for h in hints if h and h.strip()}
-    if tokens & (HINT_INSTRUCTION_SKILL_SETUP | HINT_NATIVE_SKILL_SETUP):
-        return
-    blob = f"{user_input or ''} {' '.join(goals or [])}"
-    from nls.skills_setup_policy import (
-        looks_like_active_channel_integration,
-        looks_like_native_skill_authoring,
-    )
-
-    if looks_like_active_channel_integration(blob):
-        return
-    if looks_like_native_skill_authoring(blob):
-        return
-    if not _CONFIGURE_INTENT_RE.search(blob):
-        return
-    hints.append("setup:instruction_skill")
-    hints.append(
-        "ClawHub/AgentSkill setup: read installed SKILL.md under data/skills/ "
-        "and use bash — not skill_configure"
-    )
+    """Deprecated — setup hints come from turn triage micro-inference only."""
+    del user_input, goals, hints
 
 
 def enrich_native_skill_hints(
@@ -749,43 +699,5 @@ def enrich_native_skill_hints(
     goals: list[str] | None,
     hints: list[str],
 ) -> None:
-    """Add setup:native_skill when user asks to build a bundled/native Python skill."""
-    tokens = {h.strip().lower() for h in hints if h and h.strip()}
-    if tokens & (
-        HINT_SETUP_CONFLICT
-        | HINT_CONFIGURE_BUNDLED
-        | HINT_CONTINUATION_CREDENTIAL
-        | HINT_CONTINUATION_CONFIGURE
-    ):
-        return
-    blob = f"{user_input or ''} {' '.join(goals or [])}"
-    from nls.skills_setup_policy import (
-        BABO_GITHUB_REPO_URL,
-        CHANNEL_INTEGRATION_DOCS_URL,
-        NATIVE_SKILL_DOCS_URL,
-        babo_bundled_skill_github_ref,
-        infer_channel_platform,
-        looks_like_active_channel_integration,
-        looks_like_native_skill_authoring,
-    )
-
-    if not (
-        looks_like_active_channel_integration(blob)
-        or looks_like_native_skill_authoring(blob)
-    ):
-        return
-    hints.append("setup:native_skill")
-    platform = infer_channel_platform(blob)
-    if looks_like_active_channel_integration(blob):
-        channel = platform or "discord"
-        hints.append(
-            f"Active {channel} channel: native bundled {channel}-channel plugin "
-            f"(not standalone bot/OpenClaw) — {CHANNEL_INTEGRATION_DOCS_URL} · "
-            f"examples: {babo_bundled_skill_github_ref('telegram-channel')} · "
-            f"repo: {BABO_GITHUB_REPO_URL}"
-        )
-    else:
-        hints.append(
-            f"Native NLS skill: scaffold data/skills/{{name}}/ with register() — "
-            f"{NATIVE_SKILL_DOCS_URL} · source: {BABO_GITHUB_REPO_URL}"
-        )
+    """Deprecated — setup hints come from turn triage micro-inference only."""
+    del user_input, goals, hints

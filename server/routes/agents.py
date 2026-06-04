@@ -219,11 +219,22 @@ async def delete_agent(agent_id: str, request: Request):
     if not agent_dir.exists():
         raise HTTPException(status_code=404, detail="Agent not found")
 
+    # Remove from squad roster before disk delete (dashboard direct-delete path).
+    reg = getattr(request.app.state, "squad_registry", None)
+    sm = getattr(request.app.state, "squad_manager", None)
+    if reg is not None and sm is not None:
+        squad = reg.get_for_agent(agent_id)
+        if squad is not None and squad.is_member(agent_id):
+            try:
+                sm._remove_member_from_squad(squad, agent_id)
+            except ValueError as exc:
+                logger.warning("Agent %s squad cleanup on delete: %s", agent_id, exc)
+
     try:
         await request.app.state.agent_manager.delete_agent(agent_id)
     except Exception as exc:
         logger.error("Failed to delete agent %s: %s", agent_id, exc)
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     cm = getattr(request.app.state, "connection_manager", None)
     if cm is not None:

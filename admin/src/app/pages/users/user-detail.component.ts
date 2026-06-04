@@ -57,12 +57,14 @@ import { formatUsdCents, subscriptionStatusLabel } from '../../shared/format.uti
               <span>{{ subscription()!.planId || '—' }}</span>
             </div>
             <div>
-              <span class="field-label">Included usage</span>
+              <span class="field-label">Model usage</span>
               <span>
                 @if (subscription()!.includedCreditCents > 0) {
                   {{ formatUsdCents(subscription()!.usedCreditCents) }}
                   / {{ formatUsdCents(subscription()!.includedCreditCents) }}
                   ({{ subscription()!.usedPercent }}% used)
+                } @else if (subscription()!.usedCreditCents > 0) {
+                  {{ formatUsdCents(subscription()!.usedCreditCents) }} pay-as-you-go (this period)
                 } @else if (subscription()!.billingExempt) {
                   Billing exempt
                 } @else {

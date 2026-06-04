@@ -362,9 +362,12 @@ class WhatsAppAdapter:
 
     def _agent_cfg(self, agent_id: str | None) -> dict[str, Any]:
         if agent_id:
-            merged = dict(self._global_config)
-            merged.update(self._agent_configs.get(agent_id, {}))
-            return merged
+            from nls.runtime.channel_agent_config import merge_global_and_agent_channel_config
+
+            return merge_global_and_agent_channel_config(
+                self._global_config,
+                self._agent_configs.get(agent_id, {}),
+            )
         return self._global_config
 
     def _bridge_url(self, agent_id: str | None = None) -> str:

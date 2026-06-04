@@ -5,14 +5,16 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from server.routes.squad_access import (
     caller_agent_id as resolve_caller_agent_id,
-    require_squad_lead,
+    require_lead_or_owner,
+    require_owner_dashboard,
     require_squad_member,
 )
+from server.middleware.auth import verify_auth
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +34,11 @@ class SquadUpdate(BaseModel):
     checkback_enabled: bool | None = None
     checkback_interval_seconds: int | None = None
     proposal_sla_seconds: int | None = None
+
+
+class PendingActionResolve(BaseModel):
+    approved: bool
+    resolution_note: str = ""
 
 
 def _registry(request: Request):
@@ -85,7 +92,11 @@ def _member_job_titles(request: Request, agent_ids: list[str]) -> dict[str, str]
 
 
 @router.post("")
-async def create_squad(body: SquadCreate, request: Request) -> dict[str, Any]:
+async def create_squad(
+    body: SquadCreate,
+    request: Request,
+    _auth: dict[str, Any] = Depends(require_owner_dashboard),
+) -> dict[str, Any]:
     reg = _registry(request)
     try:
         squad = reg.create(
@@ -95,7 +106,7 @@ async def create_squad(body: SquadCreate, request: Request) -> dict[str, Any]:
         )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
-    _sync_squad_members(request, squad)
+    _apply_roster_sync(request, squad, set())
     return squad.to_dict()
 
 
@@ -141,46 +152,43 @@ async def update_squad(
     body: SquadUpdate,
     request: Request,
     caller_agent_id: str | None = Query(None),
+    auth: dict[str, Any] = Depends(verify_auth),
 ) -> dict[str, Any]:
     reg = _registry(request)
     squad = reg.get(squad_id)
     if squad is None:
         raise HTTPException(404, "Squad not found")
     caller = caller_agent_id or resolve_caller_agent_id(request)
-    if any(
+    settings_change = any(
         x is not None
         for x in (
             body.checkback_enabled,
             body.checkback_interval_seconds,
             body.proposal_sla_seconds,
         )
-    ):
-        require_squad_lead(squad, caller or squad.lead_agent_id)
+    )
+    membership_change = any(
+        x is not None
+        for x in (
+            body.lead_agent_id,
+            body.member_agent_ids,
+            body.name,
+        )
+    )
+    if settings_change:
+        require_lead_or_owner(squad, caller, auth, action="update squad settings")
+    if membership_change:
+        require_lead_or_owner(squad, caller, auth, action="update squad membership")
+    old_ids = set(squad.all_member_ids)
     try:
-        if any(
-            x is not None
-            for x in (
-                body.lead_agent_id,
-                body.member_agent_ids,
-                body.name,
-            )
-        ):
-            if caller:
-                require_squad_lead(squad, caller)
+        if membership_change:
             squad = reg.update_members(
                 squad_id,
                 lead_agent_id=body.lead_agent_id,
                 member_agent_ids=body.member_agent_ids,
                 name=body.name,
             )
-        if any(
-            x is not None
-            for x in (
-                body.checkback_enabled,
-                body.checkback_interval_seconds,
-                body.proposal_sla_seconds,
-            )
-        ):
+        if settings_change:
             squad = reg.update_settings(
                 squad_id,
                 checkback_enabled=body.checkback_enabled,
@@ -189,8 +197,34 @@ async def update_squad(
             )
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
-    _sync_squad_members(request, squad)
+    if membership_change:
+        _apply_roster_sync(request, squad, old_ids)
     return squad.to_dict()
+
+
+@router.post("/{squad_id}/pending-actions/{action_id}/resolve")
+async def resolve_pending_action(
+    squad_id: str,
+    action_id: str,
+    body: PendingActionResolve,
+    request: Request,
+    _auth: dict[str, Any] = Depends(require_owner_dashboard),
+) -> dict[str, Any]:
+    reg = _registry(request)
+    sm = _manager(request)
+    squad = reg.get(squad_id)
+    if squad is None:
+        raise HTTPException(404, "Squad not found")
+    try:
+        result = await sm.resolve_pending_action(
+            squad_id,
+            action_id,
+            approved=body.approved,
+            resolution_note=body.resolution_note,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return result
 
 
 @router.delete("/{squad_id}")
@@ -198,13 +232,14 @@ async def delete_squad(
     squad_id: str,
     request: Request,
     caller_agent_id: str | None = Query(None),
+    auth: dict[str, Any] = Depends(verify_auth),
 ) -> dict[str, Any]:
     reg = _registry(request)
     squad = reg.get(squad_id)
     if squad is None:
         raise HTTPException(404, "Squad not found")
     caller = caller_agent_id or resolve_caller_agent_id(request)
-    require_squad_lead(squad, caller or squad.lead_agent_id)
+    require_lead_or_owner(squad, caller, auth, action="delete this squad")
     for aid in squad.all_member_ids:
         _sync_agent_squad(request, aid, None)
     if not reg.delete(squad_id):
@@ -217,10 +252,42 @@ async def get_squad_for_agent(agent_id: str, request: Request) -> dict[str, Any]
     reg = _registry(request)
     squad = reg.get_for_agent(agent_id)
     if squad is None:
-        return {"squad": None}
+        return {
+            "squad": None,
+            "channel_topology": None,
+            "channel_topology_guidance": "",
+        }
+
+    guidance = ""
+    topology_payload: dict[str, Any] | None = None
+    try:
+        from nls.runtime.fleet_channel_topology import (
+            build_fleet_topology_snapshot,
+            render_topology_guidance,
+            topology_to_dict,
+        )
+
+        settings = request.app.state.settings
+        snap = build_fleet_topology_snapshot(
+            agent_id=agent_id,
+            agent_dir=settings.agents_dir / agent_id,
+            app=request.app,
+            squad=squad,
+        )
+        if snap.mode != "none":
+            topology_payload = topology_to_dict(snap)
+            guidance = render_topology_guidance(snap, compact=True)
+    except Exception:
+        logger.debug("channel topology for agent %s failed", agent_id, exc_info=True)
+
     d = squad.to_dict()
     d["job_titles"] = _member_job_titles(request, squad.all_member_ids)
-    return {"squad": d, "is_lead": squad.is_lead(agent_id)}
+    return {
+        "squad": d,
+        "is_lead": squad.is_lead(agent_id),
+        "channel_topology": topology_payload,
+        "channel_topology_guidance": guidance,
+    }
 
 
 def _sync_squad_members(request: Request, squad) -> None:
@@ -228,24 +295,20 @@ def _sync_squad_members(request: Request, squad) -> None:
         _sync_agent_squad(request, aid, squad)
 
 
-def _wire_lead_hooks(sm, lead_agent_id: str, request: Request) -> None:
-    """Attach WM orchestration hooks when the lead runtime already has an active loop."""
-    runtime = request.app.state.agent_manager.get_runtime(lead_agent_id)
-    if runtime is None:
-        return
-    hooks = getattr(runtime, "_agentic_hooks", None)
-    if hooks is not None:
-        sm.set_hooks(hooks)
+def _apply_roster_sync(request: Request, squad, old_ids: set[str]) -> None:
+    sm = _manager(request)
+
+    def sync_fn(agent_id: str, sq) -> None:
+        _sync_agent_squad(request, agent_id, sq)
+
+    sm.apply_roster_change(squad, old_ids, sync_fn)
 
 
 def _sync_agent_squad(request: Request, agent_id: str, squad) -> None:
     runtime = request.app.state.agent_manager.get_runtime(agent_id)
-    if runtime is None:
-        return
-    if hasattr(runtime, "sync_job_trust"):
-        runtime.sync_job_trust(squad=squad)
-    if hasattr(runtime, "sync_squad_tools"):
+    sm = _manager(request)
+    sm.sync_agent_runtime(agent_id, runtime, squad=squad)
+    if runtime is not None and hasattr(runtime, "sync_squad_tools"):
         runtime.sync_squad_tools()
-    sm = getattr(request.app.state, "squad_manager", None)
-    if sm is not None and squad is not None and squad.is_lead(agent_id):
-        _wire_lead_hooks(sm, squad.lead_agent_id, request)
+        if hasattr(runtime, "refresh_tools"):
+            runtime.refresh_tools()

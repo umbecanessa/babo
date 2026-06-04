@@ -8,6 +8,8 @@
 
 html {
   scroll-behavior: smooth;
+  overflow-x: hidden;
+  max-width: 100%;
 }
 
 body {
@@ -18,8 +20,16 @@ body {
   color: var(--text-primary);
   background: var(--bg-primary);
   overflow-x: hidden;
+  max-width: 100%;
+  overscroll-behavior-x: none;
   -webkit-font-smoothing: antialiased;
   position: relative;
+  touch-action: pan-y;
+}
+
+main {
+  overflow-x: hidden;
+  max-width: 100%;
 }
 
 /* ── Ambient layers ── */
@@ -602,6 +612,8 @@ section[id] {
   flex-direction: column;
   justify-content: center;
   position: relative;
+  overflow: hidden;
+  max-width: 100%;
 }
 
 .hero-inner {
@@ -1046,6 +1058,9 @@ body.lightbox-open {
 .marquee-wrap {
   margin-top: auto;
   padding: 1.25rem 0 2.5rem;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
   mask-image: linear-gradient(90deg, transparent, black 12%, black 88%, transparent);
   -webkit-mask-image: linear-gradient(90deg, transparent, black 12%, black 88%, transparent);
 }
@@ -1053,7 +1068,9 @@ body.lightbox-open {
 .marquee {
   display: flex;
   width: max-content;
+  max-width: none;
   animation: marquee 40s linear infinite;
+  will-change: transform;
 }
 
 .marquee-group {
@@ -1546,6 +1563,9 @@ body.lightbox-open {
   border-radius: var(--radius-sm);
   padding: 0.4rem 0.65rem;
   text-decoration: none;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 a.quickstart-cmd-value:hover {
@@ -1896,6 +1916,20 @@ code {
 }
 
 @media (max-width: 720px) {
+  .mesh {
+    inset: -12%;
+  }
+
+  .mesh-a,
+  .mesh-b {
+    animation: none;
+    transform: none;
+  }
+
+  .wrap {
+    width: min(1180px, calc(100% - 1.25rem));
+  }
+
   .site-nav { padding: 0 0.65rem; }
 
   .nav-toggle { display: block; }

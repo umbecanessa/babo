@@ -755,6 +755,105 @@ $red: var(--accent-danger);
   word-break: break-word;
 }
 
+.mono-hint {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 11px;
+  word-break: break-all;
+}
+
+.debug-error-list {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.debug-error-item {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid $border;
+  background: $bg-2;
+}
+
+.debug-error-source {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: $amber;
+  margin-right: 8px;
+}
+
+.debug-error-at {
+  font-size: 11px;
+  color: $text-muted;
+}
+
+.debug-error-msg {
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  color: $text-dim;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.debug-artifact-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.debug-artifact-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid $border;
+  background: $bg-2;
+}
+
+.debug-artifact-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.debug-artifact-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: $text;
+}
+
+.debug-artifact-desc {
+  display: block;
+  font-size: 11px;
+  color: $text-muted;
+  margin-top: 2px;
+}
+
+.debug-artifact-size {
+  display: block;
+  font-size: 11px;
+  color: $text-dim;
+  margin-top: 4px;
+}
+
+.btn-compact {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
 .profile-cards {
   display: flex;
   flex-direction: column;

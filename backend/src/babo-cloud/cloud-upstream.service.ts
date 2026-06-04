@@ -22,7 +22,7 @@ export class CloudUpstreamService {
   readonly visionBase: string;
   readonly embedBase: string;
   readonly cloudMode: boolean;
-  /** Babo-operated OpenRouter key for trial / resold inference (Railway secret). */
+  /** Babo-operated OpenRouter key for resold inference (Railway secret). */
   readonly platformOpenRouterKey: string;
   /** vLLM model id on GX10 when desktop sends ``babo-hosted``. */
   readonly inferenceUpstreamModel: string;

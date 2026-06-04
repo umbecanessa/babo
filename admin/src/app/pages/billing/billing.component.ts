@@ -13,7 +13,7 @@ import { formatUsdCents, subscriptionStatusLabel } from '../../shared/format.uti
     <header class="page-header">
       <h1 class="page-title">Billing</h1>
       <p class="page-desc">
-        Babo Cloud subscriptions, complimentary access, and usage pools.
+        Babo Cloud subscriptions, complimentary access, and pay-as-you-go usage.
         Provider: <code>{{ platform()?.billingProvider || '—' }}</code>
       </p>
     </header>
@@ -79,6 +79,8 @@ import { formatUsdCents, subscriptionStatusLabel } from '../../shared/format.uti
                         {{ formatUsdCents(row.subscription.usedCreditCents) }}
                         / {{ formatUsdCents(row.subscription.includedCreditCents) }}
                         ({{ row.subscription.usedPercent }}%)
+                      } @else if (row.subscription.usedCreditCents > 0) {
+                        {{ formatUsdCents(row.subscription.usedCreditCents) }} pay-as-you-go
                       } @else if (row.subscription.billingExempt) {
                         Exempt
                       } @else {

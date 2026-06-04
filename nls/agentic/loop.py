@@ -1213,10 +1213,16 @@ async def run_loop(
 
     from nls.agentic.profile_guard_policy import inject_prompt_structured_hints
     inject_prompt_structured_hints(user_input, state.hints)
-    from nls.agentic.profile_guard_policy import enrich_instruction_skill_hints
-    enrich_instruction_skill_hints(user_input, state.goals, state.hints)
-    from nls.agentic.profile_guard_policy import enrich_native_skill_hints
-    enrich_native_skill_hints(user_input, state.goals, state.hints)
+
+    try:
+        from nls.agentic.fleet_triage_policy import apply_fleet_hint_policy
+
+        state.goals, state.hints = apply_fleet_hint_policy(
+            list(state.hints or []),
+            list(state.goals or []),
+        )
+    except Exception:
+        pass
 
     from nls.agentic.task_epoch_hygiene import reconcile_goals_with_hints
     state.goals = reconcile_goals_with_hints(state.goals, state.hints)
@@ -1777,6 +1783,8 @@ async def run_loop(
             "delegate_count": state.delegate_count,
             "orchestration_profile": state.orchestration_profile or "solo_structured",
             "has_active_plan": _has_plan_now,
+            "hints": list(state.hints or []),
+            "goals": list(state.goals or []),
             "last_tool": "",
             "last_tool_action": "",
             "recent_tools": [],
@@ -2022,6 +2030,8 @@ async def run_loop(
 
         if _lstate_ref is not None:
             _lstate_ref["iteration"] = state.iteration
+            _lstate_ref["hints"] = list(state.hints or [])
+            _lstate_ref["goals"] = list(state.goals or [])
             _dc = state.delegate_count
             if delegate_manager is not None:
                 try:

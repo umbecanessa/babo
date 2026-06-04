@@ -132,6 +132,74 @@ def _skill_config_path(request: Request, name: str) -> Path:
     return cfg_dir / "config.json"
 
 
+_CHANNEL_SKILL_NAMES = frozenset({
+    "discord-channel",
+    "slack-channel",
+    "telegram-channel",
+    "whatsapp-channel",
+    "email-channel",
+})
+
+_CHANNEL_CREDENTIAL_KEYS = frozenset({
+    "bot_token",
+    "signing_secret",
+    "linked_phone",
+    "connected_email",
+})
+
+
+def _channel_skill_connected(name: str, config: dict[str, Any]) -> bool:
+    if name == "discord-channel" or name == "slack-channel":
+        return bool(config.get("enabled") and str(config.get("bot_token", "")).strip())
+    if name == "telegram-channel":
+        return bool(
+            str(config.get("bot_token", "")).strip()
+            or str(config.get("linked_id", "")).strip()
+        )
+    if name == "whatsapp-channel":
+        return bool(str(config.get("linked_phone", "")).strip())
+    if name == "email-channel":
+        return bool(str(config.get("connected_email", "")).strip())
+    return False
+
+
+def _read_skill_config_for_agent(
+    cfg_path: Path,
+    name: str,
+    resolved_agent_id: str | None,
+) -> tuple[dict[str, Any], bool]:
+    """Load skill config for UI/runtime. Never leak global credentials to other agents."""
+    global_cfg: dict[str, Any] = {}
+    if cfg_path.exists():
+        try:
+            global_cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+        except Exception as exc:
+            raise HTTPException(500, f"Failed to read config: {exc}") from exc
+
+    if not resolved_agent_id:
+        return global_cfg, False
+
+    agent_cfg_path = cfg_path.parent / "agents" / f"{resolved_agent_id}.json"
+    if agent_cfg_path.exists():
+        try:
+            agent_cfg = json.loads(agent_cfg_path.read_text(encoding="utf-8"))
+        except Exception:
+            agent_cfg = {}
+        merged = dict(global_cfg)
+        merged.update(agent_cfg)
+        return merged, True
+
+    if name in _CHANNEL_SKILL_NAMES:
+        # Per-agent channel skills: non-secret defaults only until this agent is linked.
+        config = {
+            k: v for k, v in global_cfg.items()
+            if k not in _CHANNEL_CREDENTIAL_KEYS
+        }
+        return config, False
+
+    return dict(global_cfg), False
+
+
 @router.get("/{name}/config/schema")
 async def get_skill_config_schema(request: Request, name: str) -> list[dict[str, Any]]:
     """Return the skill's declared config_schema (empty list if none)."""
@@ -151,24 +219,17 @@ async def get_skill_config(
     with_schema: bool = Query(False, description="Include config_schema annotations"),
     agent_id: str | None = Query(None, description="Agent ID for per-agent config"),
 ) -> dict[str, Any]:
-    """Return the skill's config, merging global + per-agent overrides."""
+    """Return skill config for an agent. Channel credentials are per-agent only."""
     cfg_path = _skill_config_path(request, name)
-    config: dict[str, Any] = {}
-    if cfg_path.exists():
-        try:
-            config = json.loads(cfg_path.read_text(encoding="utf-8"))
-        except Exception as exc:
-            raise HTTPException(500, f"Failed to read config: {exc}")
-
     resolved_agent_id = agent_id or _resolve_agent_id(request)
-    if resolved_agent_id:
-        agent_cfg_path = cfg_path.parent / "agents" / f"{resolved_agent_id}.json"
-        if agent_cfg_path.exists():
-            try:
-                agent_cfg = json.loads(agent_cfg_path.read_text(encoding="utf-8"))
-                config.update(agent_cfg)
-            except Exception:
-                pass
+    config, per_agent_configured = _read_skill_config_for_agent(
+        cfg_path, name, resolved_agent_id,
+    )
+    channel_connected = (
+        per_agent_configured
+        and name in _CHANNEL_SKILL_NAMES
+        and _channel_skill_connected(name, config)
+    )
 
     if with_schema:
         loader = _loader(request)
@@ -176,7 +237,12 @@ async def get_skill_config(
         schema = []
         if sk and sk.meta and sk.meta.config_schema:
             schema = [f.to_dict() for f in sk.meta.config_schema]
-        return {"config": config, "schema": schema}
+        return {
+            "config": config,
+            "schema": schema,
+            "per_agent_configured": per_agent_configured,
+            "channel_connected": channel_connected,
+        }
     return config
 
 
@@ -199,11 +265,21 @@ async def update_skill_config(
                 existing = json.loads(agent_cfg_path.read_text(encoding="utf-8"))
             except Exception:
                 pass
-        merged = {**existing, **config}
-        for key, val in list(merged.items()):
+        merged = {**existing}
+        for key, val in config.items():
             if isinstance(val, str) and "***masked***" in val:
                 if existing.get(key):
-                    merged[key] = existing[key]
+                    val = existing[key]
+            if key == "scoped_channels" and isinstance(val, dict):
+                incoming_channels = val.get("channels") if isinstance(val.get("channels"), dict) else {}
+                existing_channels = (
+                    existing.get("scoped_channels", {}).get("channels")
+                    if isinstance(existing.get("scoped_channels"), dict)
+                    else {}
+                )
+                if not incoming_channels and existing_channels:
+                    continue
+            merged[key] = val
         existing = merged
         agent_cfg_path.parent.mkdir(parents=True, exist_ok=True)
         agent_cfg_path.write_text(

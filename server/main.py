@@ -138,6 +138,7 @@ async def lifespan(app: FastAPI):
         data_dir=settings.data_dir,
         agent_manager=agent_manager,
         get_runtime=agent_manager.get_runtime,
+        agents_dir=settings.agents_dir,
     )
     app.state.squad_registry = squad_registry
     app.state.squad_manager = squad_manager

@@ -144,12 +144,16 @@ def apply_desired_channel(
     channels = scoped.setdefault("channels", {})
     cid = str(channel_id)
     prev = channels.get(cid) if isinstance(channels.get(cid), dict) else {}
+    prev_platform = bool(prev.get("platform_access", False))
+    if enabled is True and not prev:
+        # Channel toggled on from UI after sync — treat as accessible unless proven otherwise.
+        prev_platform = True
     entry = _channel_entry(
         channel_id=cid,
         name=name or prev.get("name", cid),
         guild_id=guild_id if guild_id is not None else prev.get("guild_id"),
         enabled_desired=enabled if enabled is not None else bool(prev.get("enabled_desired", False)),
-        platform_access=bool(prev.get("platform_access", False)),
+        platform_access=prev_platform,
         require_mention=(
             require_mention if require_mention is not None
             else bool(prev.get("require_mention", True))
@@ -167,6 +171,27 @@ def finalize_scoped_config(cfg: dict[str, Any], scoped: dict[str, Any]) -> dict[
     out["scoped_channels"] = scoped
     out["groups"] = compile_groups_policy({**out, "scoped_channels": scoped})
     return out
+
+
+def apply_channels_bulk_config(
+    cfg: dict[str, Any],
+    selections: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Apply many channel desired states in one config update."""
+    scoped = scoped_channels_from_config(cfg)
+    working = {**cfg, "scoped_channels": scoped}
+    for sel in selections:
+        cid = str(sel.get("id") or "")
+        if not cid:
+            continue
+        scoped = apply_desired_channel(
+            working,
+            cid,
+            enabled=bool(sel.get("enabled", False)),
+            require_mention=sel.get("require_mention"),
+        )
+        working = {**working, "scoped_channels": scoped}
+    return finalize_scoped_config(cfg, scoped)
 
 
 def reconcile_config(

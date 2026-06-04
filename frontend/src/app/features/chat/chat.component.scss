@@ -1061,9 +1061,9 @@
   margin: 0 0 8px;
   padding: 10px 12px;
   border-radius: 10px;
-  border: 1px solid rgba(251, 191, 36, 0.25);
-  background: rgba(251, 191, 36, 0.08);
-  color: rgba(251, 191, 36, 0.95);
+  border: 1px solid var(--ask-user-border);
+  background: var(--ask-user-bg);
+  color: var(--ask-user-banner-text);
   font-size: 12px;
   line-height: 1.4;
 }

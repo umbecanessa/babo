@@ -14,8 +14,9 @@ Desktop packaged apps use Electron `userData/data/`.
 | `powershell-standalone/` | Bundled PowerShell 7 (Windows) |
 | `data/` | Agent runtime root (`NLS_DATA_DIR`) |
 | `setup.log`, `runtime.log` | Setup and runtime logs |
+| Settings → Support & Debug | In-app export of logs and agent state (preferred over manual copy) |
 
-See [Desktop configuration](../configuration/desktop.md#desktop-userdata-layout).
+See [Desktop configuration](../configuration/desktop.md#desktop-userdata-layout) and [Desktop support & debug export](../guides/desktop-support-debug.md).
 
 ---
 

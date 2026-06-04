@@ -56,14 +56,14 @@ export class DiscordGatewayService implements OnModuleDestroy {
 
   private sessions = new Map<string, GatewaySession>();
 
+  /** Latest runtime agent registered for each bot token. */
+  private agentByToken = new Map<string, string>();
 
+  private tokenByAgent = new Map<string, string>();
 
   constructor(
-
     private readonly channels: ChannelsService,
-
     private readonly config: ConfigService,
-
   ) {}
 
 
@@ -98,7 +98,13 @@ export class DiscordGatewayService implements OnModuleDestroy {
 
     this.unregister(agentId);
 
-
+    const previousAgent = this.agentByToken.get(botToken);
+    if (previousAgent && previousAgent !== agentId) {
+      this.logger.warn(
+        `Discord GW: bot token reused — unregistering stale agent ${previousAgent}`,
+      );
+      this.unregister(previousAgent);
+    }
 
     return new Promise((resolve) => {
 
@@ -246,6 +252,16 @@ export class DiscordGatewayService implements OnModuleDestroy {
 
     }
 
+    const token = this.tokenByAgent.get(agentId);
+
+    if (token && this.agentByToken.get(token) === agentId) {
+
+      this.agentByToken.delete(token);
+
+    }
+
+    this.tokenByAgent.delete(agentId);
+
     this.sessions.delete(agentId);
 
   }
@@ -377,6 +393,10 @@ export class DiscordGatewayService implements OnModuleDestroy {
     if (eventType === 'READY') {
 
       this.logger.log(`Discord GW ready for ${session.agentId}`);
+
+      this.agentByToken.set(session.botToken, session.agentId);
+
+      this.tokenByAgent.set(session.agentId, session.botToken);
 
       this.finishRegister(session, { ok: true, ready: true });
 

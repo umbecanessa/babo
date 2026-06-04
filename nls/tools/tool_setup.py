@@ -321,9 +321,16 @@ def setup_tools(
     # Contacts tool — on-demand address book for all channels
     try:
         from .agent_tools.contacts import create_contacts_tool
-        tools.append(create_contacts_tool(agent_id))
+        tools.append(create_contacts_tool(agent_id, agent_dir))
     except Exception as exc:
         logger.warning("Agent %s: contacts tool init failed: %s", agent_id, exc)
+
+    # Channel inspect — on-demand channel config / scoped channels for this agent
+    try:
+        from .agent_tools.channel_inspect import create_channel_inspect_tool
+        tools.append(create_channel_inspect_tool(agent_id, agent_dir))
+    except Exception as exc:
+        logger.warning("Agent %s: channel_inspect tool init failed: %s", agent_id, exc)
 
     # Email ledger — history of sent and received emails
     try:

@@ -2526,8 +2526,8 @@ $indigo-light: var(--accent-primary);
   gap: 10px;
   padding: 12px 16px;
   margin: 6px 16px;
-  background: rgba(251, 191, 36, 0.08);
-  border: 1px solid rgba(251, 191, 36, 0.25);
+  background: var(--ask-user-bg);
+  border: 1px solid var(--ask-user-border);
   border-radius: 10px;
   animation: msg-in 0.3s ease-out;
 }
@@ -2548,7 +2548,7 @@ $indigo-light: var(--accent-primary);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: rgba(251, 191, 36, 0.7);
+  color: var(--ask-user-label);
   font-weight: 600;
 }
 

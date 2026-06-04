@@ -17,6 +17,7 @@ import {
   imports: [CommonModule, RouterLink],
   templateUrl: './agent-card.component.html',
   styleUrl: './agent-card.component.scss',
+  host: { '[class.accordion-host]': 'accordion' },
 })
 export class AgentCardComponent {
   @Input({ required: true }) agent!: Agent;
@@ -24,9 +25,21 @@ export class AgentCardComponent {
   @Input() remoteMode = false;
   @Input() deleting = false;
   @Input() pausing = false;
+  @Input() accordion = false;
+  @Input() expanded = false;
+  @Input() showRemoveFromSquad = false;
+  @Input() isSquadLeadMember = false;
   @Output() delete = new EventEmitter<void>();
   @Output() togglePause = new EventEmitter<void>();
   @Output() editCharter = new EventEmitter<{ agentId: string; tab: 'job' | 'trust' }>();
+  @Output() accordionToggle = new EventEmitter<void>();
+  @Output() removeFromSquad = new EventEmitter<void>();
+
+  onAccordionHeaderClick(event: MouseEvent): void {
+    const target = event.target as HTMLElement;
+    if (target.closest('button, a, input, select, textarea')) return;
+    this.accordionToggle.emit();
+  }
 
   get snapshot(): AgentSnapshot {
     return buildAgentSnapshot(this.agent);

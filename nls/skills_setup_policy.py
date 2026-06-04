@@ -531,9 +531,16 @@ def bundled_skill_ring_guidance(
     enabled: bool,
     config_schema: list[Any] | None = None,
     agent_installed: bool = False,
+    configured: bool = False,
 ) -> tuple[str, str]:
     """Cryptex skills-ring slot content for a configurable channel/native skill."""
-    if is_pre_shipped_channel_skill(skill_name):
+    if is_pre_shipped_channel_skill(skill_name) and configured:
+        kind = "Pre-shipped channel skill"
+        action = (
+            "already configured and connected for this agent — use channel send "
+            "tools and squad tools; do not skill_configure or ask for bot token"
+        )
+    elif is_pre_shipped_channel_skill(skill_name):
         kind = "Pre-shipped channel skill"
         action = f"skill_configure(skill_name='{skill_name}')"
     elif agent_installed:
@@ -545,7 +552,12 @@ def bundled_skill_ring_guidance(
     else:
         kind = "Configurable native skill"
         action = f"skill_configure(skill_name='{skill_name}')"
-    status = "enabled" if enabled else "NOT enabled for this agent"
+    if configured:
+        status = "connected"
+    elif enabled:
+        status = "enabled"
+    else:
+        status = "NOT enabled for this agent"
     headline = f"{skill_name}: {description} [{status}]"
     schema_keys = [
         getattr(f, "key", None) or (f.get("key") if isinstance(f, dict) else None)

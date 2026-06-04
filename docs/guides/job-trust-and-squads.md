@@ -162,14 +162,34 @@ Inbox and escalations live on the squad JSON record; member todos stay in each a
 
 ### Squad tools (runtime)
 
+**Bootstrap (not yet in a squad):** agents get `squad_setup` (`action='create'`) after triage detects `fleet:squad_candidate`. Flow: propose structure → `ask_user()` → `squad_setup(action='create', owner_confirmed=true)` → `adopt_orchestration_profile(profile='squad_lead')` → `spawn_member` / `set_member_job`.
+
 Registered on agents that belong to a squad (`AgentRuntime.sync_squad_tools()`):
 
 | Tool | Typical caller | Purpose |
 |------|----------------|---------|
-| `squad` | Lead (full); members (read/propose) | `inspect`, `list_inbox`, `propose`, `approve`, `reject`, `assign`, `reassign`, `resolve_escalation`, `brief`, `checkback`, `pause`, `resume`, `status` |
+| `squad_setup` | Solo agent (pre-squad) | **`create`** squad with self as lead (requires `owner_confirmed` after `ask_user`) |
+| `squad` | Lead (full); members (read/propose) | inbox, fleet ops, **`set_member_job`**, **`set_lead_job`** (owner_confirmed), **`request_trust_change`**, **`spawn_member`**, etc. |
 | `squad_escalate` | Members | Wake lead with open escalation |
 | `squad_message` | Any member | Internal peer message (optional wake) |
 | `squad_report_done` | Members | Complete approved squad todo → notify lead |
+
+**Lead fleet management**
+
+- **`spawn_member`** — creates a new agent from default genesis, sets Job title/mission, adds to squad, and `brief`s them (target spawn flow: owner talks to lead, lead builds the team).
+- **`set_member_job`** — lead updates a **member's** job charter directly (title, mission, persona, playbook).
+- **`set_lead_job`** — lead updates **own** job only with `owner_confirmed=true` after `ask_user()`.
+- **`request_trust_change`** — queues trust patch for **any** squad member (including lead); **owner approves/denies** on dashboard.
+- **`add_member` / `remove_member`** — roster changes push `[SQUAD ROSTER UPDATE]` dispatches and refresh Cryptex membership on all affected runtimes.
+- **`pause_member` / `resume_member`** — per-agent consciousness pause (lead only).
+- **`request_delete_member`** — queues a pending action; **owner approves/denies** on the dashboard squad card before the agent is deleted.
+
+### Dashboard squad UI
+
+- Unassigned agents appear as standalone cards; squad members appear only inside their squad card as **expandable rows** (same vitals/activity as agent cards).
+- Collapsed row: status, name, job, Pause/Delete, remove-from-squad, and **chat** icon.
+- **Add agent** dropdown on each squad card adds unassigned agents.
+- Pending delete/trust requests from the lead show **Approve / Deny** buttons for the owner.
 
 ### `squad_lead` orchestration profile
 

@@ -21,8 +21,10 @@ import {
   normalizeInferenceBaseUrl,
   probeLanHost,
   runCapabilityScan,
+  scanDevice,
   testInferenceEndpoint,
 } from './capability-scanner';
+import { parseLanHostInput } from './model-fit';
 import { recommendProfile } from './capability-recommender';
 import type { CapabilityProfile, CapabilityScan } from './capability-types';
 import {
@@ -31,6 +33,13 @@ import {
   toModelFitSnapshot,
 } from './model-fit';
 import type { LanSshOptions } from './model-fit-types';
+import {
+  exportDebugArtifact,
+  exportFullDebugBundle,
+  listDebugArtifacts,
+  revealUserDataFolder,
+  type DebugArtifactKind,
+} from './debug-support';
 
 // ---------------------------------------------------------------------------
 // Register all IPC handlers
@@ -93,19 +102,65 @@ export function registerIpcHandlers(
   });
 
   ipcMain.handle('capabilities:scan-device', async () => {
-    return runCapabilityScan(venv.getNlsRoot());
+    const base = await runCapabilityScan(venv.getNlsRoot());
+    try {
+      const localFit = await modelFitLocal(venv.getNlsRoot());
+      return {
+        ...base,
+        modelFit: { local: toModelFitSnapshot(localFit) },
+      } satisfies CapabilityScan;
+    } catch (err) {
+      console.warn('Model fit (local) failed:', (err as Error)?.message || err);
+      return base;
+    }
   });
 
   ipcMain.handle(
     'capabilities:probe-lan',
-    async (_event, host: string, gpuWorkerSecret?: string) => {
-      const base = await runCapabilityScan(venv.getNlsRoot());
+    async (
+      _event,
+      host: string,
+      gpuWorkerSecret?: string,
+      sshOptions?: LanSshOptions,
+      preserveModelFit?: CapabilityScan['modelFit'],
+    ) => {
+      const device = await scanDevice(venv.getNlsRoot());
       const lan = await probeLanHost(host, gpuWorkerSecret);
-      return {
-        ...base,
+      const scan: CapabilityScan = {
         scannedAt: new Date().toISOString(),
+        device,
         lan,
+        modelFit: preserveModelFit ? { ...preserveModelFit } : {},
       };
+      const { sshUser } = parseLanHostInput(host, sshOptions?.user);
+      if (sshUser?.trim()) {
+        try {
+          const lanFit = await modelFitRemote(host, {
+            user: sshUser.trim(),
+            port: sshOptions?.port,
+          });
+          scan.modelFit = { ...scan.modelFit, lan: toModelFitSnapshot(lanFit) };
+        } catch (err) {
+          console.warn('Model fit (LAN) failed:', (err as Error)?.message || err);
+        }
+      }
+      return scan;
+    },
+  );
+
+  ipcMain.handle(
+    'capabilities:model-fit-local',
+    async () => {
+      const fit = await modelFitLocal(venv.getNlsRoot());
+      return toModelFitSnapshot(fit);
+    },
+  );
+
+  ipcMain.handle(
+    'capabilities:model-fit-remote',
+    async (_event, host: string, sshOptions?: LanSshOptions) => {
+      const fit = await modelFitRemote(host, sshOptions);
+      return toModelFitSnapshot(fit);
     },
   );
 
@@ -414,6 +469,60 @@ export function registerIpcHandlers(
     hostname: os.hostname(),
   }));
 
+  // ─── Support / debug export ───────────────────────────────────
+
+  ipcMain.handle('debug:summary', () =>
+    listDebugArtifacts(config, runtime.getStatus().error),
+  );
+
+  ipcMain.handle('debug:reveal-user-data', () => {
+    revealUserDataFolder();
+    return { ok: true };
+  });
+
+  ipcMain.handle(
+    'debug:export-artifact',
+    async (
+      _event,
+      kind: DebugArtifactKind,
+      agentId?: string,
+    ) => {
+      const win = BrowserWindow.getFocusedWindow();
+      const defaultName = defaultExportFilename(kind, agentId);
+      const result = win
+        ? await dialog.showSaveDialog(win, {
+            title: 'Export debug file',
+            defaultPath: defaultName,
+          })
+        : { canceled: true, filePath: undefined };
+      if (result.canceled || !result.filePath) {
+        return { ok: false, message: 'Export canceled' };
+      }
+      return exportDebugArtifact(config, kind, result.filePath, agentId);
+    },
+  );
+
+  ipcMain.handle('debug:export-full', async () => {
+    const win = BrowserWindow.getFocusedWindow();
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+    const defaultName = `babo-debug-export-${stamp}.zip`;
+    const result = win
+      ? await dialog.showSaveDialog(win, {
+          title: 'Export full debug bundle',
+          defaultPath: defaultName,
+          filters: [{ name: 'Zip archive', extensions: ['zip'] }],
+        })
+      : { canceled: true, filePath: undefined };
+    if (result.canceled || !result.filePath) {
+      return { ok: false, message: 'Export canceled' };
+    }
+    let dest = result.filePath;
+    if (!dest.toLowerCase().endsWith('.zip')) {
+      dest += '.zip';
+    }
+    return exportFullDebugBundle(config, runtime, dest);
+  });
+
   // ─── Notifications ────────────────────────────────────────────
 
   ipcMain.handle(
@@ -675,4 +784,31 @@ function testConnectionOnce(url: string): Promise<{ ok: boolean; message: string
       });
     });
   });
+}
+
+function defaultExportFilename(
+  kind: DebugArtifactKind,
+  agentId?: string,
+): string {
+  const shortAgent = agentId ? agentId.slice(0, 8) : '';
+  switch (kind) {
+    case 'runtime_log':
+      return 'runtime.log';
+    case 'setup_log':
+      return 'setup.log';
+    case 'electron_log':
+      return 'babo-desktop.log';
+    case 'desktop_config':
+      return 'nls-config.redacted.json';
+    case 'agent_transcript':
+      return shortAgent ? `chat-transcript-${shortAgent}.jsonl` : 'chat-transcript.jsonl';
+    case 'agent_sessions':
+      return shortAgent ? `sessions-${shortAgent}.zip` : 'sessions.zip';
+    case 'agent_agentic_logs':
+      return shortAgent ? `agentic-logs-${shortAgent}.zip` : 'agentic-logs.zip';
+    case 'agent_state':
+      return shortAgent ? `agent-state-${shortAgent}.zip` : 'agent-state.zip';
+    default:
+      return 'babo-export.dat';
+  }
 }

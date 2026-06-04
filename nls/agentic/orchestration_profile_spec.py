@@ -53,6 +53,7 @@ _CONVERSATIONAL_ONLY_BEHAVIORAL_DOMAINS = frozenset({
 # Squad lead coordination — not shown to solo or generic orchestrated turns.
 _SQUAD_LEAD_ONLY_BEHAVIORAL_DOMAINS = frozenset({
     "squad_coordination",
+    "squad_channel_topology",
     "squad_help_requests",
     "squad_inbox_discipline",
 })
@@ -392,6 +393,10 @@ def profile_anchor_message(profile: str | None) -> str:
         "squad_lead": (
             "[ORCHESTRATION DEPTH: squad_lead] You lead a persistent squad. "
             "Use squad tools to approve inbox items, assign member todos, "
+            "spawn_member (create + job + brief), add_member, remove_member, "
+            "set_member_job (update member charters), set_lead_job (your job — only "
+            "after ask_user owner_confirmed=true), request_trust_change (owner "
+            "dashboard approval), pause_member, request_delete_member (owner confirms), "
             "and resolve squad_escalate requests. Full tool surface retained."
         ),
     }

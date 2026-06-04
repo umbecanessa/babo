@@ -50,6 +50,17 @@ export function recommendProfile(
         ? 'LAN inference server detected'
         : lanPick?.reason ?? 'LAN server — use My server in setup',
     };
+  } else if (scan.modelFit?.lan?.localViable && scan.modelFit.lan.host) {
+    const pick = topFit('lan');
+    const host = scan.modelFit.lan.host.replace(/^https?:\/\//, '').split('/')[0].split(':')[0];
+    inference = {
+      tier: 'self_lan',
+      url: `http://${host}:8000`,
+      model: pick?.modelId ?? 'gpt-4o-mini',
+      reason:
+        pick?.reason ??
+        'Your LAN GPU can run large models — add your vLLM server URL in setup',
+    };
   } else if (scan.modelFit?.local?.localViable) {
     const pick = topFit('local');
     inference = {
@@ -129,9 +140,15 @@ export function recommendProfile(
         reason: 'Voice recognition on this computer (recommended)',
       };
 
+  const lanGpuFit = scan.modelFit?.lan?.localViable && scan.modelFit.lan.host;
   const profile: CapabilityProfile = {
     version: 1,
-    profileId: inferenceLan ? 'lan-hub' : device.hardwareTier === 'B' ? 'enthusiast-desktop' : 'default',
+    profileId:
+      inferenceLan || lanGpuFit
+        ? 'lan-hub'
+        : device.hardwareTier === 'B'
+          ? 'enthusiast-desktop'
+          : 'default',
     scan,
     inferenceCapabilities,
     inference,

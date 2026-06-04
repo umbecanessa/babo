@@ -151,6 +151,23 @@ async def discord_update_channel(
     return {"ok": True, "scoped_channels": updated.get("scoped_channels", {}), "permission_warning": updated.get("_permission_warning", "")}
 
 
+@router.put("/channels/{agent_id}/desired")
+async def discord_set_channels_desired(agent_id: str, request: Request):
+    """Bulk save channel scope from the Tools UI."""
+    adapter = _get_adapter(request.app)
+    if adapter is None:
+        raise HTTPException(status_code=503, detail="Discord skill not loaded")
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    selections = body.get("channels") or []
+    if not isinstance(selections, list):
+        raise HTTPException(status_code=400, detail="channels must be a list")
+    updated = await adapter.apply_channels_bulk(agent_id, selections)
+    return {"ok": True, **adapter.get_status(agent_id=agent_id)}
+
+
 @router.get("/roles/{agent_id}")
 async def discord_list_roles(agent_id: str, request: Request):
     adapter = _get_adapter(request.app)

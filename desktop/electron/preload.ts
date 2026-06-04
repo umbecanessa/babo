@@ -97,8 +97,28 @@ const nlsDesktopApi = {
     scanDevice: (): Promise<any> =>
       ipcRenderer.invoke('capabilities:scan-device'),
 
-    probeLan: (host: string, gpuWorkerSecret?: string): Promise<any> =>
-      ipcRenderer.invoke('capabilities:probe-lan', host, gpuWorkerSecret),
+    probeLan: (
+      host: string,
+      gpuWorkerSecret?: string,
+      sshOptions?: { user?: string; port?: number },
+      preserveModelFit?: { local?: unknown; lan?: unknown },
+    ): Promise<any> =>
+      ipcRenderer.invoke(
+        'capabilities:probe-lan',
+        host,
+        gpuWorkerSecret,
+        sshOptions,
+        preserveModelFit,
+      ),
+
+    modelFitLocal: (): Promise<any> =>
+      ipcRenderer.invoke('capabilities:model-fit-local'),
+
+    modelFitRemote: (
+      host: string,
+      sshOptions?: { user?: string; port?: number },
+    ): Promise<any> =>
+      ipcRenderer.invoke('capabilities:model-fit-remote', host, sshOptions),
 
     recommend: (scan: any, gpuWorkerSecret?: string): Promise<any> =>
       ipcRenderer.invoke('capabilities:recommend', scan, gpuWorkerSecret),
@@ -223,6 +243,45 @@ const nlsDesktopApi = {
 
   showNotification: (title: string, body: string): Promise<void> =>
     ipcRenderer.invoke('notification:show', title, body),
+
+  // ─── Support / debug ──────────────────────────────────────────
+
+  debug: {
+    getSummary: (): Promise<{
+      userDataPath: string;
+      dataPath: string;
+      appVersion: string;
+      platform: string;
+      errors: Array<{
+        id: string;
+        source: string;
+        message: string;
+        at: string | null;
+      }>;
+      artifacts: Array<{
+        kind: string;
+        label: string;
+        description: string;
+        agentId?: string;
+        agentName?: string;
+        path: string;
+        exists: boolean;
+        sizeBytes: number;
+      }>;
+    }> => ipcRenderer.invoke('debug:summary'),
+
+    revealUserData: (): Promise<{ ok: boolean }> =>
+      ipcRenderer.invoke('debug:reveal-user-data'),
+
+    exportArtifact: (
+      kind: string,
+      agentId?: string,
+    ): Promise<{ ok: boolean; path?: string; message: string }> =>
+      ipcRenderer.invoke('debug:export-artifact', kind, agentId),
+
+    exportFullBundle: (): Promise<{ ok: boolean; path?: string; message: string }> =>
+      ipcRenderer.invoke('debug:export-full'),
+  },
 
   // ─── Permissions ──────────────────────────────────────────────
 

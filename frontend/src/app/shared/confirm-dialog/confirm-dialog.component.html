@@ -1,0 +1,20 @@
+<div class="confirm-overlay" role="presentation">
+  <div class="confirm-backdrop" (click)="onBackdropClick()" aria-hidden="true"></div>
+  <div class="confirm-panel" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+    <h3 class="confirm-title">{{ title() }}</h3>
+    <p class="confirm-message">{{ message() }}</p>
+    <div class="confirm-actions">
+      <button type="button" class="btn-secondary" (click)="onCancelClick($event)">
+        {{ cancelLabel() }}
+      </button>
+      <button
+        type="button"
+        class="btn-confirm"
+        [class.btn-danger]="variant() === 'danger'"
+        (click)="onConfirmClick($event)"
+      >
+        {{ confirmLabel() }}
+      </button>
+    </div>
+  </div>
+</div>

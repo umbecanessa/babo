@@ -157,6 +157,22 @@ async def slack_update_channel(agent_id: str, channel_id: str, request: Request)
     return {"ok": True, "scoped_channels": updated.get("scoped_channels", {})}
 
 
+@router.put("/channels/{agent_id}/desired")
+async def slack_set_channels_desired(agent_id: str, request: Request):
+    adapter = _get_adapter(request.app)
+    if adapter is None:
+        raise HTTPException(status_code=503, detail="Slack skill not loaded")
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    selections = body.get("channels") or []
+    if not isinstance(selections, list):
+        raise HTTPException(status_code=400, detail="channels must be a list")
+    await adapter.apply_channels_bulk(agent_id, selections)
+    return {"ok": True, **adapter.get_status(agent_id=agent_id)}
+
+
 @router.get("/status/{agent_id}")
 async def slack_status(agent_id: str, request: Request):
     adapter = _get_adapter(request.app)

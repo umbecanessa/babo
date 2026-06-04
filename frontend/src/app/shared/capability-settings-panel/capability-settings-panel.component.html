@@ -22,6 +22,52 @@
 
     </div>
 
+    @if (localModelFit(); as fit) {
+      <div class="model-fit-strip">
+        <span class="model-fit-title">This PC</span>
+        @for (m of fit.recommendations.slice(0, 3); track m.modelId) {
+          <span class="model-fit-chip">{{ m.displayName }}</span>
+        }
+      </div>
+    }
+
+    <details class="lan-model-fit-details">
+      <summary>LAN server — GPU &amp; model fit</summary>
+      <p class="panel-muted">SSH into your homelab box (e.g. GX10) to see which models fit its GPU.</p>
+      <div class="form-row">
+        <input type="text" [(ngModel)]="lanHost" placeholder="192.168.68.96" />
+        <input type="text" [(ngModel)]="lanSshUser" placeholder="SSH user" />
+        <input type="text" [(ngModel)]="lanSshPort" placeholder="22" class="port-input" />
+      </div>
+      <div class="form-row actions">
+        <button type="button" class="link-btn" (click)="runLanProbe()" [disabled]="lanProbing() || !lanHost.trim()">
+          {{ lanProbing() ? 'Probing…' : 'Find services' }}
+        </button>
+        <button
+          type="button"
+          class="link-btn"
+          (click)="runLanModelFit()"
+          [disabled]="lanModelFitLoading() || !lanHost.trim() || !resolvedLanSshUser()"
+        >
+          {{ lanModelFitLoading() ? 'Scanning…' : 'Scan GPU & models' }}
+        </button>
+      </div>
+      @if (lanModelFit(); as lanFit) {
+        <ul class="model-fit-list compact">
+          <li class="gpu-line">{{ lanFit.gpuName }} · {{ lanFit.vramGb }} GB VRAM</li>
+          @if (lanFit.error) {
+            <li class="warn">{{ lanFit.error }}</li>
+          }
+          @for (m of lanFit.recommendations; track m.modelId) {
+            <li>
+              <span class="fit-tag" [class]="m.fitLevel">{{ fitLevelLabel(m.fitLevel) }}</span>
+              {{ m.displayName }} — <code>{{ m.modelId }}</code>
+            </li>
+          }
+        </ul>
+      }
+    </details>
+
   }
 
 

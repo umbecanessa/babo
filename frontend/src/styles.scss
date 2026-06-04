@@ -42,6 +42,11 @@
   --accent-gold: #e5a520;
   --accent-gold-glow: rgba(229, 165, 32, 0.15);
 
+  --ask-user-bg: color-mix(in srgb, var(--accent-warn) 16%, var(--bg-secondary));
+  --ask-user-border: color-mix(in srgb, var(--accent-warn) 55%, var(--overlay-4));
+  --ask-user-label: #8a5a00;
+  --ask-user-banner-text: var(--text-primary);
+
   --radius-sm: 10px;
   --radius-md: 14px;
   --radius-lg: 18px;
@@ -110,6 +115,11 @@
   --surface-inset: rgba(0, 0, 0, 0.22);
   --surface-inset-strong: rgba(0, 0, 0, 0.32);
   --backdrop-scrim: rgba(0, 0, 0, 0.62);
+
+  --ask-user-bg: color-mix(in srgb, var(--accent-warn) 14%, var(--bg-secondary));
+  --ask-user-border: color-mix(in srgb, var(--accent-warn) 40%, transparent);
+  --ask-user-label: color-mix(in srgb, var(--accent-warn) 78%, #fff);
+  --ask-user-banner-text: color-mix(in srgb, var(--accent-warn) 88%, #fff);
 
   color-scheme: dark;
 }

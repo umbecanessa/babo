@@ -77,6 +77,13 @@ function decodeJwtEmail(): string {
   }
 }
 
+type IntegrationConfigCacheEntry = {
+  config: Record<string, unknown>;
+  schema: ConfigFieldSchema[];
+  perAgentConfigured?: boolean;
+  channelConnected?: boolean;
+};
+
 @Component({
   selector: 'app-tools',
   standalone: true,
@@ -564,8 +571,8 @@ function decodeJwtEmail(): string {
           }
         }
 
-        <!-- Connected: Discord moderator roles -->
-        @if (getIntegrationStatus(intName)?.connected && intName === 'discord-channel') {
+        <!-- Discord moderator roles (auto-loaded when bot token is configured) -->
+        @if (intName === 'discord-channel' && discordChannelConfigured()) {
           <div class="discord-roles-panel">
             <div class="channel-scope-header">
               <div>
@@ -588,7 +595,7 @@ function decodeJwtEmail(): string {
               <p class="channel-scope-hint">Saving…</p>
             }
             @if (discordRoles().length === 0 && !discordRolesLoading()) {
-              <p class="channel-scope-empty">Click Refresh roles after the bot is in your server.</p>
+              <p class="channel-scope-empty">Loading roles from Discord…</p>
             } @else {
               @for (guild of discordRoles(); track guild.guild_id) {
                 <div class="discord-guild-roles">
@@ -610,8 +617,8 @@ function decodeJwtEmail(): string {
           </div>
         }
 
-        <!-- Connected: channel scope (Discord / Slack) -->
-        @if (getIntegrationStatus(intName)?.connected && hasChannelScopePanel(intName)) {
+        <!-- Channel scope (Discord / Slack) -->
+        @if (hasChannelScopePanel(intName) && channelScopePanelVisible(intName)) {
           <div class="channel-scope-panel">
             <div class="channel-scope-header">
               <div>
@@ -619,16 +626,33 @@ function decodeJwtEmail(): string {
                 <p class="channel-scope-hint">
                   Choose which channels this agent listens and replies in. Sync refreshes from
                   {{ getChannelType(intName) === 'discord' ? 'Discord' : 'Slack' }}.
+                  Use <strong>Save configuration</strong> below to persist your selection.
                 </p>
               </div>
-              <button
-                type="button"
-                class="modal-action-btn secondary channel-scope-sync"
-                (click)="syncChannelScope(intName)"
-                [disabled]="channelScopeSyncing()">
-                @if (channelScopeSyncing()) { <span class="btn-spinner"></span> Syncing... }
-                @else { Sync channels }
-              </button>
+              <div class="channel-scope-header-actions">
+                <button
+                  type="button"
+                  class="channel-scope-link-btn"
+                  (click)="selectAllChannelScope(true)"
+                  [disabled]="!channelScopeRows().length">
+                  Select all
+                </button>
+                <button
+                  type="button"
+                  class="channel-scope-link-btn"
+                  (click)="selectAllChannelScope(false)"
+                  [disabled]="!channelScopeRows().length">
+                  Deselect all
+                </button>
+                <button
+                  type="button"
+                  class="modal-action-btn secondary channel-scope-sync"
+                  (click)="syncChannelScope(intName)"
+                  [disabled]="channelScopeSyncing()">
+                  @if (channelScopeSyncing()) { <span class="btn-spinner"></span> Syncing... }
+                  @else { Sync channels }
+                </button>
+              </div>
             </div>
             @if (channelScopeError()) {
               <p class="channel-scope-error">{{ channelScopeError() }}</p>
@@ -908,7 +932,7 @@ export class ToolsComponent implements OnInit, OnDestroy {
   fileSaveSuccess = signal(false);
   private editedFileContent = '';
 
-  private integrationConfigCache = signal<Record<string, { config: Record<string, unknown>; schema: ConfigFieldSchema[] }>>({});
+  private integrationConfigCache = signal<Record<string, IntegrationConfigCacheEntry>>({});
   private integrationSaveSuccess = signal<Record<string, boolean>>({});
   private integrationSaving = signal<Record<string, boolean>>({});
   integrationDrafts = signal<Record<string, Record<string, unknown>>>({});
@@ -969,6 +993,8 @@ export class ToolsComponent implements OnInit, OnDestroy {
   channelScopeError = signal('');
   channelScopeWarning = signal('');
   channelScopeSyncHint = signal('');
+  channelScopeSaving = signal(false);
+  channelScopeDirty = signal(false);
   private channelScopeSkill = signal<string | null>(null);
 
   discordRoles = signal<Array<{ guild_id: string; guild_name: string; roles: Array<{ id: string; name: string }> }>>([]);
@@ -1216,7 +1242,7 @@ export class ToolsComponent implements OnInit, OnDestroy {
 
   private loadIntegrationConfigs(): void {
     const list = this.integrations();
-    const cache: Record<string, { config: Record<string, unknown>; schema: ConfigFieldSchema[] }> = {};
+    const cache: Record<string, IntegrationConfigCacheEntry> = {};
     let pending = list.length;
     if (pending === 0) {
       this.integrationConfigCache.set(cache);
@@ -1224,12 +1250,22 @@ export class ToolsComponent implements OnInit, OnDestroy {
     }
     for (const s of list) {
       this.api.getSkillConfig(s.name, true, this.skillAgentId() || undefined).subscribe({
-        next: (res: { config?: Record<string, unknown>; schema?: ConfigFieldSchema[] }) => {
+        next: (res: {
+          config?: Record<string, unknown>;
+          schema?: ConfigFieldSchema[];
+          per_agent_configured?: boolean;
+          channel_connected?: boolean;
+        }) => {
           const config = { ...(res?.config ?? {}) };
           if (s.name === 'email-channel' && this.userEmail && !config['owner_identity']) {
             config['owner_identity'] = this.userEmail;
           }
-          cache[s.name] = { config, schema: res?.schema ?? [] };
+          cache[s.name] = {
+            config,
+            schema: res?.schema ?? [],
+            perAgentConfigured: !!res?.per_agent_configured,
+            channelConnected: !!res?.channel_connected,
+          };
           pending--;
           if (pending === 0) {
             this.integrationConfigCache.set({ ...cache });
@@ -1248,40 +1284,40 @@ export class ToolsComponent implements OnInit, OnDestroy {
   }
 
   /** Use config values as fallback to populate channel status signals. */
-  private syncStatusFromConfigs(cache: Record<string, { config: Record<string, unknown>; schema: ConfigFieldSchema[] }>): void {
+  private syncStatusFromConfigs(cache: Record<string, IntegrationConfigCacheEntry>): void {
     const emailCfg = cache['email-channel']?.config;
     if (emailCfg?.['alias'] && !this.emailAlias()) {
       this.emailAlias.set(String(emailCfg['alias']));
     }
 
-    const telegramCfg = cache['telegram-channel']?.config;
-    if (telegramCfg?.['bot_token'] && !this.telegramConnected()) {
+    const telegramCfg = cache['telegram-channel'];
+    if (telegramCfg?.channelConnected && !this.telegramConnected()) {
       this.telegramConnected.set(true);
-      this.telegramBotUsername.set(String(telegramCfg['bot_username'] || ''));
+      this.telegramBotUsername.set(String(telegramCfg.config?.['bot_username'] || ''));
     }
 
-    const whatsappCfg = cache['whatsapp-channel']?.config;
-    if (whatsappCfg?.['linked_phone'] && !this.whatsappConnected()) {
+    const whatsappCfg = cache['whatsapp-channel'];
+    if (whatsappCfg?.channelConnected && !this.whatsappConnected()) {
       this.whatsappConnected.set(true);
-      this.whatsappPhone.set(String(whatsappCfg['linked_phone']));
+      this.whatsappPhone.set(String(whatsappCfg.config?.['linked_phone'] || ''));
     }
 
-    const gwCfg = cache['google-workspace']?.config;
-    if (gwCfg?.['connected_email'] && !this.googleWorkspaceConnected()) {
+    const gwCfg = cache['google-workspace'];
+    if (gwCfg?.config?.['connected_email'] && !this.googleWorkspaceConnected()) {
       this.googleWorkspaceConnected.set(true);
-      this.googleWorkspaceEmail.set(String(gwCfg['connected_email']));
+      this.googleWorkspaceEmail.set(String(gwCfg.config['connected_email']));
     }
 
-    const discordCfg = cache['discord-channel']?.config;
-    if (discordCfg?.['bot_token'] && !this.discordConnected()) {
+    const discordCfg = cache['discord-channel'];
+    if (discordCfg?.channelConnected && !this.discordConnected()) {
       this.discordConnected.set(true);
-      this.discordBotUsername.set(String(discordCfg['bot_username'] || ''));
+      this.discordBotUsername.set(String(discordCfg.config?.['bot_username'] || ''));
     }
 
-    const slackCfg = cache['slack-channel']?.config;
-    if (slackCfg?.['bot_token'] && !this.slackConnected()) {
+    const slackCfg = cache['slack-channel'];
+    if (slackCfg?.channelConnected && !this.slackConnected()) {
       this.slackConnected.set(true);
-      this.slackTeamName.set(String(slackCfg['team_name'] || slackCfg['team_id'] || ''));
+      this.slackTeamName.set(String(slackCfg.config?.['team_name'] || slackCfg.config?.['team_id'] || ''));
     }
   }
 
@@ -1396,6 +1432,9 @@ export class ToolsComponent implements OnInit, OnDestroy {
           ...c,
           [skillName]: { ...(c[skillName] ?? { config: {}, schema: [] }), config: { ...(c[skillName]?.config ?? {}), ...config } },
         }));
+        if (this.hasChannelScopePanel(skillName) && this.channelScopeRows().length) {
+          this.saveChannelScopeSelection(skillName);
+        }
       },
       error: () => this.integrationSaving.update((m) => ({ ...m, [skillName]: false })),
     });
@@ -1408,15 +1447,29 @@ export class ToolsComponent implements OnInit, OnDestroy {
     this.channelScopeError.set('');
     this.channelScopeWarning.set('');
     this.channelScopeSyncHint.set('');
+    this.channelScopeDirty.set(false);
     void this.platformIntegrations.refresh();
     this.loadSkillOnboarding(skillName);
     this.loadChannelStatusForSkill(skillName);
-    if (this.getIntegrationStatus(skillName)?.connected && this.hasChannelScopePanel(skillName)) {
+    if (this.hasChannelScopePanel(skillName) && this.channelScopePanelVisible(skillName)) {
       this.syncChannelScope(skillName);
     }
-    if (skillName === 'discord-channel' && this.getIntegrationStatus(skillName)?.connected) {
+    if (skillName === 'discord-channel' && this.discordChannelConfigured()) {
       this.loadDiscordRoles();
     }
+  }
+
+  discordChannelConfigured(): boolean {
+    if (this.discordConnected()) return true;
+    const entry = this.integrationConfigCache()['discord-channel'];
+    return !!(entry?.channelConnected || (entry?.perAgentConfigured && entry?.config?.['bot_token']));
+  }
+
+  channelScopePanelVisible(skillName: string): boolean {
+    if (!this.hasChannelScopePanel(skillName)) return false;
+    if (this.getIntegrationStatus(skillName)?.connected) return true;
+    const entry = this.integrationConfigCache()[skillName];
+    return !!(entry?.channelConnected || (entry?.perAgentConfigured && entry?.config?.['bot_token']));
   }
 
   /** Per-agent skill config id (runtime id when available — must match channel webhooks). */
@@ -1553,23 +1606,55 @@ export class ToolsComponent implements OnInit, OnDestroy {
     enabled: boolean,
     requireMention: boolean,
   ): void {
-    if (!this.agentId) return;
+    this.channelScopeRows.update((rows) =>
+      rows.map((row) =>
+        row.id === channelId
+          ? {
+              ...row,
+              enabled_desired: enabled,
+              require_mention: requireMention,
+              effective_enabled: enabled && row.platform_access !== false,
+            }
+          : row,
+      ),
+    );
+    this.channelScopeDirty.set(true);
+  }
+
+  selectAllChannelScope(enabled: boolean): void {
+    this.channelScopeRows.update((rows) =>
+      rows.map((row) => ({
+        ...row,
+        enabled_desired: enabled,
+        effective_enabled: enabled && row.platform_access !== false,
+      })),
+    );
+    this.channelScopeDirty.set(true);
+  }
+
+  saveChannelScopeSelection(skillName: string): void {
+    if (!this.agentId || !this.channelScopeRows().length) return;
+    this.channelScopeSaving.set(true);
+    this.channelScopeError.set('');
     const rid = this.channelScopeAgentId();
-    this.http.patch<any>(
-      `${this.api.runtimeBase}/skills/${skillName}/channels/${rid}/${channelId}`,
-      { enabled, require_mention: requireMention },
-    ).subscribe({
-      next: (res) => {
-        if (res?.permission_warning) {
-          this.channelScopeWarning.set(String(res.permission_warning));
-        }
-        this.loadChannelScope(skillName);
-      },
-      error: (err) => {
-        this.channelScopeError.set(err.error?.detail || 'Failed to update channel');
-        this.loadChannelScope(skillName);
-      },
-    });
+    const channels = this.channelScopeRows().map((row) => ({
+      id: row.id,
+      enabled: !!row.enabled_desired,
+      require_mention: row.require_mention !== false,
+    }));
+    this.http
+      .put<any>(`${this.api.runtimeBase}/skills/${skillName}/channels/${rid}/desired`, { channels })
+      .subscribe({
+        next: (res) => {
+          this.channelScopeRows.set(res?.channels ?? this.channelScopeRows());
+          this.channelScopeSaving.set(false);
+          this.channelScopeDirty.set(false);
+        },
+        error: (err) => {
+          this.channelScopeError.set(err.error?.detail || 'Failed to save channel scope');
+          this.channelScopeSaving.set(false);
+        },
+      });
   }
 
   quickConnect(skillName: string): void {
@@ -1734,9 +1819,14 @@ export class ToolsComponent implements OnInit, OnDestroy {
           if (s?.connected) {
             this.discordConnected.set(true);
             this.discordBotUsername.set(s.bot_username || '');
-            if (this.activeIntegration() === skillName) {
-              this.loadChannelScope(skillName);
+          }
+          if (this.activeIntegration() === skillName && this.channelScopePanelVisible(skillName)) {
+            if (s?.channels?.length) {
+              this.channelScopeRows.set(s.channels);
+            } else {
+              this.syncChannelScope(skillName);
             }
+            this.loadDiscordRoles();
           }
         },
         error: () => {},

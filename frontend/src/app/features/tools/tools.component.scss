@@ -394,6 +394,27 @@ $radius-lg: 12px;
   margin-bottom: 12px;
 }
 
+.channel-scope-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.channel-scope-link-btn {
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: $accent;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+
+  &:hover:not(:disabled) { text-decoration: underline; }
+  &:disabled { opacity: 0.4; cursor: not-allowed; }
+}
+
 .channel-scope-title {
   margin: 0 0 4px;
   font-size: 14px;

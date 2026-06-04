@@ -591,6 +591,18 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                     )
                     _pre_goals = list(_turn_triage.goals)
                     _pre_hints = list(_turn_triage.hints)
+                    try:
+                        from nls.agentic.fleet_triage_policy import (
+                            HINT_FLEET_SQUAD,
+                            apply_fleet_hint_policy,
+                        )
+
+                        if HINT_FLEET_SQUAD in _pre_hints:
+                            _pre_goals, _pre_hints = apply_fleet_hint_policy(
+                                _pre_hints, _pre_goals,
+                            )
+                    except Exception:
+                        pass
                     logger.info(
                         "Agent %s: [AGENTIC] triage profile=%s intent=%s "
                         "goals=%s hints=%s",

@@ -4,6 +4,8 @@ Configure your account and programmatic access to the **local Python runtime**.
 
 **Routes:** `/settings`, `/settings/api-keys`
 
+**Desktop:** Settings also includes **Support & Debug** (log export, full debug bundle). See [Desktop support & debug export](desktop-support-debug.md).
+
 ---
 
 ## User settings

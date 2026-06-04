@@ -21,4 +21,5 @@ In-depth guides for every major Babo feature.
 
 - [Tools & skills](tools-and-skills.md) — built-in tools, skill lifecycle, crystallization
 - [Settings & API keys](settings-and-api-keys.md) — account prefs, `nlsk_` keys
+- [Desktop support & debug export](desktop-support-debug.md) — logs, errors, full debug zip for support
 - [Integrations](integrations/index.md) — WhatsApp, Telegram, Google, email, MCP, ClawHub

@@ -93,23 +93,147 @@
         <p class="empty-hint">Click the orb or press <a routerLink="/create">Create Agent</a> to begin</p>
       </div>
     } @else {
-      <app-squads-panel [agents]="agents()" (squadsChanged)="loadAgents(true)" />
-      <div class="agents-grid">
-        @for (agent of agents(); track agent.id) {
-          <app-agent-card
-            [agent]="agent"
-            [online]="isAgentOnline(agent.id)"
-            [remoteMode]="platform.isRemote"
-            [deleting]="deletingAgentId() === agent.id"
-            [pausing]="pausingAgentId() === agent.id"
-            (delete)="deleteAgent(agent.id)"
-            (togglePause)="togglePause(agent)"
-            (editCharter)="openCharterFromCard($event.agentId, $event.tab)"
-          />
+      <div class="fleet-layout">
+        @if (unassignedAgents().length > 0) {
+          <div class="agents-grid">
+            @for (agent of unassignedAgents(); track agent.id) {
+              <app-agent-card
+                [agent]="agent"
+                [online]="isAgentOnline(agent.id)"
+                [remoteMode]="platform.isRemote"
+                [deleting]="deletingAgentId() === agent.id"
+                [pausing]="pausingAgentId() === agent.id"
+                (delete)="deleteAgent(agent.id)"
+                (togglePause)="togglePause(agent)"
+                (editCharter)="openCharterFromCard($event.agentId, $event.tab)"
+              />
+            }
+          </div>
+        } @else {
+          <p class="fleet-unassigned-hint">All agents are assigned to squads — expand a member below to chat or manage them.</p>
         }
+        <app-squads-panel
+          class="fleet-squads"
+          [agents]="agents()"
+          [remoteMode]="platform.isRemote"
+          [relayOnline]="relayStatus()"
+          [deletingAgentId]="deletingAgentId()"
+          [pausingAgentId]="pausingAgentId()"
+          (squadsChanged)="loadAgents(true)"
+          (charterRequested)="openCharterFromCard($event.agentId, $event.tab)"
+          (agentDelete)="deleteAgent($event)"
+          (agentTogglePause)="togglePause($event)"
+        />
       </div>
     }
   </div>
+
+  @if (squadsPanel?.editingSquad(); as esq) {
+    <div class="squad-modal-overlay" role="presentation">
+      <div class="squad-modal-backdrop" (click)="squadsPanel!.cancelSquadSettings()" aria-hidden="true"></div>
+      <div class="squad-settings-modal" role="dialog" aria-modal="true">
+        <h3>Squad checkback</h3>
+        <p class="squad-modal-muted">Wakes the lead on an interval and when inbox proposals exceed the SLA.</p>
+        <label class="checkbox-row">
+          <input type="checkbox" [(ngModel)]="squadsPanel!.checkbackEnabled" />
+          Enable scheduled checkback
+        </label>
+        <label>
+          Interval (minutes)
+          <input type="number" min="5" max="1440" [(ngModel)]="squadsPanel!.checkbackIntervalMin" />
+        </label>
+        <label>
+          Proposal SLA (hours, urgent wake)
+          <input type="number" min="1" max="168" [(ngModel)]="squadsPanel!.proposalSlaHours" />
+        </label>
+        <div class="squad-modal-actions">
+          <button type="button" class="btn-secondary" (click)="squadsPanel!.cancelSquadSettings()">Cancel</button>
+          <button type="button" class="btn-primary" (click)="squadsPanel!.saveSquadSettings()">Save</button>
+        </div>
+      </div>
+    </div>
+  }
+
+  @if (squadsPanel?.kanbanSquad(); as ksq) {
+    <div class="squad-modal-overlay" role="presentation">
+      <div class="squad-modal-backdrop" (click)="squadsPanel!.closeKanban()" aria-hidden="true"></div>
+      <div class="squad-kanban-modal" role="dialog" aria-modal="true">
+        <header class="squad-kanban-head">
+          <h3>Squad board</h3>
+          <button type="button" class="squad-close-btn" (click)="squadsPanel!.closeKanban()" aria-label="Close">×</button>
+        </header>
+        @if (squadsPanel!.kanbanLoading()) {
+          <p class="squad-modal-muted">Loading board…</p>
+        } @else if (squadsPanel!.kanbanBoard(); as board) {
+          <section class="squad-kanban-inbox">
+            <h4>Inbox</h4>
+            <div class="squad-kanban-columns">
+              <div class="squad-kanban-col">
+                <span class="squad-col-label">Proposed</span>
+                @for (item of board.inbox.proposed; track item.id) {
+                  <div class="squad-kanban-card">
+                    <strong>{{ item.title }}</strong>
+                    @if (item.suggested_assignee_id) {
+                      <span class="squad-card-meta">→ {{ squadsPanel!.agentLabel(item.suggested_assignee_id) }}</span>
+                    }
+                  </div>
+                } @empty {
+                  <p class="squad-col-empty">—</p>
+                }
+              </div>
+              <div class="squad-kanban-col">
+                <span class="squad-col-label">Approved</span>
+                @for (item of board.inbox.approved; track item.id) {
+                  <div class="squad-kanban-card"><strong>{{ item.title }}</strong></div>
+                } @empty {
+                  <p class="squad-col-empty">—</p>
+                }
+              </div>
+            </div>
+          </section>
+          @if (board.open_escalations?.length) {
+            <section class="squad-kanban-escalations">
+              <h4>Open escalations</h4>
+              <ul>
+                @for (esc of board.open_escalations; track esc.member_agent_id) {
+                  <li>{{ squadsPanel!.agentLabel(esc.member_agent_id) }}: {{ esc.reason }}</li>
+                }
+              </ul>
+            </section>
+          }
+          @for (mid of squadsPanel!.memberIdsForKanban(ksq); track mid) {
+            <section class="squad-kanban-member">
+              <h4>{{ squadsPanel!.agentLabel(mid) }}
+                @if (board.job_titles?.[mid]; as jobTitle) {
+                  <span class="squad-job-pill">{{ jobTitle }}</span>
+                }
+              </h4>
+              @if (board.member_todos[mid]?.length) {
+                <ul class="squad-member-todos">
+                  @for (t of board.member_todos[mid]; track t.id) {
+                    <li><span class="squad-todo-status">{{ t.status }}</span> {{ t.title }}</li>
+                  }
+                </ul>
+              } @else {
+                <p class="squad-col-empty">No squad todos</p>
+              }
+            </section>
+          }
+        }
+      </div>
+    </div>
+  }
+
+  @if (squadsPanel?.confirmDialog(); as confirm) {
+    <app-confirm-dialog
+      [title]="confirm.title"
+      [message]="confirm.message"
+      [confirmLabel]="confirm.confirmLabel"
+      [variant]="confirm.variant"
+      (confirmed)="squadsPanel!.executeConfirm()"
+      (cancelled)="squadsPanel!.cancelConfirm()"
+    />
+  }
 
   @if (charterAgentId(); as aid) {
     <app-agent-charter-modal

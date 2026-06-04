@@ -88,6 +88,12 @@ class TurnTriage:
         self.profile = profile
         self.hints = hints
 
+    def reconcile_fleet_vs_skill_hints(self) -> None:
+        """Strip conflicting skill-setup hints/goals when triage emitted fleet staffing."""
+        from nls.agentic.fleet_triage_policy import apply_fleet_hint_policy
+
+        self.goals, self.hints = apply_fleet_hint_policy(self.hints, self.goals)
+
 _THINKING_BLOCK_RE = re.compile(
     r"<think>.*?</think>",
     re.DOTALL,
@@ -222,6 +228,14 @@ _TURN_TRIAGE_SYSTEM_BASE = (
     "Use when they ask what was discussed, what you said earlier, to continue "
     "a past topic, etc. NOT for repeating the immediately previous reply "
     "in the current short thread (goals=[] recap is enough).\n"
+    "  fleet:squad_candidate — owner describes a multi-agent fleet (Discord mods + QA + "
+    "lead, several agents with different roles, community server staffing). Includes "
+    "'lead a team' when they mean mod agent + QA agent with different jobs — that is "
+    "persistent squad_setup staffing, NOT the team() tool and NOT building code/bots. "
+    "NEVER combine with setup:native_skill or setup:configure_bundled. If discord-channel "
+    "is already connected, do NOT ask for bot token or scaffold skills. Emit when they "
+    "want persistent agents working together; goals should mention squad_setup / "
+    "set_member_job; agent confirms with ask_user() first.\n"
     "Also plain-language hints are allowed ('be thorough', etc.).\n"
     "DEFERRED: post-task channel delivery "
     '{"channel":"whatsapp|telegram|email|chat","instruction":"..."}.\n\n'
@@ -242,12 +256,21 @@ _TURN_TRIAGE_SYSTEM_BASE = (
     "- PRD/spec + end-to-end build → orchestrated, hints=[], NEVER forbid:team.\n"
     "- Credentials/API keys in the message are for USE in the task → TASK, not CHAT.\n"
     "- User pastes bot token/API key alone after assistant asked for it → TASK_THINK, "
-    "solo_structured. Pre-shipped channel (telegram/whatsapp/email): hints "
-    "continuation:credential + setup:configure_bundled + skill_configure. "
-    "Agent-native channel (discord): hints continuation:credential + setup:native_skill; "
-    "goals mention skill_install + skill_configure — NEVER setup:configure_bundled.\n"
-    "- Configuring a pre-shipped Babo channel skill (telegram/whatsapp/email bot token) "
-    "→ solo_structured, hint setup:configure_bundled; use skill_configure.\n"
+    "solo_structured. Pre-shipped channel (telegram/whatsapp/email/discord/slack): hints "
+    "continuation:credential + setup:configure_bundled + skill_configure — "
+    "NEVER setup:native_skill for these bundled channel plugins.\n"
+    "- Configuring a pre-shipped Babo channel skill (telegram/whatsapp/email/discord/slack "
+    "bot token) → solo_structured, hint setup:configure_bundled; use skill_configure.\n"
+    "- When INSTALLED CHANNEL STATUS shows discord/slack CONNECTED, do NOT emit "
+    "setup:configure_bundled or ask for bot token — use fleet:squad_candidate for "
+    "multi-agent staffing instead.\n"
+    "- When the user mentions Discord/Slack channel names, scope, or 'already connected', "
+    "or you need to verify which channels are listening: goal should include "
+    "channel_inspect(action='get', channel='discord'|'slack') — NOT ask_user for "
+    "tokens or channel lists when inspect can answer.\n"
+    "- Fleet Discord topology (ask owner via ask_user if unclear): SINGLE FACE = only "
+    "lead's bot speaks in Discord, members use squad inbox; MULTI FACE = each agent "
+    "that speaks in-channel needs its own bot token on that agent's Tools integration.\n"
     "- Configuring/setup of an installed ClawHub or AgentSkill package "
     "(bot token, env vars, running SKILL.md scripts) → solo_structured, "
     "hint setup:instruction_skill; goals mention read SKILL.md + verify, "
@@ -317,6 +340,33 @@ _TURN_TRIAGE_SYSTEM_BASE = (
     '{"intent":"TASK_THINK","thinking":true,"profile":"orchestrated",'
     '"goals":["Read PRD and extract requirements","Scaffold repo and monorepo",'
     '"Build and deploy platform end-to-end"],"hints":[],"deferred":[]}\n\n'
+    'User: "I made a Discord server — I want a lead agent plus moderators and QA, '
+    'each with their own role"\n'
+    '{"intent":"CHAT_THINK","thinking":true,"profile":"solo_structured",'
+    '"goals":[],"hints":["fleet:squad_candidate"],"deferred":[]}\n\n'
+    'User: "I set up a Discord server — lead a team with one mod agent and one QA agent"\n'
+    '(means persistent squad — NOT team() tool, NOT discord skill build)\n'
+    '{"intent":"TASK_THINK","thinking":true,"profile":"solo_structured",'
+    '"goals":["Propose lead + mod + QA squad roles","Confirm with ask_user",'
+    '"Create squad via squad_setup after owner_confirmed=true"],'
+    '"hints":["fleet:squad_candidate"],"deferred":[]}\n\n'
+    'User: "I set up a Discord server — I want a lead agent plus moderators and QA, '
+    'each with their own role"\n'
+    '{"intent":"CHAT_THINK","thinking":true,"profile":"solo_structured",'
+    '"goals":[],"hints":["fleet:squad_candidate"],"deferred":[]}\n\n'
+    'User: (same thread, QA job details + "bot/discord already connected")\n'
+    '{"intent":"TASK_THINK","thinking":true,"profile":"solo_structured",'
+    '"goals":["Confirm single-face vs multi-face Discord with owner",'
+    '"Define mod and QA member jobs","Create squad with squad_setup",'
+    '"Spawn members and set_member_job"],"hints":["fleet:squad_candidate"],'
+    '"deferred":[]}\n\n'
+    'WRONG for squad staffing (never combine fleet + skill hints):\n'
+    '{"hints":["fleet:squad_candidate","setup:native_skill"],'
+    '"goals":["Scaffold native Discord skill"],...}\n\n'
+    'User: "Build a native discord-channel skill from scratch"\n'
+    '{"intent":"TASK_THINK","thinking":true,"profile":"solo_structured",'
+    '"goals":["Scaffold discord-channel bundled skill"],'
+    '"hints":["setup:native_skill"],"deferred":[]}\n\n'
     "Return ONLY the JSON object. No markdown fences, no thinking, no explanation.\n"
 )
 
@@ -546,6 +596,7 @@ def _parse_triage_dict(parsed: dict) -> TurnTriage:
     )
     triage.cap_profile_from_hints()
     triage.reconcile_orchestration_depth()
+    triage.reconcile_fleet_vs_skill_hints()
     return triage
 
 
@@ -591,6 +642,7 @@ async def triage_turn(
     history: list[dict] | None = None,
     adapter_name: str | None = None,
     tool_catalog: str | None = None,
+    environment_context: str | None = None,
 ) -> TurnTriage:
     """Single micro-inference: intent, thinking, profile, goals, hints, deferred."""
     if not (user_input or "").strip():
@@ -601,6 +653,8 @@ async def triage_turn(
         )
     try:
         _system = build_triage_system_prompt(tool_catalog=tool_catalog)
+        if environment_context:
+            _system = f"{_system}\n\n{environment_context.strip()}"
         msgs: list[dict] = [
             {"role": "system", "content": _system},
         ]

@@ -1,5 +1,6 @@
-import { Component, OnInit, OnDestroy, signal } from '@angular/core';
+import { Component, OnInit, OnDestroy, signal, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
@@ -12,16 +13,19 @@ import {
   AgentCharterModalComponent,
   CharterTab,
 } from './agent-charter-modal/agent-charter-modal.component';
+import { ConfirmDialogComponent } from '../../shared/confirm-dialog/confirm-dialog.component';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
   imports: [
     CommonModule,
+    FormsModule,
     RouterLink,
     AgentCardComponent,
     SquadsPanelComponent,
     AgentCharterModalComponent,
+    ConfirmDialogComponent,
   ],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss',
@@ -39,6 +43,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   charterAgentId = signal<string | null>(null);
   charterTab = signal<CharterTab>('job');
   charterVisible = signal(false);
+  @ViewChild(SquadsPanelComponent) squadsPanel?: SquadsPanelComponent;
   private destroyed = false;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -186,6 +191,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.ws.leaveAgent(id);
         this.agents.update(a => a.filter(agent => agent.id !== id));
         this.deletingAgentId.set(null);
+        this.loadAgents(true);
       },
       error: () => {
         this.deletingAgentId.set(null);
@@ -230,6 +236,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   get sleepingCount(): number {
     return this.agents().filter(a => (a.runtime?.status === 'sleeping') && !a.userPaused).length;
+  }
+
+  /** Agents not assigned to any squad — shown as standalone cards. */
+  unassignedAgents(): Agent[] {
+    return this.agents().filter(a => !a.squadId && !a.runtime?.squad_id);
   }
 
   navigateToCreate() {

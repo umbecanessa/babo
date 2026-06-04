@@ -219,8 +219,12 @@ class SlackAdapter:
 
     def _agent_cfg(self, agent_id: str | None) -> dict[str, Any]:
         if agent_id:
-            merged = dict(self._global_config)
-            merged.update(self._agent_configs.get(agent_id, {}))
+            from nls.runtime.channel_agent_config import merge_global_and_agent_channel_config
+
+            merged = merge_global_and_agent_channel_config(
+                self._global_config,
+                self._agent_configs.get(agent_id, {}),
+            )
             if not merged.get("groups"):
                 merged["groups"] = compile_groups_policy(merged)
             return merged
@@ -324,11 +328,24 @@ class SlackAdapter:
 
     def get_status(self, agent_id: str | None = None) -> dict[str, Any]:
         cfg = self._agent_cfg(agent_id)
+        connected = False
+        if agent_id:
+            connected = agent_id in self._connected_agents
+            if not connected:
+                try:
+                    from nls.runtime.channel_agent_config import agent_channel_is_configured
+
+                    data_root = self._ctx._skills_dir.parent
+                    connected = agent_channel_is_configured(data_root, agent_id, "slack")
+                except Exception:
+                    connected = False
+        else:
+            connected = bool(self._connected_agents)
         scoped = list_scoped_channels(cfg)
         effective = [c for c in scoped if c.get("effective_enabled")]
         return {
             "channel": "slack",
-            "connected": agent_id in self._connected_agents if agent_id else bool(self._connected_agents),
+            "connected": connected,
             "team_name": self._team_names.get(agent_id or "", ""),
             "enabled": cfg.get("enabled", False),
             "events_request_url": cfg.get("events_request_url", ""),
@@ -499,6 +516,27 @@ class SlackAdapter:
             await self._join_channel(agent_id, channel_id)
         else:
             await self._leave_channel(agent_id, channel_id)
+        self._agent_configs[agent_id] = updated
+        self._ctx.save_config(updated, agent_id=agent_id)
+        return updated
+
+    async def apply_channels_bulk(
+        self,
+        agent_id: str,
+        selections: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        from nls.skills.channel_scope import apply_channels_bulk_config
+
+        cfg = self._agent_cfg(agent_id)
+        updated = apply_channels_bulk_config(cfg, selections)
+        for sel in selections:
+            cid = str(sel.get("id") or "")
+            if not cid:
+                continue
+            if sel.get("enabled"):
+                await self._join_channel(agent_id, cid)
+            else:
+                await self._leave_channel(agent_id, cid)
         self._agent_configs[agent_id] = updated
         self._ctx.save_config(updated, agent_id=agent_id)
         return updated

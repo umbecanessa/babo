@@ -239,8 +239,12 @@ class DiscordAdapter:
 
     def _agent_cfg(self, agent_id: str | None) -> dict[str, Any]:
         if agent_id:
-            merged = dict(self._global_config)
-            merged.update(self._agent_configs.get(agent_id, {}))
+            from nls.runtime.channel_agent_config import merge_global_and_agent_channel_config
+
+            merged = merge_global_and_agent_channel_config(
+                self._global_config,
+                self._agent_configs.get(agent_id, {}),
+            )
             if "groups" not in merged or not merged.get("groups"):
                 merged["groups"] = compile_groups_policy(merged)
             return merged
@@ -345,13 +349,25 @@ class DiscordAdapter:
 
     def get_status(self, agent_id: str | None = None) -> dict[str, Any]:
         cfg = self._agent_cfg(agent_id)
-        connected = agent_id in self._connected_agents if agent_id else bool(self._connected_agents)
+        connected = False
+        if agent_id:
+            connected = agent_id in self._connected_agents
+            if not connected:
+                try:
+                    from nls.runtime.channel_agent_config import agent_channel_is_configured
+
+                    data_root = self._ctx._skills_dir.parent
+                    connected = agent_channel_is_configured(data_root, agent_id, "discord")
+                except Exception:
+                    connected = False
+        else:
+            connected = bool(self._connected_agents)
         scoped = list_scoped_channels(cfg)
         effective = [c for c in scoped if c.get("effective_enabled")]
         aid = agent_id or ""
         return {
             "channel": "discord",
-            "connected": connected or bool(cfg.get("bot_token") and cfg.get("enabled")),
+            "connected": connected,
             "bot_username": self._bot_usernames.get(aid, cfg.get("bot_username", "")),
             "bot_id": self._bot_ids.get(aid, cfg.get("bot_id", "")),
             "enabled": cfg.get("enabled", False),
@@ -367,16 +383,69 @@ class DiscordAdapter:
     def create_setup_tool(self, agent_id: str | None = None) -> DiscordSetupTool:
         return DiscordSetupTool(self, agent_id)
 
+    def _active_runtime_agent_ids(self) -> set[str]:
+        try:
+            from server.main import app
+
+            am = getattr(app.state, "agent_manager", None)
+            if am is None:
+                return set(self._agent_configs.keys())
+            return {
+                aid for aid in self._agent_configs
+                if am.get_runtime(aid) is not None
+            }
+        except Exception:
+            return set(self._agent_configs.keys())
+
+    async def _retire_agent_gateway(self, agent_id: str) -> None:
+        await self._unregister_gateway_relay(agent_id)
+        self._connected_agents.discard(agent_id)
+        cfg = self._agent_configs.get(agent_id)
+        if not cfg:
+            return
+        if cfg.get("gateway_relay_registered"):
+            updated = dict(cfg)
+            updated["gateway_relay_registered"] = False
+            self._agent_configs[agent_id] = updated
+            self._ctx.save_config(updated, agent_id=agent_id)
+
+    async def _retire_duplicate_token_agents(self, agent_id: str, token: str) -> None:
+        for other_id, cfg in list(self._agent_configs.items()):
+            if other_id == agent_id:
+                continue
+            other_token = str(cfg.get("bot_token") or "").strip()
+            if other_token and other_token == token:
+                logger.info(
+                    "Discord [%s]: retiring stale gateway for duplicate bot token",
+                    other_id,
+                )
+                await self._retire_agent_gateway(other_id)
+
     async def startup(self) -> None:
+        active_ids = self._active_runtime_agent_ids()
+        seen_tokens: dict[str, str] = {}
         for agent_id, cfg in list(self._agent_configs.items()):
-            if cfg.get("enabled") and cfg.get("bot_token"):
-                await self._startup_agent(agent_id)
+            if active_ids and agent_id not in active_ids:
+                logger.info(
+                    "Discord [%s]: skipping startup — agent not loaded in runtime",
+                    agent_id,
+                )
+                continue
+            token = str(cfg.get("bot_token") or "").strip()
+            if not cfg.get("enabled") or not token or "masked" in token:
+                continue
+            prev = seen_tokens.get(token)
+            if prev and prev != agent_id:
+                await self._retire_agent_gateway(prev)
+            seen_tokens[token] = agent_id
+            await self._startup_agent(agent_id)
 
     async def _startup_agent(self, agent_id: str) -> None:
         cfg = self._agent_cfg(agent_id)
-        token = cfg.get("bot_token", "")
-        if not token:
+        token = str(cfg.get("bot_token") or "").strip()
+        if not token or "masked" in token:
             return
+        await self._retire_duplicate_token_agents(agent_id, token)
         try:
             me = await self._api_get(token, "/users/@me")
             self._bot_ids[agent_id] = str(me.get("id", ""))
@@ -701,6 +770,20 @@ class DiscordAdapter:
         if perm_warning:
             updated = dict(updated)
             updated["_permission_warning"] = perm_warning
+        return updated
+
+    async def apply_channels_bulk(
+        self,
+        agent_id: str,
+        selections: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        """Persist many channel desired states in one write (Tools UI save)."""
+        from nls.skills.channel_scope import apply_channels_bulk_config
+
+        cfg = self._agent_cfg(agent_id)
+        updated = apply_channels_bulk_config(cfg, selections)
+        self._agent_configs[agent_id] = updated
+        self._ctx.save_config(updated, agent_id=agent_id)
         return updated
 
     async def _push_discord_channel_access(

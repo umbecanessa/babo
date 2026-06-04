@@ -2177,6 +2177,24 @@ def build_hooks_v4(
 
     # ----- Loop lifecycle -----
 
+    def _on_loop_start_refresh_channels() -> None:
+        """Re-read per-agent channel configs into Cryptex before each agentic loop."""
+        if not agent_id:
+            return
+        try:
+            from server.main import app
+
+            am = getattr(app.state, "agent_manager", None)
+            if am is None:
+                return
+            rt = am.get_runtime(agent_id)
+            if rt is not None and hasattr(rt, "_refresh_channel_awareness"):
+                rt._refresh_channel_awareness()
+        except Exception:
+            logger.debug(
+                "on_loop_start channel refresh failed for %s", agent_id, exc_info=True,
+            )
+
     def _on_loop_end(state: Any) -> None:
         """Post-loop cleanup: hypothalamus signals, WM goal cleanup, WM→ANS bridge."""
         try:
@@ -2576,7 +2594,7 @@ def build_hooks_v4(
         on_turn_end=None,
         on_goals_extracted=_on_goals_extracted,
         on_hints_extracted=_on_hints_extracted,
-        on_loop_start=None,
+        on_loop_start=_on_loop_start_refresh_channels,
         on_loop_end=_on_loop_end,
         tick_hypothalamus=_tick_hypothalamus,
         get_cortisol=_get_cortisol,

@@ -1172,7 +1172,7 @@ class AgentRuntime:
             self._populate_skills_ring()
             self._populate_channels_ring()
             self._wire_bash_process_tracking()
-            self._register_squad_tools()
+            self.sync_squad_tools()
             logger.info(
                 "[Agent] agent=%s: initialized %d tools (%d openai schemas)",
                 self.agent_id,
@@ -1191,9 +1191,10 @@ class AgentRuntime:
     _SQUAD_TOOL_NAMES = frozenset({
         "squad", "squad_escalate", "squad_message", "squad_report_done",
     })
+    _SQUAD_SETUP_TOOL_NAMES = frozenset({"squad_setup"})
 
     def sync_squad_tools(self) -> None:
-        """Add or remove squad tools when membership changes (API / squad CRUD)."""
+        """Add/remove squad or bootstrap tools when membership changes."""
         if self._agent_tools is None:
             try:
                 self._initialize_tools()
@@ -1202,6 +1203,7 @@ class AgentRuntime:
         if self._agent_tools is None:
             return
         in_squad = False
+        sm = None
         try:
             from server.main import app as _app
 
@@ -1210,31 +1212,70 @@ class AgentRuntime:
                 in_squad = sm.get_squad_for_agent(self.agent_id) is not None
         except Exception:
             pass
+
         has_squad_tools = any(
             getattr(t, "name", "") in self._SQUAD_TOOL_NAMES
             for t in self._agent_tools
         )
-        if in_squad and not has_squad_tools:
-            self._register_squad_tools()
-        elif not in_squad and has_squad_tools:
-            self._agent_tools = [
-                t for t in self._agent_tools
-                if getattr(t, "name", "") not in self._SQUAD_TOOL_NAMES
-            ]
-            try:
-                from nls.tools.tool_setup import (
-                    _populate_tools_ring,
-                    tools_to_openai_schema,
-                )
+        has_setup = any(
+            getattr(t, "name", "") in self._SQUAD_SETUP_TOOL_NAMES
+            for t in self._agent_tools
+        )
 
-                self._openai_tools = tools_to_openai_schema(self._agent_tools)
-                _populate_tools_ring(self.working_memory, self._agent_tools)
-                logger.info("Agent %s: squad tools removed", self.agent_id)
-            except Exception as exc:
-                logger.warning(
-                    "Agent %s: squad tool removal failed: %s",
-                    self.agent_id, exc,
-                )
+        if in_squad:
+            if has_setup:
+                self._remove_tools_by_name(self._SQUAD_SETUP_TOOL_NAMES)
+            if not has_squad_tools:
+                self._register_squad_tools()
+        else:
+            if has_squad_tools:
+                self._remove_tools_by_name(self._SQUAD_TOOL_NAMES)
+            if not has_setup and sm is not None:
+                self._register_squad_setup_tool(sm)
+
+    def _remove_tools_by_name(self, names: frozenset[str]) -> None:
+        if self._agent_tools is None:
+            return
+        self._agent_tools = [
+            t for t in self._agent_tools
+            if getattr(t, "name", "") not in names
+        ]
+        try:
+            from nls.tools.tool_setup import (
+                _populate_tools_ring,
+                tools_to_openai_schema,
+            )
+
+            self._openai_tools = tools_to_openai_schema(self._agent_tools)
+            _populate_tools_ring(self.working_memory, self._agent_tools)
+            if hasattr(self, "refresh_tools"):
+                self.refresh_tools()
+            logger.info("Agent %s: removed tools %s", self.agent_id, sorted(names))
+        except Exception as exc:
+            logger.warning(
+                "Agent %s: tool removal failed: %s",
+                self.agent_id, exc,
+            )
+
+    def _register_squad_setup_tool(self, sm: Any) -> None:
+        if self._agent_tools is None:
+            return
+        if any(getattr(t, "name", "") == "squad_setup" for t in self._agent_tools):
+            return
+        try:
+            from nls.tools.agent_tools.squad import SquadSetupTool
+            from nls.tools.tool_setup import (
+                _populate_tools_ring,
+                tools_to_openai_schema,
+            )
+
+            self._agent_tools.append(SquadSetupTool(sm, self.agent_id))
+            self._openai_tools = tools_to_openai_schema(self._agent_tools)
+            _populate_tools_ring(self.working_memory, self._agent_tools)
+            self.refresh_tools()
+            logger.info("Agent %s: squad_setup tool registered", self.agent_id)
+        except Exception as exc:
+            logger.debug("Agent %s: squad_setup skipped: %s", self.agent_id, exc)
 
     def _register_squad_tools(self) -> None:
         """Attach squad tools when this agent belongs to a squad."""
@@ -1268,6 +1309,7 @@ class AgentRuntime:
             ])
             self._openai_tools = tools_to_openai_schema(self._agent_tools)
             _populate_tools_ring(self.working_memory, self._agent_tools)
+            self.refresh_tools()
             logger.info("Agent %s: squad tools registered", self.agent_id)
         except Exception as exc:
             logger.debug("Agent %s: squad tools skipped: %s", self.agent_id, exc)
@@ -1350,12 +1392,17 @@ class AgentRuntime:
 
             is_enabled = enabled_set is None or name in enabled_set
             agent_installed = (sk.path / ".creator").is_file()
+            configured = False
+            if is_pre_shipped_channel_skill(name):
+                platform = name.replace("-channel", "")
+                configured = self._channel_is_connected(platform)
             headline, guidance = bundled_skill_ring_guidance(
                 name,
                 sk.meta.description or "",
                 enabled=is_enabled,
                 config_schema=schema,
                 agent_installed=agent_installed,
+                configured=configured,
             )
             salience = 0.7 if is_enabled else 0.85
             if agent_installed and not is_pre_shipped_channel_skill(name):
@@ -1404,41 +1451,193 @@ class AgentRuntime:
             self.agent_id, len(seen_names), ring.position_ids,
         )
 
-    def _channel_is_connected(self, channel: str) -> bool:
-        """True when an outbound channel skill is paired (not just installed)."""
-        import json
+    _CHANNEL_SKILL_DIRS: dict[str, str] = {
+        "whatsapp": "whatsapp-channel",
+        "telegram": "telegram-channel",
+        "email": "email-channel",
+        "discord": "discord-channel",
+        "slack": "slack-channel",
+    }
+
+    def _load_channel_agent_config(self, channel: str) -> dict | None:
+        """Load per-agent channel skill config from data/skills/{skill}/agents/{id}.json."""
         from pathlib import Path
 
-        skill_dirs = {
-            "whatsapp": "whatsapp-channel",
-            "telegram": "telegram-channel",
-            "email": "email-channel",
-        }
-        skill_dir = skill_dirs.get(channel)
-        if not skill_dir or not getattr(self, "agent_dir", None):
+        from nls.runtime.channel_agent_config import (
+            data_root_from_agent_dir,
+            load_agent_channel_config,
+        )
+
+        if not getattr(self, "agent_dir", None):
+            return None
+        return load_agent_channel_config(
+            data_root_from_agent_dir(self.agent_dir),
+            self.agent_id,
+            channel,
+        )
+
+    @staticmethod
+    def _discord_config_summary(cfg: dict) -> str:
+        scoped = cfg.get("scoped_channels") or {}
+        guilds = scoped.get("guilds") or {}
+        channels = scoped.get("channels") or {}
+        guild_names = [
+            str(g.get("name", "")).strip()
+            for g in guilds.values()
+            if isinstance(g, dict) and g.get("name")
+        ]
+        channel_names = sorted(
+            str(c.get("name", "")).strip()
+            for c in channels.values()
+            if isinstance(c, dict) and c.get("effective_enabled") and c.get("name")
+        )
+        parts: list[str] = []
+        if guild_names:
+            parts.append(f"guild: {', '.join(guild_names[:2])}")
+        if channel_names:
+            shown = ", ".join(channel_names[:10])
+            if len(channel_names) > 10:
+                shown += f", +{len(channel_names) - 10} more"
+            parts.append(f"channels: {shown}")
+        return "; ".join(parts) if parts else "bot connected"
+
+    def _channel_is_connected(self, channel: str) -> bool:
+        """True when an outbound channel skill is paired (not just installed)."""
+        skill_dir = self._CHANNEL_SKILL_DIRS.get(channel)
+        if not skill_dir:
             return True
-        data_root = Path(self.agent_dir).parent.parent
-        for rel in (
-            Path("skills") / skill_dir / "config.json",
-            Path("skills") / skill_dir / "agents" / f"{self.agent_id}.json",
-        ):
-            path = data_root / rel
-            if not path.is_file():
-                continue
-            try:
-                cfg = json.loads(path.read_text(encoding="utf-8"))
-            except Exception:
-                continue
-            if channel == "whatsapp":
-                return bool(str(cfg.get("linked_phone", "")).strip())
-            if channel == "telegram":
-                return bool(
-                    str(cfg.get("bot_token", "")).strip()
-                    or str(cfg.get("linked_id", "")).strip()
-                )
-            if channel == "email":
-                return bool(str(cfg.get("connected_email", "")).strip())
+        if not getattr(self, "agent_dir", None):
+            return False
+        cfg = self._load_channel_agent_config(channel)
+        if not cfg:
+            return False
+        if channel == "whatsapp":
+            return bool(str(cfg.get("linked_phone", "")).strip())
+        if channel == "telegram":
+            return bool(
+                str(cfg.get("bot_token", "")).strip()
+                or str(cfg.get("linked_id", "")).strip()
+            )
+        if channel == "email":
+            return bool(str(cfg.get("connected_email", "")).strip())
+        if channel == "discord":
+            return bool(
+                cfg.get("enabled")
+                and str(cfg.get("bot_token", "")).strip()
+            )
+        if channel == "slack":
+            return bool(
+                cfg.get("enabled")
+                and str(cfg.get("bot_token", "")).strip()
+            )
         return False
+
+    def _channel_status_for_triage(self) -> str:
+        """Factual connected-channel block for turn triage (not intent heuristics)."""
+        lines: list[str] = []
+        for channel in ("discord", "slack", "telegram", "whatsapp", "email"):
+            if not self._channel_is_connected(channel):
+                continue
+            extra = ""
+            if channel == "discord":
+                cfg = self._load_channel_agent_config("discord") or {}
+                extra = f" ({self._discord_config_summary(cfg)})"
+            lines.append(
+                f"- {channel}: CONNECTED{extra} — credentials already stored; "
+                "do not ask the user for bot token or call *_setup"
+            )
+        if not lines:
+            base = ""
+        else:
+            base = (
+                "INSTALLED CHANNEL STATUS (factual — trust this over assumptions):\n"
+                + "\n".join(lines)
+            )
+        try:
+            from server.main import app as _app
+            from nls.runtime.fleet_channel_topology import (
+                build_fleet_topology_snapshot,
+                render_topology_guidance,
+            )
+
+            _reg = getattr(_app.state, "squad_registry", None)
+            _squad = _reg.get_for_agent(self.agent_id) if _reg else None
+            _snap = build_fleet_topology_snapshot(
+                agent_id=self.agent_id,
+                agent_dir=self.agent_dir,
+                app=_app,
+                squad=_squad,
+            )
+            _topo = ""
+            if _squad is not None and _snap.mode != "none":
+                _topo = render_topology_guidance(_snap, compact=bool(base))
+            if _topo:
+                return f"{base}\n\n{_topo}".strip() if base else _topo
+        except Exception:
+            pass
+        return base
+
+    def _upsert_fleet_topology_ring(self, ring: Any) -> None:
+        try:
+            from server.main import app as _app
+            from nls.runtime.fleet_channel_topology import (
+                build_fleet_topology_snapshot,
+                render_topology_guidance,
+            )
+
+            _reg = getattr(_app.state, "squad_registry", None)
+            _squad = _reg.get_for_agent(self.agent_id) if _reg else None
+            if _squad is None:
+                return
+            snap = build_fleet_topology_snapshot(
+                agent_id=self.agent_id,
+                agent_dir=self.agent_dir,
+                app=_app,
+                squad=_squad,
+            )
+            content = render_topology_guidance(snap)
+            if not content.strip():
+                return
+            ring.upsert_slot(
+                domain="channel.fleet_topology",
+                content=content,
+                slot_type="fact",
+                salience=0.92,
+                source="channel_registration",
+                position="communication",
+            )
+        except Exception:
+            logger.debug(
+                "Agent %s: fleet topology ring upsert failed",
+                self.agent_id, exc_info=True,
+            )
+
+    def _channel_skill_enabled(self, channel: str) -> bool:
+        """True when the bundled channel skill is enabled for this agent."""
+        skill_name = self._CHANNEL_SKILL_DIRS.get(channel)
+        if not skill_name:
+            return False
+        enabled = self._get_enabled_skills()
+        if enabled == ["*"]:
+            return True
+        return skill_name in enabled
+
+    def _refresh_channel_awareness(self) -> None:
+        """Re-read channel configs from disk into Cryptex channels + skills rings."""
+        try:
+            self._populate_channels_ring()
+        except Exception:
+            logger.debug(
+                "Agent %s: channels ring refresh failed",
+                self.agent_id, exc_info=True,
+            )
+        try:
+            self._populate_skills_ring()
+        except Exception:
+            logger.debug(
+                "Agent %s: skills ring refresh failed",
+                self.agent_id, exc_info=True,
+            )
 
     def _populate_channels_ring(self) -> None:
         """Populate the Cryptex Channels ring from registered channel adapters."""
@@ -1462,11 +1661,20 @@ class AgentRuntime:
                 pass
 
         tool_names = {getattr(t, "name", "") for t in (self._agent_tools or [])}
-        has_whatsapp_tool = "whatsapp_send" in tool_names
+        has_whatsapp_tool = (
+            "whatsapp_send" in tool_names
+            or self._channel_skill_enabled("whatsapp")
+        )
         has_whatsapp = has_whatsapp_tool and self._channel_is_connected("whatsapp")
-        has_telegram_tool = "telegram_send" in tool_names
+        has_telegram_tool = (
+            "telegram_send" in tool_names
+            or self._channel_skill_enabled("telegram")
+        )
         has_telegram = has_telegram_tool and self._channel_is_connected("telegram")
-        has_email_tool = "email_send" in tool_names
+        has_email_tool = (
+            "email_send" in tool_names
+            or self._channel_skill_enabled("email")
+        )
         has_email = has_email_tool and self._channel_is_connected("email")
         has_calendar = any(t in tool_names for t in (
             "calendar_list", "calendar_create", "calendar_update",
@@ -1563,11 +1771,90 @@ class AgentRuntime:
                 position="communication",
             )
 
-        if has_whatsapp or has_telegram or has_email or has_calendar:
+        has_discord_tool = (
+            "discord_send" in tool_names
+            or self._channel_skill_enabled("discord")
+        )
+        has_discord = has_discord_tool and self._channel_is_connected("discord")
+        has_slack_tool = (
+            "slack_send" in tool_names
+            or self._channel_skill_enabled("slack")
+        )
+        has_slack = has_slack_tool and self._channel_is_connected("slack")
+
+        if has_discord_tool and not has_discord:
+            ring.upsert_slot(
+                domain="channel.discord",
+                content=(
+                    "Discord: NOT CONNECTED (skill enabled but bot token not configured). "
+                    "Use skill_configure(skill_name='discord-channel') or ask_user for "
+                    "bot token only when the user has not linked Discord in Babo yet."
+                ),
+                slot_type="fact",
+                salience=0.5,
+                source="channel_registration",
+                position="communication",
+            )
+        elif has_discord:
+            _dcfg = self._load_channel_agent_config("discord") or {}
+            _dsummary = self._discord_config_summary(_dcfg)
+            ring.upsert_slot(
+                domain="channel.discord",
+                content=(
+                    f"Discord: CONNECTED ({_dsummary}). "
+                    "Bot token is already configured in Babo — do NOT ask the user "
+                    "for a token and do NOT call discord_setup. "
+                    "Use discord_send for messages; channel_inspect(action='get', "
+                    "channel='discord') for scoped channel detail."
+                ),
+                slot_type="fact",
+                salience=0.95,
+                source="channel_registration",
+                position="communication",
+            )
+        if has_slack_tool and not has_slack:
+            ring.upsert_slot(
+                domain="channel.slack",
+                content=(
+                    "Slack: NOT CONNECTED (skill enabled but not configured). "
+                    "Configure via skill_configure(skill_name='slack-channel') when needed."
+                ),
+                slot_type="fact",
+                salience=0.5,
+                source="channel_registration",
+                position="communication",
+            )
+        elif has_slack:
+            ring.upsert_slot(
+                domain="channel.slack",
+                content=(
+                    "Slack: CONNECTED. Bot token already configured — do NOT ask for "
+                    "credentials again. Use slack_send for messages; "
+                    "channel_inspect(action='get', channel='slack') for scope detail."
+                ),
+                slot_type="fact",
+                salience=0.9,
+                source="channel_registration",
+                position="communication",
+            )
+
+        self._upsert_fleet_topology_ring(ring)
+
+        if (
+            has_whatsapp or has_telegram or has_email or has_calendar
+            or has_discord or has_slack
+        ):
             logger.info(
                 "[Agent] agent=%s: populated channels ring "
-                "(whatsapp=%s, telegram=%s, email=%s, calendar=%s)",
-                self.agent_id, has_whatsapp, has_telegram, has_email, has_calendar,
+                "(whatsapp=%s, telegram=%s, email=%s, calendar=%s, "
+                "discord=%s, slack=%s)",
+                self.agent_id,
+                has_whatsapp,
+                has_telegram,
+                has_email,
+                has_calendar,
+                has_discord,
+                has_slack,
             )
 
     def _has_trained_memory(self) -> bool:
@@ -4767,9 +5054,14 @@ class AgentRuntime:
                 profile="solo_structured",
             )
         try:
+            self._refresh_channel_awareness()
+        except Exception:
+            pass
+        try:
             triage = await triage_turn(
                 _vllm, user_input, history=history, adapter_name=_adapter,
                 tool_catalog=self._tool_catalog_for_triage(),
+                environment_context=self._channel_status_for_triage(),
             )
         except Exception:
             logger.warning(
@@ -4791,6 +5083,7 @@ class AgentRuntime:
             working_memory=self.dual_wm or self.working_memory,
         )
         triage.reconcile_orchestration_depth()
+        triage.reconcile_fleet_vs_skill_hints()
         self._apply_triage_to_working_memory(triage)
         logger.info(
             "Agent %s: triage intent=%s profile=%s thinking=%s goals=%s hints=%s",
@@ -4924,13 +5217,7 @@ class AgentRuntime:
                 skill_setup(self)
             self.refresh_tools()
             try:
-                self._populate_skills_ring()
-            except Exception:
-                pass
-            # Re-populate channels ring so new channel-aware skills
-            # (e.g. google-calendar) appear in the agent's WM immediately.
-            try:
-                self._populate_channels_ring()
+                self._refresh_channel_awareness()
             except Exception:
                 pass
         except Exception as exc:
@@ -4954,6 +5241,10 @@ class AgentRuntime:
             except Exception as exc:
                 logger.warning("[Agent] agent=%s: refresh_tools schema rebuild failed: %s",
                                self.agent_id, exc)
+        try:
+            self._refresh_channel_awareness()
+        except Exception:
+            pass
         logger.info(
             "[Agent] agent=%s: tools refreshed (%d tools, %d schemas)",
             self.agent_id,

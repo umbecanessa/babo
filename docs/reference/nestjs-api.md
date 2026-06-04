@@ -48,7 +48,7 @@ See [Device lease](../architecture/device-lease.md), [Soul packages](../architec
 
 ## Babo Cloud (`/api/inference/v1`, `/api/gpu`, `/api/cloud`)
 
-OpenAI-compatible inference relay + GPU workers. Auth: JWT or `nlsk_` API key. Requires trial/subscription when `BABO_CLOUD_MODE=true`.
+OpenAI-compatible inference relay + GPU workers. Auth: JWT or `nlsk_` API key. Requires an active **subscription** when `BABO_CLOUD_MODE=true` (BYOK inference does not consume Babo credits).
 
 | Method | Path | Purpose |
 |--------|------|---------|
@@ -57,7 +57,7 @@ OpenAI-compatible inference relay + GPU workers. Auth: JWT or `nlsk_` API key. R
 | POST | `/gpu/transcribe` | Audio → text |
 | POST | `/gpu/vision/describe` | Image describe |
 | POST | `/gpu/embed` | Embeddings |
-| GET | `/cloud/subscription` | Plan status (`usedTokens`, trial, quota) |
+| GET | `/cloud/subscription` | Plan status (`includedCreditCents`, `usedCreditCents`, `onDemandEnabled`, period end) |
 | GET | `/cloud/usage` | Per-request inference ledger (tokens per call) |
 
 See [Babo Cloud module](../architecture/nestjs-modules/babo-cloud.md).

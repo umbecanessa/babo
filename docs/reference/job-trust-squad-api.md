@@ -12,6 +12,15 @@ There are **no** NestJS controllers for job, trust, or squads — do not add par
 
 Same as other runtime routes: `X-Runtime-Secret` (relay) or `Authorization: Bearer nlsk_...` ([Python API](python-api.md)).
 
+**Owner-only squad mutations** (desktop shell or NestJS backend — not agent API keys):
+
+| Auth type | Source |
+|-----------|--------|
+| `local_trust` | Loopback TCP client (desktop app → `127.0.0.1`) |
+| `shared_secret` | `X-Runtime-Secret` header |
+
+Agent API keys (`auth_type: api_key`) may read squads they belong to and use squad **tools**, but cannot create squads, resolve pending actions, or mutate membership without identifying as the squad lead via `caller_agent_id`.
+
 ---
 
 ## Squad caller identity
@@ -27,12 +36,13 @@ Implementation: `server/routes/squad_access.py`.
 
 | Endpoint behavior | Without caller | With caller |
 |-------------------|----------------|-------------|
-| `GET /api/squads` | All squads | Squads where caller is a member |
+| `GET /api/squads` | All squads (owner auth) | Squads where caller is a member |
 | `GET /api/squads/{id}` | Open read | Requires membership |
 | `GET /api/squads/{id}/kanban` | — | Requires membership |
-| `PATCH` checkback fields | — | Requires **lead** |
-| `PATCH` name / members / lead | — | Requires **lead** when caller set |
-| `DELETE /api/squads/{id}` | — | Requires **lead** |
+| `POST /api/squads` | **Owner dashboard only** | — |
+| `PATCH` checkback / membership / name | **Owner dashboard** or **lead** (`caller_agent_id`) | Lead when caller set |
+| `POST .../pending-actions/{id}/resolve` | **Owner dashboard only** | — |
+| `DELETE /api/squads/{id}` | **Owner dashboard** or **lead** | Lead when caller set |
 
 ---
 
@@ -106,15 +116,16 @@ File: `data/agents/{agent_id}/trust.json`
 
 Prefix: `/api/squads`
 
-| Method | Path | Body / query | Response |
-|--------|------|--------------|----------|
-| GET | `/api/squads` | `?caller_agent_id=` | `{ squads: Squad[] }` with `job_titles` map |
-| POST | `/api/squads` | `SquadCreate` | Created squad |
-| GET | `/api/squads/{squad_id}` | `?caller_agent_id=` | Squad + `job_titles` |
-| GET | `/api/squads/{squad_id}/kanban` | `?caller_agent_id=` (required for auth) | Kanban aggregate |
-| PATCH | `/api/squads/{squad_id}` | `SquadUpdate` + caller | Updated squad |
-| DELETE | `/api/squads/{squad_id}` | `?caller_agent_id=` | `{ deleted: squad_id }` |
-| GET | `/api/squads/by-agent/{agent_id}` | — | `{ squad, is_lead }` |
+| Method | Path | Body / query | Auth | Response |
+|--------|------|--------------|------|----------|
+| GET | `/api/squads` | `?caller_agent_id=` | Any | `{ squads: Squad[] }` with `job_titles` map |
+| POST | `/api/squads` | `SquadCreate` | Owner | Created squad |
+| GET | `/api/squads/{squad_id}` | `?caller_agent_id=` | Any | Squad + `job_titles` |
+| GET | `/api/squads/{squad_id}/kanban` | `?caller_agent_id=` (required for auth) | Member | Kanban aggregate |
+| PATCH | `/api/squads/{squad_id}` | `SquadUpdate` + caller | Lead or owner | Updated squad |
+| POST | `/api/squads/{squad_id}/pending-actions/{action_id}/resolve` | `PendingActionResolve` | Owner | Resolved action |
+| DELETE | `/api/squads/{squad_id}` | `?caller_agent_id=` | Lead or owner | `{ deleted: squad_id }` |
+| GET | `/api/squads/by-agent/{agent_id}` | — | Any | `{ squad, is_lead }` |
 
 ### `SquadCreate` / `SquadUpdate`
 
@@ -128,6 +139,17 @@ Prefix: `/api/squads`
 
 `SquadUpdate` optional fields: `name`, `lead_agent_id`, `member_agent_ids`, `checkback_enabled`, `checkback_interval_seconds`, `proposal_sla_seconds`.
 
+### `PendingActionResolve`
+
+```json
+{
+  "approved": true,
+  "resolution_note": "optional note"
+}
+```
+
+Owner approves or denies lead-requested destructive actions (currently `delete_agent`). When the squad has only one member, approving delete also disbands the squad (`squad_deleted` in response).
+
 ### Squad record (`data/squads/{squad_id}.json`)
 
 | Field | Type | Description |
@@ -139,11 +161,27 @@ Prefix: `/api/squads`
 | `paused` | boolean | Squad freeze |
 | `inbox` | `SquadInboxItem[]` | Shared inbox |
 | `escalations` | `SquadEscalation[]` | Member → lead escalations |
+| `pending_actions` | `SquadPendingAction[]` | Owner-approval queue (lead-initiated deletes) |
 | `checkback_enabled` | boolean | Default `true` |
 | `checkback_interval_seconds` | int | Default `1800` (30 min) |
 | `proposal_sla_seconds` | int | Default `14400` (4 h) |
 | `last_checkback_at` | number | Last lead checkback wake |
 | `created_at` / `updated_at` | number | Timestamps |
+
+#### `SquadPendingAction`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | `pending_*` id |
+| `action_type` | string | `delete_agent`, `patch_job`, `patch_trust` |
+| `target_agent_id` | string | Agent affected on approve |
+| `payload` | object | `{ job: {...} }` or `{ trust: {...} }` for patch actions |
+| `requested_by` | string | Lead agent id |
+| `title` / `description` | string | Owner-facing summary |
+| `status` | string | `pending` \| `approved` \| `rejected` |
+| `delete_squad_on_approve` | boolean | True when sole member — disband on approve |
+| `created_at` / `resolved_at` | number | Timestamps |
+| `resolution_note` | string | Owner note on resolve |
 
 Index: `data/squads/index.json` maps `agent_id → squad_id`.
 
@@ -167,11 +205,12 @@ Index: `data/squads/index.json` maps `agent_id → squad_id`.
 
 ### Side effects on squad CRUD
 
-`server/routes/squads.py` calls `_sync_agent_squad` per affected agent:
+`server/routes/squads.py` and `SquadManager.apply_roster_change` sync every affected agent:
 
-- `runtime.sync_job_trust(squad=...)`
-- `runtime.sync_squad_tools()` — add/remove squad tools
-- `SquadManager.set_hooks()` for lead when lead runtime has active agentic hooks
+- `SquadManager.sync_agent_runtime()` → `runtime.sync_job_trust(squad=...)` + `runtime.sync_squad_tools()`
+- Lead WM hooks via `SquadManager.set_hooks()` when lead runtime is loaded
+- Roster add/remove dispatches `[SQUAD ROSTER UPDATE]` / leave notices to loaded agents
+- **Agent load** (`AgentManager.load_agent`) calls `sync_agent_runtime(..., lookup_squad=True)` so unloaded agents pick up membership when started
 
 ---
 
@@ -184,6 +223,8 @@ Registered in `nls/runtime/dispatch_sources.py`:
 | `squad_checkback:{squad_id}` | Lead | `squad_lead` |
 | `squad_escalation:{squad_id}` | Lead | `squad_lead` |
 | `squad_item_done:{squad_id}` | Lead | `squad_lead` |
+| `squad_roster:{squad_id}` | All members | Job-driven |
+| `squad_roster_left:{squad_id}` | Removed member | Job-driven |
 | `squad_wake:{agent_id}` | Member | Job-driven |
 
 Enqueue path: `SquadManager._wake_lead` → consciousness scheduler inner loop (`server/main.py` lifespan hooks).
@@ -194,11 +235,30 @@ Dedup: pending dispatch queue skips new squad wakes if any `squad_*:{squad_id}` 
 
 ## `squad` tool actions
 
-Enum on `squad(action=...)` (`nls/tools/agent_tools/squad.py`):
+Defined in `nls/tools/agent_tools/squad.py`:
 
-`inspect`, `list_inbox`, `propose`, `approve`, `reject`, `assign`, `reassign`, `resolve_escalation`, `brief`, `checkback`, `pause`, `resume`, `status`
+**Bootstrap (pre-squad):** `squad_setup(action='create')` — requires `owner_confirmed=true` after `ask_user()`.
 
-Lead-only: `approve`, `reject`, `assign`, `reassign`, `resolve_escalation`, `brief`, `checkback`, `pause`, `resume` (enforced in `SquadManager`).
+**All members:** `inspect`, `list_inbox`, `propose`
+
+**Lead only:** `approve`, `reject`, `assign`, `reassign`, `resolve_escalation`, `brief`, `checkback`, `pause`, `resume`, `status`, `add_member`, `remove_member`, `disband_member`, `pause_member`, `resume_member`, `spawn_member`, `set_member_job`, `set_lead_job` (owner_confirmed), `request_trust_change`, `request_delete_member`, `list_pending`
+
+Triage may emit hint `fleet:squad_candidate` when the owner describes a multi-agent fleet; the loop injects a bootstrap nudge.
+
+### Lead fleet management (tool)
+
+| Action | Description |
+|--------|-------------|
+| `squad_setup` / `create` | Create squad with self as lead (owner_confirmed) |
+| `add_member` | Add existing agent to squad |
+| `remove_member` / `disband_member` | Remove member (promotes new lead if lead removed) |
+| `set_member_job` | Lead updates member job charter directly |
+| `set_lead_job` | Lead updates own job with owner_confirmed after ask_user |
+| `request_trust_change` | Queue trust patch — owner approves on dashboard |
+| `pause_member` / `resume_member` | Pause/resume member consciousness loop |
+| `spawn_member` | Create agent (`genesis_version` optional), set job, add to squad, brief |
+| `request_delete_member` | Queue owner-approved delete; sole member disbands squad on approve |
+| `list_pending` | List pending owner actions |
 
 ---
 
@@ -211,6 +271,7 @@ Lead-only: `approve`, `reject`, `assign`, `reassign`, `resolve_escalation`, `bri
 | `listSquads` | `/api/squads` |
 | `getSquadKanban` | `/api/squads/{id}/kanban` |
 | `createSquad` / `updateSquad` / `deleteSquad` | `/api/squads` |
+| `resolveSquadPendingAction` | `POST /api/squads/{id}/pending-actions/{actionId}/resolve` |
 
 Components: `squads-panel`, `agent-charter-modal`, agent card job/squad labels.
 

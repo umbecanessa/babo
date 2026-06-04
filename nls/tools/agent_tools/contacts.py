@@ -266,7 +266,7 @@ class ContactsTool:
                 continue
             found_any = True
             linked = cfg.get("linked_phone", "") or cfg.get("linked_id", "")
-            connected = self._is_connected(adapter)
+            connected = self._is_connected(adapter, channel)
             status = "connected" if connected else "not connected"
             line = f"  {channel}: {owner} ({status})"
             if linked:
@@ -697,9 +697,30 @@ class ContactsTool:
             return adapter._agent_configs.get(self._agent_id, {})
         return {}
 
-    def _is_connected(self, adapter: Any) -> bool:
-        if hasattr(adapter, "_connected_agents"):
-            return self._agent_id in adapter._connected_agents
+    def _data_root(self) -> Path | None:
+        if self._data_dir is not None:
+            return Path(self._data_dir)
+        try:
+            from server.main import app
+
+            am = getattr(app.state, "agent_manager", None)
+            if am is not None:
+                return Path(am.agents_dir).parent
+        except Exception:
+            pass
+        return None
+
+    def _is_connected(self, adapter: Any, channel: str = "") -> bool:
+        channel_key = channel or getattr(adapter, "name", "") or getattr(
+            adapter, "channel_name", "",
+        )
+        if hasattr(adapter, "_connected_agents") and self._agent_id in adapter._connected_agents:
+            return True
+        data_root = self._data_root()
+        if data_root and channel_key:
+            from nls.runtime.channel_agent_config import agent_channel_is_configured
+
+            return agent_channel_is_configured(data_root, self._agent_id, channel_key)
         return False
 
     def _gather_contacts(self, channel: str, adapter: Any) -> list[dict]:
@@ -786,5 +807,6 @@ def _format_age(ts: float) -> str:
     return f"{int(delta / 86400)}d ago"
 
 
-def create_contacts_tool(agent_id: str) -> ContactsTool:
-    return ContactsTool(agent_id=agent_id)
+def create_contacts_tool(agent_id: str, agent_dir: Path | None = None) -> ContactsTool:
+    data_dir = Path(agent_dir).parent.parent if agent_dir else None
+    return ContactsTool(agent_id=agent_id, data_dir=data_dir)

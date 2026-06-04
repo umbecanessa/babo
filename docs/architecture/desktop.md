@@ -66,7 +66,7 @@ See [Desktop configuration](../configuration/desktop.md) for the full wizard flo
 
 ## Bundled runtimes (first-run)
 
-`VenvManager.setup()` downloads standalone **Python 3.12**, **Node.js 20**, and on Windows **PowerShell 7** into Electron userData, then creates the agent venv and installs `requirements-desktop.txt`. Runtime start injects `NLS_NODE_BIN`, `NLS_NPM_BIN`, and `NLS_PWSH_BIN` so skills and `bash()` work offline.
+`VenvManager.setup()` downloads standalone **Python 3.12**, **Node.js 20**, on Windows **PowerShell 7**, and **llmfit** (pinned GitHub release into `userData/llmfit-standalone`) into Electron userData, then creates the agent venv and installs `requirements-desktop.txt`. On each app start after setup, `checkDepsSync()` re-runs `pip install` when `requirements-desktop.txt` changes and re-checks Node, PowerShell, and llmfit versions. Runtime start injects `NLS_NODE_BIN`, `NLS_NPM_BIN`, and `NLS_PWSH_BIN` so skills and `bash()` work offline. Model Fit uses the bundled llmfit binary when present.
 
 On Windows, agent `bash()` runs PowerShell 7 — see [Platform shell on Windows](platform-shell-and-windows.md).
 

@@ -721,8 +721,21 @@ export class ApiService {
     );
   }
 
-  getSquadForAgent(agentId: string): Observable<{ squad: Squad | null; is_lead: boolean }> {
-    return this.http.get<{ squad: Squad | null; is_lead: boolean }>(
+  resolveSquadPendingAction(
+    squadId: string,
+    actionId: string,
+    approved: boolean,
+    _callerAgentId?: string,
+    resolutionNote = '',
+  ): Observable<{ pending_action: SquadPendingAction; deleted?: string; squad_deleted?: string }> {
+    return this.http.post<{ pending_action: SquadPendingAction; deleted?: string; squad_deleted?: string }>(
+      `${this.RUNTIME}/api/squads/${squadId}/pending-actions/${actionId}/resolve`,
+      { approved, resolution_note: resolutionNote },
+    );
+  }
+
+  getSquadForAgent(agentId: string): Observable<SquadForAgentResponse> {
+    return this.http.get<SquadForAgentResponse>(
       `${this.RUNTIME}/api/squads/by-agent/${agentId}`,
     );
   }
@@ -1022,6 +1035,32 @@ export interface TrustDocument {
   channel_overlays?: ChannelTrustOverlay[];
 }
 
+export interface FleetChannelFace {
+  agent_id: string;
+  role: string;
+  discord_connected: boolean;
+  slack_connected: boolean;
+  discord_channels: string;
+  slack_channels: string;
+}
+
+export interface FleetChannelTopology {
+  mode: 'none' | 'planning' | 'single_face' | 'multi_face';
+  platform: 'discord' | 'slack' | null;
+  viewer_agent_id: string;
+  viewer_role: string;
+  squad_id: string;
+  squad_name: string;
+  faces: FleetChannelFace[];
+}
+
+export interface SquadForAgentResponse {
+  squad: Squad | null;
+  is_lead?: boolean;
+  channel_topology?: FleetChannelTopology | null;
+  channel_topology_guidance?: string;
+}
+
 export interface SquadCreate {
   name: string;
   lead_agent_id: string;
@@ -1035,12 +1074,28 @@ export interface Squad {
   member_agent_ids: string[];
   inbox?: SquadInboxItem[];
   escalations?: { member_agent_id: string; reason: string; status: string }[];
+  pending_actions?: SquadPendingAction[];
   job_titles?: Record<string, string>;
   paused?: boolean;
   checkback_enabled?: boolean;
   checkback_interval_seconds?: number;
   proposal_sla_seconds?: number;
   last_checkback_at?: number;
+}
+
+export interface SquadPendingAction {
+  id: string;
+  action_type: string;
+  target_agent_id?: string;
+  requested_by?: string;
+  title?: string;
+  description?: string;
+  status: string;
+  created_at?: number;
+  resolved_at?: number;
+  resolution_note?: string;
+  delete_squad_on_approve?: boolean;
+  payload?: Record<string, unknown>;
 }
 
 export interface SquadInboxItem {

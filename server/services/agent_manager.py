@@ -432,6 +432,19 @@ class AgentManager:
 
         logger.info("Agent %s loaded and ready for serving", agent_id)
 
+        try:
+            from server.main import app
+
+            sm = getattr(app.state, "squad_manager", None)
+            if sm is not None:
+                sm.sync_agent_runtime(agent_id, runtime, lookup_squad=True)
+                if hasattr(runtime, "sync_squad_tools"):
+                    runtime.sync_squad_tools()
+                    if hasattr(runtime, "refresh_tools"):
+                        runtime.refresh_tools()
+        except Exception as exc:
+            logger.debug("Agent %s squad sync on load skipped: %s", agent_id, exc)
+
         cm = self.connection_manager
         if cm is not None:
             from server.services.agent_relay import ensure_agent_relay

@@ -32,6 +32,10 @@ Bridge between Angular renderer and Electron main process.
 | `execCommand(cmd, cwd?)` | `shell:exec` | Permission-gated shell |
 | `readClipboard/writeClipboard` | `clipboard:*` | Clipboard |
 | `getSystemInfo()` | `system:info` | Host metadata |
+| `debug.getSummary()` | `debug:summary` | Recent errors + exportable artifacts |
+| `debug.revealUserData()` | `debug:reveal-user-data` | Open userData in file manager |
+| `debug.exportArtifact(kind, agentId?)` | `debug:export-artifact` | Save dialog → single log/state export |
+| `debug.exportFullBundle()` | `debug:export-full` | Save dialog → full support `.zip` |
 | `showNotification(title, body)` | `notification:show` | OS notification |
 | `permissions.getAll/getProfiles/applyProfile/reset/request` | `permissions:*` | Capability prompts |
 | `update.check/download/install/snooze/getStatus` | `update:*` | Auto-update |
@@ -84,8 +88,24 @@ See [Desktop configuration](../configuration/desktop.md) and [Platform shell on 
 
 ---
 
+## Debug export kinds (`debug.exportArtifact`)
+
+| `kind` | Export |
+|--------|--------|
+| `runtime_log` | `runtime.log` (tail if huge) |
+| `setup_log` | `setup.log` |
+| `electron_log` | Latest desktop main log |
+| `desktop_config` | Redacted `nls-config.json` |
+| `agent_transcript` | `chat_transcript.jsonl` (requires `agentId`) |
+| `agent_sessions` | `sessions/` folder as zip |
+| `agent_agentic_logs` | `agentic_logs/` as zip |
+| `agent_state` | Agent metadata, config, sessions, plans, memory (zip) |
+
+---
+
 ## Related
 
+- [Desktop support & debug export](../guides/desktop-support-debug.md)
 - [Desktop configuration](../configuration/desktop.md)
 - [Capability profiles](../architecture/capability-profiles-and-onboarding.md)
 - [Deployment topologies](../architecture/deployment-topologies.md)

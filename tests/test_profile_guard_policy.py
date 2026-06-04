@@ -299,14 +299,13 @@ def test_enrich_instruction_skill_setup_hint():
         ["Configure bot with provided credentials"],
         hints,
     )
-    assert "setup:instruction_skill" in hints
-    assert any("skill_configure" in h.lower() for h in hints)
+    assert hints == []
 
 
 def test_enrich_instruction_skill_skips_duplicate():
     hints = ["setup:instruction_skill"]
     enrich_instruction_skill_hints("configure bot", ["Configure bot"], hints)
-    assert hints.count("setup:instruction_skill") == 1
+    assert hints == ["setup:instruction_skill"]
 
 
 def test_enrich_native_skill_hint_for_nls_python_skill():
@@ -316,8 +315,7 @@ def test_enrich_native_skill_hint_for_nls_python_skill():
         ["Build native Discord moderator skill"],
         hints,
     )
-    assert "setup:native_skill" in hints
-    assert "setup:instruction_skill" not in hints
+    assert hints == []
 
 
 def test_enrich_instruction_skill_skips_when_native_authoring():
@@ -327,7 +325,7 @@ def test_enrich_instruction_skill_skips_when_native_authoring():
         ["Build native skill"],
         hints,
     )
-    assert "setup:instruction_skill" not in hints
+    assert hints == []
 
 
 def test_enrich_native_skill_hint_for_active_discord_moderator():
@@ -337,9 +335,7 @@ def test_enrich_native_skill_hint_for_active_discord_moderator():
         ["Discord moderator bot"],
         hints,
     )
-    assert "setup:native_skill" in hints
-    assert any("discord-channel" in h for h in hints)
-    assert any("github.com/umbecanessa/babo" in h for h in hints)
+    assert hints == []
 
 
 def test_enrich_instruction_skips_active_channel():
@@ -349,4 +345,4 @@ def test_enrich_instruction_skips_active_channel():
         ["Discord moderator"],
         hints,
     )
-    assert "setup:instruction_skill" not in hints
+    assert hints == []

@@ -584,3 +584,180 @@
   background: currentColor;
   opacity: 0.6;
 }
+
+// ─── Accordion (squad member row) ───────────────────────────────
+:host.accordion-host {
+  display: block;
+  animation: none;
+}
+
+.accordion-member {
+  border-radius: var(--radius-md);
+  background: var(--overlay-1);
+  border: 1px solid var(--overlay-2);
+  overflow: hidden;
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+
+  &.expanded {
+    border-color: var(--glass-border-strong);
+    box-shadow: var(--shadow-glass);
+  }
+
+  &.card-paused {
+    opacity: 0.72;
+  }
+}
+
+.accordion-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+  user-select: none;
+  min-width: 0;
+
+  &:hover {
+    background: var(--overlay-2);
+  }
+}
+
+.accordion-chevron {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: transform 0.2s ease, color 0.2s ease;
+
+  .expanded & {
+    transform: rotate(180deg);
+  }
+
+  &:hover {
+    color: var(--text-primary);
+  }
+}
+
+.status-indicator.compact {
+  flex-shrink: 0;
+}
+
+.accordion-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.agent-name.inline {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text-primary);
+  margin: 0;
+  letter-spacing: 0.02em;
+}
+
+.job-pill,
+.lead-pill {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.job-pill {
+  background: var(--overlay-2);
+  color: var(--text-secondary);
+}
+
+.lead-pill {
+  background: rgba(229, 165, 32, 0.14);
+  color: #92400e;
+}
+
+:host-context([data-theme='dark']) .lead-pill {
+  background: rgba(251, 191, 36, 0.18);
+  color: #fde68a;
+}
+
+.accordion-charter {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.accordion-actions {
+  flex-shrink: 0;
+  margin-left: auto;
+
+  .pause-btn.visible,
+  .delete-btn.visible {
+    opacity: 1;
+  }
+}
+
+.chat-link-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--overlay-3);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  background: transparent;
+  text-decoration: none;
+  transition: all 0.15s ease;
+
+  &:hover {
+    color: var(--accent-primary);
+    border-color: var(--accent-tint-border);
+    background: var(--accent-primary-glow);
+  }
+}
+
+.remove-squad-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--overlay-3);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+
+  &:hover {
+    color: var(--accent-warn);
+    border-color: color-mix(in srgb, var(--accent-warn) 35%, transparent);
+    background: color-mix(in srgb, var(--accent-warn) 10%, transparent);
+  }
+}
+
+.accordion-body {
+  padding: 0 14px 14px;
+  border-top: 1px solid var(--overlay-2);
+
+  .agent-id {
+    margin: 12px 0 10px;
+  }
+
+  .card-footer {
+    margin-top: 0;
+  }
+}

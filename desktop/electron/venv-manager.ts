@@ -14,6 +14,7 @@ import * as https from 'https';
 import * as http from 'http';
 import * as path from 'path';
 import * as os from 'os';
+import { ensureLlmfit, getLlmfitBin, LLMFIT_VERSION } from './llmfit-installer';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -154,6 +155,8 @@ export class VenvManager {
       }
     }
 
+    await this.ensureLlmfitTool();
+
     this.updateStatus('ready', 'Dependencies up to date', 100);
   }
 
@@ -243,7 +246,11 @@ export class VenvManager {
         await this.ensureStandalonePowerShell();
       }
 
-      // Step 10: Ensure data directories
+      // Step 10: llmfit for hardware-aware model recommendations (Model Fit)
+      this.updateStatus('installing', 'Installing llmfit (model recommendations)...', 96);
+      await this.ensureLlmfitTool();
+
+      // Step 11: Ensure data directories
       this.updateStatus('installing', 'Setting up data directories...', 98);
       this.ensureDataDirs();
 
@@ -973,6 +980,20 @@ export class VenvManager {
     }
   }
 
+  /** Bundled llmfit for Model Fit (onboarding + settings). */
+  getLlmfitBin(): string | null {
+    return getLlmfitBin();
+  }
+
+  private async ensureLlmfitTool(): Promise<void> {
+    await ensureLlmfit({
+      onStatus: (message, progress) => {
+        this.updateStatus('installing', message, progress);
+      },
+      onLog: (level, message) => this.broadcastLog(level, message),
+    });
+  }
+
   private ensureDataDirs(): void {
     const dataDir = path.join(app.getPath('userData'), 'data');
     const dirs = [
@@ -1207,6 +1228,7 @@ export class VenvManager {
           venvPath: this.venvPath,
           installedAt: new Date().toISOString(),
           requirementsHash: reqHash,
+          llmfitVersion: getLlmfitBin() ? LLMFIT_VERSION : null,
         }),
         'utf-8',
       );

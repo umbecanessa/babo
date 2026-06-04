@@ -1512,6 +1512,7 @@ class CryptexMemory:
         "executing": {
             RING_INSTRUCTIONS: 1.0,
             RING_BEHAVIORAL: 0.95,
+            RING_CHANNELS: 0.92,
             RING_PROJECT_FACTS: 0.9,
             RING_CREDENTIALS: 0.85,
             RING_TOOLS_MCP: 0.8,
@@ -1911,6 +1912,28 @@ class CryptexMemory:
             normalize_profile,
         )
 
+        def _active_task_hints() -> set[str]:
+            tokens: set[str] = set()
+            for h in state.get("hints") or []:
+                if h and str(h).strip():
+                    tokens.add(str(h).strip().lower())
+            for ring in self._rings.values():
+                for s in ring.get_active_slots():
+                    if getattr(s, "domain", "") != "Task.Hints":
+                        continue
+                    for part in (s.content or "").split("|"):
+                        if part.strip():
+                            tokens.add(part.strip().lower())
+            return tokens
+
+        _fleet_staffing = False
+        try:
+            from nls.agentic.fleet_triage_policy import HINT_FLEET_SQUAD
+
+            _fleet_staffing = HINT_FLEET_SQUAD in _active_task_hints()
+        except Exception:
+            pass
+
         _orch_profile = normalize_profile(state.get("orchestration_profile"))
         _profile_spec = get_profile_spec(_orch_profile)
         _has_active_plan = bool(state.get("has_active_plan"))
@@ -2014,6 +2037,11 @@ class CryptexMemory:
                     getattr(s, "domain", ""), _orch_profile,
                 )
             ]
+            if _fleet_staffing:
+                all_slots = [
+                    s for s in all_slots
+                    if getattr(s, "domain", "") != "native_skill_authoring"
+                ]
 
             # Build domain → slot mapping
             _domain_map: dict[str, list] = {}
@@ -2231,11 +2259,14 @@ class CryptexMemory:
             _boost = bool(state.get("skill_discovery_boost"))
             _target = msg0_parts if _boost else msg1_parts
             _cap = 10 if _boost else 6
-            _header = (
-                "⚠ SKILLS & TOOL DISCOVERY — read first (stuck recovery):"
-                if _boost
-                else "Available Skills:"
-            )
+            if _fleet_staffing:
+                _header = "Connected channel integrations (use with squad tools):"
+            elif _boost:
+                _header = (
+                    "⚠ SKILLS & TOOL DISCOVERY — read first (stuck recovery):"
+                )
+            else:
+                _header = "Available Skills:"
             skill_lines: list[str] = [_header]
             sorted_slots = sorted(
                 skill_slots,
@@ -2245,14 +2276,24 @@ class CryptexMemory:
                 ),
             )
             for s in sorted_slots[:_cap]:
-                line = f"  ⚙ {s.content}"
-                if _boost:
-                    full = (s.metadata or {}).get("full_instructions", "")
-                    if full:
-                        excerpt = full[:500].strip()
-                        if len(full) > 500:
-                            excerpt += "…"
-                        line += f"\n    Instructions: {excerpt}"
+                meta = s.metadata or {}
+                if _fleet_staffing and meta.get("pre_shipped"):
+                    skill_name = meta.get("skill_name") or s.content.split(":")[0]
+                    status = "enabled" if meta.get("enabled") else "not enabled"
+                    line = (
+                        f"  • {skill_name}: connected channel [{status}] — "
+                        "already available for squad members; do not skill_configure "
+                        "or ask for bot token during squad staffing"
+                    )
+                else:
+                    line = f"  ⚙ {s.content}"
+                    if _boost:
+                        full = meta.get("full_instructions", "")
+                        if full:
+                            excerpt = full[:500].strip()
+                            if len(full) > 500:
+                                excerpt += "…"
+                            line += f"\n    Instructions: {excerpt}"
                 skill_lines.append(line)
             if _boost:
                 skill_lines.append(
@@ -2301,7 +2342,12 @@ class CryptexMemory:
                     ch_lines: list[str] = ["Active Channels:"]
                     for s in ch_slots:
                         ch_lines.append(f"  \U0001f4e1 {s.content}")
-                    _append(msg1_parts, "\n".join(ch_lines))
+                    _has_connected = any(
+                        "CONNECTED" in (s.content or "")
+                        and "NOT CONNECTED" not in (s.content or "")
+                        for s in ch_slots
+                    )
+                    _append(msg1_parts, "\n".join(ch_lines), force=_has_connected)
 
         def _render_consolidation() -> None:
             if _budget_remaining() < 100:
@@ -3424,6 +3470,26 @@ class CryptexMemory:
                 ),
             },
             {
+                "domain": "desktop_support_debug",
+                "render_mode": "chat",
+                "consolidation_status": "permanent",
+                "content": (
+                    "DESKTOP SUPPORT / DEBUG EXPORT: When the user reports bugs, "
+                    "crashes, runtime errors, or asks for help diagnosing Babo Desktop, "
+                    "guide them to Settings \u2192 Support & Debug (not AppData folders "
+                    "by hand). They can:\n"
+                    "- Review Recent errors (parsed from runtime/setup/desktop logs)\n"
+                    "- Export individual logs, redacted desktop config, chat transcript, "
+                    "channel sessions, agentic loop logs, or per-agent state\n"
+                    "- Export full debug bundle \u2014 one .zip with logs, redacted "
+                    "nls-config, agent transcripts/sessions/agentic logs, and agent state "
+                    "(secrets redacted; workspace files excluded)\n"
+                    "Ask them to attach the zip when contacting support or filing a bug. "
+                    "Offer to interpret errors together after they export. "
+                    "Docs: https://babo.agency/guides/desktop-support-debug/"
+                ),
+            },
+            {
                 "domain": "credentials_handling",
                 "render_mode": "agentic",
                 "consolidation_status": "permanent",
@@ -3666,6 +3732,9 @@ class CryptexMemory:
                     "- scheduler: Create recurring or one-shot jobs.\n"
                     "- communicate: Send progress update without pausing.\n"
                     "- ask_user: Ask a question and wait for reply.\n"
+                    "- channel_inspect: Per-agent channel config and scoped Discord/Slack/"
+                    "Telegram/WhatsApp/Email status. Use list or get before asking the owner "
+                    "for bot tokens or channel names.\n"
                     "- Do NOT read the same file twice.\n"
                     "- Call independent tools in parallel."
                 ),
@@ -3823,7 +3892,26 @@ class CryptexMemory:
                     "- Assign work: squad(action='approve'|'assign', assignee_agent_id=...).\n"
                     "- Status: squad(action='status'|'list_inbox'|'inspect').\n"
                     "- Brief a member: squad(action='brief', target_agent_id=..., message=...).\n"
-                    "Members keep their own Job/Trust; squad tools never bypass trust policy."
+                    "Members keep their own Job/Trust; squad tools never bypass trust policy.\n"
+                    "Public channels: read channel.fleet_topology — SINGLE FACE (one linked "
+                    "integration on the lead; members via squad inbox) vs MULTI FACE (each "
+                    "speaking agent has its own credentials on their Tools page). "
+                    "channel_inspect(action='get') for scoped channel detail. ask_user() "
+                    "before assuming multi-face; never copy credentials to members."
+                ),
+            },
+            {
+                "domain": "squad_channel_topology",
+                "render_mode": "coordinator",
+                "consolidation_status": "permanent",
+                "content": (
+                    "SQUAD CHANNEL TOPOLOGY:\n"
+                    "One channel credential set = one inbound route = one runtime agent.\n"
+                    "Single-face fleet: only the lead (or one agent) links the public channel; "
+                    "they send for public replies; members use squad inbox/todos.\n"
+                    "Multi-face fleet: each speaking agent needs its own credentials on THEIR "
+                    "agent (Dashboard → member → Tools → channel skill) with scope per role.\n"
+                    "Summary in Channels ring; detail via channel_inspect(action='get', channel=...)."
                 ),
             },
             {
@@ -3911,6 +3999,7 @@ class CryptexMemory:
         _REFRESH_DOMAINS = frozenset({
             "team_orchestration", "tool_best_practices", "workspace_discipline",
             "coordinator_mode", "solo_plan_workflow", "native_skill_authoring",
+            "desktop_support_debug",
         })
         _REFRESH_ENV_DOMAINS = frozenset({"platform_docs"})
 

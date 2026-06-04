@@ -63,6 +63,8 @@ class TeamTool:
         return (
             "Manage execution teams — persistent groups of sub-agents "
             "working on plan delegation waves.\n"
+            "NOT for Discord/community squads with permanent roles — use squad_setup + "
+            "squad() tools for that.\n"
             "WORKFLOW: 1) plan(action='create', title='...'), "
             "2) plan(action='add_step', plan_id=..., label='task', "
             "delegatable=true) for each task, "
