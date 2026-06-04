@@ -7,7 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 
-from nls.skills.bundled.discord-channel.adapter import _channel_display_name
+from .adapter import _channel_display_name
 from nls.skills.channel_adapter_util import broadcast_channel_event, strip_signal_tags
 
 logger = logging.getLogger(__name__)
@@ -63,7 +63,7 @@ async def discord_inbound(agent_id: str, request: Request):
     raw_for_policy = message if message.get("author") else (body.get("d") or {})
     skip_reason = adapter.explain_policy_block(raw_for_policy, agent_id=agent_id)
     if skip_reason:
-        from nls.skills.bundled.discord-channel.adapter import broadcast_channel_policy_skip
+        from .adapter import broadcast_channel_policy_skip
 
         logger.info("Discord webhook [%s]: policy rejected — %s", agent_id, skip_reason)
         broadcast_channel_policy_skip(app, agent_id, normalized, reason=skip_reason)
