@@ -77,11 +77,34 @@ export interface LanServiceProbe {
   detail?: string;
 }
 
+/** Model Fit snapshot attached to a device or LAN scan. */
+export interface ModelFitSnapshot {
+  target: 'local' | 'lan';
+  host?: string;
+  gpuName: string;
+  vramGb: number;
+  localViable: boolean;
+  engine: 'llmfit' | 'heuristic';
+  recommendations: Array<{
+    displayName: string;
+    modelId: string;
+    fitLevel: string;
+    reason: string;
+    runtime?: string;
+  }>;
+  error?: string;
+}
+
 /** Full scan output shown in onboarding. */
 export interface CapabilityScan {
   scannedAt: string;
   device: DeviceScan;
   lan: LanServiceProbe[];
+  /** Hardware-aware model picks (local PC and/or LAN server). */
+  modelFit?: {
+    local?: ModelFitSnapshot;
+    lan?: ModelFitSnapshot;
+  };
 }
 
 /** Optional sub-agent (delegate) chat model; uses `inference` when unset. */

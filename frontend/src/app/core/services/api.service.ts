@@ -652,6 +652,81 @@ export class ApiService {
     return this.http.get(`${this.RUNTIME}/skills/todo-list/${agentId}/items/${itemId}/plan`);
   }
 
+  // ─── Job & Trust ───────────────────────────────────────────────
+  getJob(agentId: string): Observable<JobDocument> {
+    return this.http.get<JobDocument>(`${this.RUNTIME}/agents/${agentId}/job`);
+  }
+
+  patchJob(agentId: string, body: Partial<JobDocument>): Observable<JobDocument> {
+    return this.http.patch<JobDocument>(`${this.RUNTIME}/agents/${agentId}/job`, body);
+  }
+
+  getTrust(agentId: string): Observable<TrustDocument> {
+    return this.http.get<TrustDocument>(`${this.RUNTIME}/agents/${agentId}/trust`);
+  }
+
+  patchTrust(agentId: string, body: Partial<TrustDocument>): Observable<TrustDocument> {
+    return this.http.patch<TrustDocument>(`${this.RUNTIME}/agents/${agentId}/trust`, body);
+  }
+
+  // ─── Squads ────────────────────────────────────────────────────
+  listSquads(callerAgentId?: string): Observable<{ squads: Squad[] }> {
+    let params = new HttpParams();
+    if (callerAgentId) {
+      params = params.set('caller_agent_id', callerAgentId);
+    }
+    return this.http.get<{ squads: Squad[] }>(`${this.RUNTIME}/api/squads`, { params });
+  }
+
+  getSquadKanban(squadId: string, callerAgentId: string): Observable<SquadKanbanBoard> {
+    const params = new HttpParams().set('caller_agent_id', callerAgentId);
+    return this.http.get<SquadKanbanBoard>(
+      `${this.RUNTIME}/api/squads/${squadId}/kanban`,
+      { params },
+    );
+  }
+
+  createSquad(body: SquadCreate): Observable<Squad> {
+    return this.http.post<Squad>(`${this.RUNTIME}/api/squads`, body);
+  }
+
+  getSquad(squadId: string): Observable<Squad> {
+    return this.http.get<Squad>(`${this.RUNTIME}/api/squads/${squadId}`);
+  }
+
+  updateSquad(
+    squadId: string,
+    body: Partial<SquadCreate> & {
+      checkback_enabled?: boolean;
+      checkback_interval_seconds?: number;
+      proposal_sla_seconds?: number;
+    },
+    callerAgentId?: string,
+  ): Observable<Squad> {
+    let params = new HttpParams();
+    if (callerAgentId) {
+      params = params.set('caller_agent_id', callerAgentId);
+    }
+    return this.http.patch<Squad>(`${this.RUNTIME}/api/squads/${squadId}`, body, { params });
+  }
+
+  deleteSquad(squadId: string, callerAgentId?: string): Observable<{ deleted: string }> {
+    let params = new HttpParams();
+    if (callerAgentId) {
+      params = params.set('caller_agent_id', callerAgentId);
+    }
+    return this.http.delete<{ deleted: string }>(
+      `${this.RUNTIME}/api/squads/${squadId}`,
+      { params },
+    );
+  }
+
+  getSquadForAgent(agentId: string): Observable<{ squad: Squad | null; is_lead: boolean }> {
+    return this.http.get<{ squad: Squad | null; is_lead: boolean }>(
+      `${this.RUNTIME}/api/squads/by-agent/${agentId}`,
+    );
+  }
+
   // ─── Teams ─────────────────────────────────────────────────────
   getTeams(agentId: string, includeCompleted = false): Observable<{ teams: any[] }> {
     let params = new HttpParams();
@@ -891,6 +966,10 @@ export class ApiService {
       createdAt: this.normalizeTimestamp(raw.createdAt ?? raw.created_at),
       runtime,
       userPaused: raw.userPaused ?? raw.user_paused ?? false,
+      jobTitle: raw.jobTitle ?? raw.job_title ?? runtime?.job_title,
+      squadId: raw.squadId ?? raw.squad_id ?? runtime?.squad_id,
+      squadName: raw.squadName ?? raw.squad_name ?? runtime?.squad_name,
+      isSquadLead: raw.isSquadLead ?? raw.is_squad_lead ?? runtime?.is_squad_lead,
     };
   }
 
@@ -907,6 +986,7 @@ export class ApiService {
       'theory_of_mind', 'predictive', 'predictive_processing', 'network_dynamics',
       'last_interaction', 'orchestrator_model', 'delegate_model', 'activity',
       'consciousness',
+      'job_title', 'squad_id', 'squad_name', 'is_squad_lead',
     ] as const;
 
     for (const key of flatKeys) {
@@ -921,4 +1001,80 @@ export class ApiService {
 
     return Object.keys(runtime).length > 0 ? runtime : undefined;
   }
+}
+
+export interface JobDocument {
+  title?: string;
+  mission?: string;
+  persona?: string;
+  playbook?: string;
+  default_profile?: string;
+  in_scope?: string[];
+  out_of_scope?: string[];
+  refusal_template?: string;
+}
+
+export interface TrustDocument {
+  tools_allow?: string[];
+  tools_deny?: string[];
+  action_classes_allow?: string[];
+  action_classes_deny?: string[];
+  channel_overlays?: ChannelTrustOverlay[];
+}
+
+export interface SquadCreate {
+  name: string;
+  lead_agent_id: string;
+  member_agent_ids?: string[];
+}
+
+export interface Squad {
+  id: string;
+  name: string;
+  lead_agent_id: string;
+  member_agent_ids: string[];
+  inbox?: SquadInboxItem[];
+  escalations?: { member_agent_id: string; reason: string; status: string }[];
+  job_titles?: Record<string, string>;
+  paused?: boolean;
+  checkback_enabled?: boolean;
+  checkback_interval_seconds?: number;
+  proposal_sla_seconds?: number;
+  last_checkback_at?: number;
+}
+
+export interface SquadInboxItem {
+  id: string;
+  title: string;
+  status: string;
+  suggested_assignee_id?: string;
+  assignee_id?: string;
+  created_at?: number;
+}
+
+export interface SquadKanbanBoard {
+  squad_id: string;
+  inbox: {
+    proposed: SquadInboxItem[];
+    approved: SquadInboxItem[];
+    rejected: SquadInboxItem[];
+  };
+  member_todos: Record<string, SquadMemberTodo[]>;
+  open_escalations: { member_agent_id: string; reason: string; status: string }[];
+  job_titles?: Record<string, string>;
+}
+
+export interface SquadMemberTodo {
+  id: string;
+  title: string;
+  status: string;
+  squad_id?: string;
+}
+
+export interface ChannelTrustOverlay {
+  channel_key: string;
+  profile_cap?: string;
+  tools_allow?: string[];
+  tools_deny?: string[];
+  public_channel?: boolean;
 }

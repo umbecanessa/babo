@@ -4,7 +4,7 @@ Multi-turn **agentic loop** (v4/v5): LLM generation, parallel tool execution, co
 
 **Entry:** `nls/agentic/__init__.py` — `run_loop`, `build_config`, `build_hooks`, `PlanStore`, `PermissionManager`.
 
-**Architecture:** [Agentic loop](../agentic-loop.md) · [Orchestration](../orchestration-and-delegation.md)
+**Architecture:** [Agentic loop](../agentic-loop.md) · [Orchestration](../orchestration-and-delegation.md) · [Job, Trust & Squads](../../guides/job-trust-and-squads.md)
 
 ---
 
@@ -21,6 +21,8 @@ Multi-turn **agentic loop** (v4/v5): LLM generation, parallel tool execution, co
 | `compactor.py` | Anchored compaction, relay char limits |
 | `plan_store.py` | `Plan`, `PlanStep`, dependencies, tech_stack |
 | `team_manager.py` | Waves, completion review, escalation |
+| `squad_registry.py` / `squad_manager.py` | Persistent squads, inbox, lead wakes |
+| `squad_checkback_scheduler.py` | Periodic squad lead checkbacks |
 | `delegate_manager.py` | Active delegate registry |
 | `orchestration_policy.py` | Tool policy, wakes, coordinator phases |
 | `tool_mode_policy.py` | Post-tool mode transitions |

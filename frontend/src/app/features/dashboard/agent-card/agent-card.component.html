@@ -32,9 +32,19 @@
     </div>
   </div>
 
-  <div class="card-body">
+  <div class="card-body" [class.squad-member]="!!agent.squadId" [class.squad-lead]="agent.isSquadLead">
     <h3 class="agent-name">{{ displayName }}</h3>
+    @if (jobTitle) {
+      <p class="agent-job">{{ jobTitle }}</p>
+    }
+    @if (agent.squadName) {
+      <p class="agent-squad">Squad: {{ agent.squadName }}{{ agent.isSquadLead ? ' (lead)' : '' }}</p>
+    }
     <p class="agent-id">{{ agent.runtimeAgentId }}</p>
+    <div class="charter-links">
+      <button type="button" class="link-quiet" (click)="editCharter.emit({ agentId: agent.runtimeAgentId, tab: 'job' })">Job</button>
+      <button type="button" class="link-quiet" (click)="editCharter.emit({ agentId: agent.runtimeAgentId, tab: 'trust' })">Trust</button>
+    </div>
   </div>
 
   @if (snapshot.showActivityPanel) {

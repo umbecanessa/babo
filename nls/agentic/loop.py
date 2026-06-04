@@ -1240,6 +1240,52 @@ async def run_loop(
         )
 
     _profile = state.orchestration_profile or "solo_structured"
+    if hooks is not None and getattr(hooks, "agent_dir", None) and getattr(hooks, "agent_id", ""):
+        from nls.runtime.agent_profile import resolve_orchestration_profile_for_agent
+
+        state.orchestration_profile = resolve_orchestration_profile_for_agent(
+            hooks.agent_dir,
+            hooks.agent_id,
+            _profile,
+            dispatch_source,
+        )
+        _profile = state.orchestration_profile
+
+    if hooks is not None and getattr(hooks, "agent_id", ""):
+        try:
+            from nls.agentic.profile_depth_policy import (
+                evaluate_squad_lead_profile_mismatch,
+            )
+
+            _sq_nudge = evaluate_squad_lead_profile_mismatch(
+                state,
+                agent_id=hooks.agent_id,
+                agent_dir=getattr(hooks, "agent_dir", None),
+            )
+            if _sq_nudge:
+                context.append({"role": "system", "content": _sq_nudge.message})
+        except Exception:
+            pass
+
+    if dispatch_source and hooks is not None and getattr(hooks, "agent_dir", None):
+        from nls.runtime.job_trust import load_job, load_trust
+        from nls.runtime.public_channel_guard import evaluate_public_channel_request
+
+        _refusal = evaluate_public_channel_request(
+            user_input,
+            job=load_job(hooks.agent_dir),
+            trust=load_trust(hooks.agent_dir),
+            dispatch_source=dispatch_source,
+        )
+        if _refusal:
+            state.goals = [
+                f"REFUSAL (public channel policy): Respond in chat using this template "
+                f"without using tools: {_refusal}",
+            ]
+            state.orchestration_profile = "conversational"
+            _profile = "conversational"
+            invalidate_tool_policy_cache(state)
+
     if _profile == "conversational" and not state.coordinator_mode:
         from nls.agentic.profile_guard_policy import conversational_tool_surface
 
@@ -1410,7 +1456,7 @@ async def run_loop(
         _ext_chs = {
             da.get("channel", "")
             for da in _deferred_actions
-            if da.get("channel") in ("whatsapp", "telegram", "email")
+            if da.get("channel") in ("whatsapp", "telegram", "email", "discord", "slack")
         }
         if _ext_chs:
             _ch_list = ", ".join(sorted(_ext_chs))
@@ -3280,6 +3326,7 @@ async def run_loop(
                 _responding_comm = frozenset({
                     "communicate", "ask_user", "contacts",
                     "whatsapp_send", "telegram_send", "email_send",
+                    "discord_send", "slack_send",
                     "gmail_send", "gmail_reply",
                 })
                 _non_comm_calls = [
@@ -4350,6 +4397,7 @@ async def run_loop(
                 _resp_comm_tools = frozenset({
                     "communicate", "ask_user", "contacts",
                     "whatsapp_send", "telegram_send", "email_send",
+                    "discord_send", "slack_send",
                     "gmail_send", "gmail_reply",
                 })
                 # No tool calls at all → definitely delivered a text response

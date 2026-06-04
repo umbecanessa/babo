@@ -15,6 +15,7 @@ import re
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from nls.agentic.orchestration_profile_spec import get_profile_spec, normalize_profile
 from nls.runtime.dispatch_sources import is_orchestration_dispatch_source
 from nls.tools.agent_tools.gh_auth_hints import format_gh_auth_recipe_hint
 
@@ -76,7 +77,8 @@ def block_mode_switch_for_profile(
         "team_wave_complete:",
     )):
         profile = "orchestrated"
-    if get_profile_spec(profile).allow_coordinator_modes:
+    spec = get_profile_spec(profile)
+    if spec.allow_coordinator_modes or spec.profile == "squad_lead":
         return None
     if target_mode not in _COORDINATOR_ONLY_MODES:
         return None
@@ -94,6 +96,9 @@ def _effective_orchestration_profile(inputs: ToolPolicyInputs) -> str:
         or inputs.delegates_active
         or inputs.must_await_delegates
     ):
+        prof = normalize_profile(inputs.orchestration_profile)
+        if prof == "squad_lead":
+            return "squad_lead"
         return "orchestrated"
     return inputs.orchestration_profile
 

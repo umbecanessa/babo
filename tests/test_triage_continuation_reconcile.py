@@ -74,7 +74,7 @@ def test_reconcile_telegram_token_uses_configure_bundled():
     assert "telegram-channel" in " ".join(triage.goals).lower()
 
 
-def test_reconcile_discord_token_uses_native_not_configure_bundled():
+def test_reconcile_discord_token_uses_configure_bundled():
     triage = TurnTriage(
         intent="TASK_THINK",
         profile="solo_structured",
@@ -90,9 +90,8 @@ def test_reconcile_discord_token_uses_native_not_configure_bundled():
         triage, _DISCORD_TOKEN, history=history,
     )
     lowered = {h.lower() for h in triage.hints}
-    assert "setup:configure_bundled" not in lowered
-    assert "continuation:credential" in lowered
-    assert any("skill_install" in g.lower() for g in triage.goals)
+    assert "setup:configure_bundled" in lowered
+    assert "discord-channel" in " ".join(triage.goals).lower()
 
 
 def test_reconcile_strips_native_skill_on_telegram_token_paste():
@@ -131,7 +130,7 @@ def test_boost_telegram_token_adds_configure_bundled():
     assert "setup:configure_bundled" in {h.lower() for h in triage.hints}
 
 
-def test_boost_discord_token_adds_native_not_configure_bundled():
+def test_boost_discord_token_adds_configure_bundled():
     triage = TurnTriage(
         intent="CHAT_NOTHINK",
         profile="conversational",
@@ -143,8 +142,7 @@ def test_boost_discord_token_adds_native_not_configure_bundled():
     ]
     boost_triage_for_work_continuation(triage, _DISCORD_TOKEN, history=history)
     lowered = {h.lower() for h in triage.hints}
-    assert "setup:native_skill" in lowered
-    assert "setup:configure_bundled" not in lowered
+    assert "setup:configure_bundled" in lowered
 
 
 def test_reconcile_post_restart_discord_continuation():

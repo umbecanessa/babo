@@ -71,6 +71,20 @@ Skill loader mounts per skill, e.g.:
 ```http
 POST /skills/whatsapp-channel/webhook/{agent_id}
 POST /skills/telegram-channel/webhook/{agent_id}
+POST /skills/discord-channel/webhook/{agent_id}
+POST /skills/slack-channel/webhook/{agent_id}
+```
+
+**Channel scope** (Discord / Slack):
+
+```http
+GET    /skills/discord-channel/channels/{agent_id}
+POST   /skills/discord-channel/channels/{agent_id}/sync
+PATCH  /skills/discord-channel/channels/{agent_id}/{channel_id}
+
+GET    /skills/slack-channel/channels/{agent_id}
+POST   /skills/slack-channel/channels/{agent_id}/sync
+PATCH  /skills/slack-channel/channels/{agent_id}/{channel_id}
 ```
 
 Not under `/admin/` — see [Channels & webhooks](../architecture/channels-and-webhooks.md).

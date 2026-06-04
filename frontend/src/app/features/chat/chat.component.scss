@@ -1355,6 +1355,16 @@
     border-bottom: 1px solid rgba(52, 211, 153, 0.08);
     color: var(--accent-success);
   }
+  &[data-channel="discord"] {
+    background: rgba(88, 101, 242, 0.08);
+    border-bottom: 1px solid rgba(88, 101, 242, 0.12);
+    color: #5865f2;
+  }
+  &[data-channel="slack"] {
+    background: rgba(224, 30, 90, 0.06);
+    border-bottom: 1px solid rgba(224, 30, 90, 0.1);
+    color: #e01e5a;
+  }
 }
 
 .channel-thread-name {
@@ -1480,6 +1490,8 @@
   &[data-channel="email"] { color: var(--accent-primary); }
   &[data-channel="telegram"] { color: var(--accent-primary); }
   &[data-channel="whatsapp"] { color: var(--accent-success); }
+  &[data-channel="discord"] { color: #5865f2; }
+  &[data-channel="slack"] { color: #e01e5a; }
 }
 
 .thread-group-label { flex: 1; }

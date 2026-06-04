@@ -915,10 +915,49 @@ class AgentRuntime:
                 )
             # Idempotent — picks up new profile slots on existing agents.
             wm.populate_agentic_supplement()
+            self.sync_job_trust()
         except Exception as exc:
             logger.warning(
                 "[Agent] agent=%s Cryptex population failed: %s", self.agent_id, exc,
             )
+
+    def sync_job_trust(self, squad: Any | None = None) -> int:
+        """Load job.json/trust.json and squad context into Cryptex SYSTEM slots."""
+        wm = self.working_memory
+        if wm is None:
+            return 0
+        from nls.runtime.job_trust import (
+            load_job,
+            load_trust,
+            sync_job_trust_to_cryptex,
+        )
+
+        job = load_job(self.agent_dir)
+        trust = load_trust(self.agent_dir)
+        squad_ctx = ""
+        try:
+            from server.main import app as _app
+
+            sm = getattr(_app.state, "squad_manager", None)
+            if sm is not None:
+                squad_ctx = sm.build_squad_context_block(self.agent_id)
+        except Exception:
+            pass
+        if squad is not None and not squad_ctx:
+            lead = getattr(squad, "lead_agent_id", "")
+            name = getattr(squad, "name", "")
+            sid = getattr(squad, "id", "")
+            if self.agent_id == lead:
+                squad_ctx = f"SQUAD LEAD: You lead squad '{name}' ({sid})."
+            else:
+                squad_ctx = f"SQUAD MEMBER: Squad '{name}' ({sid}). Lead: {lead}"
+        n = sync_job_trust_to_cryptex(
+            wm,
+            job=job,
+            trust=trust,
+            squad_context=squad_ctx,
+        )
+        return n
 
     def _build_base_system_prompt(self) -> str:
         """Standard system prompt (no trained memory experts).
@@ -1133,6 +1172,7 @@ class AgentRuntime:
             self._populate_skills_ring()
             self._populate_channels_ring()
             self._wire_bash_process_tracking()
+            self._register_squad_tools()
             logger.info(
                 "[Agent] agent=%s: initialized %d tools (%d openai schemas)",
                 self.agent_id,
@@ -1147,6 +1187,90 @@ class AgentRuntime:
             )
             self._agent_tools = None
             self._openai_tools = None
+
+    _SQUAD_TOOL_NAMES = frozenset({
+        "squad", "squad_escalate", "squad_message", "squad_report_done",
+    })
+
+    def sync_squad_tools(self) -> None:
+        """Add or remove squad tools when membership changes (API / squad CRUD)."""
+        if self._agent_tools is None:
+            try:
+                self._initialize_tools()
+            except Exception:
+                return
+        if self._agent_tools is None:
+            return
+        in_squad = False
+        try:
+            from server.main import app as _app
+
+            sm = getattr(_app.state, "squad_manager", None)
+            if sm is not None:
+                in_squad = sm.get_squad_for_agent(self.agent_id) is not None
+        except Exception:
+            pass
+        has_squad_tools = any(
+            getattr(t, "name", "") in self._SQUAD_TOOL_NAMES
+            for t in self._agent_tools
+        )
+        if in_squad and not has_squad_tools:
+            self._register_squad_tools()
+        elif not in_squad and has_squad_tools:
+            self._agent_tools = [
+                t for t in self._agent_tools
+                if getattr(t, "name", "") not in self._SQUAD_TOOL_NAMES
+            ]
+            try:
+                from nls.tools.tool_setup import (
+                    _populate_tools_ring,
+                    tools_to_openai_schema,
+                )
+
+                self._openai_tools = tools_to_openai_schema(self._agent_tools)
+                _populate_tools_ring(self.working_memory, self._agent_tools)
+                logger.info("Agent %s: squad tools removed", self.agent_id)
+            except Exception as exc:
+                logger.warning(
+                    "Agent %s: squad tool removal failed: %s",
+                    self.agent_id, exc,
+                )
+
+    def _register_squad_tools(self) -> None:
+        """Attach squad tools when this agent belongs to a squad."""
+        if self._agent_tools is None:
+            return
+        names = {t.name for t in self._agent_tools}
+        if "squad" in names:
+            return
+        try:
+            from server.main import app as _app
+
+            sm = getattr(_app.state, "squad_manager", None)
+            if sm is None or sm.get_squad_for_agent(self.agent_id) is None:
+                return
+            from nls.tools.agent_tools.squad import (
+                SquadEscalateTool,
+                SquadMessageTool,
+                SquadReportDoneTool,
+                SquadTool,
+            )
+            from nls.tools.tool_setup import (
+                _populate_tools_ring,
+                tools_to_openai_schema,
+            )
+
+            self._agent_tools.extend([
+                SquadTool(sm, self.agent_id),
+                SquadEscalateTool(sm, self.agent_id),
+                SquadMessageTool(sm, self.agent_id),
+                SquadReportDoneTool(sm, self.agent_id),
+            ])
+            self._openai_tools = tools_to_openai_schema(self._agent_tools)
+            _populate_tools_ring(self.working_memory, self._agent_tools)
+            logger.info("Agent %s: squad tools registered", self.agent_id)
+        except Exception as exc:
+            logger.debug("Agent %s: squad tools skipped: %s", self.agent_id, exc)
 
     def _sync_adapter_tools(self) -> None:
         """Deprecated — replaced by refresh_tools(). Kept as no-op for compatibility."""
@@ -4045,6 +4169,18 @@ class AgentRuntime:
                 # update WM (teams, decisions, escalations).
                 if self._team_manager is not None:
                     self._team_manager.set_hooks(v4_hooks)
+
+                self._agentic_hooks = v4_hooks
+                try:
+                    from server.main import app as _app
+
+                    _sm = getattr(_app.state, "squad_manager", None)
+                    if _sm is not None:
+                        _sq = _sm.get_squad_for_agent(self.agent_id)
+                        if _sq is not None and _sq.is_lead(self.agent_id):
+                            _sm.set_hooks(v4_hooks)
+                except Exception:
+                    pass
 
                 tool_dict = {t.name: t for t in self._agent_tools}
 

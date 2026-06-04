@@ -477,11 +477,6 @@ def reconcile_triage_continuation_phase(
 
     pre_shipped_skill = infer_pre_shipped_channel_skill(recent_text)
     channel_platform = infer_channel_platform(recent_text)
-    is_agent_native_channel = (
-        credential_continuation
-        and pre_shipped_skill is None
-        and channel_platform == "discord"
-    )
 
     wants_configure_bundled = bool(
         hint_tokens & HINT_CONFIGURE_BUNDLED
@@ -491,49 +486,6 @@ def reconcile_triage_continuation_phase(
             and is_pre_shipped_channel_skill(pre_shipped_skill)
         )
     )
-
-    if is_agent_native_channel:
-        skill_name = "discord-channel"
-        if channel_platform and channel_platform != "discord":
-            skill_name = f"{channel_platform}-channel"
-        cleaned = [
-            h for h in hints
-            if h.strip().lower() not in (
-                HINT_SETUP_CONFLICT | HINT_CONFIGURE_BUNDLED
-            )
-        ]
-        for token in (
-            "continuation:credential",
-            "continuation:configure_not_build",
-            "setup:native_skill",
-        ):
-            if token not in {h.strip().lower() for h in cleaned}:
-                cleaned.append(token)
-        cleaned.append(
-            f"Agent-native channel skill — finish skill_install for '{skill_name}', "
-            "ensure webhook.py exports module-level router, then skill_configure; "
-            "do NOT use setup:configure_bundled (pre-shipped channels only)"
-        )
-        goals = list(getattr(triage, "goals", None) or [])
-        if credential_continuation or not goals:
-            goals = [
-                f"Fix and skill_install '{skill_name}' from workspace until loaded",
-                f"Configure {skill_name} via skill_configure with provided credentials",
-                "Verify inbound listener starts on skill startup",
-            ]
-        triage.intent = "TASK_THINK"
-        triage.thinking = True
-        triage.profile = upgrade_profile_for_continuation(
-            getattr(triage, "profile", "") or "solo_structured",
-            working_memory,
-        )
-        triage.goals = goals[:5]
-        triage.hints = cleaned
-        logger.info(
-            "Turn triage continuation reconcile: agent-native channel skill=%s",
-            skill_name,
-        )
-        return
 
     if not wants_configure_bundled:
         return

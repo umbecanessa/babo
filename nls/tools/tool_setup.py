@@ -400,6 +400,28 @@ def setup_tools(
     if _team_manager is not None and _file_ledger is not None:
         _team_manager.set_file_ledger(_file_ledger)
 
+    try:
+        from server.main import app as _app
+
+        _sm = getattr(_app.state, "squad_manager", None)
+        if _sm is not None and _sm.get_squad_for_agent(agent_id) is not None:
+            from .agent_tools.squad import (
+                SquadEscalateTool,
+                SquadMessageTool,
+                SquadReportDoneTool,
+                SquadTool,
+            )
+
+            tools.extend([
+                SquadTool(_sm, agent_id),
+                SquadEscalateTool(_sm, agent_id),
+                SquadMessageTool(_sm, agent_id),
+                SquadReportDoneTool(_sm, agent_id),
+            ])
+            logger.info("Agent %s: squad tools initialized", agent_id)
+    except Exception as exc:
+        logger.debug("Agent %s: squad tools init skipped: %s", agent_id, exc)
+
     # Wire plan → todo lifecycle auto-sync.
     _todo_tool = next((t for t in tools if getattr(t, "name", "") == "todo"), None)
     if _plan_tool is not None and _todo_tool is not None and hasattr(_plan_tool, "set_todo_complete_fn"):

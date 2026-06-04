@@ -24,6 +24,8 @@ FastAPI application: `server/main.py` → `create_app()`.
 | POST | `/agents` | Create agent from genesis |
 | GET | `/agents` | List loaded agents |
 | GET | `/agents/{id}` | Agent status snapshot |
+| GET/PATCH | `/agents/{id}/job` | Owner Job charter (`routes/job_trust.py`) |
+| GET/PATCH | `/agents/{id}/trust` | Owner Trust rails (`routes/job_trust.py`) |
 | DELETE | `/agents/{id}` | Unload agent |
 | PATCH | `/agents/{id}/name` | Rename |
 | PATCH | `/agents/{id}/owner-email` | Owner identity for channels |
@@ -97,7 +99,15 @@ Full route tables: **[Skills admin API](skills-admin-api.md)**.
 | POST | `/webhooks/telegram/{id}` | Telegram ingress (`routes/webhooks.py`) |
 | POST | `/webhooks/generic/{id}` | Generic webhook ingress |
 | GET | `/webhooks/status` | Webhook subsystem status |
-| POST | `/skills/*-channel/webhook/{id}` | Skill bridges (WhatsApp, etc.) |
+| POST | `/skills/*-channel/webhook/{id}` | Skill bridges (WhatsApp, Telegram, Discord, Slack, …) |
+| GET | `/skills/discord-channel/channels/{id}` | List/sync Discord scoped channels |
+| POST | `/skills/discord-channel/channels/{id}/sync` | Refresh Discord channel list |
+| PATCH | `/skills/discord-channel/channels/{id}/{channelId}` | Update Discord scope |
+| GET | `/skills/slack-channel/channels/{id}` | List/sync Slack scoped channels |
+| POST | `/skills/slack-channel/channels/{id}/sync` | Refresh Slack channel list |
+| PATCH | `/skills/slack-channel/channels/{id}/{channelId}` | Update Slack scope |
+| GET | `/skills/discord-channel/status/{id}` | Discord connection status |
+| GET | `/skills/slack-channel/status/{id}` | Slack connection status |
 | GET | `/channels/{id}/status` | Channel status (`routes/channels.py`) |
 | GET | `/channels/{id}/threads` | Channel thread list |
 
@@ -126,6 +136,16 @@ WebSocket slash commands: [Chat slash commands](chat-commands.md).
 | Prefix | Purpose |
 |--------|---------|
 | `/api/agents/{id}/teams/*` | See **[Teams & projects API](teams-api.md)** |
+
+---
+
+## Squads (persistent fleet)
+
+| Prefix | Purpose |
+|--------|---------|
+| `/api/squads` | Squad CRUD, kanban, by-agent lookup |
+
+Full tables: **[Job, Trust & Squad API](job-trust-squad-api.md)**. No NestJS duplicate routes — hosted web uses `/api/rt` proxy only.
 
 ---
 

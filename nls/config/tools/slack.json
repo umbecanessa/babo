@@ -1,6 +1,6 @@
 {
   "name": "slack",
-  "description": "Send and read Slack messages. Requires a Slack Bot Token (set NLS_SLACK_TOKEN environment variable).",
+  "description": "Legacy Slack bot tool. Prefer the slack-channel skill (Tools → Slack) for scoped two-way workspace messaging.",
   "version": "1.0.0",
   "category": "communicate",
   "hormone_affinity": "oxytocin",

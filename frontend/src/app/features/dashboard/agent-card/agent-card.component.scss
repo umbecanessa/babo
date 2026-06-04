@@ -117,6 +117,50 @@
   pointer-events: none;
 }
 
+.card.squad-member {
+  border-color: color-mix(in srgb, var(--accent-primary) 22%, var(--overlay-2));
+}
+
+.card.squad-lead {
+  border-color: color-mix(in srgb, var(--accent-warn) 28%, var(--overlay-2));
+}
+
+.agent-job {
+  margin: 0.25rem 0 0;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+}
+
+.agent-squad {
+  margin: 0.15rem 0 0;
+  font-size: 0.75rem;
+  color: var(--chip-team-fg, var(--text-secondary));
+  letter-spacing: 0.03em;
+}
+
+.charter-links {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.link-quiet {
+  background: none;
+  border: none;
+  padding: 2px 6px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease;
+
+  &:hover {
+    color: var(--accent-primary);
+    background: var(--accent-primary-glow);
+  }
+}
+
 .card-alive .card-glow { background: var(--accent-success); opacity: 0.04; }
 .card-working .card-glow { background: var(--accent-primary); opacity: 0.06; }
 .card-dreaming .card-glow { background: #c084fc; opacity: 0.05; }

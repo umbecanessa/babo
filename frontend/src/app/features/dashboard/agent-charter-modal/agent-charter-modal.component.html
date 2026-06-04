@@ -1,0 +1,113 @@
+@if (visible) {
+  <div class="modal-backdrop" (click)="cancel()"></div>
+  <div class="charter-modal" role="dialog" (click)="$event.stopPropagation()">
+    <header class="modal-header">
+      <div>
+        <h3>Agent charter</h3>
+        <p class="modal-agent">{{ agentLabel || agentId }}</p>
+      </div>
+      <button type="button" class="close-btn" (click)="cancel()" aria-label="Close">×</button>
+    </header>
+
+    <nav class="tab-bar">
+      <button
+        type="button"
+        [class.active]="activeTab() === 'job'"
+        (click)="setTab('job')">
+        Job
+      </button>
+      <button
+        type="button"
+        [class.active]="activeTab() === 'trust'"
+        (click)="setTab('trust')">
+        Trust
+      </button>
+    </nav>
+
+    @if (error()) {
+      <p class="modal-error">{{ error() }}</p>
+    }
+
+    @if (!loaded()) {
+      <p class="modal-muted">Loading…</p>
+    } @else if (activeTab() === 'job') {
+      <div class="tab-body">
+        <label>Title <input type="text" [(ngModel)]="jobTitle" /></label>
+        <label>Mission <textarea rows="3" [(ngModel)]="jobMission"></textarea></label>
+        <label>Persona <textarea rows="2" [(ngModel)]="jobPersona"></textarea></label>
+        <label>Playbook <textarea rows="3" [(ngModel)]="jobPlaybook"></textarea></label>
+        <label>
+          Default profile
+          <select [(ngModel)]="jobDefaultProfile">
+            @for (p of profileCapOptions; track p) {
+              <option [value]="p">{{ p || '(auto)' }}</option>
+            }
+          </select>
+        </label>
+        <label>In scope (one per line) <textarea rows="2" [(ngModel)]="jobInScope"></textarea></label>
+        <label>Out of scope (one per line) <textarea rows="2" [(ngModel)]="jobOutOfScope"></textarea></label>
+        <label>Refusal template <textarea rows="2" [(ngModel)]="jobRefusalTemplate"></textarea></label>
+      </div>
+    } @else {
+      <div class="tab-body">
+        <p class="hint">Tools: one name per line. Empty allowlist = all tools allowed except denials.</p>
+        <label>Tools allow <textarea rows="2" [(ngModel)]="toolsAllow" placeholder="read&#10;web_search"></textarea></label>
+        <label>Tools deny <textarea rows="3" [(ngModel)]="toolsDeny" placeholder="bash&#10;write"></textarea></label>
+        <label>Forbidden action classes <textarea rows="2" [(ngModel)]="actionClassesDeny"></textarea></label>
+
+        <div class="overlays-section">
+          <div class="overlays-head">
+            <span>Channel overlays</span>
+            <button type="button" class="link-quiet" (click)="addChannelOverlay()">+ Add channel</button>
+          </div>
+          @for (ov of channelOverlays; track $index) {
+            <div class="overlay-card">
+              <label>Channel key <input type="text" [(ngModel)]="ov.channel_key" placeholder="discord-general" /></label>
+              <label>
+                Profile cap
+                <select [(ngModel)]="ov.profile_cap">
+                  @for (p of profileCapOptions; track p) {
+                    <option [value]="p">{{ p || '(none)' }}</option>
+                  }
+                </select>
+              </label>
+              <label class="checkbox-row">
+                <input type="checkbox" [(ngModel)]="ov.public_channel" />
+                Public channel (stricter refusal)
+              </label>
+              <label>
+                Tools allow on channel
+                <textarea
+                  rows="2"
+                  [ngModel]="overlayToolsAllowText(ov)"
+                  (ngModelChange)="setOverlayToolsAllow(ov, $event)"
+                  placeholder="Optional allowlist"></textarea>
+              </label>
+              <label>
+                Tools deny on channel
+                <textarea
+                  rows="2"
+                  [ngModel]="overlayToolsDenyText(ov)"
+                  (ngModelChange)="setOverlayToolsDeny(ov, $event)"></textarea>
+              </label>
+              <button type="button" class="link-danger" (click)="removeChannelOverlay($index)">Remove</button>
+            </div>
+          }
+        </div>
+      </div>
+    }
+
+    <footer class="modal-actions">
+      <button type="button" class="btn-secondary" (click)="cancel()" [disabled]="saving()">Cancel</button>
+      @if (activeTab() === 'job') {
+        <button type="button" class="btn-primary" (click)="saveJob()" [disabled]="saving() || !loaded()">
+          @if (saving()) { Saving… } @else { Save job }
+        </button>
+      } @else {
+        <button type="button" class="btn-primary" (click)="saveTrust()" [disabled]="saving() || !loaded()">
+          @if (saving()) { Saving… } @else { Save trust }
+        </button>
+      }
+    </footer>
+  </div>
+}

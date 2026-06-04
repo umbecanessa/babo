@@ -97,6 +97,12 @@ class TodoItem:
     depends_on: list[str] = field(default_factory=list)
     delegate_number: int | None = None
 
+    # Squad integration fields
+    squad_id: str = ""
+    squad_inbox_id: str = ""
+    assigner_agent_id: str = ""
+    assignee_agent_id: str = ""
+
     def __post_init__(self) -> None:
         if not self.id:
             self.id = uuid.uuid4().hex[:8]

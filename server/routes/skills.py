@@ -199,7 +199,12 @@ async def update_skill_config(
                 existing = json.loads(agent_cfg_path.read_text(encoding="utf-8"))
             except Exception:
                 pass
-        existing.update(config)
+        merged = {**existing, **config}
+        for key, val in list(merged.items()):
+            if isinstance(val, str) and "***masked***" in val:
+                if existing.get(key):
+                    merged[key] = existing[key]
+        existing = merged
         agent_cfg_path.parent.mkdir(parents=True, exist_ok=True)
         agent_cfg_path.write_text(
             json.dumps(existing, indent=2, ensure_ascii=False),
@@ -212,7 +217,7 @@ async def update_skill_config(
             adapter = getattr(sk.context, "adapter", None)
             if adapter and hasattr(adapter, "update_config"):
                 try:
-                    adapter.update_config(config, agent_id=resolved_agent_id)
+                    adapter.update_config(existing, agent_id=resolved_agent_id)
                 except Exception:
                     pass
     else:

@@ -148,9 +148,18 @@ Rule: **one user request → one master plan → one project folder**.
 
 ---
 
+## Squads (persistent fleet)
+
+Separate from **Teams** above: **Squads** coordinate **multiple full agents** via `SquadManager`, `squad` tools, and the `squad_lead` profile. Work flows through a shared **inbox** (propose → lead approve → member todos). Event-driven wakes use `squad_checkback`, `squad_escalation`, and `squad_item_done` dispatch sources.
+
+**Guide:** [Job, Trust & Squads](../guides/job-trust-and-squads.md) · **API:** [Job, Trust & Squad API](../reference/job-trust-squad-api.md)
+
+---
+
 ## Further reading
 
 - [Agentic loop](agentic-loop.md)
 - [nls/agentic module](nls-modules/agentic.md)
 - [Sequence: agentic loop](sequences/agentic-loop.md)
 - [Skill discovery & recovery](skill-discovery-and-recovery.md)
+- [Job, Trust & Squads](../guides/job-trust-and-squads.md)

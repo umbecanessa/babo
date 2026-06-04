@@ -125,6 +125,23 @@ async def lifespan(app: FastAPI):
     await skill_loader.run_startup_hooks()
     app.state.skill_loader = skill_loader
 
+    _todo_skill = skill_loader.skills.get("todo-list")
+    if _todo_skill and getattr(_todo_skill, "context", None):
+        app.state.todo_manager = getattr(_todo_skill.context, "adapter", None)
+
+    from nls.agentic.squad_registry import SquadRegistry
+    from nls.agentic.squad_manager import SquadManager
+
+    squad_registry = SquadRegistry(settings.data_dir)
+    squad_manager = SquadManager(
+        squad_registry,
+        data_dir=settings.data_dir,
+        agent_manager=agent_manager,
+        get_runtime=agent_manager.get_runtime,
+    )
+    app.state.squad_registry = squad_registry
+    app.state.squad_manager = squad_manager
+
     from nls.tools.agent_tools.scheduler import SchedulerManager
 
     scheduler_manager = SchedulerManager(str(settings.data_dir))
@@ -185,6 +202,44 @@ async def lifespan(app: FastAPI):
     app.state.consciousness_scheduler = consciousness_scheduler
     agent_manager.consciousness_scheduler = consciousness_scheduler
 
+    def _enqueue_squad_dispatch(agent_id: str, prompt: str, source: str) -> None:
+        entry = consciousness_scheduler._agents.get(agent_id)
+        il = getattr(entry, "inner_loop", None) if entry else None
+        if il is not None:
+            il.enqueue_autonomous_dispatch(prompt, source)
+
+    def _drain_squad_dispatch(agent_id: str, source_exact: str) -> int:
+        entry = consciousness_scheduler._agents.get(agent_id)
+        il = getattr(entry, "inner_loop", None) if entry else None
+        if il is None:
+            return 0
+        return il.drain_pending_dispatches(source_exact=source_exact)
+
+    squad_manager.set_dispatch_hooks(_enqueue_squad_dispatch, _drain_squad_dispatch)
+
+    def _has_squad_dispatch_prefix(agent_id: str, squad_id: str) -> bool:
+        """True if lead already has a pending squad_* dispatch for this squad."""
+        entry = consciousness_scheduler._agents.get(agent_id)
+        il = getattr(entry, "inner_loop", None) if entry else None
+        if il is None:
+            return False
+        pending = getattr(il, "_pending_dispatches", []) or []
+        suffix = f":{squad_id}"
+        return any(
+            (src or "").startswith("squad_") and (src or "").endswith(suffix)
+            for _, src in pending
+        )
+
+    from nls.agentic.squad_checkback_scheduler import SquadCheckbackScheduler
+
+    squad_checkback_scheduler = SquadCheckbackScheduler(
+        squad_registry,
+        squad_manager,
+        has_dispatch_prefix=_has_squad_dispatch_prefix,
+    )
+    squad_checkback_scheduler.start()
+    app.state.squad_checkback_scheduler = squad_checkback_scheduler
+
     def _make_scheduler_agent_message_handler(cs, am):
         from nls.tools.agent_tools.scheduler import parse_agent_message_target
 
@@ -225,6 +280,9 @@ async def lifespan(app: FastAPI):
 
     logger.warning("SHUTDOWN_TRACE lifespan teardown: %s", format_initiator_summary())
     logger.info("Shutting down Babo server...")
+    _sq_cb = getattr(app.state, "squad_checkback_scheduler", None)
+    if _sq_cb is not None:
+        await _sq_cb.stop()
     await scheduler_manager.stop()
     await skill_loader.run_shutdown_hooks()
     agent_manager.stop_autosave()
@@ -292,6 +350,8 @@ def create_app(settings: ServerSettings | None = None) -> FastAPI:
     from server.routes import webhooks
     from server.routes import channels
     from server.routes import teams as teams_routes
+    from server.routes import job_trust as job_trust_routes
+    from server.routes import squads as squads_routes
 
     app.include_router(files_routes.router, dependencies=[Depends(verify_auth)])
     app.include_router(transcribe.router, dependencies=[Depends(verify_auth)])
@@ -303,6 +363,8 @@ def create_app(settings: ServerSettings | None = None) -> FastAPI:
     app.include_router(webhooks.router, prefix="/webhooks")
     app.include_router(channels.router)
     app.include_router(teams_routes.router, dependencies=[Depends(verify_auth)])
+    app.include_router(job_trust_routes.router, dependencies=[Depends(verify_auth)])
+    app.include_router(squads_routes.router, dependencies=[Depends(verify_auth)])
 
     return app
 

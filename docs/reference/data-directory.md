@@ -29,6 +29,9 @@ data/
 │       └── config/
 ├── agents/
 │   └── {runtimeAgentId}/       # Per-agent state (primary)
+├── squads/                     # Persistent squad registry (fleet)
+│   ├── index.json              # agent_id → squad_id
+│   └── {squad_id}.json         # inbox, escalations, checkback settings
 ├── skills/                     # User-installed skills (override bundled)
 └── (other runtime caches)
 ```
@@ -49,8 +52,21 @@ data/
 | `teams/` | Orchestration state |
 | `soul/` | Soul packages and snapshots |
 | `guardrails_registry.jsonl` | Shared orchestrator/delegate contract hints |
+| `job.json` | Owner Job charter (title, mission, scope, default profile) |
+| `trust.json` | Owner Trust rails (tools, channel overlays) |
 
 Exact filenames evolve — treat `agent_meta.json` + `config/` as required after genesis copy.
+
+---
+
+## Squads directory (`data/squads/`)
+
+| Path | Purpose |
+|------|---------|
+| `index.json` | Maps each `runtimeAgentId` to at most one `squad_id` |
+| `{squad_id}.json` | Squad name, lead, members, inbox, escalations, checkback settings |
+
+See [Job, Trust & Squads](../guides/job-trust-and-squads.md) and [Job, Trust & Squad API](job-trust-squad-api.md).
 
 ---
 
@@ -82,5 +98,6 @@ For disaster recovery, copy:
 
 ## Related
 
+- [Job, Trust & Squads](../guides/job-trust-and-squads.md)
 - [Persistence](../architecture/persistence.md)
 - [Database schema](database-schema.md)

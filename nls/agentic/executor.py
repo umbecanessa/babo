@@ -2576,6 +2576,24 @@ async def execute_tools(
             )
             continue
 
+        _agent_dir = getattr(hooks, "agent_dir", None) if hooks else None
+        if _agent_dir is not None:
+            from pathlib import Path
+
+            from nls.runtime.job_trust import load_trust, is_tool_denied_by_trust
+
+            _trust_denial = is_tool_denied_by_trust(
+                name,
+                load_trust(Path(_agent_dir)),
+                getattr(state, "dispatch_source", "") or "",
+            )
+            if _trust_denial:
+                ordered_results[idx] = ToolResult(
+                    content=_trust_denial,
+                    is_error=True,
+                )
+                continue
+
         if name == "adopt_orchestration_profile":
             if not config.enable_delegation:
                 ordered_results[idx] = ToolResult(

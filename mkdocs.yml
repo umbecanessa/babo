@@ -77,6 +77,7 @@ nav:
       - Chat: guides/chat.md
       - Agentic loop & plans: guides/agentic-loop-and-plans.md
       - Projects & teams: guides/projects-and-teams.md
+      - Job, Trust & Squads: guides/job-trust-and-squads.md
       - Memory: guides/memory.md
       - Brain dashboard: guides/brain-dashboard.md
       - Sleep & consolidation: guides/sleep-and-consolidation.md
@@ -186,6 +187,7 @@ nav:
       - Skills admin API: reference/skills-admin-api.md
       - Chat slash commands: reference/chat-commands.md
       - Teams & projects API: reference/teams-api.md
+      - Job, Trust & Squad API: reference/job-trust-squad-api.md
       - NestJS API: reference/nestjs-api.md
       - Relay protocol: reference/relay-protocol.md
       - WebSocket events: reference/websocket-events.md

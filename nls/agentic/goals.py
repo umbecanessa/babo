@@ -16,14 +16,14 @@ from typing import Any, Literal
 logger = logging.getLogger(__name__)
 
 OrchestrationProfile = Literal[
-    "conversational", "solo_structured", "orchestrated",
+    "conversational", "solo_structured", "orchestrated", "squad_lead",
 ]
 IntentLabel = Literal[
     "CHAT_NOTHINK", "CHAT_THINK", "TASK_NOTHINK", "TASK_THINK",
 ]
 
 _VALID_PROFILES = frozenset({
-    "conversational", "solo_structured", "orchestrated",
+    "conversational", "solo_structured", "orchestrated", "squad_lead",
 })
 _VALID_INTENTS = frozenset({
     "CHAT_NOTHINK", "CHAT_THINK", "TASK_NOTHINK", "TASK_THINK",
@@ -56,7 +56,7 @@ class TurnTriage:
 
     @property
     def allows_orchestration(self) -> bool:
-        return self.profile == "orchestrated"
+        return self.profile in ("orchestrated", "squad_lead")
 
     def cap_profile_from_hints(self) -> None:
         """Downgrade profile using structured hint tokens from triage (language-agnostic)."""

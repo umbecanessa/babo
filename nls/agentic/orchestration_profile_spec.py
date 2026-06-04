@@ -5,10 +5,11 @@ drives tool gating, Cryptex ring/behavioral composition, plan semantics,
 guard strictness, and evaluator completion rules.  Downstream modules read
 the spec instead of scattering ``if profile ==`` checks.
 
-Profiles (3):
+Profiles (4):
   conversational — chat + quick lookup/discovery tools; no plan/team/bash/write
   solo_structured — solo IC execution with plan/todo/file tools
   orchestrated — full engineering-manager stack with teams and delegates
+  squad_lead — orchestrated superset + squad coordination domains
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ if TYPE_CHECKING:
     from nls.agentic.types import LoopState
 
 _VALID_PROFILES = frozenset({
-    "conversational", "solo_structured", "orchestrated",
+    "conversational", "solo_structured", "orchestrated", "squad_lead",
 })
 
 _DEFAULT_PROFILE: OrchestrationProfile = "solo_structured"
@@ -47,6 +48,13 @@ _EM_ONLY_BEHAVIORAL_DOMAINS = frozenset({
 _CONVERSATIONAL_ONLY_BEHAVIORAL_DOMAINS = frozenset({
     "answer_in_prose",
     "direct_tool_answer",
+})
+
+# Squad lead coordination — not shown to solo or generic orchestrated turns.
+_SQUAD_LEAD_ONLY_BEHAVIORAL_DOMAINS = frozenset({
+    "squad_coordination",
+    "squad_help_requests",
+    "squad_inbox_discipline",
 })
 
 # Plan-linked instruction domains in RING_INSTRUCTIONS.
@@ -217,6 +225,38 @@ def _spec_solo_structured() -> ProfileOrchestrationSpec:
     )
 
 
+def _spec_squad_lead() -> ProfileOrchestrationSpec:
+    """Squad lead — full EM surface plus squad coordination behavioral domains."""
+    return ProfileOrchestrationSpec(
+        profile="squad_lead",
+        tool_deny=frozenset(),
+        behavioral_domains=None,
+        rings_visible=frozenset({
+            "identity", "user_model", "consolidation", "emotional",
+            "behavioral", "environment", "channels", "tools_mcp",
+            "skills", "project_facts", "credentials", "instructions",
+            "tactical_goals", "orchestration", "wake_attention",
+            "strategic_goals",
+        }),
+        rings_when_plan_active=frozenset(),
+        tool_groups_hidden=frozenset(),
+        auto_mark_delegatable_multi_step=True,
+        default_step_delegatable=False,
+        inject_tech_stack_block=True,
+        allow_coordinator_modes=True,
+        em_pre_delegate_blocks=True,
+        em_cold_start_goal_blocks=True,
+        em_static_tool_hints=True,
+        solo_static_tool_hints=False,
+        skill_discovery_on_stall=True,
+        em_assessment_loop=True,
+        complete_on_prose=False,
+        complete_on_implicit_delivery=True,
+        complete_on_plan_artifacts=True,
+        complete_on_plan_step_started=False,
+    )
+
+
 def _spec_orchestrated() -> ProfileOrchestrationSpec:
     return ProfileOrchestrationSpec(
         profile="orchestrated",
@@ -252,6 +292,7 @@ _SPECS: dict[str, ProfileOrchestrationSpec] = {
     "conversational": _spec_conversational(),
     "solo_structured": _spec_solo_structured(),
     "orchestrated": _spec_orchestrated(),
+    "squad_lead": _spec_squad_lead(),
 }
 
 
@@ -293,13 +334,21 @@ def behavioral_domain_visible_for_profile(domain: str, profile: str | None) -> b
     if p == "solo_structured":
         return domain not in _EM_ONLY_BEHAVIORAL_DOMAINS
     if p == "orchestrated":
+        if domain in _SQUAD_LEAD_ONLY_BEHAVIORAL_DOMAINS:
+            return False
         return domain not in _CONVERSATIONAL_ONLY_BEHAVIORAL_DOMAINS
+    if p == "squad_lead":
+        if domain in _CONVERSATIONAL_ONLY_BEHAVIORAL_DOMAINS:
+            return False
+        return True
     return True
 
 
 def cap_profile_for_tool_surface(profile: str, allowed_tools: frozenset[str]) -> str:
     """Downgrade profile when triage depth exceeds available tool surface."""
     p = normalize_profile(profile)
+    if p == "squad_lead" and "squad" not in allowed_tools:
+        p = "orchestrated"
     if p == "orchestrated" and "team" not in allowed_tools:
         p = "solo_structured"
     if p == "solo_structured":
@@ -339,6 +388,11 @@ def profile_anchor_message(profile: str | None) -> str:
         "solo_structured": (
             "[ORCHESTRATION DEPTH: solo_structured] Execute yourself with "
             "allowed tools. No team waves or sub-agent teams."
+        ),
+        "squad_lead": (
+            "[ORCHESTRATION DEPTH: squad_lead] You lead a persistent squad. "
+            "Use squad tools to approve inbox items, assign member todos, "
+            "and resolve squad_escalate requests. Full tool surface retained."
         ),
     }
     return anchors.get(spec.profile, "")

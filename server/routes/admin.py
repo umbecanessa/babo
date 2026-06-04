@@ -861,6 +861,20 @@ async def get_agent_tools(agent_id: str, request: Request):
     """Return the list of enabled tools for an agent."""
     agent_dir = _get_agent_dir(request, agent_id)
 
+    def _filter_legacy_channel_tools(names: list) -> list:
+        from nls.tools.skill_manager import get_enabled_skills
+
+        enabled_skills = set(get_enabled_skills(agent_dir))
+        legacy_map = {"discord": "discord-channel", "slack": "slack-channel"}
+        filtered: list = []
+        for name in names:
+            skill = legacy_map.get(name if isinstance(name, str) else name.get("name", ""))
+            key = name if isinstance(name, str) else name.get("name", "")
+            if skill and skill in enabled_skills:
+                continue
+            filtered.append(name)
+        return filtered
+
     if _agent_uses_v2(agent_dir):
         mgr = getattr(request.app.state, "agent_manager", None)
         if mgr:
@@ -870,7 +884,7 @@ async def get_agent_tools(agent_id: str, request: Request):
                     {"name": t.name, "description": getattr(t, "description", "")}
                     for t in runtime._agent_tools
                 ]
-                return {"enabled": tools, "version": 2}
+                return {"enabled": _filter_legacy_channel_tools(tools), "version": 2}
         return {
             "enabled": [
                 {"name": "read", "description": "Read file contents"},
@@ -887,7 +901,7 @@ async def get_agent_tools(agent_id: str, request: Request):
         try:
             with open(tools_file, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            return {"enabled": data.get("enabled", [])}
+            return {"enabled": _filter_legacy_channel_tools(data.get("enabled", []))}
         except Exception:
             pass
 

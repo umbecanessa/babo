@@ -17,6 +17,7 @@ async function bootstrap() {
   // tool schemas + message history exceed that. File uploads use Multer (25MB).
   // Stripe webhooks require the raw body for signature verification.
   const stripeWebhookPath = '/api/billing/stripe/webhook';
+  const slackWebhookPrefix = '/api/channels/webhook/slack/';
   app.use(
     stripeWebhookPath,
     raw({ type: 'application/json' }),
@@ -28,6 +29,22 @@ async function bootstrap() {
     },
   );
   app.use((req: Request, res: Response, next: NextFunction) => {
+    if (
+      req.method === 'POST'
+      && req.path.startsWith(slackWebhookPrefix)
+    ) {
+      return raw({ type: 'application/json' })(req, res, () => {
+        if (Buffer.isBuffer((req as any).body)) {
+          (req as any).rawBody = (req as any).body;
+          try {
+            (req as any).body = JSON.parse((req as any).body.toString('utf-8'));
+          } catch {
+            /* leave buffer — controller will reject */
+          }
+        }
+        next();
+      });
+    }
     if (req.path === stripeWebhookPath) {
       return next();
     }

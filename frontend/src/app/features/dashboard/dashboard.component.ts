@@ -7,10 +7,22 @@ import { PlatformService } from '../../core/services/platform.service';
 import { WebSocketService } from '../../core/services/websocket.service';
 import { Agent } from '../../core/models/agent.model';
 import { AgentCardComponent } from './agent-card/agent-card.component';
+import { SquadsPanelComponent } from './squads-panel/squads-panel.component';
+import {
+  AgentCharterModalComponent,
+  CharterTab,
+} from './agent-charter-modal/agent-charter-modal.component';
+
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterLink, AgentCardComponent],
+  imports: [
+    CommonModule,
+    RouterLink,
+    AgentCardComponent,
+    SquadsPanelComponent,
+    AgentCharterModalComponent,
+  ],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss',
 })
@@ -24,6 +36,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   runtimeStatus = signal('Connecting to runtime...');
   runtimeAttempts = signal(0);
   relayStatus = signal<Record<string, boolean>>({});
+  charterAgentId = signal<string | null>(null);
+  charterTab = signal<CharterTab>('job');
+  charterVisible = signal(false);
   private destroyed = false;
   private pollTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -219,5 +234,24 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   navigateToCreate() {
     this.router.navigate(['/create']);
+  }
+
+  openCharterFromCard(agentId: string, tab: CharterTab): void {
+    this.charterAgentId.set(agentId);
+    this.charterTab.set(tab);
+    this.charterVisible.set(true);
+  }
+
+  onCharterDismiss(saved: boolean): void {
+    this.charterVisible.set(false);
+    this.charterAgentId.set(null);
+    if (saved) {
+      this.loadAgents(true);
+    }
+  }
+
+  agentLabelForCharter(id: string): string {
+    const a = this.agents().find(x => x.runtimeAgentId === id || x.id === id);
+    return a?.name || id.slice(0, 8);
   }
 }

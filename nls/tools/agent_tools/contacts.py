@@ -74,8 +74,10 @@ class ContactsTool:
                 },
                 "channel": {
                     "type": "string",
-                    "enum": ["whatsapp", "telegram", "email"],
-                    "description": "Filter results to a specific channel.",
+                    "description": (
+                        "Filter results to a specific channel "
+                        "(whatsapp, telegram, email, discord, slack, …)."
+                    ),
                 },
                 "contact_id": {
                     "type": "string",
@@ -95,7 +97,15 @@ class ContactsTool:
                 },
                 "telegram_id": {
                     "type": "string",
-                    "description": "Telegram numeric chat ID (for 'add' or 'edit'). Required to initiate Telegram messages to someone who hasn't contacted you first.",
+                    "description": "Telegram numeric chat ID (add/edit).",
+                },
+                "discord_id": {
+                    "type": "string",
+                    "description": "Discord user snowflake ID (add/edit).",
+                },
+                "slack_id": {
+                    "type": "string",
+                    "description": "Slack user ID U… (add/edit).",
                 },
                 "notes": {
                     "type": "string",
@@ -156,14 +166,27 @@ class ContactsTool:
             sl = getattr(app.state, "skill_loader", None)
             if sl is None:
                 return adapters
-            for skill_name, channel_key in (
-                ("whatsapp-channel", "whatsapp"),
-                ("telegram-channel", "telegram"),
-                ("email-channel", "email"),
-            ):
-                sk = sl.skills.get(skill_name)
-                if sk and sk.context and hasattr(sk.context, "adapter"):
-                    adapters[channel_key] = sk.context.adapter
+            for skill_name, sk in sl.skills.items():
+                if not sk or not sk.context:
+                    continue
+                meta = getattr(sk, "meta", None)
+                if not (
+                    skill_name.endswith("-channel")
+                    or (meta and getattr(meta, "contacts", None))
+                ):
+                    continue
+                adapter = getattr(sk.context, "adapter", None)
+                if adapter is None:
+                    continue
+                channel_key = getattr(adapter, "name", None) or getattr(adapter, "channel_name", "")
+                if meta and getattr(meta, "contacts", None):
+                    channel_key = meta.contacts.channel_key or channel_key
+                if not channel_key:
+                    if skill_name.endswith("-channel"):
+                        channel_key = skill_name.replace("-channel", "")
+                    else:
+                        continue
+                adapters[str(channel_key)] = adapter
         except Exception:
             logger.debug("contacts: adapter resolution failed", exc_info=True)
         return adapters
@@ -392,6 +415,8 @@ class ContactsTool:
         notes = (params.get("notes") or "").strip()
         tags = params.get("tags") or []
         telegram_id = (params.get("telegram_id") or "").strip()
+        discord_id = (params.get("discord_id") or "").strip()
+        slack_id = (params.get("slack_id") or "").strip()
 
         if not name and not email and not phone:
             return ToolResult(
@@ -415,6 +440,14 @@ class ContactsTool:
                 return ToolResult(
                     content=f"Contact with Telegram ID {telegram_id} already exists (id: {existing['id']}). Use 'edit' to update.",
                 )
+            if discord_id and (existing.get("discord_id") or "") == discord_id:
+                return ToolResult(
+                    content=f"Contact with Discord ID {discord_id} already exists (id: {existing['id']}). Use 'edit' to update.",
+                )
+            if slack_id and (existing.get("slack_id") or "") == slack_id:
+                return ToolResult(
+                    content=f"Contact with Slack ID {slack_id} already exists (id: {existing['id']}). Use 'edit' to update.",
+                )
 
         now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         contact: dict[str, Any] = {
@@ -423,6 +456,8 @@ class ContactsTool:
             "email": email,
             "phone": phone,
             "telegram_id": telegram_id,
+            "discord_id": discord_id,
+            "slack_id": slack_id,
             "notes": notes,
             "tags": tags if isinstance(tags, list) else [],
             "created_at": now,
@@ -440,6 +475,10 @@ class ContactsTool:
             parts.append(f"phone: {phone}")
         if telegram_id:
             parts.append(f"telegram_id: {telegram_id}")
+        if discord_id:
+            parts.append(f"discord_id: {discord_id}")
+        if slack_id:
+            parts.append(f"slack_id: {slack_id}")
         return ToolResult(content=" | ".join(parts))
 
     async def _edit(self, *, params: dict, **_kw: Any) -> ToolResult:
@@ -450,7 +489,10 @@ class ContactsTool:
         store = self._load_store()
         for i, c in enumerate(store):
             if c.get("id") == contact_id:
-                for field in ("name", "email", "phone", "notes", "telegram_id"):
+                for field in (
+                    "name", "email", "phone", "notes",
+                    "telegram_id", "discord_id", "slack_id",
+                ):
                     val = params.get(field)
                     if val is not None:
                         store[i][field] = str(val).strip()
@@ -693,12 +735,17 @@ class ContactsTool:
         return contacts
 
     def _gather_groups(self, channel: str, adapter: Any) -> list[dict]:
+        if hasattr(adapter, "list_groups"):
+            try:
+                return adapter.list_groups(self._agent_id)
+            except Exception:
+                pass
         cfg = self._cfg(adapter)
         groups_cfg = cfg.get("groups", {})
         return [
             {"id": gid, "name": gcfg.get("name", gid)}
             for gid, gcfg in groups_cfg.items()
-            if gid != "*"
+            if gid != "*" and gid != "__none__"
         ]
 
     @staticmethod

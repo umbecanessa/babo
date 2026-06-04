@@ -11,6 +11,11 @@ export interface Agent {
   createdAt: string;
   runtime?: AgentRuntimeStatus;
   userPaused?: boolean;
+  /** Employment charter title (from job.json). */
+  jobTitle?: string;
+  squadId?: string;
+  squadName?: string;
+  isSquadLead?: boolean;
 }
 
 export interface CreateAgentRequest {
@@ -67,6 +72,10 @@ export interface AgentRuntimeStatus {
   orchestrator_model?: string | null;
   delegate_model?: string | null;
   last_interaction?: string;
+  job_title?: string;
+  squad_id?: string;
+  squad_name?: string;
+  is_squad_lead?: boolean;
   [key: string]: any;
 }
 

@@ -1,86 +1,50 @@
-"""Discord channel adapter -- real-time Gateway connection via discord.py.
-
-Supports two inbound modes:
-  1. **Gateway WebSocket** (primary) -- persistent connection receiving messages live
-  2. **REST fallback** -- when no token configured, uses Discord REST API polling
-
-Key features:
-  - Mention detection (@Babo) in guild channels
-  - Prefix command detection (!help, !ban, !kick, etc.)
-  - DM policy enforcement (open / allowlist / disabled)
-  - Role-based permission checks (Administrator, Moderator, etc.)
-  - Auto-moderation hints for spam/hate speech/abuse
-  - Real-time typing indicators and read receipts
-  - File attachment handling
-"""
+"""Discord channel adapter — REST send, NestJS Gateway relay, scoped channels."""
 
 from __future__ import annotations
 
 import asyncio
-import io
 import json
 import logging
 import re
-import time
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Coroutine
+from typing import Any
 
 import httpx
 
+from nls.skills.channel_adapter_util import (
+    broadcast_channel_event,
+    chunk_message,
+    ensure_relay,
+    get_relay_base_url,
+    get_runtime_secret,
+    register_with_agent,
+    resolve_workspace_file,
+    strip_signal_tags,
+)
+from nls.skills.channel_scope import (
+    apply_desired_channel,
+    compile_groups_policy,
+    effective_channel_ids,
+    finalize_scoped_config,
+    list_scoped_channels,
+    merge_observed_channels,
+    reconcile_config,
+    scoped_channels_from_config,
+)
 from nls.tools.agent_tools.base import AgentTool, ToolResult
-from nls.agentic.outbound_notify import FINAL_SUMMARY_SCHEMA_PROPERTY
 
 logger = logging.getLogger(__name__)
 
-# Discord gateway constants
-DISCORD_API_BASE = "https://discord.com/api/v10"
-GATEWAY_URL = "wss://gateway.discord.gg"
-MAX_MESSAGE_LENGTH = 2000  # Discord limit per chunk
-_TYPING_INTERVAL = 3.0  # seconds between typing indicators
-
-
-@dataclass
-class _TypingState:
-    """Track typing indicator state per channel."""
-    last_typing: float = 0.0
-
-    def should_type(self) -> bool:
-        if time.time() - self.last_typing >= _TYPING_INTERVAL:
-            self.last_typing = time.time()
-            return True
-        return False
-
-
-@dataclass
-class DiscordChannelInfo:
-    """Cached info about a Discord server/channel."""
-    guild_id: str
-    guild_name: str
-    channels: dict[str, str] = field(default_factory=dict)  # id -> name
-    roles: dict[str, str] = field(default_factory=dict)  # id -> name
-    members: dict[str, str] = field(default_factory=dict)  # id -> display_name
-    joined_at: float = 0.0
-    active_channels: set[str] = field(default_factory=set)
-
-
-SIGNAL_TAG_RE = re.compile(r"\[(?:[A-Za-z_]+)(?:[:.](?:[^\]]*))?\]\s*")
-
-
-def _strip_signal_tags(text: str) -> str:
-    """Remove ANS behavioral tags (e.g. [EVALUATE:correct]) from outgoing text."""
-    return _SIGNAL_TAG_RE.sub("", text).strip()[:MAX_MESSAGE_LENGTH]
-
-
-# ---------------------------------------------------------------------------
-# Agent tools
-# ---------------------------------------------------------------------------
+DISCORD_API = "https://discord.com/api/v10"
+MAX_MESSAGE_LENGTH = 2000
+_PERM_VIEW = 1024
+_PERM_SEND = 2048
+_PERM_HISTORY = 65536
+_BOT_PERMS = _PERM_VIEW | _PERM_SEND | _PERM_HISTORY
 
 
 class DiscordSendTool:
-    """Agent tool for sending Discord messages."""
-
-    def __init__(self, adapter: "DiscordAdapter", agent_id: str | None = None) -> None:
+    def __init__(self, adapter: DiscordAdapter, agent_id: str | None = None) -> None:
         self._adapter = adapter
         self._agent_id = agent_id
 
@@ -90,16 +54,13 @@ class DiscordSendTool:
 
     @property
     def description(self) -> str:
-        bot_user = self._adapter._bot_username or ""
+        bot = self._adapter._bot_usernames.get(self._agent_id or "", "")
         base = (
-            "Send a Discord message. Provide channel_id (for servers) or user ID (for DMs) and text. "
-            "Supports basic markdown formatting. To share documents/reports/images, "
-            "use file_path with the workspace path. Messages over {} characters will be truncated.".format(
-                MAX_MESSAGE_LENGTH
-            )
+            "Send a Discord message. Use contacts to look up discord_id first. "
+            "Provide channel_id (text channel snowflake) or user id for DMs."
         )
-        if bot_user:
-            base += f" This agent's Discord username is @{bot_user}."
+        if bot:
+            base += f" Bot username: {bot}."
         return base
 
     @property
@@ -109,36 +70,17 @@ class DiscordSendTool:
             "properties": {
                 "channel_id": {
                     "type": "string",
-                    "description": "Discord channel ID or user ID to send to",
+                    "description": "Discord channel or user snowflake ID",
                 },
-                "text": {
-                    "type": "string",
-                    "description": "Message text to send (supports basic markdown)",
-                },
+                "text": {"type": "string", "description": "Message text"},
                 "file_path": {
                     "type": "string",
-                    "description": (
-                        "Workspace file path to attach as a document "
-                        "(e.g. 'PROJECT_REPORT.md', 'data/results.csv'). "
-                        "Do NOT paste file contents into text -- use this parameter instead."
-                    ),
-                },
-                "file_paths": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": (
-                        "Multiple workspace file paths to send as separate "
-                        "document attachments (e.g. ['report.pdf', 'chart.png'])"
-                    ),
+                    "description": "Workspace-relative file to attach",
                 },
                 "reply_to_message_id": {
                     "type": "string",
-                    "description": (
-                        "Message ID to reply to (for threading in channels). "
-                        "The reply will show as a threaded response."
-                    ),
+                    "description": "Message ID to reply to (threading)",
                 },
-                "final_summary": FINAL_SUMMARY_SCHEMA_PROPERTY,
             },
             "required": ["channel_id", "text"],
         }
@@ -148,60 +90,50 @@ class DiscordSendTool:
         params: dict[str, Any],
         signal: asyncio.Event | None = None,
     ) -> ToolResult:
-        channel_id = params.get("channel_id", "")
-        text = params.get("text", "")
-        file_path = params.get("file_path", "")
-        file_paths = params.get("file_paths", []) or []
-        reply_to = params.get("reply_to_message_id", "")
-
+        channel_id = str(params.get("channel_id") or "").strip()
+        text = str(params.get("text") or "")
+        file_path = str(params.get("file_path") or "").strip()
+        reply_to = str(params.get("reply_to_message_id") or "").strip()
         if not channel_id:
             return ToolResult(content="Error: channel_id is required", is_error=True)
-        if not text and not file_path and not file_paths:
-            return ToolResult(
-                content="Error: text, file_path, or file_paths is required",
-                is_error=True,
-            )
+        if not text and not file_path:
+            return ToolResult(content="Error: text or file_path required", is_error=True)
 
-        # Check allowed chats policy
-        allowed = self._adapter.get_allowed_channel_ids(self._agent_id)
-        if allowed and channel_id not in allowed:
-            known_list = ", ".join(sorted(allowed)[:5])
-            logger.warning(
-                "Discord send BLOCKED: agent=%s tried to message %s "
-                "(allowed: %s)", self._agent_id, channel_id, allowed,
-            )
+        allowed = self._adapter.get_allowed_target_ids(self._agent_id)
+        if self._adapter._outbound_restricted(self._agent_id):
+            if channel_id not in allowed:
+                return ToolResult(
+                    content=(
+                        f"Cannot send to {channel_id} — not in allowed targets. "
+                        "Save contact with discord_id, enable the channel in Tools, "
+                        "or wait for them to message first."
+                    ),
+                    is_error=True,
+                )
+        elif allowed and channel_id not in allowed:
             return ToolResult(
                 content=(
-                    f"Cannot send to channel {channel_id} — that channel has not "
-                    f"messaged you yet. Known channels: {known_list}"
+                    f"Cannot send to {channel_id} — not in allowed targets. "
+                    "Save contact with discord_id or wait for them to message first."
                 ),
                 is_error=True,
             )
 
-        # Handle file attachments
-        if file_paths:
-            results: list[str] = []
-            for fp in file_paths:
-                r = await self._adapter.send_file(channel_id, fp)
-                results.append(r.content)
-            if text:
-                await self._adapter.send_message(channel_id, text, reply_to=reply_to)
-            return ToolResult(content=f"Sent {len(file_paths)} file(s) to {channel_id}")
-
         if file_path:
-            return await self._adapter.send_file_with_caption(channel_id, file_path, caption=text)
-
-        # Regular text message
-        ok = await self._adapter.send_message(channel_id, text, reply_to=reply_to)
+            return await self._adapter.send_file(
+                channel_id, file_path, caption=text, agent_id=self._agent_id,
+                reply_to=reply_to or None,
+            )
+        ok = await self._adapter.send(
+            channel_id, text, agent_id=self._agent_id, reply_to=reply_to or None,
+        )
         if ok:
             return ToolResult(content=f"Message sent to {channel_id}")
         return ToolResult(content="Failed to send message", is_error=True)
 
 
 class DiscordSetupTool:
-    """Agent tool for validating a Discord bot token and configuring the connection."""
-
-    def __init__(self, adapter: "DiscordAdapter", agent_id: str | None = None) -> None:
+    def __init__(self, adapter: DiscordAdapter, agent_id: str | None = None) -> None:
         self._adapter = adapter
         self._agent_id = agent_id
 
@@ -212,8 +144,8 @@ class DiscordSetupTool:
     @property
     def description(self) -> str:
         return (
-            "Validate a Discord bot token and configure the Discord connection. "
-            "Call this after the user provides their bot token from Developer Portal."
+            "Validate a Discord bot token and connect the Discord channel. "
+            "Call after the user pastes their Developer Portal bot token."
         )
 
     @property
@@ -221,10 +153,7 @@ class DiscordSetupTool:
         return {
             "type": "object",
             "properties": {
-                "bot_token": {
-                    "type": "string",
-                    "description": "The Discord bot token from Developer Portal.",
-                },
+                "bot_token": {"type": "string", "description": "Discord bot token"},
             },
             "required": ["bot_token"],
         }
@@ -234,578 +163,804 @@ class DiscordSetupTool:
         params: dict[str, Any],
         signal: asyncio.Event | None = None,
     ) -> ToolResult:
-        bot_token = params.get("bot_token", "").strip()
+        token = str(params.get("bot_token") or "").strip()
         agent_id = self._agent_id or ""
-
-        if not bot_token:
-            return ToolResult(
-                content="Error: bot_token is required",
-                is_error=True,
-            )
+        if not token:
+            return ToolResult(content="Error: bot_token is required", is_error=True)
+        if not agent_id:
+            return ToolResult(content="Error: no agent context", is_error=True)
 
         try:
-            url = f"{DISCORD_API_BASE}/users/@me"
-            headers = {"Authorization": f"Bot {bot_token}"}
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                resp = await client.get(url, headers=headers)
-                resp.raise_for_status()
-                data = resp.json()
+            me = await self._adapter._api_get(token, "/users/@me")
         except Exception as exc:
             return ToolResult(
-                content=f"Invalid token -- Discord API returned an error: {exc}. "
-                        "Ask the user to double-check their token in Developer Portal.",
+                content=f"Invalid Discord token: {exc}",
                 is_error=True,
             )
 
-        result = data.get("user", data)
-        bot_username = result.get("username", "")
-        bot_discriminator = result.get("discriminator", "#0000")
-        bot_id = result.get("id", "")
+        bot_id = str(me.get("id", ""))
+        bot_username = str(me.get("username", ""))
+        self._adapter.update_config(
+            {"bot_token": token, "enabled": True, "bot_id": bot_id},
+            agent_id=agent_id,
+        )
+        self._adapter._bot_ids[agent_id] = bot_id
+        self._adapter._bot_usernames[agent_id] = bot_username
+        self._adapter._connected_agents.add(agent_id)
+        register_with_agent(agent_id, self._adapter)
 
-        if agent_id:
-            cfg_update: dict[str, Any] = {
-                "bot_token": bot_token,
-                "bot_username": bot_username,
-                "enabled": True,
-            }
-            self._adapter.update_config(cfg_update, agent_id=agent_id)
-            self._adapter._bot_username = bot_username
-            self._adapter._connected_agents.add(agent_id)
+        relay_note = ""
+        relay_url = get_relay_base_url(self._adapter._agent_cfg(agent_id))
+        if relay_url:
+            ok = await self._adapter.register_gateway_relay(relay_url, agent_id)
+            relay_note = (
+                " NestJS Gateway relay registered."
+                if ok else " NestJS Gateway registration failed — using local Gateway fallback."
+            )
+            if not ok:
+                self._adapter.start_local_gateway(agent_id)
+        else:
+            self._adapter.start_local_gateway(agent_id)
+            relay_note = " Local Gateway started (no NESTJS_URL)."
+
+        await self._adapter.sync_channels_from_platform(agent_id)
 
         return ToolResult(
             content=(
-                f"Discord connected! Bot: @{bot_username}{bot_discriminator} (ID: {bot_id})\n"
-                f"Status: Online\n"
-                f"Next step: Set owner_identity and dm_policy using skill_configure.\n"
-                f"The bot will join your servers when Babo starts with the valid token."
+                f"Discord connected as {bot_username} (id={bot_id}).{relay_note} "
+                "Call skill_configure(skill_name='discord-channel') for owner, DM policy, "
+                "and channel scope."
             ),
-            is_error=False,
         )
 
 
-# ---------------------------------------------------------------------------
-# Main adapter
-# ---------------------------------------------------------------------------
-
-
 class DiscordAdapter:
-    """Discord channel adapter using discord.py Gateway.
+    channel_name: str = "discord"
 
-    Handles both inbound messages (via Gateway events) and outbound messages
-    (via the agent tools). Provides moderation capabilities through role checks.
-    """
-
-    def __init__(self, global_config: dict[str, Any], ctx) -> None:
-        self._config = global_config
+    def __init__(self, global_config: dict[str, Any], ctx: Any) -> None:
+        self._global_config = global_config
         self._ctx = ctx
-        self._bot = None
-        self._running = False
-        self._loop: asyncio.AbstractEventLoop | None = None
-
-        # Connection state
-        self._bot_username: str = ""
+        self._agent_configs: dict[str, dict[str, Any]] = {}
+        self._bot_ids: dict[str, str] = {}
+        self._bot_usernames: dict[str, str] = {}
         self._connected_agents: set[str] = set()
-        self._guild_info: dict[str, DiscordChannelInfo] = {}
-        self._typing_states: dict[str, _TypingState] = {}
-        self._message_queue: asyncio.Queue = asyncio.Queue()
+        self._known_senders: dict[str, set[str]] = {}
+        self._relay_clients: dict[str, Any] = {}
+        self._gateway_tasks: dict[str, asyncio.Task[None]] = {}
+        self._last_sync_error: dict[str, str] = {}
+        self._load_all_agent_configs()
+        self._load_known_senders()
 
-        # Process message callback (set by AgentRuntime)
-        self._process_msg_callback: Callable[[dict[str, Any]], Coroutine] | None = None
+    def _load_all_agent_configs(self) -> None:
+        for agent_id, cfg in self._ctx.load_all_agent_configs().items():
+            self._agent_configs[agent_id] = cfg
+            if cfg.get("bot_id"):
+                self._bot_ids[agent_id] = str(cfg["bot_id"])
 
-    # ── Configuration helpers ────────────────────────────────────
-
-    def register_process_message_callback(self, callback: Callable[[dict[str, Any]], Coroutine]) -> None:
-        """Register a callback for processing incoming messages through AgentRuntime."""
-        self._process_msg_callback = callback
-
-    def get_allowed_channel_ids(self, agent_id: str | None = None) -> set[str] | None:
-        """Get set of allowed channel/user IDs based on current config."""
-        if not agent_id:
-            return None
-        policy = self._config.get("dm_policy", "disabled")
-        if policy == "disabled":
-            return set()
-        elif policy == "allowlist":
-            allow_from = self._config.get("allow_from", [])
-            return set(allow_from)
-        else:  # open
-            return None  # No restriction
-
-    def update_config(self, updates: dict[str, Any], agent_id: str | None = None) -> None:
-        """Update the adapter configuration and persist to disk."""
-        self._config.update(updates)
+    def _agent_cfg(self, agent_id: str | None) -> dict[str, Any]:
         if agent_id:
-            self._connected_agents.add(agent_id)
-            current = self._ctx.load_config(agent_id=agent_id)
-            current.update(updates)
-            self._ctx.save_config(current, agent_id=agent_id)
-        else:
-            current = self._ctx.load_config()
-            current.update(updates)
-            self._ctx.save_config(current)
+            merged = dict(self._global_config)
+            merged.update(self._agent_configs.get(agent_id, {}))
+            if "groups" not in merged or not merged.get("groups"):
+                merged["groups"] = compile_groups_policy(merged)
+            return merged
+        return self._global_config
 
-    def _resolve_agent_id(self) -> str:
-        """Pick the agent that owns this Discord bot connection."""
-        if self._connected_agents:
-            return next(iter(self._connected_agents))
-        for aid, cfg in self._ctx.load_all_agent_configs().items():
-            if cfg.get("enabled", True) and cfg.get("bot_token"):
-                self._connected_agents.add(aid)
-                return aid
-        return ""
+    @property
+    def name(self) -> str:
+        return "discord"
 
-    def create_send_tool(self, agent_id: str | None = None) -> DiscordSendTool:
-        """Create a new DiscordSendTool instance for an agent."""
-        return DiscordSendTool(adapter=self, agent_id=agent_id)
+    def update_config(self, new_config: dict[str, Any], agent_id: str) -> None:
+        merged = dict(self._agent_configs.get(agent_id, {}))
+        merged.update(new_config)
+        if "scoped_channels" in merged or any(
+            k in new_config for k in ("enabled_desired", "channels")
+        ):
+            merged = reconcile_config(merged)
+        elif "scoped_channels" in merged:
+            merged["groups"] = compile_groups_policy(merged)
+        self._agent_configs[agent_id] = merged
+        self._ctx.save_config(merged, agent_id=agent_id)
 
-    def create_setup_tool(self, agent_id: str | None = None) -> DiscordSetupTool:
-        """Create a new DiscordSetupTool instance for an agent."""
-        return DiscordSetupTool(adapter=self, agent_id=agent_id)
-
-    # ── Outbound messaging ───────────────────────────────────────
-
-    def _get_typing_state(self, channel_id: str) -> _TypingState:
-        if channel_id not in self._typing_states:
-            self._typing_states[channel_id] = _TypingState()
-        return self._typing_states[channel_id]
-
-    async def send_message(
+    async def send(
         self,
-        channel_id: str,
-        text: str,
-        reply_to: str | None = None,
+        target: str,
+        message: str,
+        **kwargs: Any,
     ) -> bool:
-        """Send a text message to a Discord channel/user."""
-        try:
-            stripped = _strip_signal_tags(text)
-            if not stripped:
-                return False
-
-            chunks = [stripped[i:i + MAX_MESSAGE_LENGTH] for i in range(0, len(stripped), MAX_MESSAGE_LENGTH)]
-            ts = self._get_typing_state(channel_id)
-            if ts.should_type():
-                try:
-                    ch = await self._bot.fetch_channel(int(channel_id))
-                    await ch.typing()
-                except Exception:
-                    pass
-
-            kwargs = {}
-            if reply_to:
-                kwargs["reference"] = reply_to
-
-            for chunk in chunks:
-                channel = await self._bot.fetch_channel(int(channel_id))
-                await channel.send(chunk, **kwargs)
-            return True
-        except Exception as e:
-            logger.error(f"Failed to send message to {channel_id}: {e}")
+        agent_id = kwargs.pop("agent_id", None)
+        reply_to = kwargs.pop("reply_to", None)
+        cfg = self._agent_cfg(agent_id)
+        token = cfg.get("bot_token", "")
+        if not token:
             return False
+        headers = {"Authorization": f"Bot {token}"}
+        for chunk in chunk_message(message, MAX_MESSAGE_LENGTH):
+            payload: dict[str, Any] = {"content": chunk}
+            if reply_to:
+                payload["message_reference"] = {"message_id": str(reply_to)}
+            try:
+                async with httpx.AsyncClient(timeout=15.0) as client:
+                    resp = await client.post(
+                        f"{DISCORD_API}/channels/{target}/messages",
+                        headers=headers,
+                        json=payload,
+                    )
+                    resp.raise_for_status()
+            except Exception as exc:
+                logger.error("Discord send failed: %s", exc)
+                return False
+        return True
 
     async def send_file(
         self,
-        channel_id: str,
+        target: str,
         file_path: str,
+        *,
         caption: str = "",
+        agent_id: str | None = None,
+        reply_to: str | None = None,
     ) -> ToolResult:
-        """Send a file to a Discord channel."""
+        if not agent_id:
+            return ToolResult(content="No agent_id", is_error=True)
+        resolved = resolve_workspace_file(agent_id, file_path)
+        if resolved is None:
+            return ToolResult(content=f"File not found: {file_path}", is_error=True)
+        cfg = self._agent_cfg(agent_id)
+        token = cfg.get("bot_token", "")
+        if not token:
+            return ToolResult(content="No bot_token", is_error=True)
+        headers = {"Authorization": f"Bot {token}"}
+        payload: dict[str, Any] = {}
+        if caption:
+            payload["content"] = caption
+        if reply_to:
+            payload["message_reference"] = {"message_id": str(reply_to)}
+        data: dict[str, Any] = {}
+        if payload:
+            data["payload_json"] = json.dumps(payload)
         try:
-            full_path = Path(file_path)
-            if not full_path.exists():
-                return ToolResult(content=f"File not found: {file_path}", is_error=True)
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(
+                    f"{DISCORD_API}/channels/{target}/messages",
+                    headers=headers,
+                    data=data,
+                    files={"files[0]": (resolved.name, resolved.read_bytes())},
+                )
+                resp.raise_for_status()
+            return ToolResult(content=f"File sent to {target}")
+        except Exception as exc:
+            return ToolResult(content=f"Send file failed: {exc}", is_error=True)
 
-            import discord as _dc
-            file_obj = _dc.File(full_path, filename=full_path.name)
-            channel = await self._bot.fetch_channel(int(channel_id))
-            await channel.send(content=caption if caption else None, file=file_obj)
-            return ToolResult(content=f"File {full_path.name} sent to {channel_id}")
-        except Exception as e:
-            logger.error(f"Failed to send file: {e}")
-            return ToolResult(content=f"File send failed: {e}", is_error=True)
+    async def is_connected(self, agent_id: str | None = None) -> bool:
+        if agent_id:
+            return agent_id in self._connected_agents
+        return bool(self._connected_agents)
 
-    async def send_file_with_caption(
-        self,
-        channel_id: str,
-        file_path: str,
-        caption: str = "",
-    ) -> ToolResult:
-        """Send a file with optional caption."""
-        return await self.send_file(channel_id, file_path, caption)
+    def get_config(self, agent_id: str | None = None) -> dict[str, Any]:
+        safe = dict(self._agent_cfg(agent_id))
+        if safe.get("bot_token"):
+            safe["bot_token"] = "***masked***"
+        return safe
 
-    # ── Inbound event handlers (registered via @bot.event) ───────
-
-    async def _on_ready(self):
-        """Handle bot being ready."""
-        logger.info(f"Discord bot ready! User: {self._bot.user}")
-        self._bot_username = self._bot.user.name
-
-        for guild in self._bot.guilds:
-            await self._cache_guild_info(guild)
-            logger.info(f"Joined guild: {guild.name} (ID: {guild.id}, {guild.member_count} members)")
-
-        for channel in self._bot.get_all_channels():
-            logger.debug(f"Available channel: #{channel.name} (id={channel.id}, type={type(channel).__name__})")
-
-        logger.info(f"Ready! Listening in {len(self._bot.guilds)} guilds.")
-
-    async def _on_message(self, message):
-        """Handle incoming messages."""
-        if message.author.bot:
-            return
-
-        if isinstance(message.channel, discord.DMChannel):
-            if not self._should_process_dm(message.author):
-                return
-
-        raw_data = {
-            "source": "discord",
-            "platform": "discord",
-            "user_id": str(message.author.id),
-            "username": message.author.name,
-            "display_name": message.author.display_name,
-            "message_id": str(message.id),
-            "content": message.content.strip(),
-            "channel_id": str(message.channel.id),
-            "channel_name": getattr(message.channel, "name", "unknown"),
-            "guild_id": str(message.guild.id) if message.guild else None,
-            "guild_name": message.guild.name if message.guild else "DM",
-            "timestamp": message.created_at.isoformat() if hasattr(message, "created_at") else None,
-            "mention_ids": [str(m.id) for m in message.mentions],
-            "role_names": [r.name for r in message.author.roles] if hasattr(message, "roles") else [],
-            "has_embeds": len(message.embeds) > 0,
-            "has_files": len(message.attachments) > 0,
+    def get_status(self, agent_id: str | None = None) -> dict[str, Any]:
+        cfg = self._agent_cfg(agent_id)
+        connected = agent_id in self._connected_agents if agent_id else bool(self._connected_agents)
+        scoped = list_scoped_channels(cfg)
+        effective = [c for c in scoped if c.get("effective_enabled")]
+        aid = agent_id or ""
+        return {
+            "channel": "discord",
+            "connected": connected or bool(cfg.get("bot_token") and cfg.get("enabled")),
+            "bot_username": self._bot_usernames.get(aid, cfg.get("bot_username", "")),
+            "bot_id": self._bot_ids.get(aid, cfg.get("bot_id", "")),
+            "enabled": cfg.get("enabled", False),
+            "scoped_channel_count": len(scoped),
+            "active_channel_count": len(effective),
+            "channels": scoped,
+            "sync_error": self._last_sync_error.get(aid, ""),
         }
 
-        logger.debug(f"[{raw_data['guild_name']}/{raw_data['channel_name']}] {raw_data['username']}: {raw_data['content'][:60]}...")
+    def create_send_tool(self, agent_id: str | None = None) -> DiscordSendTool:
+        return DiscordSendTool(self, agent_id)
 
-        if not self._is_directed_at_us(raw_data):
+    def create_setup_tool(self, agent_id: str | None = None) -> DiscordSetupTool:
+        return DiscordSetupTool(self, agent_id)
+
+    async def startup(self) -> None:
+        for agent_id, cfg in list(self._agent_configs.items()):
+            if cfg.get("enabled") and cfg.get("bot_token"):
+                await self._startup_agent(agent_id)
+
+    async def _startup_agent(self, agent_id: str) -> None:
+        cfg = self._agent_cfg(agent_id)
+        token = cfg.get("bot_token", "")
+        if not token:
             return
-
-        ts = self._get_typing_state(raw_data["channel_id"])
-        ts.last_typing = time.time()
-
-        if self._process_msg_callback:
-            try:
-                await self._process_msg_callback(raw_data)
-            except Exception as e:
-                logger.error(f"Failed to process message: {e}")
+        try:
+            me = await self._api_get(token, "/users/@me")
+            self._bot_ids[agent_id] = str(me.get("id", ""))
+            self._bot_usernames[agent_id] = str(me.get("username", ""))
+            self._connected_agents.add(agent_id)
+        except Exception as exc:
+            logger.error("Discord [%s] startup failed: %s", agent_id, exc)
+            return
+        register_with_agent(agent_id, self)
+        relay_url = get_relay_base_url(cfg)
+        if relay_url:
+            if await self.register_gateway_relay(relay_url, agent_id):
+                await ensure_relay(self._relay_clients, agent_id, relay_url)
+            else:
+                self.start_local_gateway(agent_id)
         else:
-            await self._process_inbound_gateway_message(raw_data)
+            self.start_local_gateway(agent_id)
+        await self.sync_channels_from_platform(agent_id)
 
-    async def _process_inbound_gateway_message(self, raw_data: dict[str, Any]) -> None:
-        """Route Gateway events through the shared channel message pipeline."""
-        agent_id = self._resolve_agent_id()
-        if not agent_id:
-            logger.warning("Discord Gateway message ignored — no agent with bot_token")
+    async def shutdown(self) -> None:
+        for agent_id in list(self._connected_agents):
+            await self._unregister_gateway_relay(agent_id)
+        for agent_id, task in list(self._gateway_tasks.items()):
+            task.cancel()
+        self._gateway_tasks.clear()
+        for agent_id, relay in list(self._relay_clients.items()):
+            await relay.disconnect()
+        self._relay_clients.clear()
+        self._connected_agents.clear()
+
+    async def _unregister_gateway_relay(self, agent_id: str) -> None:
+        cfg = self._agent_cfg(agent_id)
+        relay_url = get_relay_base_url(cfg)
+        if not relay_url:
             return
+        url = f"{relay_url.rstrip('/')}/api/channels/discord/unregister/{agent_id}"
+        secret = get_runtime_secret()
+        headers: dict[str, str] = {}
+        if secret:
+            headers["x-runtime-secret"] = secret
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                await client.post(url, headers=headers)
+        except Exception as exc:
+            logger.warning("Discord [%s] NestJS gateway unregister failed: %s", agent_id, exc)
+        self.stop_local_gateway(agent_id)
+
+    async def _api_get(self, token: str, path: str) -> dict[str, Any]:
+        headers = {"Authorization": f"Bot {token}"}
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(f"{DISCORD_API}{path}", headers=headers)
+            resp.raise_for_status()
+            return resp.json()
+
+    async def register_gateway_relay(self, relay_base_url: str, agent_id: str) -> bool:
+        cfg = self._agent_cfg(agent_id)
+        token = cfg.get("bot_token", "")
+        if not token:
+            return False
+        url = f"{relay_base_url.rstrip('/')}/api/channels/discord/register/{agent_id}"
+        secret = get_runtime_secret()
+        headers = {"Content-Type": "application/json"}
+        if secret:
+            headers["x-runtime-secret"] = secret
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                resp = await client.post(url, headers=headers, json={"bot_token": token})
+                resp.raise_for_status()
+                data = resp.json()
+        except Exception as exc:
+            logger.error("Discord [%s] NestJS gateway register failed: %s", agent_id, exc)
+            return False
+        if not data.get("ok") or not data.get("ready"):
+            logger.warning(
+                "Discord [%s] NestJS gateway not ready (ok=%s ready=%s)",
+                agent_id, data.get("ok"), data.get("ready"),
+            )
+            return False
+        self.update_config({"gateway_relay_registered": True}, agent_id=agent_id)
+        self.stop_local_gateway(agent_id)
+        await ensure_relay(self._relay_clients, agent_id, relay_base_url)
+        logger.info("Discord [%s]: NestJS Gateway registered and ready", agent_id)
+        return True
+
+    def start_local_gateway(self, agent_id: str) -> None:
+        task = self._gateway_tasks.get(agent_id)
+        if task is not None and not task.done():
+            return
+        self._gateway_tasks[agent_id] = asyncio.create_task(
+            self._local_gateway_loop(agent_id),
+            name=f"discord-gateway-{agent_id}",
+        )
+
+    def stop_local_gateway(self, agent_id: str) -> None:
+        task = self._gateway_tasks.pop(agent_id, None)
+        if task is not None:
+            task.cancel()
+
+    async def _local_gateway_loop(self, agent_id: str) -> None:
+        """Local discord.py Gateway when NestJS relay is unavailable."""
+        cfg = self._agent_cfg(agent_id)
+        token = cfg.get("bot_token", "")
+        if not token:
+            return
+        try:
+            import discord
+        except ImportError:
+            logger.error("discord.py not installed — local Gateway unavailable")
+            return
+
+        intents = discord.Intents.default()
+        intents.message_content = True
+        intents.guilds = True
+        intents.members = True
+        parent = self
+
+        class _Client(discord.Client):
+            async def on_ready(self) -> None:
+                logger.info(
+                    "Discord local gateway [%s] ready as %s",
+                    agent_id, self.user,
+                )
+
+            async def on_message(self, message: discord.Message) -> None:
+                if message.author.bot:
+                    return
+                mention_ids = [str(m.id) for m in message.mentions]
+                payload = {
+                    "t": "MESSAGE_CREATE",
+                    "d": {
+                        "id": str(message.id),
+                        "channel_id": str(message.channel.id),
+                        "guild_id": str(message.guild.id) if message.guild else None,
+                        "content": message.content or "",
+                        "author": {
+                            "id": str(message.author.id),
+                            "username": message.author.name,
+                            "bot": message.author.bot,
+                        },
+                        "mentions": [{"id": mid} for mid in mention_ids],
+                        "mention_everyone": message.mention_everyone,
+                    },
+                }
+                await parent._handle_gateway_payload(agent_id, payload)
+
+        client = _Client(intents=intents)
+        try:
+            await client.start(token)
+        except asyncio.CancelledError:
+            await client.close()
+        except Exception as exc:
+            logger.error("Discord local gateway [%s]: %s", agent_id, exc)
+
+    async def _handle_gateway_payload(self, agent_id: str, payload: dict[str, Any]) -> None:
+        if payload.get("t") != "MESSAGE_CREATE":
+            return
+        message = payload.get("d") or {}
+        normalized = self.normalize_gateway_message(message, agent_id)
+        if normalized is None:
+            return
+        if not self.should_respond(message, agent_id=agent_id):
+            return
+        await self._process_inbound(agent_id, normalized, message)
+
+    async def ensure_bot_identity(self, agent_id: str) -> str | None:
+        cfg = self._agent_cfg(agent_id)
+        token = str(cfg.get("bot_token") or "").strip()
+        if not token or "masked" in token:
+            self._last_sync_error[agent_id] = "Bot token missing — run Setup in Chat or save a valid token."
+            return None
+        bot_id = self._bot_ids.get(agent_id) or str(cfg.get("bot_id") or "")
+        if bot_id:
+            return bot_id
+        try:
+            me = await self._api_get(token, "/users/@me")
+            bot_id = str(me.get("id", ""))
+            username = str(me.get("username", ""))
+            if not bot_id:
+                return None
+            self._bot_ids[agent_id] = bot_id
+            self._bot_usernames[agent_id] = username
+            self.update_config(
+                {"bot_id": bot_id, "bot_username": username},
+                agent_id=agent_id,
+            )
+            return bot_id
+        except Exception as exc:
+            self._last_sync_error[agent_id] = f"Discord API auth failed: {exc}"
+            return None
+
+    async def fetch_observed_channels(self, agent_id: str) -> list[dict[str, Any]]:
+        cfg = self._agent_cfg(agent_id)
+        token = str(cfg.get("bot_token") or "").strip()
+        if not token or "masked" in token:
+            self._last_sync_error[agent_id] = "Bot token missing or invalid."
+            return []
+        bot_id = await self.ensure_bot_identity(agent_id)
+        if not bot_id:
+            return []
+        headers = {"Authorization": f"Bot {token}"}
+        observed: list[dict[str, Any]] = []
+        errors: list[str] = []
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                guilds_resp = await client.get(f"{DISCORD_API}/users/@me/guilds", headers=headers)
+                guilds_resp.raise_for_status()
+                guilds = guilds_resp.json()
+                if not guilds:
+                    self._last_sync_error[agent_id] = (
+                        "Bot is not in any Discord servers yet — invite it, then sync again."
+                    )
+                    return []
+                for guild in guilds:
+                    gid = str(guild.get("id", ""))
+                    gname = str(guild.get("name", gid))
+                    ch_resp = await client.get(
+                        f"{DISCORD_API}/guilds/{gid}/channels", headers=headers,
+                    )
+                    if ch_resp.status_code == 403:
+                        errors.append(f"No channel list access in {gname} (403)")
+                        continue
+                    ch_resp.raise_for_status()
+                    guild_perms = int(guild.get("permissions") or 0)
+                    platform_access = bool(guild_perms & _PERM_VIEW)
+                    for ch in ch_resp.json():
+                        if ch.get("type") not in (0, 5, 15):
+                            continue
+                        cid = str(ch.get("id", ""))
+                        observed.append({
+                            "id": cid,
+                            "name": ch.get("name", cid),
+                            "guild_id": gid,
+                            "guild_name": gname,
+                            "platform_access": platform_access,
+                        })
+        except Exception as exc:
+            logger.warning("Discord [%s] fetch channels failed: %s", agent_id, exc)
+            self._last_sync_error[agent_id] = str(exc)
+            return []
+        if observed:
+            self._last_sync_error.pop(agent_id, None)
+        elif errors:
+            self._last_sync_error[agent_id] = "; ".join(errors)
+        else:
+            self._last_sync_error[agent_id] = "No text channels found in servers the bot can see."
+        return observed
+
+    async def fetch_guild_roles(self, agent_id: str) -> list[dict[str, Any]]:
+        cfg = self._agent_cfg(agent_id)
+        token = str(cfg.get("bot_token") or "").strip()
+        if not token or "masked" in token:
+            return []
+        if not await self.ensure_bot_identity(agent_id):
+            return []
+        headers = {"Authorization": f"Bot {token}"}
+        out: list[dict[str, Any]] = []
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                guilds_resp = await client.get(f"{DISCORD_API}/users/@me/guilds", headers=headers)
+                guilds_resp.raise_for_status()
+                for guild in guilds_resp.json():
+                    gid = str(guild.get("id", ""))
+                    gname = str(guild.get("name", gid))
+                    roles_resp = await client.get(
+                        f"{DISCORD_API}/guilds/{gid}/roles", headers=headers,
+                    )
+                    if roles_resp.status_code == 403:
+                        continue
+                    roles_resp.raise_for_status()
+                    roles = []
+                    for role in roles_resp.json():
+                        rid = str(role.get("id", ""))
+                        if not rid or role.get("name") == "@everyone":
+                            continue
+                        roles.append({
+                            "id": rid,
+                            "name": role.get("name", rid),
+                            "color": role.get("color", 0),
+                            "managed": bool(role.get("managed", False)),
+                        })
+                    roles.sort(key=lambda r: r["name"].lower())
+                    out.append({"guild_id": gid, "guild_name": gname, "roles": roles})
+        except Exception as exc:
+            logger.warning("Discord [%s] fetch roles failed: %s", agent_id, exc)
+        return out
+
+    async def sync_channels_from_platform(
+        self,
+        agent_id: str,
+        *,
+        auto_enable: bool = False,
+    ) -> dict[str, Any]:
+        cfg = self._agent_cfg(agent_id)
+        observed = await self.fetch_observed_channels(agent_id)
+        updated = reconcile_config(
+            cfg, observed, auto_enable_on_platform_access=auto_enable,
+        )
+        self._agent_configs[agent_id] = updated
+        self._ctx.save_config(updated, agent_id=agent_id)
+        return updated
+
+    async def apply_channel_desired(
+        self,
+        agent_id: str,
+        channel_id: str,
+        *,
+        enabled: bool,
+        require_mention: bool | None = None,
+    ) -> dict[str, Any]:
+        cfg = self._agent_cfg(agent_id)
+        scoped = apply_desired_channel(
+            cfg, channel_id, enabled=enabled, require_mention=require_mention,
+        )
+        updated = finalize_scoped_config(cfg, scoped)
+        perm_warning = ""
+        if enabled:
+            perm_warning = await self._push_discord_channel_access(agent_id, channel_id, grant=True)
+        else:
+            perm_warning = await self._push_discord_channel_access(agent_id, channel_id, grant=False)
+        self._agent_configs[agent_id] = updated
+        self._ctx.save_config(updated, agent_id=agent_id)
+        if perm_warning:
+            updated = dict(updated)
+            updated["_permission_warning"] = perm_warning
+        return updated
+
+    async def _push_discord_channel_access(
+        self,
+        agent_id: str,
+        channel_id: str,
+        *,
+        grant: bool,
+    ) -> str:
+        """Push channel permission overwrite. Returns user-facing warning if it fails."""
+        cfg = self._agent_cfg(agent_id)
+        token = cfg.get("bot_token", "")
+        bot_id = self._bot_ids.get(agent_id, cfg.get("bot_id", ""))
+        if not token or not bot_id:
+            return ""
+        headers = {"Authorization": f"Bot {token}", "Content-Type": "application/json"}
+        overwrite = {
+            "type": 1,
+            "allow": str(_BOT_PERMS if grant else 0),
+            "deny": str(_PERM_VIEW if not grant else 0),
+        }
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.put(
+                    f"{DISCORD_API}/channels/{channel_id}/permissions/{bot_id}",
+                    headers=headers,
+                    json=overwrite,
+                )
+                if resp.status_code in (200, 204):
+                    return ""
+                logger.warning(
+                    "Discord permission push [%s] ch=%s status=%s",
+                    agent_id, channel_id, resp.status_code,
+                )
+                if resp.status_code == 403:
+                    return (
+                        "Could not update Discord channel permissions (403). "
+                        "Grant the bot Manage Roles or manually allow it in that channel."
+                    )
+                return (
+                    f"Discord permission update returned HTTP {resp.status_code}. "
+                    "The channel scope was saved in Babo; verify bot access in Discord."
+                )
+        except Exception as exc:
+            logger.warning("Discord permission push failed: %s", exc)
+            return f"Discord permission update failed: {exc}"
+
+    def normalize_gateway_message(
+        self,
+        message: dict[str, Any],
+        agent_id: str | None,
+    ) -> dict[str, Any] | None:
+        content = (message.get("content") or "").strip()
+        channel_id = str(message.get("channel_id") or "")
+        guild_id = message.get("guild_id")
+        author = message.get("author") or {}
+        if author.get("bot"):
+            return None
+        if not channel_id:
+            return None
+        sender_id = str(author.get("id", ""))
+        sender_name = str(author.get("username") or author.get("global_name") or "?")
+        is_dm = guild_id is None
+        if is_dm:
+            session_key = f"discord:dm:{sender_id}"
+        else:
+            session_key = f"discord:channel:{channel_id}"
+        bot_id = self._bot_ids.get(agent_id or "", "")
+        mention_ids = {str(m.get("id", "")) for m in message.get("mentions", [])}
+        is_mention = bot_id in mention_ids or message.get("mention_everyone")
+        return {
+            "channel": "discord",
+            "session_key": session_key,
+            "sender_id": sender_id,
+            "sender_name": sender_name,
+            "content": content,
+            "is_group": not is_dm,
+            "group_id": str(guild_id) if guild_id else None,
+            "is_mention": is_mention,
+            "is_dm": is_dm,
+            "metadata": {
+                "channel_id": channel_id,
+                "message_id": str(message.get("id", "")),
+                "guild_id": guild_id,
+            },
+        }
+
+    def normalize(self, payload: dict[str, Any], agent_id: str | None = None) -> dict[str, Any] | None:
+        if payload.get("t") == "MESSAGE_CREATE":
+            return self.normalize_gateway_message(payload.get("d") or {}, agent_id)
+        if "content" in payload and payload.get("author"):
+            return self.normalize_gateway_message(payload, agent_id)
+        return None
+
+    def should_respond(self, message: dict[str, Any], agent_id: str | None = None) -> bool:
+        from nls.runtime.channels import PolicyEnforcer
+
+        cfg = self._agent_cfg(agent_id)
+        enforcer = PolicyEnforcer(cfg)
+        author = message.get("author") or {}
+        sender_id = str(author.get("id", ""))
+        sender_username = str(author.get("username", ""))
+        guild_id = message.get("guild_id")
+        channel_id = str(message.get("channel_id") or "")
+
+        if guild_id is None:
+            return enforcer.check_dm(sender_id, sender_username=sender_username)
+
+        effective = effective_channel_ids(cfg)
+        if not effective or channel_id not in effective:
+            return False
+
+        bot_id = self._bot_ids.get(agent_id or "", cfg.get("bot_id", ""))
+        mention_ids = {str(m.get("id", "")) for m in message.get("mentions", [])}
+        is_mention = bool(bot_id and bot_id in mention_ids)
+        if not is_mention:
+            is_mention = enforcer.check_mention(message.get("content") or "")
+        if not is_mention and guild_id:
+            mod_roles = {str(r) for r in cfg.get("moderator_role_ids", []) if r}
+            if mod_roles:
+                member = message.get("member") or {}
+                member_roles = {str(r) for r in member.get("roles", [])}
+                if member_roles & mod_roles:
+                    is_mention = True
+        return enforcer.check_group(channel_id, sender_id, is_mention=is_mention)
+
+    def register_known_sender(self, sender_id: str, agent_id: str) -> None:
+        sid = str(sender_id)
+        senders = self._known_senders.setdefault(agent_id, set())
+        if sid not in senders:
+            senders.add(sid)
+            self._save_known_senders()
+
+    def _outbound_restricted(self, agent_id: str | None) -> bool:
+        if not agent_id:
+            return False
+        cfg = self._agent_configs.get(agent_id, {})
+        return bool(cfg.get("enabled"))
+
+    def get_allowed_target_ids(self, agent_id: str | None) -> set[str]:
+        allowed: set[str] = set()
+        if not agent_id:
+            return allowed
+        cfg = self._agent_configs.get(agent_id, {})
+        owner = cfg.get("owner_identity", "")
+        if owner:
+            allowed.add(str(owner))
+        for entry in cfg.get("allow_from", []):
+            if entry:
+                allowed.add(str(entry))
+        allowed.update(self._known_senders.get(agent_id, set()))
+        allowed.update(effective_channel_ids(cfg))
+        try:
+            from server.main import app
+            am = getattr(app.state, "agent_manager", None)
+            if am is not None:
+                path = am.agents_dir / agent_id / "contacts.json"
+                if path.exists():
+                    data = json.loads(path.read_text(encoding="utf-8"))
+                    items = data if isinstance(data, list) else data.get("contacts", [])
+                    for c in items:
+                        did = str(c.get("discord_id") or "").strip()
+                        if did:
+                            allowed.add(did)
+        except Exception:
+            pass
+        return allowed
+
+    def _known_senders_path(self) -> Path:
+        return self._ctx._skills_dir / "discord-channel" / "known_senders.json"
+
+    def _load_known_senders(self) -> None:
+        path = self._known_senders_path()
+        if not path.exists():
+            return
+        try:
+            raw = json.loads(path.read_text(encoding="utf-8"))
+            for aid, ids in raw.items():
+                self._known_senders[aid] = set(ids)
+        except Exception:
+            pass
+
+    def _save_known_senders(self) -> None:
+        path = self._known_senders_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps({aid: sorted(ids) for aid, ids in self._known_senders.items()}, indent=2),
+            encoding="utf-8",
+        )
+
+    async def _process_inbound(
+        self,
+        agent_id: str,
+        normalized: dict[str, Any],
+        raw_message: dict[str, Any],
+    ) -> None:
         try:
             from server.main import app
         except ImportError:
             return
-
         agent_manager = getattr(app.state, "agent_manager", None)
         if agent_manager is None:
             return
         runtime = agent_manager.get_runtime(agent_id)
         if runtime is None:
-            logger.warning("Discord Gateway: agent %s runtime not loaded", agent_id)
             return
 
-        body = {
-            "content": raw_data.get("content", ""),
-            "channel_id": raw_data.get("channel_id", ""),
-            "author": {
-                "username": raw_data.get("username", "?"),
-                "id": raw_data.get("user_id", ""),
-            },
-            "guild_id": raw_data.get("guild_id"),
-        }
-        normalized = self.normalize_webhook(body, agent_id=agent_id)
-        if normalized is None:
-            return
-
+        self.register_known_sender(normalized["sender_id"], agent_id)
         session_key = normalized["session_key"]
-        text = normalized.get("content", "") or ""
-        chat_id = normalized.get("channel_id", "")
-        sender_name = normalized.get("sender_name", "?")
+        text = normalized.get("content", "")
+        channel_id = normalized["metadata"]["channel_id"]
+        sender_name = normalized["sender_name"]
 
         history = runtime.load_session_history(session_key)
         runtime.save_session_history(
-            history + [{"role": "user", "content": text or "[media]"}],
+            history + [{"role": "user", "content": text or "[empty]"}],
             session_key=session_key,
             metadata={"channel": "discord", "sender": sender_name},
         )
+        broadcast_channel_event(app, agent_id, "discord", normalized, direction="inbound")
 
-        try:
-            from nls.skills.channel_processing import (
-                process_channel_message,
-                try_feed_pending_answer,
-            )
+        from nls.skills.channel_processing import (
+            process_channel_message,
+            try_feed_pending_answer,
+        )
 
-            if try_feed_pending_answer(agent_id, session_key, text):
-                return
-
-            user_input = (
-                f"[{sender_name} via Discord]: {text}"
-                if text else f"[{sender_name} via Discord]:"
-            )
-            response_text = await process_channel_message(
-                app,
-                runtime,
-                agent_id,
-                user_input,
-                history,
-                channel_adapter=self,
-                reply_target=chat_id,
-                session_key=session_key,
-            )
-            if response_text:
-                clean = _strip_signal_tags(response_text)
-                if clean:
-                    await self.send_message(chat_id, clean)
-                    runtime.save_session_history(
-                        history
-                        + [
-                            {"role": "user", "content": text},
-                            {"role": "assistant", "content": clean},
-                        ],
-                        session_key=session_key,
-                        metadata={"channel": "discord", "sender": sender_name},
-                    )
-        except Exception as exc:
-            logger.error(
-                "Discord Gateway processing failed for agent %s: %s",
-                agent_id, exc, exc_info=True,
-            )
-
-    def _is_directed_at_us(self, msg_data: dict[str, Any]) -> bool:
-        """Check if a message is directed at our bot."""
-        mention_pattern = self._config.get("mention_pattern", "Babo").lower()
-        prefix_commands = self._config.get("prefix_commands", True)
-
-        content = msg_data.get("content", "").lower().strip()
-        mention_ids = msg_data.get("mention_ids", [])
-
-        if mention_ids:
-            return True
-
-        if mention_pattern and (mention_pattern in content or mention_pattern in content.split()):
-            return True
-
-        if prefix_commands:
-            parts = content.split(None, 1)
-            if parts and parts[0].startswith("!"):
-                cmd = parts[0][1:].split()[0] if len(parts[0]) > 1 else ""
-                known_cmds = {
-                    "help", "ban", "kick", "mute", "warn", "purge", "unban",
-                    "info", "moderate", "settings", "rules", "welcome",
-                    "channels", "roles", "members", "status", "ping", "uptime",
-                }
-                if cmd in known_cmds:
-                    return True
-        return False
-
-    def _should_process_dm(self, author: object) -> bool:
-        """Check if we should process a DM from this user."""
-        policy = self._config.get("dm_policy", "disabled")
-        if policy == "open":
-            return True
-        elif policy == "allowlist":
-            allow_from = self._config.get("allow_from", [])
-            auth_name = getattr(author, "name", "")
-            auth_id = str(getattr(author, "id", ""))
-            return auth_name in allow_from or auth_id in allow_from
-        else:
-            return False
-
-    async def _cache_guild_info(self, guild):
-        """Cache useful information about a guild."""
-        info = self._guild_info.get(str(guild.id))
-        if not info:
-            info = DiscordChannelInfo(
-                guild_id=str(guild.id),
-                guild_name=guild.name,
-            )
-            self._guild_info[str(guild.id)] = info
-
-        info.channels.clear()
-        for ch in guild.text_channels + guild.voice_channels:
-            info.channels[str(ch.id)] = ch.name
-
-        info.roles.clear()
-        for role in guild.roles:
-            info.roles[str(role.id)] = role.name
-
-        info.joined_at = time.time()
-
-    # ── Webhook normalization helpers ────────────────────────────
-
-    def normalize_webhook(self, body: dict[str, Any], agent_id: str = "") -> dict[str, Any] | None:
-        """Normalize a Discord webhook payload into our internal format.
-
-        Handles both direct message payloads and interaction/callback data.
-        Returns None if the message should be skipped.
-        """
-        import uuid
-
-        sender_name = "unknown"
-        user_id = "unknown"
-        channel_id = "unknown"
-        guild_id = None
-        guild_name = "DM"
-        content = ""
-        is_dm = True
-
-        # Direct message-style payload
-        if "content" in body and "channel_id" in body:
-            sender_name = body.get("author", {}).get("username", body.get("author", {}).get("name", "unknown"))
-            user_id = str(body.get("author", {}).get("id", "unknown"))
-            channel_id = str(body["channel_id"])
-            content = body.get("content", "")
-            if body.get("guild_id"):
-                guild_id = str(body["guild_id"])
-                is_dm = False
-                guild_name = body.get("guild", {}).get("name", guild_name or "Unknown Server")
-            else:
-                guild_id = None
-                is_dm = True
-
-        elif "message" in body:
-            msg = body["message"]
-            sender_name = msg.get("author", {}).get("username", "unknown")
-            user_id = str(msg.get("author", {}).get("id", "unknown"))
-            channel_id = str(msg.get("channel_id", "unknown"))
-            content = msg.get("content", "")
-            guild_id = str(msg.get("guild_id")) if msg.get("guild_id") else None
-            guild_name = msg.get("guild", {}).get("name", "Unknown Server") if msg.get("guild") else "Unknown Server"
-            is_dm = not guild_id
-
-        elif "interaction" in body:
-            inter = body["interaction"]
-            sender_name = inter.get("user", {}).get("username", "unknown")
-            user_id = str(inter.get("user", {}).get("id", "unknown"))
-            channel_id = str(inter.get("channel_id", "unknown"))
-            content = (inter.get("data", {}).get("options", [{}])[-1].get("value", "") if inter.get("data", {}).get("options") else "") or ""
-            guild_id = str(inter.get("guild_id", "")) if inter.get("guild_id") else None
-            guild_name = inter.get("guild_name", "Unknown Server")
-            is_dm = not guild_id
-
-        # Skip empty messages
-        if not content or not content.strip():
-            return None
-
-        session_key = f"discord-{channel_id}" if not is_dm else f"discord-dm-{user_id}"
-
-        return {
-            "session_key": session_key,
-            "content": content.strip(),
-            "sender_name": sender_name,
-            "sender_id": user_id,
-            "channel_id": channel_id,
-            "guild_id": guild_id,
-            "guild_name": guild_name,
-            "is_dm": is_dm,
-            "attachments": [],
-            "metadata": {"platform": "discord", "raw_body_keys": list(body.keys())[:20]},
-        }
-
-    def get_status(self, agent_id: str = "") -> dict[str, Any]:
-        """Return connection status for the frontend dashboard."""
-        return {
-            "channel": "discord",
-            "connected": self._running and self._bot is not None,
-            "bot_username": self._bot_username or "",
-            "guild_count": len(getattr(self._bot, "guilds", [])) if self._bot else 0,
-            "enabled": bool(self._config.get("bot_token")),
-            "dm_policy": self._config.get("dm_policy", "disabled"),
-            "prefix_commands": self._config.get("prefix_commands", True),
-        }
-
-    # ── Lifecycle hooks ──────────────────────────────────────────
-
-    async def startup(self):
-        """Start the Discord bot connection."""
-        for aid, cfg in self._ctx.load_all_agent_configs().items():
-            if cfg.get("enabled", True) and cfg.get("bot_token"):
-                self._config.update(
-                    {k: v for k, v in cfg.items() if v not in (None, "")},
-                )
-                self._connected_agents.add(aid)
-
-        bot_token = self._config.get("bot_token", "")
-        if not bot_token:
-            logger.warning("No Discord bot token configured. Skipping startup.")
+        if try_feed_pending_answer(agent_id, session_key, text):
             return
 
-        try:
-            import discord
-
-            intents = discord.Intents.default()
-            intents.message_content = True
-            intents.messages = True
-            intents.guilds = True
-            intents.members = True
-            intents.reactions = True
-            intents.emojis = True
-            intents.presences = True
-
-            self._bot = discord.Bot(intents=intents, command_prefix="!")
-
-            @self._bot.event
-            async def on_ready():
-                await self._on_ready()
-
-            @self._bot.event
-            async def on_message(message):
-                await self._on_message(message)
-
-            @self._bot.event
-            async def on_message_edit(before, after):
-                logger.debug(f"Message edited in {after.channel} by {after.author}")
-
-            @self._bot.event
-            async def on_message_delete(message):
-                logger.debug(f"Message deleted in {message.channel} by {message.author}")
-
-            self._running = True
-            logger.info("Starting Discord bot session...")
-            asyncio.create_task(
-                self._run_bot_session(bot_token),
-                name="discord-channel-gateway",
+        user_input = f"[{sender_name} via Discord]: {text}" if text else f"[{sender_name} via Discord]:"
+        response_text = await process_channel_message(
+            app, runtime, agent_id, user_input, history,
+            channel_adapter=self,
+            reply_target=channel_id,
+            session_key=session_key,
+        )
+        clean = strip_signal_tags(response_text) if response_text else ""
+        if not clean and response_text:
+            clean = response_text.strip()
+        if clean:
+            history.append({"role": "user", "content": text})
+            history.append({"role": "assistant", "content": clean})
+            runtime.save_session_history(
+                history, session_key=session_key,
+                metadata={"channel": "discord", "sender": sender_name},
+            )
+            await self.send(channel_id, clean, agent_id=agent_id)
+            broadcast_channel_event(
+                app, agent_id, "discord", normalized, clean, direction="response",
             )
 
-        except Exception as e:
-            logger.error(f"Failed to start Discord adapter: {e}", exc_info=True)
-            self._running = False
-            raise
+    def list_groups(self, agent_id: str) -> list[dict[str, Any]]:
+        cfg = self._agent_cfg(agent_id)
+        return [
+            {"id": c.get("id"), "name": c.get("name", c.get("id"))}
+            for c in list_scoped_channels(cfg)
+            if c.get("effective_enabled")
+        ]
 
-    async def _run_bot_session(self, bot_token: str) -> None:
-        """Run discord.py Gateway in the background (non-blocking startup hook)."""
-        try:
-            if self._bot is not None:
-                await self._bot.start(bot_token)
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:
-            logger.error("Discord Gateway session ended: %s", exc, exc_info=True)
-            self._running = False
-
-    async def shutdown(self):
-        """Stop the Discord bot connection."""
-        if self._bot and self._running:
-            try:
-                await self._bot.close()
-                self._running = False
-                logger.info("Discord adapter shut down gracefully")
-            except Exception as e:
-                logger.error(f"Error shutting down Discord adapter: {e}")
-                self._running = False
-
-    async def process_queued_messages(self):
-        """Process any queued messages (fallback when no callback registered)."""
-        while not self._message_queue.empty():
-            try:
-                msg_data = self._message_queue.get_nowait()
-                logger.debug(f"Queued message: {msg_data['content'][:50]}...")
-            except asyncio.QueueEmpty:
-                break
+    def get_known_senders(self, agent_id: str) -> dict[str, str]:
+        cfg = self._agent_cfg(agent_id)
+        known = self._known_senders.get(agent_id, set())
+        return {sid: sid for sid in sorted(known)}

@@ -1,6 +1,7 @@
 import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Resend } from 'resend';
+import { createHmac, timingSafeEqual } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { RuntimeService } from '../runtime/runtime.service';
 import { ProviderKeysService } from '../babo-cloud/provider-keys.service';
@@ -14,6 +15,9 @@ export class ChannelsService {
 
   /** Connected relay WebSockets: runtimeAgentId -> WebSocket */
   private relaySockets = new Map<string, WebSocket>();
+
+  /** Slack signing secrets registered by the Python runtime (runtimeAgentId -> secret) */
+  private slackSigningSecrets = new Map<string, string>();
 
   constructor(
     private config: ConfigService,
@@ -51,6 +55,46 @@ export class ChannelsService {
   removeRelaySocket(agentId: string): void {
     this.relaySockets.delete(agentId);
     this.logger.log(`Relay WS removed for agent ${agentId}`);
+  }
+
+  registerSlackSigningSecret(agentId: string, signingSecret: string): void {
+    if (!signingSecret) {
+      this.slackSigningSecrets.delete(agentId);
+      return;
+    }
+    this.slackSigningSecrets.set(agentId, signingSecret);
+    this.logger.log(`Slack signing secret registered for agent ${agentId}`);
+  }
+
+  unregisterSlackSigningSecret(agentId: string): void {
+    this.slackSigningSecrets.delete(agentId);
+  }
+
+  getSlackSigningSecret(agentId: string): string | undefined {
+    return this.slackSigningSecrets.get(agentId);
+  }
+
+  verifySlackSignature(
+    signingSecret: string,
+    timestamp: string,
+    rawBody: Buffer,
+    signature: string,
+  ): boolean {
+    if (!signingSecret || !timestamp || !signature || !rawBody?.length) {
+      return false;
+    }
+    const ts = parseInt(timestamp, 10);
+    if (!Number.isFinite(ts) || Math.abs(Date.now() / 1000 - ts) > 60 * 5) {
+      return false;
+    }
+    const base = `v0:${timestamp}:${rawBody.toString('utf-8')}`;
+    const digest = createHmac('sha256', signingSecret).update(base).digest('hex');
+    const expected = `v0=${digest}`;
+    try {
+      return timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
+    } catch {
+      return false;
+    }
   }
 
   pushToRelayByAgentId(agentId: string, channel: string, payload: any): boolean {

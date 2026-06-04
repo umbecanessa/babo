@@ -1,6 +1,6 @@
 {
   "name": "discord",
-  "description": "Send messages to Discord channels via webhook or bot. Requires NLS_DISCORD_WEBHOOK_URL or NLS_DISCORD_BOT_TOKEN.",
+  "description": "Legacy Discord webhook/bot tool. Prefer the discord-channel skill (Tools → Discord) for scoped two-way messaging.",
   "version": "1.0.0",
   "category": "communicate",
   "hormone_affinity": "oxytocin",

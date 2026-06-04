@@ -35,7 +35,7 @@ Electron may override via IPC `urls:get` after config wizard.
 |-------|---------|
 | `/setup` | Desktop first-run |
 | `/auth/*` | Login/register |
-| `/dashboard` | Agent list + relay status |
+| `/dashboard` | Agent list, relay status, **Squads** panel (fleet + charter modal) |
 | `/create` | Genesis wizard |
 | `/chat/:agentId` | Main chat + **run panel** + **model picker** |
 | `/tools/:agentId` | Integrations & skills |

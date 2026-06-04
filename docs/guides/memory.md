@@ -25,7 +25,7 @@ Long-term context is organized as **13 rotating rings**:
 
 ### Fixed (always visible)
 
-- **Identity** — who the agent is
+- **Identity** — who the agent is (includes **Job** title/mission from `job.json` when synced)
 - **User model** — who you are, preferences
 - **Consolidation** — compressed long-term summaries
 - **Emotional / hormonal** — affect snapshot
@@ -41,7 +41,7 @@ Long-term context is organized as **13 rotating rings**:
 
 ### Domain (rotate per capability area)
 
-- **Behavioral** — habits and patterns
+- **Behavioral** — habits and patterns (includes **Trust** boundaries and squad context at `ACCESS_SYSTEM`)
 - **Skills** — installed skill state
 - **Tools + MCP** — connected tool servers
 - **Channels** — WhatsApp/Telegram/email config summaries
@@ -119,6 +119,7 @@ Sleep cycles merge low-salience WM into Cryptex consolidation rings and promote 
 
 ## Related
 
+- [Job, Trust & Squads](job-trust-and-squads.md) — owner charter in identity and behavioral rings
 - [Core concepts](../getting-started/concepts.md)
 - [Brain dashboard](brain-dashboard.md)
 - [Chat](chat.md)

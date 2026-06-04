@@ -141,6 +141,42 @@ class ConfigField:
 
 
 @dataclass
+class ContactIdentityField:
+    """Identity field a channel skill contributes to the contacts tool."""
+
+    key: str = ""
+    description: str = ""
+    required_for_outbound: bool = False
+
+
+@dataclass
+class ContactChannelSpec:
+    """Declares how a channel skill integrates with the contacts tool."""
+
+    channel_key: str = ""
+    display_name: str = ""
+    identity_fields: list[ContactIdentityField] = field(default_factory=list)
+    supports_groups: bool = True
+    supports_recent: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "channel_key": self.channel_key,
+            "display_name": self.display_name,
+            "identity_fields": [
+                {
+                    "key": f.key,
+                    "description": f.description,
+                    "required_for_outbound": f.required_for_outbound,
+                }
+                for f in self.identity_fields
+            ],
+            "supports_groups": self.supports_groups,
+            "supports_recent": self.supports_recent,
+        }
+
+
+@dataclass
 class SkillMeta:
     """Declarative metadata for a skill package."""
 
@@ -154,6 +190,7 @@ class SkillMeta:
     bridges: list[SkillBridge] = field(default_factory=list)
     webhooks: list[SkillWebhook] = field(default_factory=list)
     config_schema: list[ConfigField] = field(default_factory=list)
+    contacts: ContactChannelSpec | None = None
 
     skill_type: str = "native"
     """``"native"`` | ``"agentskill"`` | ``"hybrid"``"""

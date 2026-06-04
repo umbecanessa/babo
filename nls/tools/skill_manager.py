@@ -16,12 +16,14 @@ logger = logging.getLogger(__name__)
 
 BUNDLED_SKILLS: list[str] = [
     "email-channel", "google-workspace", "telegram-channel",
-    "whatsapp-channel", "todo-list", "mcp-client",
+    "whatsapp-channel", "discord-channel", "slack-channel",
+    "todo-list", "mcp-client",
 ]
 
 # Pre-shipped channel plugins configured via skill_configure (not agent-authored).
 PRE_SHIPPED_CHANNEL_SKILLS: frozenset[str] = frozenset({
     "telegram-channel", "whatsapp-channel", "email-channel",
+    "discord-channel", "slack-channel",
 })
 
 

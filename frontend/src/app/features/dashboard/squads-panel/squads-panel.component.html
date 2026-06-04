@@ -1,0 +1,193 @@
+<section class="squads-panel">
+  <div class="panel-header">
+    <div class="panel-heading">
+      <h2 class="panel-title">Squads</h2>
+      <p class="panel-subtitle">Persistent fleets with a lead, shared inbox, and member coordination</p>
+    </div>
+    <button type="button" class="panel-action" (click)="showCreate.set(!showCreate())">
+      {{ showCreate() ? 'Cancel' : 'Create squad' }}
+    </button>
+  </div>
+
+  @if (error()) {
+    <p class="panel-error">{{ error() }}</p>
+  }
+
+  @if (showCreate()) {
+    <div class="create-form">
+      <label>
+        Name
+        <input type="text" [(ngModel)]="newName" placeholder="e.g. Discord moderators" />
+      </label>
+      <label>
+        Lead agent
+        <select [(ngModel)]="newLeadId">
+          <option value="">Select lead…</option>
+          @for (a of agentOptions; track a.runtimeAgentId) {
+            <option [value]="a.runtimeAgentId">{{ agentLabel(a.runtimeAgentId) }}</option>
+          }
+        </select>
+      </label>
+      <div class="member-picks">
+        <span class="label">Members</span>
+        @for (a of agentOptions; track a.runtimeAgentId) {
+          <label class="member-chip">
+            <input
+              type="checkbox"
+              [checked]="selectedMembers.includes(a.runtimeAgentId)"
+              (change)="toggleMember(a.runtimeAgentId)"
+            />
+            {{ agentLabel(a.runtimeAgentId) }}
+          </label>
+        }
+      </div>
+      <button type="button" class="btn-primary" (click)="createSquad()">Create</button>
+    </div>
+  }
+
+  @if (loading()) {
+    <p class="panel-muted">Loading squads…</p>
+  } @else if (squads().length === 0) {
+    <p class="panel-muted">No squads yet. Group agents with a lead for shared inbox and coordination.</p>
+  } @else {
+    <div class="squad-list">
+    @for (sq of squads(); track sq.id) {
+      <article class="squad-card">
+        <div class="squad-card-head">
+          <h3>{{ sq.name }}</h3>
+          <div class="head-actions">
+            <button type="button" class="link-quiet" (click)="openKanban(sq)">Board</button>
+            <button type="button" class="link-quiet" (click)="openSquadSettings(sq)">Checkback</button>
+            <button type="button" class="link-danger" (click)="deleteSquad(sq.id, sq.lead_agent_id)">Delete</button>
+          </div>
+        </div>
+        <p class="squad-meta">Lead: {{ agentLabel(sq.lead_agent_id) }}</p>
+        @if (sq.checkback_enabled !== false) {
+          <p class="checkback-meta">
+            Auto checkback every {{ (sq.checkback_interval_seconds ?? 1800) / 60 | number:'1.0-0' }} min
+          </p>
+        } @else {
+          <p class="checkback-meta muted">Scheduled checkback off</p>
+        }
+        @if (pendingCount(sq) > 0) {
+          <p class="inbox-hint">{{ pendingCount(sq) }} proposal(s) pending lead approval</p>
+        }
+        <ul class="squad-members">
+          @for (mid of sq.member_agent_ids; track mid) {
+            <li>
+              <span>{{ agentLabel(mid) }}{{ mid === sq.lead_agent_id ? ' (lead)' : '' }}</span>
+              @if (sq.job_titles && sq.job_titles[mid]) {
+                <span class="job-pill">{{ sq.job_titles[mid] }}</span>
+              }
+              <button type="button" class="link-quiet" (click)="openCharter(mid, 'job')">Job</button>
+              <button type="button" class="link-quiet" (click)="openCharter(mid, 'trust')">Trust</button>
+            </li>
+          }
+        </ul>
+      </article>
+    }
+    </div>
+  }
+
+  @if (editingSquad(); as esq) {
+    <div class="settings-modal-backdrop" (click)="cancelSquadSettings()"></div>
+    <div class="settings-modal" role="dialog">
+      <h3>Squad checkback</h3>
+      <p class="modal-muted">Wakes the lead on an interval and when inbox proposals exceed the SLA.</p>
+      <label class="checkbox-row">
+        <input type="checkbox" [(ngModel)]="checkbackEnabled" />
+        Enable scheduled checkback
+      </label>
+      <label>
+        Interval (minutes)
+        <input type="number" min="5" max="1440" [(ngModel)]="checkbackIntervalMin" />
+      </label>
+      <label>
+        Proposal SLA (hours, urgent wake)
+        <input type="number" min="1" max="168" [(ngModel)]="proposalSlaHours" />
+      </label>
+      <div class="modal-actions">
+        <button type="button" class="btn-secondary" (click)="cancelSquadSettings()">Cancel</button>
+        <button type="button" class="btn-primary" (click)="saveSquadSettings()">Save</button>
+      </div>
+    </div>
+  }
+</section>
+
+@if (kanbanSquad(); as ksq) {
+  <div class="settings-modal-backdrop" (click)="closeKanban()"></div>
+  <div class="kanban-modal" role="dialog">
+    <header class="kanban-head">
+      <h3>Squad board</h3>
+      <button type="button" class="close-btn" (click)="closeKanban()" aria-label="Close">×</button>
+    </header>
+    @if (kanbanLoading()) {
+      <p class="panel-muted">Loading board…</p>
+    } @else if (kanbanBoard(); as board) {
+      <section class="kanban-inbox">
+        <h4>Inbox</h4>
+        <div class="kanban-columns">
+          <div class="kanban-col">
+            <span class="col-label">Proposed</span>
+            @for (item of board.inbox.proposed; track item.id) {
+              <div class="kanban-card">
+                <strong>{{ item.title }}</strong>
+                @if (item.suggested_assignee_id) {
+                  <span class="card-meta">→ {{ agentLabel(item.suggested_assignee_id) }}</span>
+                }
+              </div>
+            } @empty {
+              <p class="col-empty">—</p>
+            }
+          </div>
+          <div class="kanban-col">
+            <span class="col-label">Approved</span>
+            @for (item of board.inbox.approved; track item.id) {
+              <div class="kanban-card"><strong>{{ item.title }}</strong></div>
+            } @empty {
+              <p class="col-empty">—</p>
+            }
+          </div>
+        </div>
+      </section>
+      @if (board.open_escalations?.length) {
+        <section class="kanban-escalations">
+          <h4>Open escalations</h4>
+          <ul>
+            @for (esc of board.open_escalations; track esc.member_agent_id) {
+              <li>{{ agentLabel(esc.member_agent_id) }}: {{ esc.reason }}</li>
+            }
+          </ul>
+        </section>
+      }
+      @for (mid of memberIdsForKanban(ksq); track mid) {
+        <section class="kanban-member">
+          <h4>{{ agentLabel(mid) }}
+            @if (board.job_titles?.[mid]; as jobTitle) {
+              <span class="job-pill">{{ jobTitle }}</span>
+            }
+          </h4>
+          @if (board.member_todos[mid]?.length) {
+            <ul class="member-todos">
+              @for (t of board.member_todos[mid]; track t.id) {
+                <li><span class="todo-status">{{ t.status }}</span> {{ t.title }}</li>
+              }
+            </ul>
+          } @else {
+            <p class="col-empty">No squad todos</p>
+          }
+        </section>
+      }
+    }
+  </div>
+}
+
+@if (charterAgentId(); as aid) {
+  <app-agent-charter-modal
+    [agentId]="aid"
+    [agentLabel]="agentLabel(aid)"
+    [visible]="charterVisible()"
+    [initialTab]="charterTab()"
+    (dismiss)="onCharterDismiss($event)"
+  />
+}

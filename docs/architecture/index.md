@@ -19,7 +19,7 @@ Technical documentation for how Babo is built and how data flows.
 |----------|-------|
 | [Agent runtime](agent-runtime.md) | `AgentRuntime` lifecycle and APIs |
 | [Agentic loop](agentic-loop.md) | Multi-step LLM + tools |
-| [Orchestration & delegation](orchestration-and-delegation.md) | Teams, waves, coordinator policy |
+| [Orchestration & delegation](orchestration-and-delegation.md) | Teams, waves, coordinator policy, squads |
 | [Skill discovery & recovery](skill-discovery-and-recovery.md) | Stall, ClawHub, recipes, ring boost |
 | [Brain & memory](brain-and-memory.md) | Cryptex, hormones, DomainDB, identity |
 | [Bridge & AKU](bridge-and-aku.md) | Knowledge units, agentic bridge |
@@ -34,6 +34,14 @@ Technical documentation for how Babo is built and how data flows.
 | [Inference](inference.md) | OpenAI-compatible BYO API |
 | [Capability profiles & onboarding](capability-profiles-and-onboarding.md) | Composable local / LAN / hosted setup |
 | [Vision worker](vision-worker.md) | Ambient desktop vision tiers |
+
+---
+
+## Guides (user-facing)
+
+| Document | Topic |
+|----------|-------|
+| [Job, Trust & Squads](../guides/job-trust-and-squads.md) | Owner charter, Trust rails, dashboard squads |
 
 ---
 

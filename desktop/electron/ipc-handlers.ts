@@ -24,7 +24,13 @@ import {
   testInferenceEndpoint,
 } from './capability-scanner';
 import { recommendProfile } from './capability-recommender';
-import type { CapabilityProfile } from './capability-types';
+import type { CapabilityProfile, CapabilityScan } from './capability-types';
+import {
+  modelFitLocal,
+  modelFitRemote,
+  toModelFitSnapshot,
+} from './model-fit';
+import type { LanSshOptions } from './model-fit-types';
 
 // ---------------------------------------------------------------------------
 // Register all IPC handlers

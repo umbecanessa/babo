@@ -111,6 +111,14 @@ Admin/UI: Chain tab, `GET /admin/agents/{id}/chain`.
 
 Soul import/export: admin routes + UI.
 
+### Job & Trust (owner charter)
+
+**Modules:** `nls/runtime/job_trust.py` · **Persistence:** `job.json`, `trust.json` per agent
+
+Owner-edited Job and Trust sync into Cryptex with **`ACCESS_SYSTEM`** access so [task epoch hygiene](../guides/agentic-loop-and-plans.md) and channel noise do not clear employment boundaries. Squad membership adds a `Squad.*` context block on sync.
+
+**Guide:** [Job, Trust & Squads](../guides/job-trust-and-squads.md)
+
 ---
 
 ## DMN & idle behavior

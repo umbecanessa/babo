@@ -80,7 +80,11 @@ Example: browser `GET /api/rt/agents/{runtimeId}/status` → relay `http_proxy` 
 |--------|------|------|---------|
 | POST | `/email/activate/:agentId` | JWT | Provision Resend alias |
 | POST | `/email/send` | `X-Runtime-Secret` | Runtime sends email |
-| POST | `/webhook/:channel/:agentId` | Public | Telegram/WhatsApp/etc. ingress |
+| POST | `/webhook/:channel/:agentId` | Public | Telegram, Slack, etc. ingress |
+| POST | `/discord/register/:agentId` | `X-Runtime-Secret` | Start Discord Gateway |
+| POST | `/discord/unregister/:agentId` | `X-Runtime-Secret` | Stop Discord Gateway |
+| POST | `/slack/register/:agentId` | `X-Runtime-Secret` | Register Slack signing secret |
+| POST | `/slack/unregister/:agentId` | `X-Runtime-Secret` | Remove Slack signing secret |
 | GET | `/email/status/:agentId` | JWT | Email channel status |
 | POST | `/email/webhook` | Public | Resend inbound |
 | GET | `/pending/:agentId` | JWT | Queued messages while offline |

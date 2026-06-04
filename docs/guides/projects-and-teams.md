@@ -1,8 +1,10 @@
 # Projects & teams
 
-The **Projects** workspace is where Babo manages multi-step work with boards, timelines, and sub-agent teams.
+The **Projects** workspace is where Babo manages multi-step work with boards, timelines, and sub-agent **teams**.
 
 **Route:** `/projects/:agentId` (also `/tasks/:agentId`)
+
+> **Not squads:** **Teams** here are ephemeral delegate waves inside **one** agent’s loop. **Squads** are persistent multi-agent groups on the **Dashboard** (shared inbox, squad lead, `squad` tools). See [Job, Trust & Squads](job-trust-and-squads.md).
 
 ---
 
@@ -95,6 +97,7 @@ The todo-list skill connects board items to **idle-mode execution**: when you're
 
 ## Related
 
+- [Job, Trust & Squads](job-trust-and-squads.md) — persistent fleet (vs Teams here)
 - [Agentic loop & plans](agentic-loop-and-plans.md)
 - [Chat](chat.md)
 - [Memory](memory.md)

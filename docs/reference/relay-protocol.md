@@ -100,8 +100,11 @@ Examples of inner `event.type`: `thought`, `tool_start`, `tool_end`, `response_c
 
 `POST /api/channels/webhook/:channel/:agentId` (no JWT):
 
-1. Try `pushToRelayByAgentId` immediately
-2. Else queue in `PendingChannelMessage` for drain on reconnect (`drainAndPushPending`)
+1. Verify provider signature when applicable (Slack signing secret)
+2. Try `pushToRelayByAgentId` immediately
+3. Else queue in `PendingChannelMessage` for drain on reconnect (`drainAndPushPending`)
+
+**Discord** does not use this webhook path for messages — see `DiscordGatewayService` and `POST /api/channels/discord/register/:agentId`. Relay still delivers `channel_message` with `"channel": "discord"`.
 
 ---
 

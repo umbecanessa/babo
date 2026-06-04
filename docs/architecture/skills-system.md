@@ -36,7 +36,11 @@ Skills extend agents with **tools**, **HTTP routers**, **channel bridges**, and 
 | google-workspace | `bundled/google-workspace/` | OAuth Gmail/Calendar/Drive/Sheets |
 | email-channel | `bundled/email-channel/` | Resend inbox |
 | telegram-channel | `bundled/telegram-channel/` | Bot + webhook relay |
+| discord-channel | `bundled/discord-channel/` | NestJS Gateway + scoped guild channels |
+| slack-channel | `bundled/slack-channel/` | Events API + scoped workspace channels |
 | whatsapp-channel | `bundled/whatsapp-channel/` | Baileys Node bridge |
+
+Discord and Slack share **`nls/skills/channel_scope.py`** for two-way channel sync and compile `PolicyEnforcer` groups from effective scoped channels.
 
 ---
 
@@ -106,9 +110,12 @@ NestJS `clawhub` module downloads skill → DB → `pushSkillInstall` over relay
 
 ## Channel skills & relay
 
-Channel adapters register webhooks pointing at NestJS:
-
-`https://<api>/api/channels/webhook/telegram/{runtimeAgentId}`
+| Skill | NestJS ingress |
+|-------|----------------|
+| Telegram | `POST /api/channels/webhook/telegram/{runtimeAgentId}` |
+| Slack | `POST /api/channels/webhook/slack/{runtimeAgentId}` (+ signing secret register) |
+| Discord | `POST /api/channels/discord/register/{runtimeAgentId}` (Gateway, not HTTP webhook) |
+| Email | Resend → `/api/channels/email/webhook` |
 
 NestJS forwards to desktop via relay — see [Channels](channels-and-webhooks.md).
 

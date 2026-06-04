@@ -26,6 +26,7 @@ export class AgentCardComponent {
   @Input() pausing = false;
   @Output() delete = new EventEmitter<void>();
   @Output() togglePause = new EventEmitter<void>();
+  @Output() editCharter = new EventEmitter<{ agentId: string; tab: 'job' | 'trust' }>();
 
   get snapshot(): AgentSnapshot {
     return buildAgentSnapshot(this.agent);
@@ -74,6 +75,14 @@ export class AgentCardComponent {
       case 'offline': return 'var(--text-muted)';
       default: return '#525252';
     }
+  }
+
+  get jobTitle(): string {
+    return (
+      this.agent.jobTitle
+      || this.agent.runtime?.job_title
+      || 'General helpful assistant'
+    );
   }
 
   get displayName(): string {

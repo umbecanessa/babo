@@ -28,13 +28,42 @@ export function recommendProfile(
   const visionLan = lan.find((s) => s.kind === 'vision' && s.healthy);
   const transcribeLan = lan.find((s) => s.kind === 'transcribe' && s.healthy);
 
+  const topFit = (kind: 'local' | 'lan') => {
+    const snap = kind === 'local' ? scan.modelFit?.local : scan.modelFit?.lan;
+    if (!snap?.recommendations?.length) return undefined;
+    return (
+      snap.recommendations.find(
+        (r) => r.fitLevel === 'perfect' || r.fitLevel === 'good',
+      ) ?? snap.recommendations[0]
+    );
+  };
+
   let inference: WorkloadPlacement;
   if (inferenceLan?.url) {
+    const lanPick = topFit('lan');
+    const running = inferenceLan.modelIds?.[0];
     inference = {
       tier: 'self_lan',
       url: inferenceLan.url,
-      model: inferenceLan.modelIds?.[0] ?? 'gpt-4o-mini',
-      reason: 'LAN inference server detected',
+      model: running ?? lanPick?.modelId ?? 'gpt-4o-mini',
+      reason: running
+        ? 'LAN inference server detected'
+        : lanPick?.reason ?? 'LAN server — use My server in setup',
+    };
+  } else if (scan.modelFit?.local?.localViable) {
+    const pick = topFit('local');
+    inference = {
+      tier: 'self_local',
+      url: 'http://127.0.0.1:11434',
+      model: pick?.modelId ?? 'llama3.2:3b',
+      reason: pick?.reason ?? 'Best match for this GPU — install Ollama and pull this model',
+    };
+  } else if (scan.modelFit?.local && !scan.modelFit.local.localViable) {
+    inference = {
+      tier: 'hosted_babo',
+      model: 'google/gemini-2.5-flash',
+      reason:
+        'This PC is tight on VRAM for local chat — Babo Cloud is recommended',
     };
   } else if (device.vramGb >= 8) {
     inference = {

@@ -137,6 +137,10 @@ class LoopHooks:
     # --- Brain event bus (Phase 4) ---
     brain_event_bus: Any | None = None
 
+    # --- Agent identity paths (Job / Trust resolution) ---
+    agent_id: str = ""
+    agent_dir: Any | None = None
+
 
 def build_config(agent_config: dict[str, Any]) -> Any:
     """Build AgenticConfig from agent config dict."""
@@ -2607,6 +2611,8 @@ def build_hooks_v4(
         wm_get_tactical_goals=_wm_get_tactical_goals,
         log_event=_log_event_fn,
         mid_wait_hook=_mid_wait_absorb,
+        agent_id=agent_id,
+        agent_dir=agent_dir,
     )
     _hooks.brain_event_bus = _brain_bus  # type: ignore[attr-defined]
     _hooks._render_mode_ref = _render_mode_ref  # type: ignore[attr-defined]

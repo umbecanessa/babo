@@ -93,6 +93,7 @@
         <p class="empty-hint">Click the orb or press <a routerLink="/create">Create Agent</a> to begin</p>
       </div>
     } @else {
+      <app-squads-panel [agents]="agents()" (squadsChanged)="loadAgents(true)" />
       <div class="agents-grid">
         @for (agent of agents(); track agent.id) {
           <app-agent-card
@@ -103,10 +104,20 @@
             [pausing]="pausingAgentId() === agent.id"
             (delete)="deleteAgent(agent.id)"
             (togglePause)="togglePause(agent)"
+            (editCharter)="openCharterFromCard($event.agentId, $event.tab)"
           />
         }
       </div>
     }
   </div>
 
+  @if (charterAgentId(); as aid) {
+    <app-agent-charter-modal
+      [agentId]="aid"
+      [agentLabel]="agentLabelForCharter(aid)"
+      [visible]="charterVisible()"
+      [initialTab]="charterTab()"
+      (dismiss)="onCharterDismiss($event)"
+    />
+  }
 </div>

@@ -555,6 +555,18 @@ async def process_channel_message(
                 channel_adapter, "channel_name", "channel",
             )
 
+        from nls.runtime.squad_channel_policy import channel_delivery_allowed
+
+        _allowed, _refusal = channel_delivery_allowed(
+            app, agent_id, _channel_source,
+        )
+        if not _allowed:
+            logger.info(
+                "Channel [%s]: blocked for agent %s — not squad lead",
+                _channel_source, agent_id,
+            )
+            return _refusal
+
         # Update cryptex Channels ring (Ring 12)
         _update_channels_ring(runtime, _channel_source)
 

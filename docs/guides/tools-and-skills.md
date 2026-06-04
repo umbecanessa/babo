@@ -15,9 +15,11 @@ One-click cards for bundled channel skills:
 - Email
 - Telegram
 - WhatsApp
+- **Discord**
+- **Slack**
 - Google Workspace
 
-Each card shows connection status, setup button, and settings. See [Integrations](integrations/index.md).
+Each card shows connection status, setup button, and settings. Connected **Discord** and **Slack** cards include a **Channel scope** panel (sync, enable toggles, @mention policy). See [Integrations](integrations/index.md).
 
 ### Installed skills
 
@@ -57,7 +59,7 @@ Filter by category, install or connect in one click.
 |------|---------|-----|
 | `auto` | Email channel | Zero-config provisioning |
 | `qr_pair` | WhatsApp | Scan QR in modal |
-| `conversational` | Telegram | Agent guides @BotFather steps |
+| `conversational` | Telegram, Discord, Slack | Agent guides setup; paste tokens in chat |
 | `ui` | Google Workspace | OAuth modal in app |
 | `manual` | MCP client | Enter command or URL |
 
@@ -117,13 +119,17 @@ When an instruction-based skill is used heavily with high success:
 | **Code** | `semantic_search` |
 | **Orchestration** | `plan`, `team`, `delegate_ring`, `task_complete` |
 | **Memory** | `wm` |
-| **Comms** | `contacts`, `email_history` |
+| **Comms** | `contacts`, `email_history`, `discord_send`, `slack_send` (when channel skills enabled) |
 | **Media** | `vision`, `screenshot`, `eyes` |
 | **Scheduling** | `scheduler`, `poller` |
 | **Meta** | `discover_tools`, `get_tool_schema`, `skill_configure`, `clawhub` |
 | **Output** | `offer_download` |
 
-Channel skills add their own tools (e.g. `whatsapp_send`, Gmail read/write).
+Channel skills add their own tools (e.g. `whatsapp_send`, `discord_send`, `slack_send`, Gmail read/write).
+
+### Legacy JSON tools
+
+`nls/config/tools/discord.json` and `slack.json` are **deprecated** when the bundled `discord-channel` / `slack-channel` skills are enabled for an agent — they are filtered from the Tools list. Use channel skill send tools instead.
 
 ---
 

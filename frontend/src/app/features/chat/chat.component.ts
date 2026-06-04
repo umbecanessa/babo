@@ -146,18 +146,22 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
   groupedThreads = computed(() => {
     const threads = this.activeThreads();
     const groups: { channel: string; label: string; icon: string; threads: typeof threads }[] = [];
-    const channelOrder = ['websocket', 'email', 'telegram', 'whatsapp'];
+    const channelOrder = ['websocket', 'email', 'telegram', 'whatsapp', 'discord', 'slack'];
     const channelLabels: Record<string, string> = {
       websocket: 'Direct',
       email: 'Email',
       telegram: 'Telegram',
       whatsapp: 'WhatsApp',
+      discord: 'Discord',
+      slack: 'Slack',
     };
     const channelIcons: Record<string, string> = {
       websocket: 'chat',
       email: 'email',
       telegram: 'telegram',
       whatsapp: 'whatsapp',
+      discord: 'discord',
+      slack: 'slack',
     };
 
     for (const ch of channelOrder) {
@@ -3088,6 +3092,10 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         return parts[2] ? `@${parts[2]}` : 'DM';
       case 'whatsapp':
         return parts[2] || 'Chat';
+      case 'discord':
+        return parts[1] === 'dm' ? (parts[2] || 'DM') : (parts[2] || 'Channel');
+      case 'slack':
+        return parts[1] === 'dm' ? (parts[2] || 'DM') : (parts[2] || 'Channel');
       case 'websocket': {
         const idx = this.activeThreads().filter(t => t.channel === 'websocket').length;
         return parts[2] ? `Thread ${parts[2].substring(0, 8)}` : `Thread ${idx}`;

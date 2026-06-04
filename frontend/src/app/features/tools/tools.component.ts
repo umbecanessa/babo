@@ -55,6 +55,8 @@ const CHANNEL_SKILL_NAMES: Record<string, IntegrationChannelType> = {
   'telegram-channel': 'telegram',
   'whatsapp-channel': 'whatsapp',
   'google-workspace': 'google-workspace',
+  'discord-channel': 'discord',
+  'slack-channel': 'slack',
 };
 
 function isIntegrationSkill(skill: { name: string; config_schema?: { category?: string }[] }): boolean {
@@ -496,6 +498,28 @@ function decodeJwtEmail(): string {
               </button>
             </div>
           }
+          @if (getChannelType(intName) === 'discord') {
+            <div class="modal-action-block">
+              <p class="modal-intro">{{ getSkillOnboarding(intName)?.intro_message || 'Set up Discord for your agent.' }}</p>
+              <ol class="modal-steps-list">
+                @for (step of getIntegrationContext('discord').setupSteps; track step) {
+                  <li>{{ step }}</li>
+                }
+              </ol>
+              <button class="modal-action-btn" (click)="connectDiscord()">Setup in Chat</button>
+            </div>
+          }
+          @if (getChannelType(intName) === 'slack') {
+            <div class="modal-action-block">
+              <p class="modal-intro">{{ getSkillOnboarding(intName)?.intro_message || 'Set up Slack for your agent.' }}</p>
+              <ol class="modal-steps-list">
+                @for (step of getIntegrationContext('slack').setupSteps; track step) {
+                  <li>{{ step }}</li>
+                }
+              </ol>
+              <button class="modal-action-btn" (click)="connectSlack()">Setup in Chat</button>
+            </div>
+          }
           @if (getChannelType(intName) === 'google-workspace') {
             <div class="modal-action-block">
               <p class="modal-intro">{{ getSkillOnboarding(intName)?.intro_message || 'Connect your Google account to let your agent manage Gmail, Calendar, Drive, and Sheets.' }}</p>
@@ -538,6 +562,124 @@ function decodeJwtEmail(): string {
               }
             </div>
           }
+        }
+
+        <!-- Connected: Discord moderator roles -->
+        @if (getIntegrationStatus(intName)?.connected && intName === 'discord-channel') {
+          <div class="discord-roles-panel">
+            <div class="channel-scope-header">
+              <div>
+                <h4 class="channel-scope-title">Moderator roles</h4>
+                <p class="channel-scope-hint">
+                  Members with these server roles can talk to the bot without @mention.
+                  Synced live from Discord.
+                </p>
+              </div>
+              <button
+                type="button"
+                class="modal-action-btn secondary channel-scope-sync"
+                (click)="loadDiscordRoles()"
+                [disabled]="discordRolesLoading()">
+                @if (discordRolesLoading()) { <span class="btn-spinner"></span> }
+                @else { Refresh roles }
+              </button>
+            </div>
+            @if (discordRolesSaving()) {
+              <p class="channel-scope-hint">Saving…</p>
+            }
+            @if (discordRoles().length === 0 && !discordRolesLoading()) {
+              <p class="channel-scope-empty">Click Refresh roles after the bot is in your server.</p>
+            } @else {
+              @for (guild of discordRoles(); track guild.guild_id) {
+                <div class="discord-guild-roles">
+                  <div class="discord-guild-name">{{ guild.guild_name }}</div>
+                  <div class="discord-role-chips">
+                    @for (role of guild.roles; track role.id) {
+                      <label class="discord-role-chip" [class.selected]="isModeratorRoleSelected(role.id)">
+                        <input
+                          type="checkbox"
+                          [checked]="isModeratorRoleSelected(role.id)"
+                          (change)="toggleModeratorRole(role.id, $any($event.target).checked)" />
+                        <span>{{ role.name }}</span>
+                      </label>
+                    }
+                  </div>
+                </div>
+              }
+            }
+          </div>
+        }
+
+        <!-- Connected: channel scope (Discord / Slack) -->
+        @if (getIntegrationStatus(intName)?.connected && hasChannelScopePanel(intName)) {
+          <div class="channel-scope-panel">
+            <div class="channel-scope-header">
+              <div>
+                <h4 class="channel-scope-title">Channel scope</h4>
+                <p class="channel-scope-hint">
+                  Choose which channels this agent listens and replies in. Sync refreshes from
+                  {{ getChannelType(intName) === 'discord' ? 'Discord' : 'Slack' }}.
+                </p>
+              </div>
+              <button
+                type="button"
+                class="modal-action-btn secondary channel-scope-sync"
+                (click)="syncChannelScope(intName)"
+                [disabled]="channelScopeSyncing()">
+                @if (channelScopeSyncing()) { <span class="btn-spinner"></span> Syncing... }
+                @else { Sync channels }
+              </button>
+            </div>
+            @if (channelScopeError()) {
+              <p class="channel-scope-error">{{ channelScopeError() }}</p>
+            }
+            @if (channelScopeWarning()) {
+              <p class="channel-scope-warning">{{ channelScopeWarning() }}</p>
+            }
+            @if (channelScopeLoading()) {
+              <div class="panel-loading"><span class="btn-spinner"></span> Loading channels...</div>
+            } @else if (!channelScopeRows().length) {
+              <p class="channel-scope-empty">
+                No channels found yet.
+                @if (channelScopeSyncHint()) {
+                  {{ channelScopeSyncHint() }}
+                } @else {
+                  Click <strong>Sync channels</strong> — the bot must be in a server with permission to list channels.
+                }
+              </p>
+            } @else {
+              <div class="channel-scope-list">
+                @for (row of channelScopeRows(); track row.id) {
+                  <div class="channel-scope-row" [class.inactive]="!row.effective_enabled">
+                    <div class="channel-scope-meta">
+                      <span class="channel-scope-name">{{ row.name || row.id }}</span>
+                      @if (row.guild_name) {
+                        <span class="channel-scope-guild">{{ row.guild_name }}</span>
+                      }
+                      @if (!row.platform_access && row.enabled_desired) {
+                        <span class="channel-scope-badge warn">No platform access</span>
+                      }
+                    </div>
+                    <label class="channel-scope-toggle">
+                      <input
+                        type="checkbox"
+                        [checked]="!!row.enabled_desired"
+                        (change)="toggleChannelScope(intName, row.id, $any($event.target).checked, !!row.require_mention)" />
+                      <span>Enabled</span>
+                    </label>
+                    <label class="channel-scope-toggle">
+                      <input
+                        type="checkbox"
+                        [checked]="row.require_mention !== false"
+                        [disabled]="!row.enabled_desired"
+                        (change)="toggleChannelScope(intName, row.id, !!row.enabled_desired, $any($event.target).checked)" />
+                      <span>@mention only</span>
+                    </label>
+                  </div>
+                }
+              </div>
+            }
+          </div>
         }
 
         <!-- Connected: setup completion prompt -->
@@ -787,6 +929,8 @@ export class ToolsComponent implements OnInit, OnDestroy {
       telegram: 'Telegram',
       whatsapp: 'WhatsApp',
       'google-workspace': 'Google Workspace',
+      discord: 'Discord',
+      slack: 'Slack',
     };
     return titles[ch] ?? name;
   });
@@ -804,6 +948,33 @@ export class ToolsComponent implements OnInit, OnDestroy {
 
   telegramConnected = signal(false);
   telegramBotUsername = signal('');
+
+  discordConnected = signal(false);
+  discordBotUsername = signal('');
+
+  slackConnected = signal(false);
+  slackTeamName = signal('');
+
+  channelScopeRows = signal<Array<{
+    id: string;
+    name?: string;
+    guild_name?: string;
+    enabled_desired?: boolean;
+    effective_enabled?: boolean;
+    platform_access?: boolean;
+    require_mention?: boolean;
+  }>>([]);
+  channelScopeLoading = signal(false);
+  channelScopeSyncing = signal(false);
+  channelScopeError = signal('');
+  channelScopeWarning = signal('');
+  channelScopeSyncHint = signal('');
+  private channelScopeSkill = signal<string | null>(null);
+
+  discordRoles = signal<Array<{ guild_id: string; guild_name: string; roles: Array<{ id: string; name: string }> }>>([]);
+  discordModeratorRoleIds = signal<string[]>([]);
+  discordRolesLoading = signal(false);
+  discordRolesSaving = signal(false);
 
   whatsappQR = signal('');
   whatsappPairing = signal(false);
@@ -1052,7 +1223,7 @@ export class ToolsComponent implements OnInit, OnDestroy {
       return;
     }
     for (const s of list) {
-      this.api.getSkillConfig(s.name, true, this.agentId || undefined).subscribe({
+      this.api.getSkillConfig(s.name, true, this.skillAgentId() || undefined).subscribe({
         next: (res: { config?: Record<string, unknown>; schema?: ConfigFieldSchema[] }) => {
           const config = { ...(res?.config ?? {}) };
           if (s.name === 'email-channel' && this.userEmail && !config['owner_identity']) {
@@ -1100,6 +1271,18 @@ export class ToolsComponent implements OnInit, OnDestroy {
       this.googleWorkspaceConnected.set(true);
       this.googleWorkspaceEmail.set(String(gwCfg['connected_email']));
     }
+
+    const discordCfg = cache['discord-channel']?.config;
+    if (discordCfg?.['bot_token'] && !this.discordConnected()) {
+      this.discordConnected.set(true);
+      this.discordBotUsername.set(String(discordCfg['bot_username'] || ''));
+    }
+
+    const slackCfg = cache['slack-channel']?.config;
+    if (slackCfg?.['bot_token'] && !this.slackConnected()) {
+      this.slackConnected.set(true);
+      this.slackTeamName.set(String(slackCfg['team_name'] || slackCfg['team_id'] || ''));
+    }
   }
 
   // ── Integration helpers ──────────────────────────────────
@@ -1139,6 +1322,14 @@ export class ToolsComponent implements OnInit, OnDestroy {
     if (skillName === 'google-workspace') {
       const connected = this.googleWorkspaceConnected();
       return { connected, displayValue: connected ? (this.googleWorkspaceEmail() || 'Connected') : undefined };
+    }
+    if (skillName === 'discord-channel') {
+      const connected = this.discordConnected();
+      return { connected, displayValue: connected ? (this.discordBotUsername() || 'Bot') : undefined };
+    }
+    if (skillName === 'slack-channel') {
+      const connected = this.slackConnected();
+      return { connected, displayValue: connected ? (this.slackTeamName() || 'Workspace') : undefined };
     }
     return null;
   }
@@ -1197,7 +1388,7 @@ export class ToolsComponent implements OnInit, OnDestroy {
   saveIntegrationConfig(skillName: string, config: Record<string, unknown>): void {
     this.integrationSaving.update((m) => ({ ...m, [skillName]: true }));
     this.integrationSaveSuccess.update((m) => ({ ...m, [skillName]: false }));
-    this.api.updateSkillConfig(skillName, config, this.agentId || undefined).subscribe({
+    this.api.updateSkillConfig(skillName, config, this.skillAgentId() || undefined).subscribe({
       next: () => {
         this.integrationSaving.update((m) => ({ ...m, [skillName]: false }));
         this.integrationSaveSuccess.update((m) => ({ ...m, [skillName]: true }));
@@ -1214,14 +1405,178 @@ export class ToolsComponent implements OnInit, OnDestroy {
 
   openIntegrationModal(skillName: string): void {
     this.activeIntegration.set(skillName);
+    this.channelScopeError.set('');
+    this.channelScopeWarning.set('');
+    this.channelScopeSyncHint.set('');
     void this.platformIntegrations.refresh();
     this.loadSkillOnboarding(skillName);
     this.loadChannelStatusForSkill(skillName);
+    if (this.getIntegrationStatus(skillName)?.connected && this.hasChannelScopePanel(skillName)) {
+      this.syncChannelScope(skillName);
+    }
+    if (skillName === 'discord-channel' && this.getIntegrationStatus(skillName)?.connected) {
+      this.loadDiscordRoles();
+    }
+  }
+
+  /** Per-agent skill config id (runtime id when available — must match channel webhooks). */
+  skillAgentId(): string {
+    return this.runtimeAgentId || this.agentId;
+  }
+
+  hasChannelScopePanel(skillName: string): boolean {
+    return skillName === 'discord-channel' || skillName === 'slack-channel';
+  }
+
+  private channelScopeAgentId(): string {
+    return this.skillAgentId();
+  }
+
+  loadChannelScope(skillName: string): void {
+    if (!this.agentId || !this.hasChannelScopePanel(skillName)) return;
+    this.channelScopeSkill.set(skillName);
+    this.channelScopeLoading.set(true);
+    this.channelScopeError.set('');
+    this.channelScopeSyncHint.set('');
+    const rid = this.channelScopeAgentId();
+    this.http.get<any>(`${this.api.runtimeBase}/skills/${skillName}/channels/${rid}`).subscribe({
+      next: (res) => {
+        this.channelScopeRows.set(res?.channels ?? []);
+        if (res?.sync_error) {
+          this.channelScopeSyncHint.set(String(res.sync_error));
+        }
+        this.channelScopeLoading.set(false);
+      },
+      error: (err) => {
+        this.channelScopeError.set(err.error?.detail || 'Failed to load channels');
+        this.channelScopeLoading.set(false);
+      },
+    });
+  }
+
+  syncChannelScope(skillName: string): void {
+    if (!this.agentId || this.channelScopeSyncing()) return;
+    this.channelScopeSyncing.set(true);
+    this.channelScopeError.set('');
+    this.channelScopeWarning.set('');
+    this.channelScopeSyncHint.set('');
+    const rid = this.channelScopeAgentId();
+    this.http.post<any>(`${this.api.runtimeBase}/skills/${skillName}/channels/${rid}/sync`, {}).subscribe({
+      next: (res) => {
+        this.channelScopeRows.set(res?.channels ?? []);
+        if (res?.sync_error) {
+          this.channelScopeSyncHint.set(String(res.sync_error));
+        }
+        this.channelScopeSyncing.set(false);
+      },
+      error: (err) => {
+        const status = err?.status;
+        const detail = err.error?.detail;
+        if (status === 404) {
+          this.channelScopeError.set(
+            'Channel scope API not found — restart Babo Desktop (or the Python runtime on port 9222) '
+            + 'so the latest discord-channel skill is loaded.',
+          );
+        } else {
+          this.channelScopeError.set(detail || 'Sync failed');
+        }
+        this.channelScopeSyncing.set(false);
+      },
+    });
+  }
+
+  loadDiscordRoles(): void {
+    if (!this.agentId) return;
+    this.discordRolesLoading.set(true);
+    const rid = this.skillAgentId();
+    this.http.get<any>(`${this.api.runtimeBase}/skills/discord-channel/roles/${rid}`).subscribe({
+      next: (res) => {
+        this.discordRoles.set(res?.guilds ?? []);
+        this.discordModeratorRoleIds.set(res?.moderator_role_ids ?? []);
+        this.discordRolesLoading.set(false);
+      },
+      error: (err) => {
+        if (err?.status === 404) {
+          this.channelScopeError.set(
+            'Roles API not found — restart Babo Desktop to load the updated discord-channel skill.',
+          );
+        }
+        this.discordRolesLoading.set(false);
+      },
+    });
+  }
+
+  isModeratorRoleSelected(roleId: string): boolean {
+    return this.discordModeratorRoleIds().includes(roleId);
+  }
+
+  toggleModeratorRole(roleId: string, selected: boolean): void {
+    const current = new Set(this.discordModeratorRoleIds());
+    if (selected) {
+      current.add(roleId);
+    } else {
+      current.delete(roleId);
+    }
+    const next = [...current];
+    this.discordModeratorRoleIds.set(next);
+    this.persistModeratorRoles(next);
+  }
+
+  private persistModeratorRoles(roleIds: string[]): void {
+    if (!this.agentId) return;
+    this.discordRolesSaving.set(true);
+    const rid = this.skillAgentId();
+    this.http.patch<any>(
+      `${this.api.runtimeBase}/skills/discord-channel/roles/${rid}`,
+      { moderator_role_ids: roleIds },
+    ).subscribe({
+      next: () => {
+        this.discordRolesSaving.set(false);
+        this.integrationConfigCache.update((c) => ({
+          ...c,
+          'discord-channel': {
+            ...(c['discord-channel'] ?? { config: {}, schema: [] }),
+            config: {
+              ...(c['discord-channel']?.config ?? {}),
+              moderator_role_ids: roleIds,
+            },
+          },
+        }));
+      },
+      error: () => this.discordRolesSaving.set(false),
+    });
+  }
+
+  toggleChannelScope(
+    skillName: string,
+    channelId: string,
+    enabled: boolean,
+    requireMention: boolean,
+  ): void {
+    if (!this.agentId) return;
+    const rid = this.channelScopeAgentId();
+    this.http.patch<any>(
+      `${this.api.runtimeBase}/skills/${skillName}/channels/${rid}/${channelId}`,
+      { enabled, require_mention: requireMention },
+    ).subscribe({
+      next: (res) => {
+        if (res?.permission_warning) {
+          this.channelScopeWarning.set(String(res.permission_warning));
+        }
+        this.loadChannelScope(skillName);
+      },
+      error: (err) => {
+        this.channelScopeError.set(err.error?.detail || 'Failed to update channel');
+        this.loadChannelScope(skillName);
+      },
+    });
   }
 
   quickConnect(skillName: string): void {
     if (skillName === 'email-channel') { this.connectEmail(skillName); return; }
     if (skillName === 'telegram-channel') { this.connectTelegram(); return; }
+    if (skillName === 'discord-channel') { this.connectDiscord(); return; }
+    if (skillName === 'slack-channel') { this.connectSlack(); return; }
     if (skillName === 'google-workspace') { this.connectGoogleWorkspace(); return; }
     this.openIntegrationModal(skillName);
   }
@@ -1302,6 +1657,30 @@ export class ToolsComponent implements OnInit, OnDestroy {
         error: () => {},
       });
     }
+
+    if (loaded('discord-channel')) {
+      this.http.get<any>(`${this.api.runtimeBase}/skills/discord-channel/status/${rid}`).subscribe({
+        next: (s) => {
+          if (s?.connected) {
+            this.discordConnected.set(true);
+            this.discordBotUsername.set(s.bot_username || '');
+          }
+        },
+        error: () => {},
+      });
+    }
+
+    if (loaded('slack-channel')) {
+      this.http.get<any>(`${this.api.runtimeBase}/skills/slack-channel/status/${rid}`).subscribe({
+        next: (s) => {
+          if (s?.connected) {
+            this.slackConnected.set(true);
+            this.slackTeamName.set(s.team_name || '');
+          }
+        },
+        error: () => {},
+      });
+    }
   }
 
   private loadChannelStatusForSkill(skillName: string): void {
@@ -1349,6 +1728,34 @@ export class ToolsComponent implements OnInit, OnDestroy {
         error: () => {},
       });
     }
+    if (skillName === 'discord-channel') {
+      this.http.get<any>(`${this.api.runtimeBase}/skills/discord-channel/status/${rid}`).subscribe({
+        next: (s) => {
+          if (s?.connected) {
+            this.discordConnected.set(true);
+            this.discordBotUsername.set(s.bot_username || '');
+            if (this.activeIntegration() === skillName) {
+              this.loadChannelScope(skillName);
+            }
+          }
+        },
+        error: () => {},
+      });
+    }
+    if (skillName === 'slack-channel') {
+      this.http.get<any>(`${this.api.runtimeBase}/skills/slack-channel/status/${rid}`).subscribe({
+        next: (s) => {
+          if (s?.connected) {
+            this.slackConnected.set(true);
+            this.slackTeamName.set(s.team_name || '');
+            if (this.activeIntegration() === skillName) {
+              this.loadChannelScope(skillName);
+            }
+          }
+        },
+        error: () => {},
+      });
+    }
   }
 
   // ── Skill config / files ──────────────────────────────
@@ -1358,7 +1765,7 @@ export class ToolsComponent implements OnInit, OnDestroy {
     this.skillConfigData.set({});
     this.skillConfigSchema.set([]);
     this.configSaveSuccess.set(false);
-    this.api.getSkillConfig(name, true, this.agentId || undefined).subscribe({
+    this.api.getSkillConfig(name, true, this.skillAgentId() || undefined).subscribe({
       next: (res: { config?: Record<string, unknown>; schema?: ConfigFieldSchema[] } | Record<string, unknown>) => {
         const config = (res && 'config' in res && res.config) ? res.config : (res ?? {});
         const schema = (res && 'schema' in res && Array.isArray((res as any).schema)) ? (res as any).schema : [];
@@ -1403,7 +1810,7 @@ export class ToolsComponent implements OnInit, OnDestroy {
   saveConfig(skillName: string): void {
     this.configSaving.set(true);
     this.configSaveSuccess.set(false);
-    this.api.updateSkillConfig(skillName, this.skillConfigData(), this.agentId || undefined).subscribe({
+    this.api.updateSkillConfig(skillName, this.skillConfigData(), this.skillAgentId() || undefined).subscribe({
       next: () => { this.configSaving.set(false); this.configSaveSuccess.set(true); },
       error: () => { this.configSaving.set(false); },
     });
@@ -1540,6 +1947,20 @@ export class ToolsComponent implements OnInit, OnDestroy {
     if (!this.agentId) return;
     this.router.navigate(['/chat', this.agentId], {
       queryParams: { setup: 'telegram-channel' },
+    });
+  }
+
+  connectDiscord(): void {
+    if (!this.agentId) return;
+    this.router.navigate(['/chat', this.agentId], {
+      queryParams: { setup: 'discord-channel' },
+    });
+  }
+
+  connectSlack(): void {
+    if (!this.agentId) return;
+    this.router.navigate(['/chat', this.agentId], {
+      queryParams: { setup: 'slack-channel' },
     });
   }
 

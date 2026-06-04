@@ -9,6 +9,7 @@ In-depth guides for every major Babo feature.
 - [Chat](chat.md) — messaging, streaming, voice, browser panel
 - [Agentic loop & plans](agentic-loop-and-plans.md) — autonomy, plans, modes, compaction
 - [Projects & teams](projects-and-teams.md) — board, timeline, sub-agents, command bar
+- [Job, Trust & Squads](job-trust-and-squads.md) — owner charter, tool rails, persistent agent fleets
 
 ## Memory & cognition
 

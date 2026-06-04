@@ -29,6 +29,8 @@ Flow:
 
 Example: `GET /api/rt/admin/agents/{runtimeId}/chain` → Python `GET /admin/agents/{runtimeId}/chain`.
 
+Job, Trust, and Squad APIs live only on Python (`/agents/{id}/job`, `/agents/{id}/trust`, `/api/squads/*`). The hosted UI calls them through the same proxy — there are no dedicated NestJS controllers for those resources. See [Job, Trust & Squad API](../../reference/job-trust-squad-api.md).
+
 ---
 
 ## When to use

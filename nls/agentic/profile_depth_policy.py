@@ -30,9 +30,14 @@ from nls.agentic.types import AgentMode, LoopState
 
 logger = logging.getLogger(__name__)
 
-SuggestedProfile = Literal["solo_structured", "orchestrated"]
+SuggestedProfile = Literal["solo_structured", "orchestrated", "squad_lead"]
 
-_PROFILE_ORDER = ("conversational", "solo_structured", "orchestrated")
+_PROFILE_ORDER = (
+    "conversational",
+    "solo_structured",
+    "orchestrated",
+    "squad_lead",
+)
 
 _PLAN_ACTIONS = frozenset({
     "create", "update", "read", "verify", "complete",
@@ -526,6 +531,40 @@ def append_depth_to_stall_message(
     return f"{stall_msg}\n\n{nudge.message}"
 
 
+def evaluate_squad_lead_profile_mismatch(
+    state: LoopState,
+    *,
+    agent_id: str,
+    agent_dir: Any,
+) -> ProfileDepthNudge | None:
+    """Nudge squad leads off conversational/orchestrated-only depth."""
+    if suppress_depth_nudges(state) or not agent_id or agent_dir is None:
+        return None
+    try:
+        from pathlib import Path
+
+        from nls.agentic.squad_registry import SquadRegistry
+
+        data_dir = Path(agent_dir).parent.parent
+        squad = SquadRegistry(data_dir).get_for_agent(agent_id)
+        if squad is None or not squad.is_lead(agent_id):
+            return None
+    except Exception:
+        return None
+
+    profile = normalize_profile(state.orchestration_profile or "solo_structured")
+    if profile == "squad_lead":
+        return None
+    return _maybe_nudge(
+        state,
+        "T12_squad_lead_mismatch",
+        profile,
+        "squad_lead",
+        "You are the squad lead with inbox and member coordination duties. "
+        "Adopt squad_lead so squad tools and orchestration depth match your role.",
+    )
+
+
 def evaluate_wm_profile_mismatch(
     state: LoopState,
     *,
@@ -561,8 +600,11 @@ def validate_profile_adoption(
     if target_norm == current:
         return f"Already on profile '{current}'."
 
-    if target_norm not in _PROFILE_ORDER:
-        return f"Unknown profile '{target}'. Use conversational, solo_structured, or orchestrated."
+    if target_norm not in _PROFILE_ORDER and target_norm != "squad_lead":
+        return (
+            f"Unknown profile '{target}'. Use conversational, solo_structured, "
+            "orchestrated, or squad_lead."
+        )
 
     hints = {h.strip().lower() for h in (state.hints or []) if h and h.strip()}
     if hints & HINT_FORBID_TEAM and target_norm == "orchestrated":

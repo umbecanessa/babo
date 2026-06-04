@@ -33,6 +33,7 @@ Details: **[Deployment topologies](architecture/deployment-topologies.md)**
 | Understand concepts | [Core concepts](getting-started/concepts.md) |
 | Deploy backend to Railway | [Cloud deployment](configuration/cloud-deployment.md) |
 | See how chat/memory/tools work | [User guides](guides/index.md) |
+| Set agent roles & fleet squads | [Job, Trust & Squads](guides/job-trust-and-squads.md) |
 | Understand the full architecture | [Architecture index](architecture/index.md) |
 | Look up APIs & relay protocol | [Reference](reference/index.md) |
 | Add a tool or skill | [Extension guide](extension/index.md) |
@@ -57,12 +58,13 @@ Details: **[Deployment topologies](architecture/deployment-topologies.md)**
 | [Chat](guides/chat.md) | Streaming, voice, commands |
 | [Agentic loop & plans](guides/agentic-loop-and-plans.md) | Autonomy, plans, sub-agents |
 | [Projects & teams](guides/projects-and-teams.md) | Board, timeline, orchestration |
+| [Job, Trust & Squads](guides/job-trust-and-squads.md) | Owner charter, tool rails, dashboard fleets |
 | [Memory](guides/memory.md) | Cryptex, knowledge, soul |
 | [Brain dashboard](guides/brain-dashboard.md) | Hormones, drives, signals |
 | [Sleep & consolidation](guides/sleep-and-consolidation.md) | Long-term memory |
 | [Tools & skills](guides/tools-and-skills.md) | Integrations, MCP, ClawHub |
 | [Settings & API keys](guides/settings-and-api-keys.md) | Account prefs, automation keys |
-| [Integrations](guides/integrations/index.md) | WhatsApp, Telegram, Google, email |
+| [Integrations](guides/integrations/index.md) | WhatsApp, Telegram, Discord, Slack, Google, email |
 
 ### Architecture (deep)
 
@@ -83,6 +85,7 @@ Details: **[Deployment topologies](architecture/deployment-topologies.md)**
 |-------|-------------|
 | [Glossary](reference/glossary.md) | Terms |
 | [Python API](reference/python-api.md) | FastAPI routes |
+| [Job, Trust & Squad API](reference/job-trust-squad-api.md) | `job.json`, `trust.json`, `/api/squads` |
 | [NestJS API](reference/nestjs-api.md) | REST + Socket.IO |
 | [Relay protocol](reference/relay-protocol.md) | Desktop ↔ cloud WS |
 | [Environment (complete)](reference/environment-complete.md) | All env vars |

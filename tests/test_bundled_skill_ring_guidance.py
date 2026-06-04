@@ -17,12 +17,25 @@ def test_bundled_skill_ring_not_enabled():
     assert "bot_token" in guidance
 
 
-def test_agent_installed_native_skill_ring():
+def test_pre_shipped_discord_ring_not_agent_installed():
     headline, guidance = bundled_skill_ring_guidance(
         "discord-channel",
         "Discord bot integration",
         enabled=True,
         config_schema=[{"key": "bot_token"}],
+        agent_installed=True,
+    )
+    assert "Pre-shipped" in guidance
+    assert "skill_configure" in guidance
+    assert "skill_install from scratch" in guidance
+
+
+def test_agent_installed_native_skill_ring():
+    headline, guidance = bundled_skill_ring_guidance(
+        "my-custom-channel",
+        "Custom channel skill",
+        enabled=True,
+        config_schema=[{"key": "api_key"}],
         agent_installed=True,
     )
     assert "Agent-installed" in guidance

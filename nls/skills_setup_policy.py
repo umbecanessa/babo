@@ -189,16 +189,20 @@ def is_pre_shipped_channel_skill(skill_name: str) -> bool:
 
 
 def infer_pre_shipped_channel_skill(text: str) -> str | None:
-    """Map user text to a pre-shipped channel skill, or None (e.g. discord = agent-native)."""
+    """Map user text to a pre-shipped channel skill, or None."""
     low = (text or "").lower()
     if "whatsapp" in low:
         return "whatsapp-channel"
     if "telegram" in low:
         return "telegram-channel"
+    if "discord" in low:
+        return "discord-channel"
+    if "slack" in low:
+        return "slack-channel"
     if "email" in low and "gmail" not in low:
         return "email-channel"
     platform = infer_channel_platform(text)
-    if platform in ("telegram", "whatsapp"):
+    if platform in ("telegram", "whatsapp", "discord", "slack"):
         return f"{platform}-channel"
     return None
 
@@ -557,7 +561,8 @@ def bundled_skill_ring_guidance(
         )
     elif is_pre_shipped_channel_skill(skill_name):
         detail_lines.append(
-            "Pre-shipped Babo channel (telegram/whatsapp/email) — do not skill_install from scratch."
+            "Pre-shipped Babo channel (telegram/whatsapp/email/discord/slack) "
+            "— do not skill_install from scratch."
         )
     if schema_keys:
         detail_lines.append(f"Schema fields: {', '.join(schema_keys[:8])}")
@@ -743,7 +748,7 @@ def looks_like_active_channel_integration(text: str) -> bool:
 def infer_channel_platform(text: str) -> str | None:
     """Best-effort channel name from user text (discord, telegram, whatsapp)."""
     low = (text or "").lower()
-    for name in ("discord", "telegram", "whatsapp"):
+    for name in ("discord", "telegram", "whatsapp", "slack"):
         if name in low:
             return name
     return None

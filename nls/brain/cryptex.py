@@ -3813,6 +3813,41 @@ class CryptexMemory:
                 ),
             },
             {
+                "domain": "squad_coordination",
+                "render_mode": "coordinator",
+                "consolidation_status": "permanent",
+                "content": (
+                    "SQUAD COORDINATION (lead only):\n"
+                    "You lead a persistent squad of full-power peer agents.\n"
+                    "- Shared inbox: members squad(action='propose'); you approve or reject.\n"
+                    "- Assign work: squad(action='approve'|'assign', assignee_agent_id=...).\n"
+                    "- Status: squad(action='status'|'list_inbox'|'inspect').\n"
+                    "- Brief a member: squad(action='brief', target_agent_id=..., message=...).\n"
+                    "Members keep their own Job/Trust; squad tools never bypass trust policy."
+                ),
+            },
+            {
+                "domain": "squad_help_requests",
+                "render_mode": "coordinator",
+                "consolidation_status": "permanent",
+                "content": (
+                    "SQUAD ESCALATIONS: Members use squad_escalate when blocked by trust, "
+                    "policy, or technical limits. You receive [SQUAD ESCALATION] wakes. "
+                    "Resolve with squad tools or owner channel — do not ask members to "
+                    "circumvent Trust."
+                ),
+            },
+            {
+                "domain": "squad_inbox_discipline",
+                "render_mode": "coordinator",
+                "consolidation_status": "permanent",
+                "content": (
+                    "SQUAD INBOX: Review proposed items before they become member todos. "
+                    "Reject unclear work with reject_reason. Prefer batched checkbacks "
+                    "over constant polling."
+                ),
+            },
+            {
                 "domain": "project_directory",
                 "render_mode": "agentic",
                 "consolidation_status": "permanent",

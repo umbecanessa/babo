@@ -2,7 +2,7 @@ import type { BackendChoiceId } from '../../features/setup/setup-backend.util';
 import { normalizeNestjsUrl } from '../../features/setup/setup-backend.util';
 import type { PlatformCapabilities } from '../models/platform-capabilities.model';
 
-export type IntegrationChannelId = 'email' | 'telegram' | 'whatsapp' | 'google-workspace';
+export type IntegrationChannelId = 'email' | 'telegram' | 'whatsapp' | 'google-workspace' | 'discord' | 'slack';
 
 export interface IntegrationSetupContext {
   channel: IntegrationChannelId;
@@ -170,6 +170,42 @@ export function buildIntegrationContext(
         usesBaboCloudBackend: baboBackend,
         ready: true,
         credentialMode: 'local',
+        setupSteps: steps,
+      };
+    }
+
+    case 'discord': {
+      const steps = [
+        'Create a bot in the Discord Developer Portal and copy the bot token.',
+        baboBackend
+          ? 'Setup in Chat — Babo Cloud runs the Discord Gateway on NestJS and relays messages to your desktop.'
+          : `Ensure NestJS is public (${webhookBase}) and Babo Desktop relay is online.`,
+        'Invite the bot to your server and channels in Discord — scope syncs back to Babo automatically.',
+        'Configure owner identity, DM policy, and channel scope in the form below.',
+      ];
+      return {
+        channel,
+        usesBaboCloudBackend: baboBackend,
+        ready: true,
+        credentialMode: 'self_service',
+        setupSteps: steps,
+      };
+    }
+
+    case 'slack': {
+      const requestUrl = `${webhookBase}/api/channels/webhook/slack/{your-agent-id}`;
+      const steps = [
+        'Create a Slack app at api.slack.com/apps with bot scopes (app_mentions:read, chat:write, im:history, channels:history).',
+        'Enable Event Subscriptions and set Request URL to:',
+        requestUrl,
+        'Copy the bot token (xoxb-…) and signing secret into Setup in Chat or the config form below.',
+        'Invite the app to channels in Slack — membership syncs back to Babo.',
+      ];
+      return {
+        channel,
+        usesBaboCloudBackend: baboBackend,
+        ready: true,
+        credentialMode: 'self_service',
         setupSteps: steps,
       };
     }

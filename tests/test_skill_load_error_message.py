@@ -18,8 +18,9 @@ def test_router_import_error_hint():
     assert "task_complete" in msg.lower()
 
 
-def test_infer_pre_shipped_excludes_discord():
+def test_infer_pre_shipped_includes_discord_and_slack():
     from nls.skills_setup_policy import infer_pre_shipped_channel_skill
 
-    assert infer_pre_shipped_channel_skill("discord bot token") is None
+    assert infer_pre_shipped_channel_skill("discord bot token") == "discord-channel"
+    assert infer_pre_shipped_channel_skill("slack workspace app") == "slack-channel"
     assert infer_pre_shipped_channel_skill("telegram bot setup") == "telegram-channel"

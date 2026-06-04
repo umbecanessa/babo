@@ -58,6 +58,18 @@ Think of it as a project manager (main agent) coordinating specialists (sub-agen
 
 ---
 
+## Job, Trust, and Squads
+
+**Job** is the owner-written charter for an agent — title, mission, scope, and how to refuse out-of-role requests. It lives in `job.json` and is synced into long-term memory so channel chat cannot rewrite it.
+
+**Trust** is the owner-written permission layer — which tools are allowed or denied, and per-channel caps (for example, keeping a public Discord channel on a conversational profile).
+
+**Squads** are persistent groups of agents on the **Dashboard** (not the same as Teams in Projects). A **squad lead** coordinates members through a shared inbox and squad tools; each member keeps their own Job, Trust, and memory.
+
+See [Job, Trust & Squads](../guides/job-trust-and-squads.md).
+
+---
+
 ## Memory layers
 
 Babo memory is layered, like human cognition:
@@ -142,7 +154,7 @@ This is optional transparency, not something you must configure.
 
 **Skills** are installable packages that add:
 
-- Channel adapters (WhatsApp, Telegram, email)
+- Channel adapters (WhatsApp, Telegram, Discord, Slack, email)
 - OAuth integrations (Google Workspace)
 - MCP server connections
 - Community packages from **ClawHub**
@@ -159,10 +171,14 @@ Once integrated, external channels route into the same agent brain:
 
 - WhatsApp DMs and groups (policy-controlled)
 - Telegram bot messages
+- Discord bot in scoped guild channels + DMs
+- Slack app in scoped workspace channels + DMs
 - Agent email inbox
 - Google Workspace events (Gmail polling, calendar, etc.)
 
-**Contacts** unify address book across channels.
+**Contacts** unify address book across channels (`discord_id`, `slack_id`, etc.).
+
+**Channel scope** (Discord/Slack): enable which workspace channels the agent listens to in **Tools → Integrations**.
 
 ---
 

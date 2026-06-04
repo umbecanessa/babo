@@ -21,6 +21,15 @@ _ORCHESTRATION_PREFIXES = (
     "pending_wave_launch:",
     "board_reconcile:",
     "check_back",
+    "squad_checkback:",
+    "squad_escalation:",
+    "squad_item_done:",
+)
+
+_SQUAD_ORCHESTRATION_PREFIXES = (
+    "squad_checkback:",
+    "squad_escalation:",
+    "squad_item_done:",
 )
 
 
@@ -29,3 +38,9 @@ def is_orchestration_dispatch_source(source: str) -> bool:
     if source in _ORCHESTRATION_EXACT:
         return True
     return any(source.startswith(p) for p in _ORCHESTRATION_PREFIXES)
+
+
+def is_squad_orchestration_dispatch_source(source: str) -> bool:
+    """True for squad lead coordination wakes (inbox, escalation, member done)."""
+    src = (source or "").strip()
+    return any(src.startswith(p) for p in _SQUAD_ORCHESTRATION_PREFIXES)

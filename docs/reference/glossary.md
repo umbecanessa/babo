@@ -8,12 +8,19 @@
 | **AKU** | Atomic Knowledge Unit — structured learning artifact from bridge extraction |
 | **ANS** | Autonomic Nervous System — signal buffer and sleep triggers (`nls/brain/autonomic.py`) |
 | **BYO inference** | User supplies OpenAI-compatible API URL + model |
-| **Channel** | External messaging surface (web, WhatsApp, Telegram, email) |
+| **Channel** | External messaging surface (web, WhatsApp, Telegram, Discord, Slack, email) |
+| **Channel scope** | Per-channel enable/mention policy for Discord/Slack (`scoped_channels` in skill config) |
+| **Effective enabled** | Channel is both desired in Babo and accessible on the platform |
 | **ChannelRelayClient** | Outbound WS from desktop Python → NestJS (`nls/runtime/channels.py`) |
 | **ClawHub** | Community skill marketplace proxied by NestJS |
 | **Cryptex** | Layered long-term memory rings (`nls/brain/working_memory.py`) |
 | **Consciousness scheduler** | Chooses which agents run autonomous inner loops |
 | **Consolidation sleep** | LLM summarization into durable memory (not weight training) |
+| **Job** | Owner-defined employment charter (`data/agents/{id}/job.json`) — title, mission, scope, refusal voice |
+| **Trust** | Owner-defined action rails (`trust.json`) — tool allow/deny, per-channel profile caps |
+| **Squad** | Persistent multi-agent group on the dashboard with a lead, shared inbox, and squad tools |
+| **`squad_lead`** | Orchestration profile for a squad lead — extends `orchestrated` with squad coordination depth |
+| **Team** | Ephemeral sub-agent wave inside one parent agentic run (`TeamManager`, Projects UI) |
 | **Delegate / sub-agent** | Child agentic run with scoped context (`nls/agentic/orchestrator.py`) |
 | **Desktop hub** | User machine running Electron + Python runtime |
 | **DMN** | Default Mode Network — idle replay/exploration (`nls/brain/dmn.py`) |

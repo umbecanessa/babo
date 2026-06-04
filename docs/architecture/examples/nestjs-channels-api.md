@@ -117,6 +117,197 @@ Desktop forwards to: `POST http://127.0.0.1:9222/skills/telegram-channel/webhook
 
 ---
 
+## Slack Events API webhook
+
+**Request URL** (configured in Slack app):
+
+```text
+https://<api-host>/api/channels/webhook/slack/agent_7f3a9c2e
+```
+
+**URL verification** (Slack setup):
+
+```http
+POST /api/channels/webhook/slack/agent_7f3a9c2e
+Content-Type: application/json
+
+{
+  "type": "url_verification",
+  "challenge": "3cb39193a1ab...",
+  "token": "..."
+}
+```
+
+**Response** `200`
+
+```json
+{
+  "challenge": "3cb39193a1ab..."
+}
+```
+
+**Signed event** (after sidecar registered signing secret):
+
+```http
+POST /api/channels/webhook/slack/agent_7f3a9c2e
+X-Slack-Signature: v0=...
+X-Slack-Request-Timestamp: 1710000000
+Content-Type: application/json
+
+{
+  "type": "event_callback",
+  "event": {
+    "type": "app_mention",
+    "user": "U123",
+    "text": "<@UBOT> hello",
+    "channel": "C456",
+    "ts": "1710000000.000100"
+  }
+}
+```
+
+**Response** `200`
+
+```json
+{
+  "ok": true,
+  "delivered": true,
+  "queued": false
+}
+```
+
+**Errors:** `401 Invalid Slack signature` if secret missing, wrong, or body tampered.
+
+**Register signing secret** (Python sidecar, not browser):
+
+```http
+POST /api/channels/slack/register/agent_7f3a9c2e
+X-Runtime-Secret: <RUNTIME_SHARED_SECRET>
+Content-Type: application/json
+
+{ "signing_secret": "abc123..." }
+```
+
+---
+
+## Discord Gateway registration
+
+Called by Python when `discord-channel` starts with relay configured.
+
+**Request**
+
+```http
+POST /api/channels/discord/register/agent_7f3a9c2e
+X-Runtime-Secret: <RUNTIME_SHARED_SECRET>
+Content-Type: application/json
+
+{ "bot_token": "..." }
+```
+
+**Response** `200` (after Gateway `READY`)
+
+```json
+{
+  "ok": true,
+  "ready": true,
+  "agentId": "agent_7f3a9c2e"
+}
+```
+
+**Errors:** `400` if token invalid, Gateway timeout, or invalid session.
+
+**Unregister** (sidecar shutdown):
+
+```http
+POST /api/channels/discord/unregister/agent_7f3a9c2e
+X-Runtime-Secret: <RUNTIME_SHARED_SECRET>
+```
+
+**Relay payload** for inbound Discord messages:
+
+```json
+{
+  "type": "channel_message",
+  "channel": "discord",
+  "payload": {
+    "t": "MESSAGE_CREATE",
+    "d": {
+      "id": "...",
+      "channel_id": "...",
+      "guild_id": "...",
+      "content": "hello",
+      "author": { "id": "...", "username": "user" },
+      "mentions": []
+    }
+  }
+}
+```
+
+Desktop forwards to: `POST http://127.0.0.1:9222/skills/discord-channel/webhook/{runtimeAgentId}`.
+
+---
+
+## Channel scope API (Python runtime)
+
+Mounted by bundled skills on the desktop sidecar (`9222`). `{agentId}` = **runtimeAgentId**.
+
+**List + sync (Discord)**
+
+```http
+GET /skills/discord-channel/channels/agent_7f3a9c2e
+POST /skills/discord-channel/channels/agent_7f3a9c2e/sync
+```
+
+**Response** (excerpt)
+
+```json
+{
+  "channel": "discord",
+  "connected": true,
+  "scoped_channel_count": 12,
+  "active_channel_count": 2,
+  "channels": [
+    {
+      "id": "1234567890",
+      "name": "general",
+      "guild_name": "My Server",
+      "enabled_desired": true,
+      "platform_access": true,
+      "effective_enabled": true,
+      "require_mention": true
+    }
+  ]
+}
+```
+
+**Update desired scope**
+
+```http
+PATCH /skills/discord-channel/channels/agent_7f3a9c2e/1234567890
+Content-Type: application/json
+
+{
+  "enabled": true,
+  "require_mention": false
+}
+```
+
+**Response**
+
+```json
+{
+  "ok": true,
+  "scoped_channels": { "channels": { "...": "..." } },
+  "permission_warning": ""
+}
+```
+
+`permission_warning` may contain text if Discord permission overwrite failed (403).
+
+Slack uses the same paths under `/skills/slack-channel/channels/...`.
+
+---
+
 ## Drain pending messages (JWT)
 
 **Request**

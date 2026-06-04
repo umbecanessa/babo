@@ -1,11 +1,13 @@
 import {
-  Controller, Get, Post, Body, Param, Headers,
+  Controller, Get, Post, Body, Param, Headers, Req,
   UseGuards, Request, HttpException, HttpStatus,
 } from '@nestjs/common';
+import type { Request as ExpressRequest } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { ConfigService } from '@nestjs/config';
 import { AgentsService } from '../agents/agents.service';
 import { ChannelsService } from './channels.service';
+import { DiscordGatewayService } from './discord-gateway.service';
 
 @Controller('channels')
 export class ChannelsController {
@@ -13,6 +15,7 @@ export class ChannelsController {
     private channels: ChannelsService,
     private agents: AgentsService,
     private config: ConfigService,
+    private discordGateway: DiscordGatewayService,
   ) {}
 
   // ── Email: Activate (user-facing, JWT-protected) ───────────────
@@ -74,7 +77,33 @@ export class ChannelsController {
     @Param('channel') channel: string,
     @Param('agentId') agentId: string,
     @Body() payload: any,
+    @Req() req: ExpressRequest,
+    @Headers('x-slack-signature') slackSignature?: string,
+    @Headers('x-slack-request-timestamp') slackTimestamp?: string,
   ) {
+    // Slack Events API URL verification (must respond before relay)
+    if (channel === 'slack' && payload?.type === 'url_verification') {
+      return { challenge: payload.challenge };
+    }
+
+    if (channel === 'slack' && slackSignature && slackTimestamp) {
+      const signingSecret = this.channels.getSlackSigningSecret(agentId);
+      const rawBody = (req as any).rawBody as Buffer | undefined;
+      if (signingSecret) {
+        if (
+          !rawBody
+          || !this.channels.verifySlackSignature(
+            signingSecret,
+            slackTimestamp,
+            rawBody,
+            slackSignature,
+          )
+        ) {
+          throw new HttpException('Invalid Slack signature', HttpStatus.UNAUTHORIZED);
+        }
+      }
+    }
+
     console.log(`[webhook-relay] ${channel}/${agentId} — incoming`);
 
     // Try relay WS push first (works even if agent isn't in NestJS DB,
@@ -95,6 +124,58 @@ export class ChannelsController {
     }
 
     return { ok: true, delivered: pushed, queued };
+  }
+
+  // ── Discord: NestJS Gateway registration (runtime secret) ───────
+
+  @Post('discord/register/:agentId')
+  async registerDiscordGateway(
+    @Param('agentId') agentId: string,
+    @Headers('x-runtime-secret') secret: string,
+    @Body() body: { bot_token?: string },
+  ) {
+    this.validateRuntimeSecret(secret);
+    const token = body?.bot_token || '';
+    const result = await this.discordGateway.register(agentId, token);
+    if (!result.ok) {
+      throw new HttpException(result.error || 'register failed', HttpStatus.BAD_REQUEST);
+    }
+    return { ok: true, ready: !!result.ready, agentId };
+  }
+
+  @Post('slack/register/:agentId')
+  async registerSlackWebhook(
+    @Param('agentId') agentId: string,
+    @Headers('x-runtime-secret') secret: string,
+    @Body() body: { signing_secret?: string },
+  ) {
+    this.validateRuntimeSecret(secret);
+    const signingSecret = body?.signing_secret || '';
+    if (!signingSecret) {
+      throw new HttpException('signing_secret required', HttpStatus.BAD_REQUEST);
+    }
+    this.channels.registerSlackSigningSecret(agentId, signingSecret);
+    return { ok: true, agentId };
+  }
+
+  @Post('slack/unregister/:agentId')
+  async unregisterSlackWebhook(
+    @Param('agentId') agentId: string,
+    @Headers('x-runtime-secret') secret: string,
+  ) {
+    this.validateRuntimeSecret(secret);
+    this.channels.unregisterSlackSigningSecret(agentId);
+    return { ok: true };
+  }
+
+  @Post('discord/unregister/:agentId')
+  async unregisterDiscordGateway(
+    @Param('agentId') agentId: string,
+    @Headers('x-runtime-secret') secret: string,
+  ) {
+    this.validateRuntimeSecret(secret);
+    this.discordGateway.unregister(agentId);
+    return { ok: true };
   }
 
   // ── Email: Inbound Webhook (called by Resend, no auth) ────────

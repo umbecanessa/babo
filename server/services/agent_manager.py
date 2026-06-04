@@ -638,6 +638,27 @@ class AgentManager:
             if created:
                 result["created_at"] = created
 
+        try:
+            from nls.runtime.job_trust import load_job
+
+            job = load_job(self.agents_dir / agent_id)
+            result["job_title"] = job.display_title
+        except Exception:
+            pass
+
+        try:
+            from nls.agentic.squad_registry import SquadRegistry
+
+            if not hasattr(self, "_squad_registry"):
+                self._squad_registry = SquadRegistry(self.agents_dir.parent)
+            squad = self._squad_registry.get_for_agent(agent_id)
+            if squad is not None:
+                result["squad_id"] = squad.id
+                result["squad_name"] = squad.name
+                result["is_squad_lead"] = squad.is_lead(agent_id)
+        except Exception:
+            pass
+
         if not result.get("last_interaction"):
             last = self._read_disk_last_interaction(agent_id)
             if last:
