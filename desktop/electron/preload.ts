@@ -235,6 +235,12 @@ const nlsDesktopApi = {
   stat: (filePath: string): Promise<{ isFile: boolean; isDirectory: boolean }> =>
     ipcRenderer.invoke('fs:stat', filePath),
 
+  unlink: (filePath: string): Promise<void> =>
+    ipcRenderer.invoke('fs:unlink', filePath),
+
+  rename: (oldPath: string, newPath: string): Promise<void> =>
+    ipcRenderer.invoke('fs:rename', oldPath, newPath),
+
   showOpenDialog: (
     options: Record<string, unknown>,
   ): Promise<{ canceled: boolean; filePaths: string[] }> =>

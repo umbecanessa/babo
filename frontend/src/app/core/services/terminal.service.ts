@@ -23,6 +23,7 @@ export class TerminalService {
   private ioSocket: Socket | null = null;
   private outputSubject = new Subject<TerminalOutput>();
   private pending: Record<string, unknown>[] = [];
+  private pendingIo: { event: string; payload: unknown }[] = [];
   private runtimeWsBase = '';
 
   connected = signal(false);
@@ -69,7 +70,7 @@ export class TerminalService {
       this.sendRaw({ type: 'input', data });
       return;
     }
-    this.ioSocket?.emit('terminal:input', { data });
+    this.emitIo('terminal:input', { data });
   }
 
   resize(cols: number, rows: number): void {
@@ -86,7 +87,7 @@ export class TerminalService {
       this.sendRaw({ type: 'cwd', path });
       return;
     }
-    this.ioSocket?.emit('terminal:cwd', { path });
+    this.emitIo('terminal:cwd', { path });
   }
 
   onOutput(): Observable<TerminalOutput> {
@@ -95,6 +96,7 @@ export class TerminalService {
 
   disconnect(): void {
     this.pending = [];
+    this.pendingIo = [];
     this.rawSocket?.close();
     this.rawSocket = null;
     this.ioSocket?.disconnect();
@@ -170,6 +172,7 @@ export class TerminalService {
 
     this.ioSocket.on('connect', () => {
       this.connected.set(true);
+      this.flushPendingIo();
     });
 
     this.ioSocket.on('disconnect', () => {
@@ -179,6 +182,7 @@ export class TerminalService {
 
     this.ioSocket.on('terminal:ready', () => {
       this.ready.set(true);
+      this.flushPendingIo();
       this.outputSubject.next({ type: 'ready' });
     });
 
@@ -216,5 +220,21 @@ export class TerminalService {
       this.rawSocket.send(JSON.stringify(payload));
     }
     this.pending = [];
+  }
+
+  private emitIo(event: string, payload: unknown): void {
+    if (this.ioSocket?.connected) {
+      this.ioSocket.emit(event, payload);
+      return;
+    }
+    this.pendingIo.push({ event, payload });
+  }
+
+  private flushPendingIo(): void {
+    if (!this.ioSocket?.connected) return;
+    for (const item of this.pendingIo) {
+      this.ioSocket.emit(item.event, item.payload);
+    }
+    this.pendingIo = [];
   }
 }

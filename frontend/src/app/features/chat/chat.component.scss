@@ -153,11 +153,26 @@
   flex: 1;
   display: flex;
   min-height: 0;
+  min-width: 0;
   overflow: hidden;
 }
 
 .conv-nav-desktop {
+  flex: 0 0 220px;
+  width: 220px;
+  min-width: 220px;
+  max-width: 220px;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
   flex-shrink: 0;
+}
+
+.chat-workspace.nav-collapsed .conv-nav-desktop {
+  flex: 0 0 48px;
+  width: 48px;
+  min-width: 48px;
+  max-width: 48px;
 }
 
 .chat-center-column {
@@ -166,6 +181,7 @@
   flex-direction: column;
   min-width: 0;
   min-height: 0;
+  overflow: hidden;
 
   > app-run-panel {
     display: block;
@@ -214,7 +230,14 @@
 
 .panel-header-btn {
   position: relative;
-  gap: 4px;
+  flex-shrink: 0;
+  overflow: visible;
+
+  &.active {
+    color: var(--accent-primary);
+    border-color: color-mix(in srgb, var(--accent-primary) 35%, var(--glass-border));
+    background: var(--accent-primary-glow);
+  }
 
   &.pulse {
     animation: inbox-pulse 1.5s ease-in-out infinite;
@@ -222,14 +245,18 @@
 }
 
 .panel-header-badge {
-  font-size: 0.6rem;
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  font-size: 0.55rem;
   font-weight: 700;
   background: var(--accent-danger);
   color: #fff;
   border-radius: 999px;
-  padding: 0 5px;
-  min-width: 16px;
-  line-height: 1.4;
+  padding: 0 4px;
+  min-width: 14px;
+  line-height: 1.35;
+  pointer-events: none;
 }
 
 .left-dock-backdrop {
@@ -267,8 +294,16 @@
 }
 
 .chat-layout.focus-mode {
-  .conv-nav-desktop {
+  .chat-workspace.nav-collapsed .conv-nav-desktop {
     display: none;
+  }
+
+  @media (max-width: 768px) {
+    .activity-badge,
+    .agentic-progress,
+    .project-processes-chip {
+      display: none;
+    }
   }
 }
 
@@ -280,6 +315,105 @@
 @media (max-width: 768px) {
   .conv-nav-desktop {
     display: none;
+  }
+
+  .chat-center-column > app-run-panel {
+    padding: 0 8px;
+  }
+
+  .conversation-toolbar {
+    padding: 6px 8px;
+    gap: 6px;
+  }
+
+  .agent-info {
+    min-width: 0;
+  }
+
+  .agent-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 42vw;
+  }
+
+  .header-right {
+    gap: 4px;
+    min-width: 0;
+  }
+
+  .panel-header-btn {
+    width: 34px;
+    height: 34px;
+    min-width: 34px;
+    padding: 0;
+  }
+
+  .agentic-result-chip {
+    display: none;
+  }
+}
+
+.mobile-conv-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 880;
+  background: var(--backdrop-scrim);
+}
+
+.mobile-conv-drawer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 885;
+  width: min(300px, 88vw);
+  display: flex;
+  flex-direction: column;
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border-right: 1px solid var(--glass-border);
+  box-shadow: 8px 0 40px rgba(0, 0, 0, 0.45);
+  animation: conv-drawer-in 0.22s ease-out;
+
+  app-conversation-nav {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+}
+
+@keyframes conv-drawer-in {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+
+.mobile-conv-drawer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--glass-border);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.mobile-conv-close {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 1.25rem;
+  line-height: 1;
+  padding: 4px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--overlay-2);
+    color: var(--text-primary);
   }
 }
 
@@ -362,8 +496,9 @@
 .header-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   margin-left: auto;
+  flex-shrink: 0;
 }
 
 // --- Last agentic run summary chip in header ---
@@ -405,33 +540,6 @@
     font-size: 11px;
     color: var(--text-secondary);
     white-space: nowrap;
-  }
-}
-
-.brain-toggle {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--text-muted);
-  background: none;
-  border: none;
-  cursor: pointer;
-  transition: color 0.2s;
-
-  &:hover { color: var(--text-secondary); }
-}
-
-.brain-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--text-muted);
-  transition: all 0.3s;
-
-  &.active {
-    background: var(--accent-primary);
-    box-shadow: 0 0 6px var(--accent-primary-glow);
   }
 }
 
@@ -559,9 +667,17 @@
 
 .sheet-content {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
   padding-bottom: env(safe-area-inset-bottom, 16px);
+
+  app-signal-sidebar,
+  app-chat-inbox,
+  app-conversation-context {
+    display: block;
+    min-height: min(52vh, 420px);
+  }
 }
 
 // --- Connection banner ---
@@ -620,11 +736,11 @@
 
 // --- Floating plan panel (sits directly above input box) ---
 .plan-panel {
-  padding: 0 20px;
+  padding: 0 14px;
   flex-shrink: 0;
 
   @media (max-width: 768px) {
-    padding: 0 12px;
+    padding: 0 8px;
   }
 }
 
@@ -768,15 +884,20 @@
 
 // --- Input ---
 .chat-input-area {
-  padding: 16px 20px 20px;
-  border-top: 1px solid var(--glass-border);
-  background: color-mix(in srgb, var(--glass-bg) 65%, transparent);
+  padding: 12px 14px 14px;
+  margin: 0 14px 14px;
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--glass-bg) 78%, transparent);
   backdrop-filter: blur(var(--glass-blur));
   -webkit-backdrop-filter: blur(var(--glass-blur));
+  box-shadow: var(--shadow-glass);
   flex-shrink: 0;
 
   @media (max-width: 768px) {
+    margin: 0 8px 8px;
     padding: 10px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+    border-radius: 12px;
   }
 }
 
@@ -793,6 +914,9 @@
 .composer-toolbar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-width: 800px;
   margin: 0 auto 8px;
   padding: 0 4px;
 }
@@ -1271,9 +1395,9 @@
 
 .drop-overlay {
   position: absolute;
-  left: 20px;
-  right: 20px;
-  bottom: 20px;
+  left: 14px;
+  right: 14px;
+  bottom: 14px;
   top: auto;
   height: 52px;
   z-index: 10;
@@ -1292,9 +1416,9 @@
   margin: 0 auto;
 
   @media (max-width: 768px) {
-    left: 12px;
-    right: 12px;
-    bottom: 10px;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
   }
 }
 
@@ -1322,16 +1446,7 @@
   }
 }
 
-// --- Attachment chips ---
-.attachments-bar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  max-width: 800px;
-  margin: 0 auto 8px;
-  padding: 0 4px;
-}
-
+// --- Attachment chips (inline in composer-toolbar) ---
 .attachment-chip {
   display: inline-flex;
   align-items: center;

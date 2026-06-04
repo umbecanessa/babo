@@ -57,17 +57,11 @@ export class ChatPanelService {
 
   /** Open or toggle a left-dock tab (Workbench / Browser). */
   toggleLeft(tab: LeftDockTab): void {
-    if (this._focusMode()) {
-      this._focusMode.set(false);
-    }
     this._leftDock.update((cur) => (cur === tab ? 'closed' : tab));
     this.persist();
   }
 
   openLeft(tab: LeftDockTab): void {
-    if (this._focusMode()) {
-      this._focusMode.set(false);
-    }
     this._leftDock.set(tab);
     this.persist();
   }
@@ -79,9 +73,6 @@ export class ChatPanelService {
 
   /** Open or toggle a right-dock tab (Live / Inbox / Context). */
   toggleRight(tab: RightDockTab): void {
-    if (this._focusMode()) {
-      this._focusMode.set(false);
-    }
     this._rightDock.update((cur) => (cur === tab ? 'closed' : tab));
     if (tab === 'inbox') {
       this._inboxPulse.set(false);
@@ -90,9 +81,6 @@ export class ChatPanelService {
   }
 
   openRight(tab: RightDockTab): void {
-    if (this._focusMode()) {
-      this._focusMode.set(false);
-    }
     this._rightDock.set(tab);
     if (tab === 'inbox') {
       this._inboxPulse.set(false);
@@ -129,6 +117,11 @@ export class ChatPanelService {
   }
 
   toggleNavRail(): void {
+    if (this._focusMode() && this._navRail() === 'collapsed') {
+      this._navRail.set('expanded');
+      this.persist();
+      return;
+    }
     this._navRail.update((m) => (m === 'expanded' ? 'collapsed' : 'expanded'));
     this.persist();
   }
@@ -183,6 +176,11 @@ export class ChatPanelService {
       if (p.navRail) this._navRail.set(p.navRail);
       if (p.focusMode != null) this._focusMode.set(p.focusMode);
       if (p.mobileSheetTab) this._mobileSheetTab.set(p.mobileSheetTab);
+      if (this._focusMode()) {
+        this._leftDock.set('closed');
+        this._rightDock.set('closed');
+        this._navRail.set('collapsed');
+      }
     } catch {
       // ignore
     }

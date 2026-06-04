@@ -5,6 +5,8 @@ export interface ExplorerNode {
   children?: ExplorerNode[];
   expanded?: boolean;
   loading?: boolean;
+  /** Transient row while the user names a new file/folder. */
+  isPending?: boolean;
 }
 
 export interface EditorTab {

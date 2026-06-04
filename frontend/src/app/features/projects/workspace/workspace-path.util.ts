@@ -1,5 +1,41 @@
 import { normalizeWorkbenchFilePath } from '../../../core/services/activity-format.util';
 
+/** Normalize workspace paths for stable comparisons. */
+export function normalizeWorkspacePath(path: string): string {
+  return (path || '').replace(/\\/g, '/').replace(/\/+$/, '');
+}
+
+/** Case-insensitive workspace path equality (Windows-safe). */
+export function workspacePathsEqual(a: string, b: string): boolean {
+  return (
+    normalizeWorkspacePath(a).toLowerCase() === normalizeWorkspacePath(b).toLowerCase()
+  );
+}
+
+/** True when `path` is the same entry as `parent` or nested under it. */
+export function isPathUnderWorkspace(path: string, parent: string): boolean {
+  const p = normalizeWorkspacePath(path).toLowerCase();
+  const root = normalizeWorkspacePath(parent).toLowerCase();
+  return p === root || p.startsWith(`${root}/`);
+}
+
+/** Re-root a path when a workspace folder or file was renamed. */
+export function migrateWorkspacePath(
+  oldRoot: string,
+  newRoot: string,
+  filePath: string,
+): string {
+  const normOld = normalizeWorkspacePath(oldRoot);
+  const normNew = normalizeWorkspacePath(newRoot);
+  const normFile = normalizeWorkspacePath(filePath);
+  if (!normFile.toLowerCase().startsWith(normOld.toLowerCase())) {
+    return filePath;
+  }
+  const suffix = normFile.slice(normOld.length);
+  const sep = filePath.includes('\\') ? '\\' : '/';
+  return normNew.replace(/\//g, sep) + suffix.replace(/\//g, sep);
+}
+
 /** Reject path traversal and path separators in a single workspace entry name. */
 export function sanitizeWorkspaceEntryName(name: string): string {
   const trimmed = (name || '').trim();

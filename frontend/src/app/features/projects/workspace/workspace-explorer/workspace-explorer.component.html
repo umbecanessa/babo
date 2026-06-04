@@ -2,12 +2,12 @@
   <div class="explorer-header">
     <span class="explorer-title">{{ rootLabel() }}</span>
     <div class="explorer-actions">
-      <button class="icon-btn" type="button" title="New file" (click)="createFile.emit()" [disabled]="busy">
+      <button class="icon-btn" type="button" title="New file" (click)="startCreateFile()" [disabled]="busy || !!pendingCreate()">
         <svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14">
           <path d="M9 1H3.5A1.5 1.5 0 0 0 2 2.5v11A1.5 1.5 0 0 0 3.5 15h9a1.5 1.5 0 0 0 1.5-1.5V6L9 1zm0 1.5L13.5 6H9V2.5zM4 8h8v1H4V8zm0 2.5h5V12H4v-1.5z"/>
         </svg>
       </button>
-      <button class="icon-btn" type="button" title="New folder" (click)="createFolder.emit()" [disabled]="busy">
+      <button class="icon-btn" type="button" title="New folder" (click)="startCreateFolder()" [disabled]="busy || !!pendingCreate()">
         <svg viewBox="0 0 16 16" fill="currentColor" width="14" height="14">
           <path d="M1 3.5A1.5 1.5 0 0 1 2.5 2H6l1.5 2H13.5A1.5 1.5 0 0 1 15 5.5v7a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 1 12.5v-9zM2.5 3a.5.5 0 0 0-.5.5V6h12V5.5a.5.5 0 0 0-.5-.5H7L5.5 3H2.5z"/>
         </svg>
@@ -44,15 +44,21 @@
     </div>
   </div>
 
-  <div class="explorer-body">
-    @if (loading() && tree().length === 0) {
+  <div class="explorer-body" (contextmenu)="onBodyContextMenu($event)">
+    @if (loading() && tree().length === 0 && !pendingCreate()) {
       <div class="explorer-empty">Loading…</div>
     } @else if (error()) {
       <div class="explorer-empty error">{{ error() }}</div>
-    } @else if (tree().length === 0) {
-      <div class="explorer-empty">No files in workspace.</div>
     } @else {
       <div class="tree">
+        @if (isPendingParent(rootPath)) {
+          <ng-container *ngTemplateOutlet="pendingRow; context: { depth: 0 }" />
+        }
+
+        @if (tree().length === 0 && !pendingCreate()) {
+          <div class="explorer-empty inline">No files yet — create one above.</div>
+        }
+
         @for (node of tree(); track trackNode($index, node)) {
           <ng-container *ngTemplateOutlet="treeNode; context: { node: node, depth: 0 }" />
         }
@@ -61,13 +67,59 @@
   </div>
 </div>
 
+@if (contextMenu(); as menu) {
+  <div
+    class="context-menu-backdrop"
+    (click)="closeContextMenu()"
+    (contextmenu)="$event.preventDefault()"
+  ></div>
+  <div
+    class="context-menu"
+    [style.left.px]="menu.x"
+    [style.top.px]="menu.y"
+    (click)="$event.stopPropagation()"
+  >
+    @if (menu.node.isDirectory) {
+      <button type="button" class="context-menu-item" (click)="contextMenuNewFile()">New file</button>
+      <button type="button" class="context-menu-item" (click)="contextMenuNewFolder()">New folder</button>
+      <div class="context-menu-sep"></div>
+    }
+    @if (!isRootNode(menu.node)) {
+      <button type="button" class="context-menu-item" (click)="contextMenuRename()">Rename</button>
+      <button type="button" class="context-menu-item danger" (click)="contextMenuDelete()">Delete</button>
+    }
+  </div>
+}
+
+<ng-template #pendingRow let-depth="depth">
+  <div
+    class="tree-row pending-create"
+    [style.padding-left.px]="depth * 14 + 10"
+    (click)="$event.stopPropagation()"
+  >
+    <span class="chevron spacer"></span>
+    <span class="node-icon">{{ pendingKind() === 'folder' ? '&#128193;' : '&#128196;' }}</span>
+    <input
+      #pendingNameInput
+      class="pending-name-input"
+      [ngModel]="pendingCreate()?.draft"
+      (ngModelChange)="updatePendingDraft($event)"
+      (keydown)="onPendingKeydown($event)"
+      (blur)="onPendingBlur()"
+      spellcheck="false"
+    />
+  </div>
+</ng-template>
+
 <ng-template #treeNode let-node="node" let-depth="depth">
   <div
     class="tree-row"
     [style.padding-left.px]="depth * 14 + 10"
     [class.is-dir]="node.isDirectory"
     [class.active]="isActive(node)"
+    [class.selected]="isSelectedDir(node)"
     (click)="onNodeClick(node, $event)"
+    (contextmenu)="onNodeContextMenu(node, $event)"
   >
     @if (node.isDirectory) {
       <span class="chevron" [class.open]="node.expanded">&#9656;</span>
@@ -81,15 +133,32 @@
         &#128196;
       }
     </span>
-    <span class="node-name">{{ node.name }}</span>
+    <span class="node-name" [class.hidden]="isRenaming(node)">{{ node.name }}</span>
+    @if (isRenaming(node)) {
+      <input
+        class="pending-name-input rename-input"
+        [ngModel]="pendingRename()?.draft"
+        (ngModelChange)="updateRenameDraft($event)"
+        (keydown)="onRenameKeydown($event)"
+        (blur)="onRenameBlur()"
+        (click)="$event.stopPropagation()"
+        spellcheck="false"
+      />
+    }
     @if (node.loading) {
       <span class="node-loading">…</span>
     }
   </div>
 
-  @if (node.isDirectory && node.expanded && node.children) {
-    @for (child of node.children; track trackNode($index, child)) {
-      <ng-container *ngTemplateOutlet="treeNode; context: { node: child, depth: depth + 1 }" />
+  @if (node.isDirectory && node.expanded) {
+    @if (isPendingParent(node.path)) {
+      <ng-container *ngTemplateOutlet="pendingRow; context: { depth: depth + 1 }" />
+    }
+
+    @if (node.children) {
+      @for (child of node.children; track trackNode($index, child)) {
+        <ng-container *ngTemplateOutlet="treeNode; context: { node: child, depth: depth + 1 }" />
+      }
     }
   }
 </ng-template>

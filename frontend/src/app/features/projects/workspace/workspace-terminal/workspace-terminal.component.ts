@@ -33,6 +33,7 @@ export class WorkspaceTerminalComponent implements AfterViewInit, OnDestroy, OnC
   private term?: Terminal;
   private fitAddon?: FitAddon;
   private outputSub?: Subscription;
+  private resizeObserver?: ResizeObserver;
   private cwdApplied = false;
 
   constructor(private terminal: TerminalService) {}
@@ -68,9 +69,15 @@ export class WorkspaceTerminalComponent implements AfterViewInit, OnDestroy, OnC
 
     this.term.onData((data) => this.terminal.sendInput(data));
 
-    void this.terminal.connect().then(() => this.applyCwd());
+    this.resizeObserver = new ResizeObserver(() => this.reflow());
+    this.resizeObserver.observe(this.host.nativeElement);
 
-    requestAnimationFrame(() => this.fitAddon?.fit());
+    void this.terminal.connect().then(() => {
+      this.applyCwd();
+      this.focusTerminal();
+    });
+
+    requestAnimationFrame(() => this.reflow());
   }
 
   ngOnChanges(changes: SimpleChanges): void {
@@ -81,6 +88,7 @@ export class WorkspaceTerminalComponent implements AfterViewInit, OnDestroy, OnC
   }
 
   ngOnDestroy(): void {
+    this.resizeObserver?.disconnect();
     this.outputSub?.unsubscribe();
     this.term?.dispose();
     this.terminal.disconnect();
@@ -88,10 +96,12 @@ export class WorkspaceTerminalComponent implements AfterViewInit, OnDestroy, OnC
 
   @HostListener('window:resize')
   onWindowResize(): void {
-    this.fitAddon?.fit();
-    if (this.term) {
-      this.terminal.resize(this.term.cols, this.term.rows);
-    }
+    this.reflow();
+  }
+
+  onHostPointerDown(event: MouseEvent): void {
+    if ((event.target as HTMLElement).closest('.close-btn')) return;
+    this.focusTerminal();
   }
 
   closePanel(): void {
@@ -102,5 +112,16 @@ export class WorkspaceTerminalComponent implements AfterViewInit, OnDestroy, OnC
     if (!this.cwd || this.cwdApplied || !this.terminal.ready()) return;
     this.terminal.setCwd(this.cwd);
     this.cwdApplied = true;
+  }
+
+  private focusTerminal(): void {
+    this.term?.focus();
+  }
+
+  private reflow(): void {
+    this.fitAddon?.fit();
+    if (this.term) {
+      this.terminal.resize(this.term.cols, this.term.rows);
+    }
   }
 }

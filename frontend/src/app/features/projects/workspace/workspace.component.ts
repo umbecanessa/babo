@@ -20,8 +20,10 @@ import { AgentWorkspaceContextService } from '../../../core/services/agent-works
 import {
   buildWorkspaceFilePathCandidates,
   isAbsoluteFilesystemPath,
+  isPathUnderWorkspace,
+  migrateWorkspacePath,
   resolveAgentWorkspacePath,
-  sanitizeWorkspaceEntryName,
+  workspacePathsEqual,
 } from './workspace-path.util';
 import { languageFromFileName } from './language.util';
 
@@ -159,7 +161,9 @@ export class WorkspaceComponent implements OnInit, OnChanges {
 
   private _readFileAt(absPath: string, candidates: string[], index: number): void {
     const existing = this.tabs().find(
-      (t) => t.path === absPath || candidates.includes(t.path),
+      (t) =>
+        workspacePathsEqual(t.path, absPath)
+        || candidates.some((c) => workspacePathsEqual(c, t.path)),
     );
     if (existing) {
       this.activePath.set(existing.path);
@@ -184,7 +188,7 @@ export class WorkspaceComponent implements OnInit, OnChanges {
       next: (res) => {
         this.tabs.update((tabs) =>
           tabs.map((t) =>
-            t.path === absPath
+            workspacePathsEqual(t.path, absPath)
               ? { ...t, content: res.content, loading: false }
               : t,
           ),
@@ -220,31 +224,72 @@ export class WorkspaceComponent implements OnInit, OnChanges {
   }
 
   closeTab(path: string): void {
-    this.tabs.update((tabs) => tabs.filter((t) => t.path !== path));
-    if (this.activePath() === path) {
+    this.tabs.update((tabs) => tabs.filter((t) => !workspacePathsEqual(t.path, path)));
+    if (workspacePathsEqual(this.activePath(), path)) {
       const remaining = this.tabs();
       this.activePath.set(remaining.length ? remaining[remaining.length - 1].path : '');
     }
   }
 
-  onTabDirty(event: { path: string; dirty: boolean }): void {
+  onFileDeleted(path: string): void {
     this.tabs.update((tabs) =>
-      tabs.map((t) => (t.path === event.path ? { ...t, dirty: event.dirty } : t)),
+      tabs.filter((t) => !isPathUnderWorkspace(t.path, path)),
     );
+    if (isPathUnderWorkspace(this.activePath(), path)) {
+      const remaining = this.tabs();
+      this.activePath.set(remaining.length ? remaining[remaining.length - 1].path : '');
+    }
+  }
+
+  onFileRenamed(event: { oldPath: string; newPath: string }): void {
+    const { oldPath, newPath } = event;
+
+    void (async () => {
+      const affected = this.tabs().filter((t) => isPathUnderWorkspace(t.path, oldPath));
+      for (const tab of affected) {
+        const migratedPath = migrateWorkspacePath(oldPath, newPath, tab.path);
+        const name = migratedPath.split(/[/\\]/).pop() || tab.name;
+        await this.editorPanel?.renameTabPath(tab.path, migratedPath, name);
+      }
+
+      this.tabs.update((tabs) =>
+        tabs.map((t) => {
+          if (!isPathUnderWorkspace(t.path, oldPath)) return t;
+          const migratedPath = migrateWorkspacePath(oldPath, newPath, t.path);
+          const name = migratedPath.split(/[/\\]/).pop() || t.name;
+          return {
+            ...t,
+            path: migratedPath,
+            name,
+            language: languageFromFileName(name),
+          };
+        }),
+      );
+
+      if (isPathUnderWorkspace(this.activePath(), oldPath)) {
+        this.activePath.set(
+          migrateWorkspacePath(oldPath, newPath, this.activePath()),
+        );
+      }
+    })();
   }
 
   saveTab(path: string): void {
-    const tab = this.tabs().find((t) => t.path === path);
+    const tab = this.tabs().find((t) => workspacePathsEqual(t.path, path));
     if (!tab) return;
 
-    const content = this.editorPanel?.getContent(path) ?? tab.content;
+    const content = this.editorPanel?.getContent(tab.path) ?? tab.content;
 
-    this.fs.writeFile(path, content).subscribe({
+    this.fs.writeFile(tab.path, content).subscribe({
       next: () => {
+        this.editorPanel?.markSaved(tab.path, content);
         this.tabs.update((tabs) =>
-          tabs.map((t) => (t.path === path ? { ...t, dirty: false, content } : t)),
+          tabs.map((t) =>
+            workspacePathsEqual(t.path, tab.path)
+              ? { ...t, dirty: false, content }
+              : t,
+          ),
         );
-        this.editorPanel?.markSaved(path, content);
         this.toast.show('Saved', 'info');
       },
       error: (err) => {
@@ -255,46 +300,11 @@ export class WorkspaceComponent implements OnInit, OnChanges {
   }
 
   toggleShell(): void {
+    const opening = !this.shellOpen();
     this.shellOpen.update((v) => !v);
-  }
-
-  promptNewFile(): void {
-    const name = window.prompt('New file name', 'untitled.txt');
-    const safe = sanitizeWorkspaceEntryName(name || '');
-    if (!safe) {
-      if (name) this.toast.show('Invalid file name', 'error');
-      return;
+    if (opening) {
+      (document.activeElement as HTMLElement | null)?.blur?.();
     }
-    const path = this.fs.joinPath(this.rootPath(), safe);
-    this.fs.writeFile(path, '').subscribe({
-      next: () => {
-        this.explorerPanel?.refresh();
-        this.openFile(path);
-        this.toast.show('File created', 'info');
-      },
-      error: (err) => {
-        this.toast.show(err?.error?.detail || err?.message || 'Failed to create file', 'error');
-      },
-    });
-  }
-
-  promptNewFolder(): void {
-    const name = window.prompt('New folder name', 'newfolder');
-    const safe = sanitizeWorkspaceEntryName(name || '');
-    if (!safe) {
-      if (name) this.toast.show('Invalid folder name', 'error');
-      return;
-    }
-    const path = this.fs.joinPath(this.rootPath(), safe);
-    this.fs.mkdir(path, true).subscribe({
-      next: () => {
-        this.explorerPanel?.refresh();
-        this.toast.show('Folder created', 'info');
-      },
-      error: (err) => {
-        this.toast.show(err?.error?.detail || err?.message || 'Failed to create folder', 'error');
-      },
-    });
   }
 
   triggerFileUpload(): void {

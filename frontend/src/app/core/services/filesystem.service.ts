@@ -177,6 +177,39 @@ export class FilesystemService {
     });
   }
 
+  /** Delete a file or directory. */
+  unlink(targetPath: string): Observable<{ message: string; path: string }> {
+    if (this.platform.isElectron) {
+      if (nls()?.unlink) {
+        return from(nls().unlink(targetPath) as Promise<void>).pipe(
+          map(() => ({ message: 'Deleted', path: targetPath })),
+        );
+      }
+      return throwError(() => new Error('Delete requires a desktop app update'));
+    }
+
+    return this.http.post<{ message: string; path: string }>(`${this.API}/fs/unlink`, {
+      path: targetPath,
+    });
+  }
+
+  /** Rename or move a file or directory. */
+  rename(oldPath: string, newPath: string): Observable<{ message: string; path: string }> {
+    if (this.platform.isElectron) {
+      if (nls()?.rename) {
+        return from(nls().rename(oldPath, newPath) as Promise<void>).pipe(
+          map(() => ({ message: 'Renamed', path: newPath })),
+        );
+      }
+      return throwError(() => new Error('Rename requires a desktop app update'));
+    }
+
+    return this.http.post<{ message: string; path: string }>(`${this.API}/fs/rename`, {
+      old_path: oldPath,
+      new_path: newPath,
+    });
+  }
+
   /** Write binary file from base64 payload. */
   writeFileBytes(filePath: string, contentBase64: string): Observable<WriteFileResponse> {
     if (this.platform.isElectron) {

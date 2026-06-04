@@ -95,6 +95,25 @@ $glass-border: var(--glass-border);
   color: var(--text-muted);
 
   &.error { color: var(--accent-danger); }
+
+  &.inline {
+    padding: 8px 12px 8px 24px;
+    font-style: italic;
+  }
+}
+
+.pending-name-input {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 6px;
+  border: 1px solid var(--accent-primary);
+  border-radius: 4px;
+  background: var(--overlay-1);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-primary-glow);
 }
 
 .tree-row {
@@ -124,6 +143,15 @@ $glass-border: var(--glass-border);
       font-weight: 500;
     }
   }
+
+  &.selected {
+    background: rgba(129, 140, 248, 0.08);
+  }
+
+  &.pending-create {
+    background: rgba(129, 140, 248, 0.12);
+    cursor: default;
+  }
 }
 
 .chevron {
@@ -151,6 +179,66 @@ $glass-border: var(--glass-border);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+
+  &.hidden {
+    display: none;
+  }
+}
+
+.rename-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.context-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+
+.context-menu {
+  position: fixed;
+  z-index: 41;
+  min-width: 160px;
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  box-shadow: var(--shadow-glass);
+}
+
+.context-menu-item {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--overlay-2);
+    color: var(--text-primary);
+  }
+
+  &.danger {
+    color: var(--accent-danger, #f87171);
+
+    &:hover {
+      background: rgba(248, 113, 113, 0.12);
+    }
+  }
+}
+
+.context-menu-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--overlay-2);
 }
 
 .node-loading {

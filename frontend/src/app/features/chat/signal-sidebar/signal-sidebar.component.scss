@@ -1,16 +1,17 @@
 :host {
   display: block;
   height: 100%;
+  width: 100%;
 }
 
 .sidebar {
-  width: 280px;
+  width: 100%;
   height: 100%;
   background: var(--glass-bg);
   backdrop-filter: blur(var(--glass-blur));
   -webkit-backdrop-filter: blur(var(--glass-blur));
-  border-left: 1px solid var(--glass-border);
-  box-shadow: var(--shadow-glass);
+  border-left: none;
+  box-shadow: none;
   overflow-y: auto;
   flex-shrink: 0;
   animation: sidebar-in 0.3s ease-out;

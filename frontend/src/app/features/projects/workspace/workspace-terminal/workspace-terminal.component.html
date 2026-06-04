@@ -6,5 +6,10 @@
     }
     <button type="button" class="close-btn" title="Close shell" (click)="closePanel()">&times;</button>
   </div>
-  <div #host class="terminal-host"></div>
+  <div
+    #host
+    class="terminal-host"
+    tabindex="0"
+    (mousedown)="onHostPointerDown($event)"
+  ></div>
 </div>

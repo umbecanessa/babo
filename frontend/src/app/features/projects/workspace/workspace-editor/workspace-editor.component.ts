@@ -25,6 +25,8 @@ import {
 import { highlightSelectionMatches } from '@codemirror/search';
 import { baboTheme, languageExtension } from '../codemirror.loader';
 import { EditorTab } from '../workspace.models';
+import { languageFromFileName } from '../language.util';
+import { workspacePathsEqual } from '../workspace-path.util';
 import { ThemeService } from '../../../../core/services/theme.service';
 
 @Component({
@@ -41,10 +43,10 @@ export class WorkspaceEditorComponent
 
   @Input({ required: true }) tabs: EditorTab[] = [];
   @Input({ required: true }) activePath = '';
+  @Input() shellOpen = false;
 
   @Output() tabSelect = new EventEmitter<string>();
   @Output() tabClose = new EventEmitter<string>();
-  @Output() tabDirty = new EventEmitter<{ path: string; dirty: boolean }>();
   @Output() save = new EventEmitter<string>();
 
   private readonly themeService = inject(ThemeService);
@@ -73,7 +75,11 @@ export class WorkspaceEditorComponent
 
   ngOnChanges(changes: SimpleChanges): void {
     if (!this.editorReady) return;
-    if (changes['tabs'] || changes['activePath']) {
+    if (changes['activePath']) {
+      void this.syncStates().then(() => this.showActiveState());
+      return;
+    }
+    if (changes['tabs'] && this.tabsStructurallyChanged(changes['tabs'])) {
       void this.syncStates().then(() => this.showActiveState());
     }
   }
@@ -115,9 +121,12 @@ export class WorkspaceEditorComponent
   }
 
   getContent(path: string): string {
-    const state = this.states.get(path);
-    if (state) return state.doc.toString();
-    return this.tabs.find((t) => t.path === path)?.content ?? '';
+    for (const [key, state] of this.states) {
+      if (workspacePathsEqual(key, path)) {
+        return state.doc.toString();
+      }
+    }
+    return this.tabs.find((t) => workspacePathsEqual(t.path, path))?.content ?? '';
   }
 
   markSaved(path: string, content?: string): void {
@@ -129,7 +138,7 @@ export class WorkspaceEditorComponent
         state.update({ changes: { from: 0, to: state.doc.length, insert: next } })
           .state,
       );
-      if (this.activePath === path && this.view) {
+      if (workspacePathsEqual(this.activePath, path) && this.view) {
         this.view.setState(this.states.get(path)!);
         this.applyEditorTheme();
       }
@@ -137,22 +146,53 @@ export class WorkspaceEditorComponent
     this.dirtyPaths.delete(path);
   }
 
+  /** Preserve open buffer when explorer renames a file. */
+  async renameTabPath(
+    oldPath: string,
+    newPath: string,
+    fileName: string,
+  ): Promise<void> {
+    if (workspacePathsEqual(oldPath, newPath)) return;
+
+    const state = this.states.get(oldPath);
+    const wasDirty = this.dirtyPaths.has(oldPath);
+    this.states.delete(oldPath);
+    this.dirtyPaths.delete(oldPath);
+    this.pendingStates.delete(oldPath);
+
+    if (!state) return;
+
+    const lang = await languageExtension(fileName, languageFromFileName(fileName));
+    const newState = EditorState.create({
+      doc: state.doc.toString(),
+      extensions: this.stateExtensions(newPath, true, lang),
+    });
+    this.states.set(newPath, newState);
+    if (wasDirty) {
+      this.dirtyPaths.add(newPath);
+    }
+
+    if (workspacePathsEqual(this.activePath, oldPath) && this.view) {
+      this.mountState(newState);
+    }
+  }
+
   private isDark(): boolean {
     return this.themeService.effective() === 'dark';
   }
 
-  private baseExtensions(path: string): Extension[] {
+  private baseExtensions(): Extension[] {
     return [
       history(),
       keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
       highlightSelectionMatches(),
       this.themeCompartment.of(baboTheme(this.isDark())),
       EditorView.updateListener.of((update) => {
-        if (!update.docChanged) return;
+        if (!update.docChanged || !this.view || update.view !== this.view) return;
         const active = this.activePath;
-        if (!active || active !== path) return;
+        if (!active) return;
+        this.states.set(active, update.state);
         this.dirtyPaths.add(active);
-        this.tabDirty.emit({ path: active, dirty: true });
       }),
     ];
   }
@@ -163,7 +203,7 @@ export class WorkspaceEditorComponent
     lang: Extension = [],
   ): Extension[] {
     return [
-      ...this.baseExtensions(path),
+      ...this.baseExtensions(),
       this.editableCompartment.of(EditorView.editable.of(editable)),
       lang,
     ];
@@ -297,7 +337,50 @@ export class WorkspaceEditorComponent
     this.view.setState(state);
     this.applyEditorTheme();
     this.setEditable(true);
-    this.view.focus();
+    if (!this.shellOpen) {
+      this.view.focus();
+    }
     requestAnimationFrame(() => this.view?.requestMeasure());
   }
+
+  /** Ignore parent tab updates that only flip the dirty flag. */
+  private tabsStructurallyChanged(change: SimpleChanges['tabs']): boolean {
+    const prev = (change.previousValue ?? []) as EditorTab[];
+    const cur = (change.currentValue ?? []) as EditorTab[];
+    if (prev.length !== cur.length) return true;
+
+    const prevByPath = new Map(
+      prev.map((t) => [normalizeTabPath(t.path), t]),
+    );
+    for (const tab of cur) {
+      const key = normalizeTabPath(tab.path);
+      const before = prevByPath.get(key);
+      if (!before) {
+        if (this.isRenamedTab(prev, cur, tab)) continue;
+        return true;
+      }
+      if (before.loading !== tab.loading) return true;
+      if (before.content !== tab.content && !this.dirtyPaths.has(tab.path)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** Path-only rename already handled via renameTabPath(). */
+  private isRenamedTab(prev: EditorTab[], cur: EditorTab[], tab: EditorTab): boolean {
+    const removed = prev.filter(
+      (p) => !cur.some((c) => workspacePathsEqual(c.path, p.path)),
+    );
+    if (removed.length !== 1) return false;
+    const added = cur.filter(
+      (c) => !prev.some((p) => workspacePathsEqual(p.path, c.path)),
+    );
+    if (added.length !== 1 || added[0].path !== tab.path) return false;
+    return this.states.has(tab.path);
+  }
+}
+
+function normalizeTabPath(path: string): string {
+  return path.replace(/\\/g, '/').toLowerCase();
 }

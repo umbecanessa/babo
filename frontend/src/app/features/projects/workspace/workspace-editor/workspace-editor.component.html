@@ -7,7 +7,7 @@
           [class.active]="activePath === tab.path"
           (click)="selectTab(tab.path)"
         >
-          <span class="tab-dot" [class.dirty]="isDirty(tab.path) || tab.dirty"></span>
+          <span class="tab-dot" [class.dirty]="isDirty(tab.path)"></span>
           <span class="tab-name">{{ tab.name }}</span>
           @if (tab.loading) {
             <span class="tab-spinner">…</span>
@@ -20,7 +20,7 @@
     @if (activeTab(); as tab) {
       <div class="editor-toolbar">
         <span class="file-path" [title]="tab.path">{{ tab.path }}</span>
-        @if (isDirty(tab.path) || tab.dirty) {
+        @if (isDirty(tab.path)) {
           <button class="save-btn" type="button" (click)="save.emit(tab.path)">Save</button>
         }
       </div>

@@ -131,8 +131,12 @@
           [class.active]="panels.rightDock() === 'inbox'"
           [class.pulse]="panels.inboxPulse()"
           (click)="toggleInboxPanel()"
-          title="Inbox — channel messages">
-          Inbox
+          title="Inbox — channel messages"
+          aria-label="Inbox">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/>
+            <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>
+          </svg>
           @if (panels.inboxBadge() > 0) {
             <span class="panel-header-badge">{{ panels.inboxBadge() }}</span>
           }
@@ -143,8 +147,11 @@
           class="info-btn panel-header-btn desktop-only"
           [class.active]="panels.rightDock() === 'live'"
           (click)="toggleSidebar()"
-          title="Live — brain signals &amp; activity">
-          Live
+          title="Live — brain signals &amp; activity"
+          aria-label="Live">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+          </svg>
         </button>
 
         <button
@@ -152,8 +159,13 @@
           class="info-btn panel-header-btn desktop-only"
           [class.active]="panels.rightDock() === 'context'"
           (click)="toggleContextPanel()"
-          title="Context — conversation metadata">
-          Context
+          title="Context — conversation metadata"
+          aria-label="Context">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="16" x2="12" y2="12"/>
+            <line x1="12" y1="8" x2="12.01" y2="8"/>
+          </svg>
         </button>
 
         <button
@@ -161,13 +173,14 @@
           class="info-btn panel-header-btn desktop-only"
           [class.active]="panels.focusMode()"
           (click)="toggleFocusMode()"
-          title="Focus mode — hide side panels">
-          Focus
-        </button>
-
-        <button class="brain-toggle mobile-only" (click)="openBottomSheet()" title="Brain &amp; inbox">
-          <span class="brain-dot" [class.active]="bottomSheetOpen()"></span>
-          Brain
+          title="Focus mode — hide side panels"
+          aria-label="Focus mode">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M8 3H5a2 2 0 0 0-2 2v3"/>
+            <path d="M21 8V5a2 2 0 0 0-2-2h-3"/>
+            <path d="M3 16v3a2 2 0 0 0 2 2h3"/>
+            <path d="M16 21h3a2 2 0 0 0 2-2v-3"/>
+          </svg>
         </button>
       </div>
     </div>
@@ -223,6 +236,22 @@
 
       <div class="chat-center-column">
         <div class="conversation-toolbar">
+          <button
+            type="button"
+            class="nav-rail-toggle mobile-only"
+            (click)="toggleMobileConvNav()"
+            title="Conversations"
+            aria-label="Conversations"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="8" y1="6" x2="21" y2="6"/>
+              <line x1="8" y1="12" x2="21" y2="12"/>
+              <line x1="8" y1="18" x2="21" y2="18"/>
+              <line x1="3" y1="6" x2="3.01" y2="6"/>
+              <line x1="3" y1="12" x2="3.01" y2="12"/>
+              <line x1="3" y1="18" x2="3.01" y2="18"/>
+            </svg>
+          </button>
           <button
             type="button"
             class="nav-rail-toggle desktop-only"
@@ -305,43 +334,6 @@
             </div>
           }
 
-          @if (pendingAttachments().length > 0) {
-            <div class="attachments-bar">
-              @for (att of pendingAttachments(); track att.path) {
-                <div class="attachment-chip" [class.is-image]="att.mime_type.startsWith('image/')">
-                  @if (att.mime_type.startsWith('image/')) {
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                      <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                      <polyline points="21 15 16 10 5 21"></polyline>
-                    </svg>
-                  } @else {
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                      <polyline points="14 2 14 8 20 8"></polyline>
-                    </svg>
-                  }
-                  <span class="attachment-name">{{ att.name }}</span>
-                  <button class="attachment-remove" (click)="removeAttachment(att.path)" title="Remove">
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-                      <line x1="18" y1="6" x2="6" y2="18"></line>
-                      <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
-                  </button>
-                </div>
-              }
-            </div>
-          }
-
-          @if (fileUploading()) {
-            <div class="attachments-bar">
-              <div class="attachment-chip uploading">
-                <span class="upload-spinner"></span>
-                <span class="attachment-name">Uploading...</span>
-              </div>
-            </div>
-          }
-
           @if (voice.state() === 'recording') {
             <div class="input-wrapper recording-active">
               <button (click)="cancelVoice()" class="voice-cancel-btn" title="Cancel">
@@ -371,6 +363,35 @@
             <div class="composer-focus" data-day1-coach="chat-composer">
               <div class="composer-toolbar">
                 <app-chat-model-picker />
+                @for (att of pendingAttachments(); track att.path) {
+                  <div class="attachment-chip" [class.is-image]="att.mime_type.startsWith('image/')">
+                    @if (att.mime_type.startsWith('image/')) {
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                        <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                        <polyline points="21 15 16 10 5 21"></polyline>
+                      </svg>
+                    } @else {
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                      </svg>
+                    }
+                    <span class="attachment-name">{{ att.name }}</span>
+                    <button class="attachment-remove" (click)="removeAttachment(att.path)" title="Remove">
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                      </svg>
+                    </button>
+                  </div>
+                }
+                @if (fileUploading()) {
+                  <div class="attachment-chip uploading">
+                    <span class="upload-spinner"></span>
+                    <span class="attachment-name">Uploading...</span>
+                  </div>
+                }
               </div>
               @if (!agenticActive() && composerDest().hint) {
                 <div class="composer-destination-hint">{{ composerDest().hint }}</div>
@@ -475,6 +496,23 @@
     (channelThreadSelect)="switchThread($event)"
     (inboxSelect)="onInboxSelect($event)"
   />
+
+  @if (mobileConvNavOpen()) {
+    <div class="mobile-conv-backdrop mobile-only" (click)="closeMobileConvNav()" aria-hidden="true"></div>
+    <aside class="mobile-conv-drawer mobile-only">
+      <div class="mobile-conv-drawer-header">
+        <span>Conversations</span>
+        <button type="button" class="mobile-conv-close" (click)="closeMobileConvNav()" aria-label="Close">&times;</button>
+      </div>
+      <app-conversation-nav
+        [currentKey]="currentThread()"
+        [collapsed]="false"
+        (selectThread)="switchThread($event); closeMobileConvNav()"
+        (newBranch)="createNewThread(); closeMobileConvNav()"
+        (openInbox)="openInboxFromNav(); closeMobileConvNav(); openBottomSheet(); setMobileSheetTab('inbox')"
+      />
+    </aside>
+  }
 
   @if (bottomSheetOpen()) {
     <div class="sheet-backdrop" (click)="closeBottomSheet()"></div>

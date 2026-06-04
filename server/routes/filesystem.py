@@ -61,6 +61,15 @@ class FileWriteBytesRequest(BaseModel):
     content_base64: str
 
 
+class UnlinkRequest(BaseModel):
+    path: str
+
+
+class RenameRequest(BaseModel):
+    old_path: str
+    new_path: str
+
+
 # ── Endpoints ─────────────────────────────────────────────────────
 
 
@@ -155,6 +164,59 @@ async def write_file_bytes(body: FileWriteBytesRequest):
         "message": "File written",
         "metadata": {"path": str(file_path), "size": len(data), "append": False},
     }
+
+
+@router.post("/unlink")
+async def unlink_path(body: UnlinkRequest):
+    """Delete a file or directory."""
+    import shutil
+    from pathlib import Path as P
+
+    if ".." in body.path.replace("\\", "/").split("/"):
+        raise HTTPException(status_code=400, detail="Invalid path")
+
+    target = P(body.path)
+    if not target.exists():
+        raise HTTPException(status_code=404, detail=f"Path not found: {body.path}")
+
+    try:
+        if target.is_dir():
+            shutil.rmtree(target)
+        else:
+            target.unlink()
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    return {"message": "Deleted", "path": str(target)}
+
+
+@router.post("/rename")
+async def rename_path(body: RenameRequest):
+    """Rename or move a file or directory."""
+    from pathlib import Path as P
+
+    for raw in (body.old_path, body.new_path):
+        if ".." in raw.replace("\\", "/").split("/"):
+            raise HTTPException(status_code=400, detail="Invalid path")
+
+    old_path = P(body.old_path)
+    new_path = P(body.new_path)
+    if not old_path.exists():
+        raise HTTPException(status_code=404, detail=f"Path not found: {body.old_path}")
+
+    try:
+        new_path.parent.mkdir(parents=True, exist_ok=True)
+        old_path.rename(new_path)
+    except FileExistsError:
+        raise HTTPException(status_code=400, detail=f"Destination already exists: {body.new_path}")
+    except PermissionError:
+        raise HTTPException(status_code=403, detail="Permission denied")
+    except OSError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    return {"message": "Renamed", "path": str(new_path)}
 
 
 @router.post("/edit")

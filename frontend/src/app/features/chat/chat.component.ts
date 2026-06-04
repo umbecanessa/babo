@@ -122,6 +122,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
   );
 
   bottomSheetOpen = signal(false);
+  mobileConvNavOpen = signal(false);
   daydreams = signal<any[]>([]);
   activities = signal<any[]>([]);
 
@@ -842,6 +843,14 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
   closeBottomSheet() {
     this.bottomSheetOpen.set(false);
+  }
+
+  toggleMobileConvNav(): void {
+    this.mobileConvNavOpen.update((v) => !v);
+  }
+
+  closeMobileConvNav(): void {
+    this.mobileConvNavOpen.set(false);
   }
 
   /** Top hormone name + value for the condensed mobile bar. */

@@ -1,18 +1,18 @@
 <div class="workspace" [class.shell-open]="shellOpen()">
   <div class="workspace-main">
     <aside class="explorer-pane" [style.width.px]="explorerWidth()">
-      <app-workspace-explorer
-        [rootPath]="rootPath()"
-        [activePath]="activePath()"
-        [shellOpen]="shellOpen()"
-        [busy]="uploading()"
-        (fileOpen)="openFile($event)"
-        (createFile)="promptNewFile()"
-        (createFolder)="promptNewFolder()"
-        (uploadFiles)="triggerFileUpload()"
-        (uploadFolder)="triggerFolderUpload()"
-        (toggleShell)="toggleShell()"
-      />
+    <app-workspace-explorer
+      [rootPath]="rootPath()"
+      [activePath]="activePath()"
+      [shellOpen]="shellOpen()"
+      [busy]="uploading()"
+      (fileOpen)="openFile($event)"
+      (uploadFiles)="triggerFileUpload()"
+      (uploadFolder)="triggerFolderUpload()"
+      (toggleShell)="toggleShell()"
+      (fileDeleted)="onFileDeleted($event)"
+      (fileRenamed)="onFileRenamed($event)"
+    />
     </aside>
 
     <div
@@ -25,16 +25,18 @@
       <app-workspace-editor
         [tabs]="tabs()"
         [activePath]="activePath()"
+        [shellOpen]="shellOpen()"
         (tabSelect)="selectTab($event)"
         (tabClose)="closeTab($event)"
-        (tabDirty)="onTabDirty($event)"
         (save)="saveTab($event)"
       />
     </section>
   </div>
 
   @if (shellOpen()) {
-    <app-workspace-terminal [cwd]="rootPath()" (closed)="shellOpen.set(false)" />
+    <div class="shell-pane">
+      <app-workspace-terminal [cwd]="rootPath()" (closed)="shellOpen.set(false)" />
+    </div>
   }
 
   <input

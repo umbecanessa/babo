@@ -431,6 +431,21 @@ export function registerIpcHandlers(
     );
   });
 
+  ipcMain.handle('fs:unlink', async (_event, targetPath: string) => {
+    await permissions.require('filesystem.write', permissions.filesystemScope(targetPath));
+    await fs.promises.rm(targetPath, { recursive: true, force: true });
+  });
+
+  ipcMain.handle('fs:rename', async (_event, oldPath: string, newPath: string) => {
+    await permissions.require('filesystem.write', permissions.filesystemScope(oldPath));
+    await permissions.require('filesystem.write', permissions.filesystemScope(newPath));
+    const parent = path.dirname(newPath);
+    if (parent && parent !== newPath) {
+      await fs.promises.mkdir(parent, { recursive: true });
+    }
+    await fs.promises.rename(oldPath, newPath);
+  });
+
   // ─── Dialogs ──────────────────────────────────────────────────
 
   ipcMain.handle(
