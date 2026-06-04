@@ -293,6 +293,9 @@ def test_fleet_squad_intent_detection():
     from nls.agentic.fleet_triage_policy import (
         HINT_FLEET_SQUAD,
         apply_fleet_hint_policy,
+        fleet_active_tool_names,
+        fleet_hint_active,
+        fleet_squad_bootstrap_message,
     )
     from nls.agentic.goals import TurnTriage
     from nls.agentic.profile_guard_policy import tools_denied_by_hints
@@ -327,6 +330,18 @@ def test_fleet_squad_intent_detection():
     denied = tools_denied_by_hints([HINT_FLEET_SQUAD])
     assert "team" in denied
     assert "delegate" in denied
+
+    assert fleet_hint_active([HINT_FLEET_SQUAD])
+    assert "squad_setup" in fleet_active_tool_names()
+    assert "squad_setup" in fleet_squad_bootstrap_message()
+
+    from nls.engine.thalamic_router import predict_tools
+
+    predicted = predict_tools(
+        "lead a squad with one mod agent and one QA agent for Discord channels",
+    )
+    assert "squad_setup" in predicted
+    assert "channel_inspect" in predicted
 
 
 def test_create_squad_for_agent(tmp_path: Path):

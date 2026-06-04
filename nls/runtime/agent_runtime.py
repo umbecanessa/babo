@@ -1275,7 +1275,7 @@ class AgentRuntime:
             self.refresh_tools()
             logger.info("Agent %s: squad_setup tool registered", self.agent_id)
         except Exception as exc:
-            logger.debug("Agent %s: squad_setup skipped: %s", self.agent_id, exc)
+            logger.warning("Agent %s: squad_setup skipped: %s", self.agent_id, exc)
 
     def _register_squad_tools(self) -> None:
         """Attach squad tools when this agent belongs to a squad."""
@@ -4469,6 +4469,17 @@ class AgentRuntime:
                 except Exception:
                     pass
 
+                _fleet_hints = list(pre_extracted_hints or [])
+                if not _fleet_hints and pre_triage is not None:
+                    _fleet_hints = list(getattr(pre_triage, "hints", None) or [])
+                try:
+                    from nls.agentic.fleet_triage_policy import fleet_hint_active
+
+                    if fleet_hint_active(_fleet_hints):
+                        self.sync_squad_tools()
+                except Exception:
+                    pass
+
                 tool_dict = {t.name: t for t in self._agent_tools}
 
                 # Deferred tool loading: the executor gets the FULL tool
@@ -4478,7 +4489,14 @@ class AgentRuntime:
                 _active_tool_names: set[str] | None = None
                 try:
                     from nls.engine.thalamic_router import CORE_TOOLS, predict_tools as _predict_tools
+                    from nls.agentic.fleet_triage_policy import (
+                        fleet_active_tool_names,
+                        fleet_hint_active,
+                    )
+
                     _predicted = _predict_tools(user_input)
+                    if fleet_hint_active(_fleet_hints):
+                        _predicted |= set(fleet_active_tool_names())
                     _active_tool_names = set(CORE_TOOLS) | _predicted
                     _dt = tool_dict.get("discover_tools")
                     if _dt is not None and hasattr(_dt, "set_registry"):

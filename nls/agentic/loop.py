@@ -913,9 +913,24 @@ async def run_loop(
             delegate_manager=delegate_manager,
         )
     )
+    _fleet_force_tools: set[str] = set()
+    try:
+        from nls.agentic.fleet_triage_policy import (
+            fleet_active_tool_names,
+            fleet_hint_active,
+        )
+
+        if fleet_hint_active(state.hints):
+            _fleet_force_tools = set(fleet_active_tool_names())
+    except Exception:
+        pass
     for _tool_name, _tool_obj in tools.items():
         if isinstance(_tool_obj, AgentTool):
-            if active_tool_names is not None and _tool_name not in active_tool_names:
+            if (
+                active_tool_names is not None
+                and _tool_name not in active_tool_names
+                and _tool_name not in _fleet_force_tools
+            ):
                 continue
             try:
                 _base_schemas.append(tool_to_openai_schema(_tool_obj))
@@ -1215,12 +1230,33 @@ async def run_loop(
     inject_prompt_structured_hints(user_input, state.hints)
 
     try:
-        from nls.agentic.fleet_triage_policy import apply_fleet_hint_policy
+        from nls.agentic.fleet_triage_policy import (
+            apply_fleet_hint_policy,
+            fleet_active_tool_names,
+            fleet_hint_active,
+            fleet_squad_bootstrap_message,
+        )
 
         state.goals, state.hints = apply_fleet_hint_policy(
             list(state.hints or []),
             list(state.goals or []),
         )
+        if fleet_hint_active(state.hints):
+            state.unlocked_tools.update(fleet_active_tool_names())
+    except Exception:
+        pass
+
+    try:
+        from nls.agentic.fleet_triage_policy import (
+            fleet_hint_active,
+            fleet_squad_bootstrap_message,
+        )
+
+        if fleet_hint_active(state.hints):
+            context.append({
+                "role": "system",
+                "content": fleet_squad_bootstrap_message(),
+            })
     except Exception:
         pass
 

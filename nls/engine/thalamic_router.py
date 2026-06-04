@@ -47,6 +47,14 @@ _TOOL_PREDICT_PATTERNS: list[tuple[re.Pattern[str], set[str]]] = [
     (re.compile(r"\b(telegram|tg)\b", re.I), {"telegram_send"}),
     (re.compile(r"\b(browse|open\s+url|visit\s+(https?|www)|go\s+to\s+the\s+(page|site|website))\b", re.I), {"browser"}),
     (re.compile(r"\b(team|delegate|sub.?agent|wave|concurrent)\b", re.I), {"delegate", "team"}),
+    (
+        re.compile(
+            r"\b(?:squad|fleet|mod\s+agent|qa\s+agent|community\s+mod|"
+            r"persistent\s+(?:squad|team|staff))\b",
+            re.I,
+        ),
+        {"squad_setup", "channel_inspect", "contacts"},
+    ),
     (re.compile(r"\b(reach\s+out|contact\s+someone)\b", re.I), {"reach_out"}),
     (
         re.compile(

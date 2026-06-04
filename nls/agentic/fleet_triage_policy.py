@@ -68,10 +68,34 @@ def apply_fleet_hint_policy(
     return strip_skill_scaffold_goals(goals), strip_skill_setup_hints(hints)
 
 
+FLEET_ACTIVE_TOOL_NAMES = frozenset({
+    "squad_setup",
+    "channel_inspect",
+    "contacts",
+})
+
+
+def fleet_active_tool_names() -> frozenset[str]:
+    """Tools to pre-unlock when triage emitted fleet:squad_candidate."""
+    return FLEET_ACTIVE_TOOL_NAMES
+
+
 def fleet_squad_team_block_message() -> str:
     return (
         "BLOCKED: team() is for one-run plan delegation waves inside a single task — "
         "not for persistent Discord/community squads.\n"
         "Use squad_setup(action='create', owner_confirmed=true, ...) after ask_user(), "
         "then squad(action='spawn_member', ...) and set_member_job for each role."
+    )
+
+
+def fleet_squad_bootstrap_message() -> str:
+    return (
+        "[FLEET SQUAD — persistent staffing, not team() waves]\n"
+        "You are not in a squad yet. Use squad_setup(action='create', "
+        "owner_confirmed=true, ...) after ask_user() confirms structure.\n"
+        "There is no squad() tool until the squad exists — do not call squad(action=...).\n"
+        "Use channel_inspect(action='get', channel='discord') to see scoped channels.\n"
+        "After creation: adopt_orchestration_profile(profile='squad_lead'), "
+        "squad(action='spawn_member', ...), squad(action='set_member_job', ...)."
     )

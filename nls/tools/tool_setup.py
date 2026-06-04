@@ -411,23 +411,29 @@ def setup_tools(
         from server.main import app as _app
 
         _sm = getattr(_app.state, "squad_manager", None)
-        if _sm is not None and _sm.get_squad_for_agent(agent_id) is not None:
-            from .agent_tools.squad import (
-                SquadEscalateTool,
-                SquadMessageTool,
-                SquadReportDoneTool,
-                SquadTool,
-            )
+        if _sm is not None:
+            if _sm.get_squad_for_agent(agent_id) is not None:
+                from .agent_tools.squad import (
+                    SquadEscalateTool,
+                    SquadMessageTool,
+                    SquadReportDoneTool,
+                    SquadTool,
+                )
 
-            tools.extend([
-                SquadTool(_sm, agent_id),
-                SquadEscalateTool(_sm, agent_id),
-                SquadMessageTool(_sm, agent_id),
-                SquadReportDoneTool(_sm, agent_id),
-            ])
-            logger.info("Agent %s: squad tools initialized", agent_id)
+                tools.extend([
+                    SquadTool(_sm, agent_id),
+                    SquadEscalateTool(_sm, agent_id),
+                    SquadMessageTool(_sm, agent_id),
+                    SquadReportDoneTool(_sm, agent_id),
+                ])
+                logger.info("Agent %s: squad tools initialized", agent_id)
+            else:
+                from .agent_tools.squad import SquadSetupTool
+
+                tools.append(SquadSetupTool(_sm, agent_id))
+                logger.info("Agent %s: squad_setup initialized", agent_id)
     except Exception as exc:
-        logger.debug("Agent %s: squad tools init skipped: %s", agent_id, exc)
+        logger.warning("Agent %s: squad tools init failed: %s", agent_id, exc)
 
     # Wire plan → todo lifecycle auto-sync.
     _todo_tool = next((t for t in tools if getattr(t, "name", "") == "todo"), None)

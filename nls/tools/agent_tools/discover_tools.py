@@ -60,13 +60,26 @@ class DiscoverToolsTool:
                 content=f"All available tools ({len(names)}): {', '.join(names)}"
             )
 
-        matches: list[str] = []
+        entries: list[tuple[int, str, str]] = []
         for name, tool in self._registry.items():
             desc = getattr(tool, "description", "") or ""
-            if query in name.lower() or query in desc.lower():
-                matches.append(
-                    f"- **{name}**: {desc[:120]}"
-                )
+            name_l = name.lower()
+            desc_l = desc.lower()
+            if query not in name_l and query not in desc_l:
+                continue
+            if name_l.startswith(query):
+                rank = 0
+            elif query in name_l:
+                rank = 1
+            else:
+                rank = 2
+            entries.append((rank, name, desc))
+
+        entries.sort(key=lambda item: (item[0], item[1]))
+        matches = [
+            f"- **{name}**: {desc[:120]}"
+            for _, name, desc in entries
+        ]
 
         if not matches:
             return ToolResult(
