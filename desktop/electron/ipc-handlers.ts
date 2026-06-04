@@ -179,6 +179,13 @@ export function registerIpcHandlers(
     },
   );
 
+  ipcMain.handle(
+    'capabilities:probe-lan-services',
+    async (_event, host: string, gpuWorkerSecret?: string) => {
+      return probeLanHost(host, gpuWorkerSecret);
+    },
+  );
+
   ipcMain.handle('capabilities:test-inference', async (_event, url: string, apiKey?: string) => {
     return testInferenceEndpoint(url, apiKey);
   });

@@ -758,7 +758,7 @@
             placeholder="Same as GX10 / Babo Cloud GPU_UPSTREAM_SECRET"
             autocomplete="off"
           />
-          <span class="hint">Required for vision on port 8443 when the server uses BABO_VISION_SECRET.</span>
+          <span class="hint">Required for Vision on port 8443. Use the same value as BABO_VISION_SECRET on the server (e.g. nls-dev-secret).</span>
         </div>
         <div class="sheet-actions">
           <button
@@ -777,6 +777,36 @@
           >
             {{ lanModelFitLoading() ? 'Scanning GPU…' : 'Scan GPU & model fit' }}
           </button>
+          @if (lanServiceCards().length) {
+            <div class="lan-services-panel">
+              <p class="lan-services-title">Services on this host</p>
+              <div class="lan-service-chips">
+                @for (s of lanServiceCards(); track s.port + s.kind) {
+                  <div class="lan-service-chip" [class.ok]="s.healthy" [class.fail]="!s.healthy">
+                    <div class="lan-chip-head">
+                      <span class="lan-chip-icon" aria-hidden="true">{{ lanServiceIcon(s) }}</span>
+                      <div class="lan-chip-titles">
+                        <span class="lan-chip-title">{{ lanKindLabel(s.kind, s.port) }}</span>
+                        <span class="lan-chip-sub">{{ lanServiceSubtitle(s) }}</span>
+                      </div>
+                      <span class="lan-chip-badge" [class.ok]="s.healthy" [class.fail]="!s.healthy">
+                        {{ s.healthy ? 'Online' : 'Offline' }}
+                      </span>
+                    </div>
+                    @if (lanServiceModelLine(s); as modelLine) {
+                      <p class="lan-chip-model" [title]="modelLine">{{ modelLine }}</p>
+                    }
+                    <p class="lan-chip-meta">{{ lanServiceMetaLine(s) }}</p>
+                    @if (!s.healthy && s.detail) {
+                      <p class="lan-chip-hint">{{ s.detail }}</p>
+                    } @else if (s.healthy && s.detail && !lanServiceModelLine(s)) {
+                      <p class="lan-chip-hint ok-hint">{{ s.detail }}</p>
+                    }
+                  </div>
+                }
+              </div>
+            </div>
+          }
           @if (lanModelFit(); as lanFit) {
             <div class="model-fit-panel lan">
               <p class="model-fit-head">
@@ -803,19 +833,6 @@
                 </ul>
               }
             </div>
-          }
-          @if (lanServices().length) {
-            <ul class="lan-list">
-              @for (s of lanServices(); track s.port + s.kind) {
-                <li [class.ok]="s.healthy" [class.fail]="!s.healthy">
-                  {{ s.healthy ? '✓' : '—' }}
-                  {{ lanKindLabel(s.kind, s.port) }} · {{ s.port }}
-                  @if (!s.healthy && s.detail) {
-                    <span class="lan-detail"> — {{ s.detail }}</span>
-                  }
-                </li>
-              }
-            </ul>
           }
           <button class="action-btn full" type="button" (click)="showLanSheet.set(false)">Done</button>
         </div>

@@ -19,6 +19,7 @@ import type {
   CapabilityProfile,
   CapabilityScan,
   CapabilityTier,
+  LanServiceProbe,
   ModelFitRecommendationRow,
   ModelFitSnapshot,
 } from './capability-profile.model';
@@ -364,7 +365,17 @@ export class SetupComponent implements OnInit, OnDestroy {
     { tier: 'off' as CapabilityTier, label: 'Off', shortLabel: 'Off' },
   ];
 
-  lanServices = computed(() => this.scan()?.lan ?? []);
+  /** Chat → Vision → Voice, one card per role. */
+  lanServiceCards = computed(() => {
+    const lan = this.scan()?.lan ?? [];
+    const chat =
+      lan.find((s) => s.kind === 'inference' && s.port === 8000) ??
+      lan.find((s) => s.kind === 'inference' && s.port === 11434) ??
+      lan.find((s) => s.kind === 'inference');
+    const vision = lan.find((s) => s.kind === 'vision');
+    const voice = lan.find((s) => s.kind === 'transcribe');
+    return [chat, vision, voice].filter((s): s is LanServiceProbe => !!s);
+  });
 
   visibleBrainCards = computed(() => {
     const caps = this.platformCaps();
@@ -597,6 +608,62 @@ export class SetupComponent implements OnInit, OnDestroy {
       default:
         return kind;
     }
+  }
+
+  lanServiceIcon(s: LanServiceProbe): string {
+    switch (s.kind) {
+      case 'inference':
+        return s.port === 11434 ? '◆' : '💬';
+      case 'vision':
+        return '👁';
+      case 'transcribe':
+        return '🎤';
+      default:
+        return '⎔';
+    }
+  }
+
+  lanServiceSubtitle(s: LanServiceProbe): string {
+    switch (s.kind) {
+      case 'inference':
+        return s.port === 11434
+          ? 'Local chat on this server'
+          : 'vLLM / OpenAI-compatible chat';
+      case 'vision':
+        return 'Screen awareness (Moondream / VLM)';
+      case 'transcribe':
+        return 'Microphone → text (Whisper)';
+      default:
+        return s.url;
+    }
+  }
+
+  lanServiceModelLine(s: LanServiceProbe): string | null {
+    if (!s.healthy) return null;
+    if (s.primaryModel) {
+      if (s.extraModelCount && s.extraModelCount > 0) {
+        return `${s.primaryModel} +${s.extraModelCount} more`;
+      }
+      return s.primaryModel;
+    }
+    if (s.modelIds?.length) {
+      return s.modelIds.length > 1
+        ? `${s.modelIds[0]} +${s.modelIds.length - 1} more`
+        : s.modelIds[0];
+    }
+    return null;
+  }
+
+  lanServiceMetaLine(s: LanServiceProbe): string {
+    const parts: string[] = [];
+    if (s.runtime) parts.push(s.runtime);
+    parts.push(`:${s.port}`);
+    if (s.latencyMs != null && s.healthy) parts.push(`${s.latencyMs}ms`);
+    if (s.device && s.healthy) parts.push(s.device);
+    if (s.healthy && s.kind === 'vision' && s.modelLoaded === false) {
+      parts.push('cold');
+    }
+    return parts.join(' · ');
   }
 
   brainServerUrl(): string {
@@ -1115,18 +1182,29 @@ export class SetupComponent implements OnInit, OnDestroy {
     }
   }
 
+  private async fetchLanServices(): Promise<LanServiceProbe[]> {
+    return (await this.nls().capabilities.probeLanServices(
+      this.lanHost.trim(),
+      this.lanGpuSecret.trim(),
+    )) as LanServiceProbe[];
+  }
+
   async runLanModelFitOnly(): Promise<void> {
     if (!this.lanHost.trim() || !this.resolvedLanSshUser()) return;
     this.lanModelFitLoading.set(true);
     try {
-      const snap = await this.nls().capabilities.modelFitRemote(
-        this.lanHost.trim(),
-        this.lanSshOptions(),
-      );
+      const [snap, lan] = await Promise.all([
+        this.nls().capabilities.modelFitRemote(
+          this.lanHost.trim(),
+          this.lanSshOptions(),
+        ) as Promise<ModelFitSnapshot>,
+        this.fetchLanServices(),
+      ]);
       const prev = this.scan();
       if (prev) {
         this.scan.set({
           ...prev,
+          lan,
           modelFit: { ...prev.modelFit, lan: snap },
         });
       } else {
@@ -1141,9 +1219,14 @@ export class SetupComponent implements OnInit, OnDestroy {
             hasMps: false,
             hasMlxVlm: false,
           },
-          lan: [],
+          lan,
           modelFit: { lan: snap },
         });
+      }
+      const secret = this.lanGpuSecret.trim();
+      if (secret) {
+        this.config.gpuWorkerSecret = secret;
+        await this.nls().config.set({ gpuWorkerSecret: secret });
       }
       if (snap?.localViable) {
         this.recommendedBrainTier = 'self_lan';

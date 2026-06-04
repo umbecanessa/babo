@@ -111,6 +111,9 @@ const nlsDesktopApi = {
         preserveModelFit,
       ),
 
+    probeLanServices: (host: string, gpuWorkerSecret?: string): Promise<any> =>
+      ipcRenderer.invoke('capabilities:probe-lan-services', host, gpuWorkerSecret),
+
     modelFitLocal: (): Promise<any> =>
       ipcRenderer.invoke('capabilities:model-fit-local'),
 

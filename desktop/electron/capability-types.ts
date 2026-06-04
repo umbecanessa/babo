@@ -73,6 +73,15 @@ export interface LanServiceProbe {
   kind: 'inference' | 'transcribe' | 'vision' | 'embed' | 'unknown';
   url: string;
   modelIds?: string[];
+  /** Primary model id or name from the service health/models response. */
+  primaryModel?: string;
+  /** Additional models beyond primaryModel (inference only). */
+  extraModelCount?: number;
+  latencyMs?: number;
+  runtime?: string;
+  device?: string;
+  /** Vision worker: weights loaded in memory. */
+  modelLoaded?: boolean;
   healthy: boolean;
   detail?: string;
 }

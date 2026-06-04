@@ -48,6 +48,12 @@ export interface LanServiceProbe {
   kind: string;
   url: string;
   modelIds?: string[];
+  primaryModel?: string;
+  extraModelCount?: number;
+  latencyMs?: number;
+  runtime?: string;
+  device?: string;
+  modelLoaded?: boolean;
   healthy: boolean;
   detail?: string;
 }

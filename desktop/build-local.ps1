@@ -84,6 +84,59 @@ function Stop-BaboLocks {
     Start-Sleep -Seconds 2
 }
 
+function Clear-ReadOnlyTree([string]$fullPath) {
+    if (-not (Test-Path -LiteralPath $fullPath)) { return }
+    try {
+        $root = Get-Item -LiteralPath $fullPath -Force
+        $root.Attributes = $root.Attributes -band (-bnot [System.IO.FileAttributes]::ReadOnly)
+    } catch { }
+    Get-ChildItem -LiteralPath $fullPath -Recurse -Force -ErrorAction SilentlyContinue | ForEach-Object {
+        try {
+            $_.Attributes = $_.Attributes -band (-bnot [System.IO.FileAttributes]::ReadOnly)
+        } catch { }
+    }
+}
+
+function Remove-ArtifactDir([string]$path) {
+    if (-not (Test-Path -LiteralPath $path)) { return $true }
+    Clear-ReadOnlyTree $path
+    try {
+        Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction Stop
+        return $true
+    } catch {
+        Write-Host "   Could not remove $path : $($_.Exception.Message)" -ForegroundColor Yellow
+        return $false
+    }
+}
+
+function Clear-PreviousArtifacts {
+    Write-Step "Cleaning previous build artifacts"
+    if (-not $script:KeepRunning) {
+        Stop-BaboLocks
+    }
+
+    $releaseBuild = Join-Path $PSScriptRoot "release-build"
+    if (Test-Path $releaseBuild) {
+        Get-ChildItem $releaseBuild -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+            $name = $_.Name
+            if ($name -like "build-*" -or $name -like "win-unpacked.bak.*") {
+                if (Remove-ArtifactDir $_.FullName) {
+                    Write-Ok "Removed release-build\$name"
+                }
+            }
+        }
+    }
+
+    if ($Installer) {
+        $release = Join-Path $PSScriptRoot "release"
+        if (Test-Path $release) {
+            if (Remove-ArtifactDir $release) {
+                Write-Ok "Removed release\"
+            }
+        }
+    }
+}
+
 function Test-BaboExe($UnpackedDir) {
     $exe = Join-Path $UnpackedDir "Babo.exe"
     return (Test-Path -LiteralPath $exe -PathType Leaf)
@@ -170,6 +223,8 @@ function Promote-UnpackedBuild {
 
     Write-Err "Promote failed and Babo.exe not found in build output or win-unpacked"
 }
+
+Clear-PreviousArtifacts
 
 Write-Step "Building Angular (electron config)"
 Push-Location "..\frontend"

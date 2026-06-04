@@ -18,6 +18,14 @@ import type {
   MultimodalConfidence,
 } from './capability-types';
 
+function resolveLanHostname(hostInput: string): string {
+  let raw = hostInput.trim().replace(/^https?:\/\//, '').split('/')[0];
+  if (raw.includes('@')) {
+    raw = raw.slice(raw.indexOf('@') + 1);
+  }
+  return raw.split(':')[0];
+}
+
 const execFileAsync = promisify(execFile);
 
 export interface ModelCapabilitiesFile {
@@ -132,7 +140,13 @@ function fetchJson(
   url: string,
   timeoutMs = 5_000,
   headers?: Record<string, string>,
-): Promise<{ ok: boolean; status: number; body: string; latency: number }> {
+): Promise<{
+  ok: boolean;
+  status: number;
+  body: string;
+  latency: number;
+  errorCode?: string;
+}> {
   return new Promise((resolve) => {
     const start = Date.now();
     const lib = url.startsWith('https') ? https : http;
@@ -148,22 +162,62 @@ function fetchJson(
         });
       });
     });
-    req.on('error', () => {
-      resolve({ ok: false, status: 0, body: '', latency: Date.now() - start });
+    req.on('error', (err: NodeJS.ErrnoException) => {
+      resolve({
+        ok: false,
+        status: 0,
+        body: '',
+        latency: Date.now() - start,
+        errorCode: err.code,
+      });
     });
     req.on('timeout', () => {
       req.destroy();
-      resolve({ ok: false, status: 0, body: '', latency: Date.now() - start });
+      resolve({
+        ok: false,
+        status: 0,
+        body: '',
+        latency: Date.now() - start,
+        errorCode: 'ETIMEDOUT',
+      });
     });
   });
+}
+
+function probeFailureDetail(
+  r: { status: number; errorCode?: string },
+  kind: LanServiceProbe['kind'],
+  secret: string,
+): string {
+  if (r.status === 401 && kind === 'vision') {
+    return secret
+      ? 'Unauthorized — check GPU worker secret'
+      : 'Enter GPU worker secret above, then scan again';
+  }
+  if (r.status === 401) {
+    return 'Unauthorized';
+  }
+  if (r.status > 0) {
+    return `HTTP ${r.status}`;
+  }
+  if (r.errorCode === 'ECONNREFUSED') {
+    return 'Not running on this port — start the container on the server';
+  }
+  if (r.errorCode === 'ETIMEDOUT' || r.errorCode === 'ESOCKETTIMEDOUT') {
+    return 'Timed out — check firewall or host address';
+  }
+  if (r.errorCode === 'EHOSTUNREACH' || r.errorCode === 'ENETUNREACH') {
+    return 'Host unreachable on your network';
+  }
+  return 'Unreachable — service may be stopped';
 }
 
 export async function probeLanHost(
   host: string,
   gpuWorkerSecret?: string,
 ): Promise<LanServiceProbe[]> {
-  const base = host.replace(/^https?:\/\//, '').split('/')[0];
-  const hostname = base.split(':')[0];
+  const hostname = resolveLanHostname(host);
+  if (!hostname) return [];
   const secret = gpuWorkerSecret?.trim() ?? '';
   const probes: Array<{ port: number; kind: LanServiceProbe['kind']; path: string }> = [
     { port: 8000, kind: 'inference', path: '/v1/models' },
@@ -181,38 +235,69 @@ export async function probeLanHost(
       headers['X-GPU-Worker-Secret'] = secret;
     }
     const r = await fetchJson(url, 8_000, Object.keys(headers).length ? headers : undefined);
-    let detail = r.ok ? `${r.latency}ms` : `unreachable (${r.status || 'error'})`;
-    if (!r.ok && r.status === 401 && p.kind === 'vision') {
-      detail = secret
-        ? 'Unauthorized — check GPU secret'
-        : 'Needs GPU worker secret (same as Babo Cloud / GX10)';
-    }
+    let detail = r.ok ? `${r.latency}ms` : probeFailureDetail(r, p.kind, secret);
     const entry: LanServiceProbe = {
       host: hostname,
       port: p.port,
       kind: p.kind,
-      url:
-        p.kind === 'inference'
-          ? `http://${hostname}:${p.port}`
-          : `http://${hostname}:${p.port}`,
+      url: `http://${hostname}:${p.port}`,
       healthy: r.ok,
+      latencyMs: r.ok ? r.latency : undefined,
       detail,
     };
 
     if (r.ok && p.kind === 'inference') {
+      entry.runtime = p.port === 11434 ? 'Ollama' : 'vLLM';
       try {
         const data = JSON.parse(r.body);
         const models = (data.data ?? []).map((m: { id?: string }) => m.id).filter(Boolean);
         entry.modelIds = models;
+        if (models.length) {
+          entry.primaryModel = models[0];
+          entry.extraModelCount = Math.max(0, models.length - 1);
+          detail =
+            models.length > 1
+              ? `${models[0]} +${models.length - 1} more`
+              : models[0];
+          entry.detail = detail;
+        }
       } catch {
         entry.modelIds = [];
       }
     }
 
+    if (r.ok && p.kind === 'vision') {
+      try {
+        const data = JSON.parse(r.body) as {
+          model?: string;
+          device?: string;
+          loaded?: boolean;
+        };
+        if (data.model) {
+          entry.primaryModel = data.model;
+          entry.device = data.device;
+          entry.modelLoaded = data.loaded;
+          const loadNote = data.loaded ? 'ready' : 'cold start';
+          entry.detail = `${data.model} · ${data.device ?? 'unknown'} · ${loadNote}`;
+        }
+      } catch { /* ignore */ }
+    }
+
     if (r.ok && p.kind === 'transcribe') {
       try {
-        const data = JSON.parse(r.body);
-        entry.detail = data.model ? `model=${data.model}` : entry.detail;
+        const data = JSON.parse(r.body) as {
+          model?: string;
+          device?: string;
+          compute_type?: string;
+          loaded?: boolean;
+        };
+        if (data.model) {
+          entry.primaryModel = data.model;
+          entry.device = data.device ?? data.compute_type;
+          entry.modelLoaded = data.loaded;
+          const dev = entry.device ? ` · ${entry.device}` : '';
+          entry.detail = `${data.model}${dev}`;
+        }
       } catch { /* ignore */ }
     }
 
