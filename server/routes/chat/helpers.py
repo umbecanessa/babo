@@ -187,6 +187,8 @@ def _format_file_size(size: int) -> str:
 
 def _file_kind(mime: str, name: str) -> str:
     """Classify a file into a kind for the attachment context hint."""
+    if mime == "application/x-directory" or name.endswith("/"):
+        return "folder"
     nl = name.lower()
     ext = "." + nl.rsplit(".", 1)[-1] if "." in nl else ""
     if mime in _IMAGE_MIMES:
@@ -237,6 +239,11 @@ def _augment_with_attachments(
             "Use the read tool with the EXACT path shown above to examine "
             "text, PDF, Word, Excel, PowerPoint, RTF, and archive files. "
             "Do NOT shorten or guess the path \u2014 use the full path as given."
+        )
+    if "folder" in kinds:
+        hint_parts.append(
+            "This is a folder attachment. List or search inside the folder path "
+            "and use read on individual files as needed."
         )
     if "audio" in kinds:
         hint_parts.append(

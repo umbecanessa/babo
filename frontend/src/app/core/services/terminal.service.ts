@@ -59,7 +59,7 @@ export class TerminalService {
       if (!this.runtimeWsBase) {
         await this.initElectronWsUrl();
       }
-      this.connectRawWs(`${this.runtimeWsBase}/ws/terminal`);
+      await this.connectRawWs(`${this.runtimeWsBase}/ws/terminal`);
       return;
     }
     this.connectSocketIo();
@@ -105,52 +105,92 @@ export class TerminalService {
     this.ready.set(false);
   }
 
-  private connectRawWs(url: string): void {
-    if (this.rawSocket?.readyState === WebSocket.OPEN) return;
-    if (this.rawSocket?.readyState === WebSocket.CONNECTING) return;
+  private connectRawWs(url: string): Promise<void> {
+    if (this.rawSocket?.readyState === WebSocket.OPEN) {
+      return Promise.resolve();
+    }
+    if (this.rawSocket?.readyState === WebSocket.CONNECTING) {
+      return this.waitForRawSocket();
+    }
 
     this.ioSocket?.disconnect();
     this.ioSocket = null;
 
-    this.rawSocket = new WebSocket(url);
+    return new Promise((resolve, reject) => {
+      const socket = new WebSocket(url);
+      this.rawSocket = socket;
 
-    this.rawSocket.onopen = () => {
-      this.connected.set(true);
-      this.ready.set(true);
-      this.flushPendingRaw();
-      this.outputSubject.next({ type: 'ready' });
-    };
+      socket.onopen = () => {
+        this.connected.set(true);
+        this.flushPendingRaw();
+        resolve();
+      };
 
-    this.rawSocket.onclose = () => {
-      this.connected.set(false);
-      this.ready.set(false);
-      this.rawSocket = null;
-    };
-
-    this.rawSocket.onerror = () => {
-      this.outputSubject.next({ type: 'error', message: 'Terminal connection error' });
-    };
-
-    this.rawSocket.onmessage = (event) => {
-      try {
-        const msg = JSON.parse(String(event.data));
-        switch (msg.type) {
-          case 'output':
-            this.outputSubject.next({ type: 'output', data: msg.data || '' });
-            break;
-          case 'exit':
-            this.outputSubject.next({ type: 'exit', code: msg.code ?? 0 });
-            break;
-          case 'error':
-            this.outputSubject.next({ type: 'error', message: msg.message || 'Terminal error' });
-            break;
-          default:
-            break;
+      socket.onclose = () => {
+        this.connected.set(false);
+        this.ready.set(false);
+        if (this.rawSocket === socket) {
+          this.rawSocket = null;
         }
-      } catch {
-        this.outputSubject.next({ type: 'output', data: String(event.data) });
-      }
-    };
+      };
+
+      socket.onerror = () => {
+        this.outputSubject.next({ type: 'error', message: 'Terminal connection error' });
+        reject(new Error('Terminal connection error'));
+      };
+
+      socket.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(String(event.data));
+          switch (msg.type) {
+            case 'ready':
+              this.ready.set(true);
+              this.outputSubject.next({ type: 'ready' });
+              break;
+            case 'output':
+              this.outputSubject.next({ type: 'output', data: msg.data || '' });
+              break;
+            case 'exit':
+              this.outputSubject.next({ type: 'exit', code: msg.code ?? 0 });
+              break;
+            case 'error':
+              this.outputSubject.next({ type: 'error', message: msg.message || 'Terminal error' });
+              break;
+            default:
+              break;
+          }
+        } catch {
+          this.outputSubject.next({ type: 'output', data: String(event.data) });
+        }
+      };
+    });
+  }
+
+  private waitForRawSocket(): Promise<void> {
+    const socket = this.rawSocket;
+    if (!socket || socket.readyState === WebSocket.OPEN) {
+      return Promise.resolve();
+    }
+    if (socket.readyState === WebSocket.CLOSED || socket.readyState === WebSocket.CLOSING) {
+      return Promise.reject(new Error('Terminal connection closed'));
+    }
+
+    return new Promise((resolve, reject) => {
+      const onOpen = () => {
+        cleanup();
+        resolve();
+      };
+      const onError = () => {
+        cleanup();
+        reject(new Error('Terminal connection error'));
+      };
+      const cleanup = () => {
+        socket.removeEventListener('open', onOpen);
+        socket.removeEventListener('error', onError);
+      };
+      socket.addEventListener('open', onOpen);
+      socket.addEventListener('error', onError);
+    });
   }
 
   private connectSocketIo(): void {

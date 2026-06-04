@@ -54,6 +54,9 @@ striprtf>=0.0.26
 # CLI utilities
 rich>=13.0.0
 
+# Interactive workspace shell (Windows ConPTY)
+pywinpty>=2.0.15; sys_platform == "win32"
+
 # Browser tool
 browser-use>=0.11.0
 playwright>=1.48.0

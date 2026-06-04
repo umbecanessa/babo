@@ -1473,6 +1473,14 @@
     }
   }
 
+  &.is-folder {
+    border-color: color-mix(in srgb, var(--accent-primary) 35%, var(--overlay-3));
+
+    svg {
+      color: var(--accent-primary);
+    }
+  }
+
   &.uploading {
     opacity: 0.7;
 

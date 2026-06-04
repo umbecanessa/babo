@@ -20,6 +20,8 @@ import {
   toolDoneLabel,
 } from '../../core/services/workbench-tool-outcome.util';
 import { ApiService, FileAttachment, ProjectProcess } from '../../core/services/api.service';
+import { ChatAttachmentService } from '../../core/services/chat-attachment.service';
+import { isFolderAttachment } from '../../core/utils/chat-drop.util';
 import { PlatformService } from '../../core/services/platform.service';
 import { VoiceRecorderService } from '../../core/services/voice-recorder.service';
 import { ToastService } from '../../shared/toast/toast.service';
@@ -83,6 +85,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
   @ViewChild('messageInput') messageInput!: ElementRef<HTMLTextAreaElement>;
   @ViewChild('waveformCanvas') waveformCanvas!: ElementRef<HTMLCanvasElement>;
   @ViewChild('fileInput') fileInput!: ElementRef<HTMLInputElement>;
+  @ViewChild('folderInput') folderInput!: ElementRef<HTMLInputElement>;
   @ViewChild(SignalSidebarComponent) signalSidebar?: SignalSidebarComponent;
   agent = signal<Agent | null>(null);
   agentOnline = signal(true);
@@ -227,6 +230,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     private day1Coach: Day1CoachService,
     private agentModels: AgentModelService,
     readonly platformIntegrations: PlatformIntegrationsService,
+    private chatAttachments: ChatAttachmentService,
   ) {}
 
   googleUsesByoCredentials(): boolean {
@@ -685,7 +689,25 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
   }
 
   // ─── File Handling ───────────────────────────────────────────
+  readonly isFolderAttachment = isFolderAttachment;
+
+  onAttachClick(event: MouseEvent) {
+    if (event.shiftKey) {
+      this.folderInput?.nativeElement.click();
+    } else {
+      this.fileInput?.nativeElement.click();
+    }
+  }
+
   onFilesSelected(event: Event) {
+    const input = event.target as HTMLInputElement;
+    if (input.files && input.files.length > 0) {
+      this.uploadFiles(Array.from(input.files));
+    }
+    input.value = '';
+  }
+
+  onFolderSelected(event: Event) {
     const input = event.target as HTMLInputElement;
     if (input.files && input.files.length > 0) {
       this.uploadFiles(Array.from(input.files));
@@ -710,10 +732,9 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     event.stopPropagation();
     this.isDragOver.set(false);
 
-    const files = event.dataTransfer?.files;
-    if (files && files.length > 0) {
-      this.uploadFiles(Array.from(files));
-    }
+    const dt = event.dataTransfer;
+    if (!dt) return;
+    this.uploadFromDataTransfer(dt);
   }
 
   removeAttachment(path: string) {
@@ -724,9 +745,30 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     if (!this.agentId || files.length === 0) return;
     this.fileUploading.set(true);
 
-    this.api.uploadFiles(this.agentId, files).subscribe({
+    this.chatAttachments.uploadFromFileList(this.agentId, files).subscribe({
       next: (uploaded) => {
-        this.pendingAttachments.update(list => [...list, ...uploaded]);
+        if (uploaded.length) {
+          this.pendingAttachments.update(list => [...list, ...uploaded]);
+        }
+        this.fileUploading.set(false);
+      },
+      error: (err) => {
+        console.error('File upload failed:', err);
+        this.toast.show('File upload failed', 'error');
+        this.fileUploading.set(false);
+      },
+    });
+  }
+
+  private uploadFromDataTransfer(dataTransfer: DataTransfer) {
+    if (!this.agentId) return;
+    this.fileUploading.set(true);
+
+    this.chatAttachments.uploadFromDataTransfer(this.agentId, dataTransfer).subscribe({
+      next: (uploaded) => {
+        if (uploaded.length) {
+          this.pendingAttachments.update(list => [...list, ...uploaded]);
+        }
         this.fileUploading.set(false);
       },
       error: (err) => {

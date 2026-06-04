@@ -75,6 +75,10 @@ export class WorkspaceEditorComponent
 
   ngOnChanges(changes: SimpleChanges): void {
     if (!this.editorReady) return;
+    if (changes['shellOpen']?.currentValue === true) {
+      this.view?.contentDOM.blur();
+      return;
+    }
     if (changes['activePath']) {
       void this.syncStates().then(() => this.showActiveState());
       return;

@@ -31,6 +31,8 @@ export interface FileAttachment {
   path: string;
   size: number;
   mime_type: string;
+  is_folder?: boolean;
+  file_count?: number;
 }
 
 /** Detached project dev server / background process from agent bash tool. */
@@ -481,6 +483,31 @@ export class ApiService {
     return this.http.post<FileAttachment[]>(
       `${this.RUNTIME}/agents/${agentId}/files/upload`,
       formData,
+    );
+  }
+
+  uploadFolder(
+    agentId: string,
+    folderName: string,
+    files: File[],
+    relativePaths: string[],
+  ): Observable<FileAttachment[]> {
+    const formData = new FormData();
+    formData.append('folder_name', folderName);
+    formData.append('relative_paths', JSON.stringify(relativePaths));
+    for (const f of files) {
+      formData.append('files', f, f.name);
+    }
+    return this.http.post<FileAttachment[]>(
+      `${this.RUNTIME}/agents/${agentId}/files/upload-folder`,
+      formData,
+    );
+  }
+
+  importFolder(agentId: string, sourcePath: string): Observable<FileAttachment[]> {
+    return this.http.post<FileAttachment[]>(
+      `${this.RUNTIME}/agents/${agentId}/files/import-folder`,
+      { source_path: sourcePath },
     );
   }
 

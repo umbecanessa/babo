@@ -64,20 +64,19 @@ export class WorkspaceTerminalComponent implements AfterViewInit, OnDestroy, OnC
         this.term?.writeln(`\r\n\x1b[31m${ev.message}\x1b[0m`);
       } else if (ev.type === 'ready') {
         this.applyCwd();
+        this.reflow();
       }
     });
-
-    this.term.onData((data) => this.terminal.sendInput(data));
 
     this.resizeObserver = new ResizeObserver(() => this.reflow());
     this.resizeObserver.observe(this.host.nativeElement);
 
     void this.terminal.connect().then(() => {
-      this.applyCwd();
-      this.focusTerminal();
+      this.term?.onData((data) => this.terminal.sendInput(data));
+      requestAnimationFrame(() => this.focusTerminal());
+    }).catch(() => {
+      // Error surfaced via onOutput subscription.
     });
-
-    requestAnimationFrame(() => this.reflow());
   }
 
   ngOnChanges(changes: SimpleChanges): void {

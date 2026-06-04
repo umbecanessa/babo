@@ -42,20 +42,97 @@
     }
   </div>
 
-  <div class="sidebar-input">
+  <div class="sidebar-input"
+       (dragover)="onDragOver($event)"
+       (dragleave)="onDragLeave($event)"
+       (drop)="onDrop($event)"
+       [class.drag-over]="isDragOver()">
+
+    <input #fileInput type="file" multiple style="display:none" (change)="onFilesSelected($event)" />
+    <input #folderInput type="file" webkitdirectory multiple style="display:none" (change)="onFilesSelected($event)" />
+
+    @if (isDragOver()) {
+      <div class="drop-overlay">Drop files or folders here</div>
+    }
+
+    @if (pendingAttachments().length || fileUploading()) {
+      <div class="attachment-row">
+        @for (att of pendingAttachments(); track att.path) {
+          <div class="attachment-chip"
+               [class.is-image]="att.mime_type.startsWith('image/')"
+               [class.is-folder]="isFolderAttachment(att)">
+            @if (isFolderAttachment(att)) {
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+              </svg>
+            } @else if (att.mime_type.startsWith('image/')) {
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                <polyline points="21 15 16 10 5 21"></polyline>
+              </svg>
+            } @else {
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+              </svg>
+            }
+            <span class="attachment-name">{{ att.name }}</span>
+            <button class="attachment-remove" type="button" (click)="removeAttachment(att.path)" title="Remove">&times;</button>
+          </div>
+        }
+        @if (fileUploading()) {
+          <div class="attachment-chip uploading">
+            <span class="upload-spinner"></span>
+            <span class="attachment-name">Uploading...</span>
+          </div>
+        }
+      </div>
+    }
+
     <span class="input-hint">{{ composerHint().hint }}</span>
-    <div class="input-row">
-      <input
-        class="chat-input"
-        [ngModel]="input()"
-        (ngModelChange)="updateInput($event)"
-        [placeholder]="composerHint().placeholder"
-        (keydown)="onKeydown($event)"
-        [disabled]="sending()"
-      />
-      <button class="send-btn" (click)="send()" [disabled]="!input().trim() || sending()">
-        @if (sending()) { &hellip; } @else { Send }
-      </button>
-    </div>
+
+    @if (voice.state() === 'recording') {
+      <div class="input-row voice-row">
+        <button type="button" class="icon-btn voice-cancel" (click)="cancelVoice()" title="Cancel">&times;</button>
+        <span class="recording-label">Recording {{ formatDuration(voice.duration()) }}</span>
+        <button type="button" class="stop-btn" (click)="stopVoice()" title="Stop & Transcribe">Stop</button>
+      </div>
+    } @else if (voice.state() === 'transcribing') {
+      <div class="input-row transcribing-row">
+        <span class="transcribing-label">Transcribing...</span>
+      </div>
+    } @else {
+      <div class="input-row">
+        <button type="button" class="icon-btn attach-btn" (click)="onAttachClick($event)" title="Attach files (Shift+click for folder)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+          </svg>
+        </button>
+        <input
+          #chatInput
+          class="chat-input"
+          [ngModel]="input()"
+          (ngModelChange)="updateInput($event)"
+          [placeholder]="composerHint().placeholder"
+          (keydown)="onKeydown($event)"
+          [disabled]="sending()"
+        />
+        @if (canSend()) {
+          <button class="send-btn" type="button" (click)="send()" [disabled]="sending()">
+            @if (sending()) { &hellip; } @else { Send }
+          </button>
+        } @else {
+          <button type="button" class="icon-btn mic-btn" (click)="startVoice()" title="Voice input">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+              <line x1="12" y1="19" x2="12" y2="23"></line>
+              <line x1="8" y1="23" x2="16" y2="23"></line>
+            </svg>
+          </button>
+        }
+      </div>
+    }
   </div>
 </div>

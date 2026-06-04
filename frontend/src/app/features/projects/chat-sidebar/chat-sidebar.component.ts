@@ -10,6 +10,8 @@ import {
   signal,
   computed,
   inject,
+  ElementRef,
+  ViewChild,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -17,10 +19,14 @@ import { RouterLink } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
 import { Subscription } from 'rxjs';
 import { WebSocketService } from '../../../core/services/websocket.service';
-import { ApiService } from '../../../core/services/api.service';
+import { ApiService, FileAttachment } from '../../../core/services/api.service';
 import { PlatformService } from '../../../core/services/platform.service';
 import { ConversationService } from '../../../core/services/conversation.service';
+import { ChatAttachmentService } from '../../../core/services/chat-attachment.service';
+import { VoiceRecorderService } from '../../../core/services/voice-recorder.service';
+import { ToastService } from '../../../shared/toast/toast.service';
 import { composerDestination } from '../../../core/services/composer-destination.util';
+import { isFolderAttachment } from '../../../core/utils/chat-drop.util';
 import { parseThinking } from '../../../shared/signal-utils';
 import { MarkdownPipe } from '../../../shared/pipes/markdown.pipe';
 
@@ -42,13 +48,21 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
   @Input() agentId = '';
   @Output() close = new EventEmitter<void>();
 
+  @ViewChild('fileInput') fileInput?: ElementRef<HTMLInputElement>;
+  @ViewChild('folderInput') folderInput?: ElementRef<HTMLInputElement>;
+  @ViewChild('chatInput') chatInput?: ElementRef<HTMLInputElement>;
+
   messages = signal<ChatMessage[]>([]);
   input = signal('');
   sending = signal(false);
   loadingHistory = signal(false);
   activeThread = signal('websocket:main');
   streamingText = signal('');
+  pendingAttachments = signal<FileAttachment[]>([]);
+  fileUploading = signal(false);
+  isDragOver = signal(false);
 
+  readonly isFolderAttachment = isFolderAttachment;
   readonly conversations = inject(ConversationService);
 
   /** Private desk threads only — no Discord/WhatsApp/etc. in Projects sidebar. */
@@ -73,6 +87,9 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
     private api: ApiService,
     private http: HttpClient,
     private platform: PlatformService,
+    public voice: VoiceRecorderService,
+    private chatAttachments: ChatAttachmentService,
+    private toast: ToastService,
   ) {}
 
   ngOnInit(): void {
@@ -105,7 +122,8 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
 
   send(): void {
     const msg = this.input().trim();
-    if (!msg || this.sending()) return;
+    const attachments = this.pendingAttachments();
+    if ((!msg && attachments.length === 0) || this.sending()) return;
 
     if (!this.ws.connected()) {
       this.messages.update((msgs) => [
@@ -123,14 +141,24 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
 
     this.messages.update((msgs) => [
       ...msgs,
-      { role: 'user' as const, content: msg, timestamp: Date.now() / 1000 },
+      { role: 'user' as const, content: msg || '(attachment)', timestamp: Date.now() / 1000 },
     ]);
 
     this.sending.set(true);
     this.input.set('');
+    this.pendingAttachments.set([]);
     this.streamingText.set('');
 
-    this.ws.sendMessage(msg, threadKey);
+    if (attachments.length > 0) {
+      this.ws.send({
+        type: 'message',
+        content: msg || 'Please examine the attached files.',
+        attachments,
+        session_key: threadKey,
+      });
+    } else {
+      this.ws.sendMessage(msg, threadKey);
+    }
   }
 
   onKeydown(event: KeyboardEvent): void {
@@ -142,6 +170,129 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
 
   updateInput(value: string): void {
     this.input.set(value);
+  }
+
+  onAttachClick(event: MouseEvent): void {
+    if (event.shiftKey) {
+      this.folderInput?.nativeElement.click();
+    } else {
+      this.fileInput?.nativeElement.click();
+    }
+  }
+
+  onFilesSelected(event: Event): void {
+    const input = event.target as HTMLInputElement;
+    const files = input.files ? Array.from(input.files) : [];
+    input.value = '';
+    if (!files.length) return;
+    this.uploadFiles(files);
+  }
+
+  onDragOver(event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.isDragOver.set(true);
+  }
+
+  onDragLeave(event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.isDragOver.set(false);
+  }
+
+  onDrop(event: DragEvent): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.isDragOver.set(false);
+    const dt = event.dataTransfer;
+    if (!dt) return;
+    this.uploadFromDataTransfer(dt);
+  }
+
+  removeAttachment(path: string): void {
+    this.pendingAttachments.update((list) => list.filter((a) => a.path !== path));
+  }
+
+  async startVoice(): Promise<void> {
+    try {
+      await this.voice.startRecording();
+    } catch (err) {
+      console.error('Microphone access denied:', err);
+      this.toast.show('Microphone access denied', 'error');
+    }
+  }
+
+  async stopVoice(): Promise<void> {
+    try {
+      const blob = await this.voice.stopRecording();
+      this.api.transcribe(blob).subscribe({
+        next: (result) => {
+          this.input.set(result.text);
+          this.voice.finishTranscribing();
+          setTimeout(() => this.chatInput?.nativeElement?.focus(), 50);
+        },
+        error: (err) => {
+          console.error('Transcription failed:', err);
+          this.toast.show('Transcription failed', 'error');
+          this.voice.finishTranscribing();
+        },
+      });
+    } catch (err) {
+      console.error('Stop recording failed:', err);
+      this.voice.cancelRecording();
+    }
+  }
+
+  cancelVoice(): void {
+    this.voice.cancelRecording();
+  }
+
+  formatDuration(secs: number): string {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${m}:${s.toString().padStart(2, '0')}`;
+  }
+
+  canSend(): boolean {
+    return !!(this.input().trim() || this.pendingAttachments().length) && !this.sending();
+  }
+
+  private uploadFiles(files: File[]): void {
+    if (!this.agentId || files.length === 0) return;
+    this.fileUploading.set(true);
+
+    this.chatAttachments.uploadFromFileList(this.agentId, files).subscribe({
+      next: (uploaded) => {
+        if (uploaded.length) {
+          this.pendingAttachments.update((list) => [...list, ...uploaded]);
+        }
+        this.fileUploading.set(false);
+      },
+      error: (err) => {
+        console.error('File upload failed:', err);
+        this.toast.show('File upload failed', 'error');
+        this.fileUploading.set(false);
+      },
+    });
+  }
+
+  private uploadFromDataTransfer(dataTransfer: DataTransfer): void {
+    if (!this.agentId) return;
+    this.fileUploading.set(true);
+
+    this.chatAttachments.uploadFromDataTransfer(this.agentId, dataTransfer).subscribe({
+      next: (uploaded) => {
+        if (uploaded.length) {
+          this.pendingAttachments.update((list) => [...list, ...uploaded]);
+        }
+        this.fileUploading.set(false);
+      },
+      error: (err) => {
+        console.error('File upload failed:', err);
+        this.toast.show('File upload failed', 'error');
+        this.fileUploading.set(false);
+      },
+    });
   }
 
   private bootstrap(): void {
@@ -156,6 +307,7 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
     if (this.prevAgentId && this.prevAgentId !== this.agentId) {
       this.messages.set([]);
       this.activeThread.set('websocket:main');
+      this.pendingAttachments.set([]);
     }
     this.prevAgentId = this.agentId;
 
