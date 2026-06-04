@@ -723,8 +723,8 @@
 
   <!-- LAN sheet -->
   @if (showLanSheet()) {
-    <div class="sheet-backdrop" (click)="showLanSheet.set(false)">
-      <div class="sheet sheet-lan" (click)="$event.stopPropagation()">
+    <div class="modal-dismiss-scrim setup-sheet-backdrop" (click)="showLanSheet.set(false)">
+      <div class="modal-panel sheet sheet-lan" (click)="$event.stopPropagation()">
         <h3>Network server</h3>
         <p class="small-muted sheet-lead">vLLM, Whisper, or vision on your LAN. Add SSH to see which models fit that machine’s GPU.</p>
         <div class="form-group sheet-field">
@@ -842,8 +842,8 @@
 
   <!-- Local Ollama setup sheet -->
   @if (showLocalModelSetup() && setupModel(); as model) {
-    <div class="sheet-backdrop" (click)="closeLocalModelSetup()">
-      <div class="sheet sheet-local-setup" (click)="$event.stopPropagation()">
+    <div class="modal-dismiss-scrim setup-sheet-backdrop" (click)="closeLocalModelSetup()">
+      <div class="modal-panel sheet sheet-local-setup" (click)="$event.stopPropagation()">
         <h3>Set up {{ model.displayName }}</h3>
         <p class="small-muted sheet-lead">
           Babo uses <strong>Ollama</strong> on this PC. Follow these steps, then choose this model for chat.
@@ -928,8 +928,8 @@
 
   <!-- LAN model guide sheet -->
   @if (showLanModelGuide() && setupModel(); as model) {
-    <div class="sheet-backdrop" (click)="closeLanModelGuide()">
-      <div class="sheet sheet-local-setup" (click)="$event.stopPropagation()">
+    <div class="modal-dismiss-scrim setup-sheet-backdrop" (click)="closeLanModelGuide()">
+      <div class="modal-panel sheet sheet-local-setup" (click)="$event.stopPropagation()">
         <h3>{{ model.displayName }} on your server</h3>
         <p class="small-muted sheet-lead">
           LAN chat uses a <strong>vLLM</strong> or OpenAI-compatible server on port <strong>8000</strong>, not Ollama.
@@ -965,8 +965,8 @@
 
   <!-- Voice sheet -->
   @if (showVoiceSheet()) {
-    <div class="sheet-backdrop" (click)="closeVoiceSheet()">
-      <div class="sheet sheet-voice" (click)="$event.stopPropagation()">
+    <div class="modal-dismiss-scrim setup-sheet-backdrop" (click)="closeVoiceSheet()">
+      <div class="modal-panel sheet sheet-voice" (click)="$event.stopPropagation()">
         <h3>Voice input</h3>
         <div class="chip-row voice-chips">
           @for (opt of voiceOptions; track opt.tier) {

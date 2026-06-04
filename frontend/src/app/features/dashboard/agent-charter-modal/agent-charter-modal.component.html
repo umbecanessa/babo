@@ -1,13 +1,13 @@
 @if (visible) {
-  <div class="charter-overlay" role="presentation">
-    <div class="modal-backdrop" (click)="cancel()" aria-hidden="true"></div>
-    <div class="charter-modal" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
+  <div class="modal-overlay charter-overlay" role="presentation">
+    <div class="modal-scrim" (click)="cancel()" aria-hidden="true"></div>
+    <div class="modal-panel charter-modal" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
       <header class="modal-header">
         <div>
           <h3>Agent charter</h3>
           <p class="modal-agent">{{ agentLabel || agentId }}</p>
         </div>
-        <button type="button" class="close-btn" (click)="cancel()" aria-label="Close">×</button>
+        <button type="button" class="modal-close close-btn" (click)="cancel()" aria-label="Close">×</button>
       </header>
 
       <nav class="tab-bar">

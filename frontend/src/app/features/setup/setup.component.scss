@@ -4,11 +4,6 @@
   overflow: hidden;
 }
 
-:root[data-theme='light'] .setup-card:not(.welcome) {
-  background: var(--glass-bg-hover);
-  border-color: var(--glass-border-strong);
-}
-
 .setup-page {
   position: relative;
   height: 100%;
@@ -83,16 +78,16 @@
 .setup-card {
   position: relative;
   z-index: 1;
-  background: var(--overlay-1);
-  border: 1px solid var(--overlay-3);
-  border-radius: 20px;
+  background: var(--modal-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
   padding: 28px 32px 24px;
   max-width: 520px;
   width: calc(100% - 32px);
   max-height: calc(100vh - 40px);
   display: flex;
   flex-direction: column;
-  backdrop-filter: blur(20px);
+  box-shadow: var(--shadow-glass), 0 24px 80px rgba(0, 0, 0, 0.35);
   box-sizing: border-box;
   overflow: hidden;
 
@@ -2041,15 +2036,8 @@
   }
 }
 
-.sheet-backdrop {
-  position: fixed;
-  inset: 0;
+.setup-sheet-backdrop {
   z-index: 100;
-  background: rgba(0, 0, 0, 0.45);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
 }
 
 .sheet {
@@ -2057,30 +2045,13 @@
   max-width: 520px;
   max-height: min(85vh, 720px);
   overflow-y: auto;
-  background: var(--overlay-1);
-  border: 1px solid var(--overlay-3);
-  border-radius: 16px;
   padding: 20px 22px 24px;
-  backdrop-filter: blur(24px);
-  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.35);
-  animation: setup-sheet-in 0.22s ease-out;
 
   h3 {
     margin: 0 0 6px;
     font-size: 17px;
     font-weight: 400;
     color: var(--text-primary);
-  }
-}
-
-@keyframes setup-sheet-in {
-  from {
-    opacity: 0;
-    transform: scale(0.96) translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1) translateY(0);
   }
 }
 

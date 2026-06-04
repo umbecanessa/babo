@@ -218,13 +218,13 @@ function unionRect(elements: Element[]): DOMRect | null {
 
       :host {
 
-        --coach-scrim: rgba(0, 0, 0, 0.38);
+        --coach-scrim: var(--backdrop-scrim);
 
         position: fixed;
 
         inset: 0;
 
-        z-index: 12000;
+        z-index: var(--modal-z-coach, 12000);
 
         pointer-events: none;
 
@@ -258,17 +258,15 @@ function unionRect(elements: Element[]): DOMRect | null {
 
         max-width: min(380px, calc(100vw - 32px));
 
-        background: var(--glass-bg-hover);
+        background: var(--modal-bg);
 
-        border: 1px solid var(--glass-border-strong);
+        border: 1px solid var(--glass-border);
 
-        border-radius: 16px;
+        border-radius: var(--radius-lg);
 
         padding: 18px 20px;
 
-        backdrop-filter: blur(20px);
-
-        box-shadow: var(--shadow-glass);
+        box-shadow: var(--shadow-glass), 0 24px 80px rgba(0, 0, 0, 0.35);
 
         color: var(--text-primary);
 
@@ -370,7 +368,7 @@ function unionRect(elements: Element[]): DOMRect | null {
 
         position: relative;
 
-        z-index: 12002;
+        z-index: calc(var(--modal-z-coach, 12000) + 2);
 
       }
 

@@ -146,6 +146,9 @@ import { updateReleaseNotesPlainText } from './update-release-notes.util';
       position: fixed;
       inset: 0;
       z-index: 9998;
+      background: var(--backdrop-scrim);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
     }
 
     .panel {
@@ -154,12 +157,10 @@ import { updateReleaseNotesPlainText } from './update-release-notes.util';
       right: 0;
       z-index: 9999;
       width: 340px;
-      border-radius: 12px;
-      background: rgba(15, 15, 25, 0.95);
-      backdrop-filter: blur(24px);
-      -webkit-backdrop-filter: blur(24px);
-      border: 1px solid var(--accent-primary-glow);
-      box-shadow: 0 16px 48px var(--overlay-5), 0 0 40px var(--accent-primary-glow);
+      border-radius: var(--radius-md);
+      background: var(--modal-bg);
+      border: 1px solid var(--glass-border);
+      box-shadow: var(--shadow-glass), 0 16px 48px rgba(0, 0, 0, 0.35);
       overflow: hidden;
       animation: panelIn 150ms ease-out;
     }

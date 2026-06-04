@@ -20,8 +20,8 @@ type ConnectState = 'idle' | 'connecting' | 'waiting' | 'connected' | 'error';
   imports: [CommonModule],
   template: `
     @if (open()) {
-      <div class="modal-backdrop" [class.closing]="closing" (click)="dismiss()">
-        <div class="modal-panel" (click)="$event.stopPropagation()">
+      <div class="modal-dismiss-scrim" [class.closing]="closing" (click)="dismiss()">
+        <div class="modal-panel google-connect-panel" (click)="$event.stopPropagation()">
           <div class="modal-top-bar">
             <div class="modal-header-left">
               <svg viewBox="0 0 24 24" fill="currentColor" width="22" height="22" class="google-icon">
@@ -126,7 +126,6 @@ type ConnectState = 'idle' | 'connecting' | 'waiting' | 'connected' | 'error';
     }
   `,
   styles: [`
-    $bg-panel: var(--bg-surface);
     $border: var(--glass-border);
     $accent: var(--accent-primary);
     $green: #4ade80;
@@ -134,73 +133,15 @@ type ConnectState = 'idle' | 'connecting' | 'waiting' | 'connected' | 'error';
     $text-heading: var(--text-primary);
     $text-muted: var(--text-muted);
 
-    .modal-backdrop {
-      position: fixed;
-      inset: 0;
-      z-index: 1000;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: var(--overlay-5);
-      backdrop-filter: blur(6px);
-      animation: fadeIn 0.18s ease-out;
-
-      &.closing { animation: fadeOut 0.18s ease-in forwards; }
-    }
-
-    .modal-panel {
+    .google-connect-panel {
       width: 92vw;
       max-width: 480px;
-      display: flex;
-      flex-direction: column;
-      background: $bg-panel;
-      border: 1px solid $border;
-      border-radius: 14px;
-      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
-      animation: slideUp 0.22s ease-out;
-
-      .closing & { animation: slideDown 0.18s ease-in forwards; }
-    }
-
-    .modal-top-bar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 18px 24px;
-      border-bottom: 1px solid $border;
     }
 
     .modal-header-left {
       display: flex;
       align-items: center;
       gap: 10px;
-    }
-
-    .modal-title {
-      font-size: 18px;
-      font-weight: 600;
-      color: $text-heading;
-      margin: 0;
-    }
-
-    .modal-close {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 32px;
-      height: 32px;
-      background: transparent;
-      border: 1px solid $border;
-      border-radius: 8px;
-      color: $text-muted;
-      cursor: pointer;
-      transition: all 0.15s;
-
-      &:hover {
-        color: $text-heading;
-        border-color: var(--overlay-5);
-        background: var(--overlay-2);
-      }
     }
 
     .modal-body {
@@ -368,10 +309,6 @@ type ConnectState = 'idle' | 'connecting' | 'waiting' | 'connected' | 'error';
       margin: 0;
     }
 
-    @keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
-    @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
-    @keyframes slideUp   { from { opacity: 0; transform: translateY(24px) scale(0.97); } to { opacity: 1; transform: translateY(0) scale(1); } }
-    @keyframes slideDown { from { opacity: 1; transform: translateY(0) scale(1); } to { opacity: 0; transform: translateY(16px) scale(0.97); } }
     @keyframes spin  { to { transform: rotate(360deg); } }
     @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(1.15); } }
   `],

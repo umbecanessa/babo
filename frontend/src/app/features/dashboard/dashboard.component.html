@@ -129,9 +129,9 @@
   </div>
 
   @if (squadsPanel?.editingSquad(); as esq) {
-    <div class="squad-modal-overlay" role="presentation">
-      <div class="squad-modal-backdrop" (click)="squadsPanel!.cancelSquadSettings()" aria-hidden="true"></div>
-      <div class="squad-settings-modal" role="dialog" aria-modal="true">
+    <div class="modal-overlay squad-modal-overlay" role="presentation">
+      <div class="modal-scrim squad-modal-backdrop" (click)="squadsPanel!.cancelSquadSettings()" aria-hidden="true"></div>
+      <div class="modal-panel squad-settings-modal" role="dialog" aria-modal="true">
         <h3>Squad checkback</h3>
         <p class="squad-modal-muted">Wakes the lead on an interval and when inbox proposals exceed the SLA.</p>
         <label class="checkbox-row">
@@ -155,9 +155,9 @@
   }
 
   @if (squadsPanel?.kanbanSquad(); as ksq) {
-    <div class="squad-modal-overlay" role="presentation">
-      <div class="squad-modal-backdrop" (click)="squadsPanel!.closeKanban()" aria-hidden="true"></div>
-      <div class="squad-kanban-modal" role="dialog" aria-modal="true">
+    <div class="modal-overlay squad-modal-overlay" role="presentation">
+      <div class="modal-scrim squad-modal-backdrop" (click)="squadsPanel!.closeKanban()" aria-hidden="true"></div>
+      <div class="modal-panel squad-kanban-modal" role="dialog" aria-modal="true">
         <header class="squad-kanban-head">
           <h3>Squad board</h3>
           <button type="button" class="squad-close-btn" (click)="squadsPanel!.closeKanban()" aria-label="Close">×</button>

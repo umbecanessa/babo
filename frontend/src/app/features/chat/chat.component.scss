@@ -370,11 +370,9 @@
   width: min(300px, 88vw);
   display: flex;
   flex-direction: column;
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
+  background: var(--modal-bg);
   border-right: 1px solid var(--glass-border);
-  box-shadow: 8px 0 40px rgba(0, 0, 0, 0.45);
+  box-shadow: 8px 0 40px rgba(0, 0, 0, 0.35);
   animation: conv-drawer-in 0.22s ease-out;
 
   app-conversation-nav {
@@ -606,7 +604,9 @@
   display: none;
   position: fixed;
   inset: 0;
-  background: var(--overlay-5);
+  background: var(--backdrop-scrim);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   z-index: 900;
   animation: fade-in 0.25s ease-out;
 
@@ -628,12 +628,11 @@
   right: 0;
   z-index: 950;
   max-height: 75vh;
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  border-top-left-radius: 20px;
-  border-top-right-radius: 20px;
-  box-shadow: 0 -8px 40px var(--overlay-5);
+  background: var(--modal-bg);
+  border-top: 1px solid var(--glass-border);
+  border-top-left-radius: var(--radius-lg);
+  border-top-right-radius: var(--radius-lg);
+  box-shadow: 0 -8px 40px rgba(0, 0, 0, 0.35);
   animation: sheet-slide-up 0.35s cubic-bezier(0.32, 0.72, 0, 1);
   overflow: hidden;
 

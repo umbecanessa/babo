@@ -1,0 +1,141 @@
+// Modal design contract — opaque panels over the glassmorphic app shell.
+// Backdrop dims + blurs the page; panel uses solid --modal-bg (no panel blur).
+
+@keyframes modal-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes modal-exit {
+  from {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(16px) scale(0.97);
+  }
+}
+
+@keyframes modal-scrim-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes modal-scrim-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+// Pattern A: overlay wrapper + absolute scrim (confirm, charter, squad)
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--modal-z, 1100);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  pointer-events: auto;
+}
+
+.modal-scrim {
+  position: absolute;
+  inset: 0;
+  background: var(--backdrop-scrim);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+// Pattern B: flex scrim — click backdrop to dismiss (detail, google, update, info)
+.modal-dismiss-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--modal-z, 1100);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--backdrop-scrim);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: modal-scrim-in 0.18s ease-out;
+
+  &.closing {
+    animation: modal-scrim-out 0.18s ease-in forwards;
+  }
+}
+
+.modal-panel {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  background: var(--modal-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-glass), 0 24px 80px rgba(0, 0, 0, 0.35);
+  color: var(--text-primary);
+  animation: modal-enter 0.22s ease-out;
+
+  .closing & {
+    animation: modal-exit 0.18s ease-in forwards;
+  }
+}
+
+.modal-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid var(--glass-border);
+  flex-shrink: 0;
+}
+
+.modal-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.modal-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: var(--overlay-1);
+  border: 1px solid var(--overlay-3);
+  border-radius: 8px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+
+  &:hover {
+    color: var(--text-primary);
+    background: var(--overlay-2);
+    border-color: var(--glass-border-strong);
+  }
+}
+
+.modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+.modal-overlay--confirm {
+  z-index: var(--modal-z-confirm, 1200);
+}
+
+.modal-dismiss-scrim--system {
+  z-index: var(--modal-z-system, 10000);
+}

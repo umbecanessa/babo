@@ -1,33 +1,6 @@
-.confirm-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1200;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  pointer-events: auto;
-}
-
-.confirm-backdrop {
-  position: absolute;
-  inset: 0;
-  background: var(--backdrop-scrim);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-}
-
 .confirm-panel {
-  position: relative;
-  z-index: 1;
   width: min(420px, 92vw);
   padding: 22px 24px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--glass-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-glass), 0 24px 80px rgba(0, 0, 0, 0.35);
-  color: var(--text-primary);
-  animation: confirm-enter 0.22s ease-out;
 }
 
 .confirm-title {
@@ -95,16 +68,5 @@
     &:hover {
       box-shadow: 0 0 16px color-mix(in srgb, var(--accent-danger) 45%, transparent);
     }
-  }
-}
-
-@keyframes confirm-enter {
-  from {
-    opacity: 0;
-    transform: translateY(12px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
   }
 }

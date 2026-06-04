@@ -72,16 +72,16 @@
 .auth-card {
   position: relative;
   z-index: 1;
-  background: var(--overlay-1);
-  border: 1px solid var(--overlay-3);
-  border-radius: 20px;
+  background: var(--modal-bg);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
   padding: 28px 32px 24px;
   max-width: 420px;
   width: calc(100% - 32px);
   max-height: calc(100vh - 40px);
   display: flex;
   flex-direction: column;
-  backdrop-filter: blur(20px);
+  box-shadow: var(--shadow-glass), 0 24px 80px rgba(0, 0, 0, 0.35);
   box-sizing: border-box;
   text-align: left;
 }

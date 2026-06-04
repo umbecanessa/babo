@@ -66,6 +66,13 @@
   --surface-inset-strong: var(--overlay-3);
   --backdrop-scrim: rgba(0, 0, 0, 0.32);
 
+  /* Modals — opaque panel on dimmed scrim (not glass-bg) */
+  --modal-bg: var(--bg-secondary);
+  --modal-z: 1100;
+  --modal-z-confirm: 1200;
+  --modal-z-system: 10000;
+  --modal-z-coach: 12000;
+
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
 
@@ -253,6 +260,8 @@ a {
     text-decoration: underline;
   }
 }
+
+@import './app/shared/styles/modal';
 
 .glass-panel {
   background: var(--glass-bg);

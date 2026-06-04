@@ -11,11 +11,9 @@ import { normalizeUpdateReleaseNotes } from './update-release-notes.util';
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (updateService.showModal()) {
-      <div class="modal-backdrop" [class.closing]="closing()" (click)="onLater()">
-        <div class="modal-card" [class.closing]="closing()" (click)="$event.stopPropagation()">
-          <div class="accent-bar"></div>
-
-          <div class="card-body">
+      <div class="modal-dismiss-scrim modal-dismiss-scrim--system" [class.closing]="closing()" (click)="onLater()">
+        <div class="modal-panel update-modal-card" [class.closing]="closing()" (click)="$event.stopPropagation()">
+          <div class="modal-body card-body">
             <div class="icon-wrap">
               <svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="28" height="28" aria-hidden="true">
                 <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
@@ -46,46 +44,12 @@ import { normalizeUpdateReleaseNotes } from './update-release-notes.util';
     }
   `,
   styles: `
-    .modal-backdrop {
-      position: fixed;
-      inset: 0;
-      z-index: 10000;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: var(--backdrop-scrim);
-      backdrop-filter: blur(6px);
-      -webkit-backdrop-filter: blur(6px);
-      animation: backdropIn 200ms ease-out forwards;
-      padding: 24px;
-
-      &.closing { animation: backdropOut 150ms ease-in forwards; }
-    }
-
-    .modal-card {
-      position: relative;
+    .update-modal-card {
       max-width: 440px;
       width: 100%;
-      border-radius: var(--radius-md);
-      background: var(--glass-bg);
-      backdrop-filter: blur(var(--glass-blur));
-      -webkit-backdrop-filter: blur(var(--glass-blur));
-      border: 1px solid var(--glass-border);
-      overflow: hidden;
-      animation: cardIn 250ms ease-out forwards;
-      box-shadow: var(--shadow-glass), 0 24px 64px rgba(0, 0, 0, 0.35);
-
-      &.closing { animation: cardOut 150ms ease-in forwards; }
-    }
-
-    .accent-bar {
-      height: 2px;
-      flex-shrink: 0;
-      background: linear-gradient(90deg, var(--accent-primary), var(--accent-secondary));
     }
 
     .card-body {
-      padding: 28px 24px 22px;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -241,11 +205,6 @@ import { normalizeUpdateReleaseNotes } from './update-release-notes.util';
         color: var(--text-primary);
       }
     }
-
-    @keyframes backdropIn { from { opacity: 0; } to { opacity: 1; } }
-    @keyframes backdropOut { from { opacity: 1; } to { opacity: 0; } }
-    @keyframes cardIn { from { opacity: 0; transform: scale(0.96) translateY(8px); } to { opacity: 1; transform: scale(1) translateY(0); } }
-    @keyframes cardOut { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.96); } }
   `,
 })
 export class UpdateModalComponent {

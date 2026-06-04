@@ -7,7 +7,7 @@ import { CommonModule } from '@angular/common';
   imports: [CommonModule],
   template: `
     @if (open()) {
-      <div class="modal-backdrop" [class.closing]="closing" (click)="dismiss()">
+      <div class="modal-dismiss-scrim" [class.closing]="closing" (click)="dismiss()">
         <div class="modal-panel" (click)="$event.stopPropagation()">
           <div class="modal-top-bar">
             <h2 class="modal-title">{{ title() }}</h2>
