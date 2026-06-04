@@ -11,6 +11,10 @@ from nls.runtime.channel_agent_config import (
     data_root_from_agent_dir,
     load_agent_channel_config,
 )
+from nls.runtime.interaction_policy import (
+    channel_skill_name,
+    summarize_interaction_mode,
+)
 
 _KNOWN_CHANNELS = tuple(_CHANNEL_SKILL_DIRS.keys())
 
@@ -138,27 +142,44 @@ def _slack_summary(cfg: dict[str, Any], adapter: Any | None, agent_id: str) -> s
     return "; ".join(parts)
 
 
+def _interaction_summary(channel: str, cfg: dict[str, Any]) -> str:
+    skill = channel_skill_name(channel)
+    if not skill or not cfg:
+        return ""
+    try:
+        return summarize_interaction_mode(skill, cfg)
+    except Exception:
+        return ""
+
+
 def _simple_summary(channel: str, cfg: dict[str, Any], adapter: Any | None, agent_id: str) -> str:
+    parts: list[str] = []
     if channel == "discord":
-        return _discord_summary(cfg, adapter, agent_id)
-    if channel == "slack":
-        return _slack_summary(cfg, adapter, agent_id)
-    if channel == "telegram":
+        parts.append(_discord_summary(cfg, adapter, agent_id))
+    elif channel == "slack":
+        parts.append(_slack_summary(cfg, adapter, agent_id))
+    elif channel == "telegram":
         uname = ""
         if adapter is not None:
             uname = getattr(adapter, "_bot_usernames", {}).get(agent_id or "", "")
-        return f"bot @{uname}" if uname else ""
-    if channel == "whatsapp":
+        if uname:
+            parts.append(f"bot @{uname}")
+    elif channel == "whatsapp":
         phone = str(cfg.get("linked_phone", "")).strip()
-        return f"phone {phone}" if phone else ""
-    if channel == "email":
+        if phone:
+            parts.append(f"phone {phone}")
+    elif channel == "email":
         alias = str(cfg.get("alias", "") or cfg.get("from_address", "")).strip()
         email = str(cfg.get("connected_email", "")).strip()
         if email:
-            return f"mailbox {email}"
-        if alias:
-            return f"sends from {alias}"
-    return ""
+            parts.append(f"mailbox {email}")
+        elif alias:
+            parts.append(f"sends from {alias}")
+
+    mode = _interaction_summary(channel, cfg)
+    if mode:
+        parts.append(mode)
+    return "; ".join(p for p in parts if p)
 
 
 def _format_scoped_channel_rows(
@@ -255,8 +276,11 @@ def inspect_channel(
         owner = safe.get("owner_identity")
         if owner:
             lines.append(f"  owner_identity: {owner}")
-        if channel == "discord" and safe.get("dm_policy"):
+        if safe.get("dm_policy"):
             lines.append(f"  dm_policy: {safe.get('dm_policy')}")
+        mode_line = _interaction_summary(channel, cfg)
+        if mode_line:
+            lines.append(f"  interaction: {mode_line}")
         if safe.get("bot_username"):
             lines.append(f"  bot_username: {safe.get('bot_username')}")
         if safe.get("bot_id"):
@@ -297,11 +321,21 @@ def inspect_channel(
                 lines.append(f"  bot_username: @{uname}")
         if safe.get("owner_identity"):
             lines.append(f"  owner_identity: {safe.get('owner_identity')}")
+        if safe.get("dm_policy"):
+            lines.append(f"  dm_policy: {safe.get('dm_policy')}")
+        mode_line = _interaction_summary(channel, cfg)
+        if mode_line:
+            lines.append(f"  interaction: {mode_line}")
     elif channel == "whatsapp":
         if safe.get("linked_phone"):
             lines.append(f"  linked_phone: {safe.get('linked_phone')}")
         if safe.get("owner_identity"):
             lines.append(f"  owner_identity: {safe.get('owner_identity')}")
+        if safe.get("dm_policy"):
+            lines.append(f"  dm_policy: {safe.get('dm_policy')}")
+        mode_line = _interaction_summary(channel, cfg)
+        if mode_line:
+            lines.append(f"  interaction: {mode_line}")
     elif channel == "email":
         if safe.get("connected_email"):
             lines.append(f"  connected_email: {safe.get('connected_email')}")
@@ -309,6 +343,15 @@ def inspect_channel(
             lines.append(f"  alias: {safe.get('alias')}")
         if safe.get("from_address"):
             lines.append(f"  from_address: {safe.get('from_address')}")
+        if safe.get("owner_identity"):
+            lines.append(f"  owner_identity: {safe.get('owner_identity')}")
+        if safe.get("dm_policy"):
+            lines.append(f"  dm_policy: {safe.get('dm_policy')}")
+        if safe.get("thread_policy"):
+            lines.append(f"  thread_policy: {safe.get('thread_policy')}")
+        mode_line = _interaction_summary(channel, cfg)
+        if mode_line:
+            lines.append(f"  interaction: {mode_line}")
 
     lines.append(
         "  Use this data for squad routing and job design — do not ask the owner "

@@ -8,6 +8,7 @@ from nls.skills import (
     SkillOnboarding,
     SkillWebhook,
 )
+from nls.runtime.interaction_policy import INTERACTION_SETUP_HINT
 
 meta = SkillMeta(
     name="slack-channel",
@@ -29,7 +30,8 @@ meta = SkillMeta(
             "2. Add bot scopes: app_mentions:read, chat:write, channels:history, im:history\n"
             "3. Enable Event Subscriptions — Request URL is shown in Tools after token setup\n"
             "4. Ask for bot token (xoxb-…) and signing secret, then call slack_setup\n"
-            "5. Call skill_configure(skill_name='slack-channel') for owner, DM policy, channels\n"
+            "5. Call skill_configure(skill_name='slack-channel') for owner and interaction policy\n"
+            f"6. {INTERACTION_SETUP_HINT}\n"
             "Users can also /invite @App in Slack — channel scope syncs back here."
         ),
         completion_event="channel_connected",

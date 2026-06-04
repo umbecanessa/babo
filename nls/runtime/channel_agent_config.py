@@ -6,13 +6,9 @@ import json
 from pathlib import Path
 from typing import Any
 
-_CHANNEL_SKILL_DIRS: dict[str, str] = {
-    "whatsapp": "whatsapp-channel",
-    "telegram": "telegram-channel",
-    "email": "email-channel",
-    "discord": "discord-channel",
-    "slack": "slack-channel",
-}
+from nls.runtime.channel_policy_profiles import channel_skill_dirs
+
+_CHANNEL_SKILL_DIRS: dict[str, str] = channel_skill_dirs()
 
 CHANNEL_CREDENTIAL_KEYS = frozenset({
     "bot_token",

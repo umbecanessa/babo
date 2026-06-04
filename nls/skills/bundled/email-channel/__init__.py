@@ -10,6 +10,7 @@ on self-hosted NestJS (Settings → Integrations or server env vars).
 """
 
 from nls.skills import ConfigField, SkillMeta, SkillOnboarding, SkillWebhook
+from nls.runtime.interaction_policy import INTERACTION_SETUP_HINT
 
 _EMAIL_SETUP_PROMPT = (
     "Guide the user through email channel setup. Be concise and practical.\n\n"
@@ -24,8 +25,10 @@ _EMAIL_SETUP_PROMPT = (
     "or retry activation.\n\n"
     "**After alias is provisioned:**\n"
     "1. Tell them the agent's new email address.\n"
-    "2. Call skill_configure(skill_name='email-channel') for owner_identity and DM policy.\n"
-    "3. Confirm setup is complete."
+    "2. Call skill_configure(skill_name='email-channel') for owner_identity and "
+    "interaction policy (private inbox + multi-party email threads/CC)\n"
+    f"3. {INTERACTION_SETUP_HINT}\n"
+    "4. Confirm setup is complete."
 )
 
 meta = SkillMeta(
@@ -71,6 +74,16 @@ meta = SkillMeta(
             description="Allowed sender emails (used when dm_policy=allowlist)",
             category="policy",
         ),
+        ConfigField(
+            key="thread_policy", type="choice", required=False,
+            default="owner_initiated",
+            options=["open", "owner_initiated", "allowlist", "disabled"],
+            description=(
+                "Multi-party email threads (To/CC with others). "
+                "Private 1:1 uses dm_policy; threads use this."
+            ),
+            category="policy",
+        ),
     ],
 )
 
@@ -87,6 +100,7 @@ def register(app, ctx):
         "auto_classify": True,
         "allow_from": [],
         "dm_policy": "open",
+        "thread_policy": "owner_initiated",
     })
 
     adapter = EmailAdapter(global_config=global_config, ctx=ctx)

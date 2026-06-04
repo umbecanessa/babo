@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -160,9 +161,14 @@ class SquadSetupTool:
             "properties": props,
         }
 
-    async def execute(self, **kwargs: Any) -> ToolResult:
+    async def execute(
+        self,
+        params: dict[str, Any],
+        signal: asyncio.Event | None = None,
+    ) -> ToolResult:
         import json
 
+        kwargs = params
         action = (kwargs.get("action") or "").strip().lower()
         if action != "create":
             return ToolResult(content=f"Unknown squad_setup action: {action}", is_error=True)
@@ -237,9 +243,14 @@ class SquadTool:
             )
         return None
 
-    async def execute(self, **kwargs: Any) -> ToolResult:
+    async def execute(
+        self,
+        params: dict[str, Any],
+        signal: asyncio.Event | None = None,
+    ) -> ToolResult:
         import json
 
+        kwargs = params
         action = (kwargs.get("action") or "").strip().lower()
         if action not in _ALL_ACTIONS:
             return ToolResult(content=f"Unknown squad action: {action}", is_error=True)
@@ -300,9 +311,14 @@ class SquadEscalateTool:
             },
         }
 
-    async def execute(self, **kwargs: Any) -> ToolResult:
+    async def execute(
+        self,
+        params: dict[str, Any],
+        signal: asyncio.Event | None = None,
+    ) -> ToolResult:
         import json
 
+        kwargs = params
         reason = (kwargs.get("reason") or "").strip()
         if not reason:
             return ToolResult(content="reason is required", is_error=True)
@@ -355,9 +371,14 @@ class SquadMessageTool:
             },
         }
 
-    async def execute(self, **kwargs: Any) -> ToolResult:
+    async def execute(
+        self,
+        params: dict[str, Any],
+        signal: asyncio.Event | None = None,
+    ) -> ToolResult:
         import json
 
+        kwargs = params
         message = (kwargs.get("message") or "").strip()
         if not message:
             return ToolResult(content="message is required", is_error=True)
@@ -406,9 +427,14 @@ class SquadReportDoneTool:
             },
         }
 
-    async def execute(self, **kwargs: Any) -> ToolResult:
+    async def execute(
+        self,
+        params: dict[str, Any],
+        signal: asyncio.Event | None = None,
+    ) -> ToolResult:
         import json
 
+        kwargs = params
         todo_id = (kwargs.get("todo_id") or "").strip()
         if not todo_id:
             return ToolResult(content="todo_id is required", is_error=True)

@@ -70,7 +70,7 @@ async def process_inbound_email(
     if adapter is None:
         return {"ok": False, "error": "email skill not loaded"}
 
-    if not adapter.should_respond(sender, agent_id=agent_id):
+    if not adapter.should_respond(sender, agent_id=agent_id, headers=headers):
         logger.info("Email [%s]: policy rejected from %s", agent_id, sender)
         return {"ok": True, "status": "policy_rejected"}
 
@@ -90,6 +90,7 @@ async def process_inbound_email(
         body=text,
         headers=headers,
         message_id=message_id,
+        agent_id=agent_id,
     )
 
     raw_attachments = []

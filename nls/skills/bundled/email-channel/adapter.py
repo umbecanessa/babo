@@ -435,12 +435,23 @@ class EmailAdapter:
 
     # -- policy enforcement ------------------------------------------------
 
-    def should_respond(self, sender_email: str, agent_id: str | None = None) -> bool:
-        from nls.runtime.channels import PolicyEnforcer
+    def should_respond(
+        self,
+        sender_email: str,
+        agent_id: str | None = None,
+        *,
+        headers: dict[str, str] | None = None,
+    ) -> bool:
+        from nls.runtime.interaction_policy import check_email_inbound_policy
 
         cfg = self._agent_cfg(agent_id)
-        enforcer = PolicyEnforcer(cfg)
-        return enforcer.check_dm(sender_email.lower())
+        hdrs = headers or {}
+        agent_addrs: set[str] = set()
+        for key in ("alias", "from_address", "connected_email"):
+            val = str(cfg.get(key, "")).strip()
+            if val:
+                agent_addrs.add(val.lower())
+        return check_email_inbound_policy(cfg, sender_email, hdrs, agent_addrs)
 
     # -- per-agent config --------------------------------------------------
 
@@ -626,6 +637,7 @@ class EmailAdapter:
         body: str,
         headers: dict[str, str] | None = None,
         message_id: str = "",
+        agent_id: str | None = None,
     ) -> dict[str, Any]:
         headers = headers or {}
 
@@ -648,14 +660,24 @@ class EmailAdapter:
         session_key = f"email:thread:{thread_root}"
         is_content = self.is_newsletter(headers, body)
 
+        from nls.runtime.interaction_policy import is_shared_email_inbound
+
+        cfg = self._agent_cfg(agent_id)
+        agent_addrs: set[str] = set()
+        for key in ("alias", "from_address", "connected_email"):
+            val = str(cfg.get(key, "")).strip()
+            if val:
+                agent_addrs.add(val.lower())
+        is_group = is_shared_email_inbound(headers, agent_addrs)
+
         return {
             "channel": "email",
             "session_key": session_key,
             "sender_id": sender,
             "sender_name": sender.split("@")[0] if "@" in sender else sender,
             "content": body,
-            "is_group": False,
-            "group_id": None,
+            "is_group": is_group,
+            "group_id": thread_root if is_group else None,
             "is_mention": True,
             "is_forwarded": subject.lower().startswith(("fwd:", "fw:")),
             "is_reply_to_bot": bool(in_reply_to),

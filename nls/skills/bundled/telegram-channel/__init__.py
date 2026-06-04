@@ -9,6 +9,7 @@ Provides:
 """
 
 from nls.skills import ConfigField, SkillMeta, SkillOnboarding, SkillWebhook
+from nls.runtime.interaction_policy import INTERACTION_SETUP_HINT
 
 meta = SkillMeta(
     name="telegram-channel",
@@ -27,8 +28,9 @@ meta = SkillMeta(
             "2. Tell them to send /newbot and follow the prompts to name their bot\n"
             "3. Ask them to paste the bot token they receive (it looks like 123456:ABC-DEF...)\n"
             "4. Once they paste it, call the telegram_setup tool with that token to validate and save it\n"
-            "5. After setup succeeds, call skill_configure(skill_name='telegram-channel') to check "
-            "what else needs configuring, then ask the user for the missing fields.\n"
+            "5. After setup succeeds, call skill_configure(skill_name='telegram-channel') "
+            "for owner_identity and interaction policy\n"
+            f"6. {INTERACTION_SETUP_HINT}\n"
             "If the token is invalid, ask them to try again."
         ),
         completion_event="channel_connected",

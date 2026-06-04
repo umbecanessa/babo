@@ -12,6 +12,7 @@ Features:
 """
 
 from nls.skills import ConfigField, SkillBridge, SkillMeta, SkillOnboarding, SkillWebhook
+from nls.runtime.interaction_policy import INTERACTION_SETUP_HINT
 
 meta = SkillMeta(
     name="whatsapp-channel",
@@ -24,9 +25,10 @@ meta = SkillMeta(
         setup_prompt=(
             "After WhatsApp pairing completes (QR code scanned), guide the user:\n"
             "1. Confirm the pairing succeeded and tell them the linked phone number\n"
-            "2. Call skill_configure(skill_name='whatsapp-channel') to check what else "
-            "needs configuring, then ask the user for the missing fields.\n"
-            "3. Confirm everything is set up."
+            "2. Call skill_configure(skill_name='whatsapp-channel') for owner_identity and "
+            "interaction policy\n"
+            f"3. {INTERACTION_SETUP_HINT}\n"
+            "4. Confirm everything is set up."
         ),
         completion_event="channel_connected",
     ),

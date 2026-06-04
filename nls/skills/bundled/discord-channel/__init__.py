@@ -13,6 +13,7 @@ from nls.skills import (
     SkillOnboarding,
     SkillWebhook,
 )
+from nls.runtime.interaction_policy import INTERACTION_SETUP_HINT
 
 meta = SkillMeta(
     name="discord-channel",
@@ -32,10 +33,11 @@ meta = SkillMeta(
             "Guide the user through connecting Discord:\n"
             "1. They need a bot token from Discord Developer Portal → Bot → Token\n"
             "2. Ask them to paste the token, then call discord_setup with bot_token\n"
-            "3. Call skill_configure(skill_name='discord-channel') for owner_identity, "
-            "dm_policy, and channel scope\n"
+            "3. Call skill_configure(skill_name='discord-channel') for owner_identity and "
+            "interaction policy (interaction_mode preset — not raw dm_policy values)\n"
             "4. They can invite the bot to servers/channels in Discord — scope syncs back here\n"
-            "If invalid, ask them to reset the token in the Developer Portal."
+            f"5. {INTERACTION_SETUP_HINT}\n"
+            "If invalid token, ask them to reset it in the Developer Portal."
         ),
         completion_event="channel_connected",
     ),
