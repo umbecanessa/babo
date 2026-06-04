@@ -362,7 +362,7 @@
           } @else {
             <div class="composer-focus" data-day1-coach="chat-composer">
               <div class="composer-toolbar">
-                <app-chat-model-picker />
+                <app-chat-model-picker variant="chip" />
                 @for (att of pendingAttachments(); track att.path) {
                   <div class="attachment-chip" [class.is-image]="att.mime_type.startsWith('image/')">
                     @if (att.mime_type.startsWith('image/')) {

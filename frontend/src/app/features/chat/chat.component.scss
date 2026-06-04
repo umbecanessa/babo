@@ -919,6 +919,11 @@
   max-width: 800px;
   margin: 0 auto 8px;
   padding: 0 4px;
+
+  app-chat-model-picker {
+    flex: 0 0 auto;
+    max-width: min(240px, 50vw);
+  }
 }
 
 .input-wrapper {

@@ -220,6 +220,9 @@ type MenuView =
       .model-picker {
         position: relative;
         flex-shrink: 0;
+        display: block;
+        width: fit-content;
+        max-width: 100%;
       }
       .model-picker.wide .model-trigger {
         max-width: 100%;
