@@ -142,6 +142,7 @@ async def lifespan(app: FastAPI):
     )
     app.state.squad_registry = squad_registry
     app.state.squad_manager = squad_manager
+    agent_manager.set_squad_registry(squad_registry)
 
     from nls.tools.agent_tools.scheduler import SchedulerManager
 

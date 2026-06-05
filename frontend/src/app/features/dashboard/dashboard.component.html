@@ -230,7 +230,9 @@
       [message]="confirm.message"
       [confirmLabel]="confirm.confirmLabel"
       [variant]="confirm.variant"
-      (confirmed)="squadsPanel!.executeConfirm()"
+      [showOption]="confirm.action === 'delete_squad'"
+      [optionLabel]="confirm.deleteAgentsOptionLabel || ''"
+      (confirmed)="squadsPanel!.executeConfirm($event)"
       (cancelled)="squadsPanel!.cancelConfirm()"
     />
   }

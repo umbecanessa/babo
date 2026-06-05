@@ -737,12 +737,15 @@ export class ApiService {
     return this.http.patch<Squad>(`${this.RUNTIME}/api/squads/${squadId}`, body, { params });
   }
 
-  deleteSquad(squadId: string, callerAgentId?: string): Observable<{ deleted: string }> {
+  deleteSquad(squadId: string, callerAgentId?: string, deleteAgents = false): Observable<{ deleted: string; agents_deleted?: string[] }> {
     let params = new HttpParams();
     if (callerAgentId) {
       params = params.set('caller_agent_id', callerAgentId);
     }
-    return this.http.delete<{ deleted: string }>(
+    if (deleteAgents) {
+      params = params.set('delete_agents', 'true');
+    }
+    return this.http.delete<{ deleted: string; agents_deleted?: string[] }>(
       `${this.RUNTIME}/api/squads/${squadId}`,
       { params },
     );

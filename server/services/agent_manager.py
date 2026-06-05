@@ -265,6 +265,21 @@ class AgentManager:
         # Connection manager (set after startup by main.py)
         self.connection_manager: Any = None
 
+        # Shared with app.state.squad_registry (set in main.py after startup).
+        self._squad_registry: Any = None
+
+    def set_squad_registry(self, registry: Any) -> None:
+        """Use the same SquadRegistry instance as squad API routes."""
+        self._squad_registry = registry
+
+    def _resolve_squad_registry(self) -> Any:
+        if self._squad_registry is not None:
+            return self._squad_registry
+        from nls.agentic.squad_registry import SquadRegistry
+
+        self._squad_registry = SquadRegistry(self.agents_dir.parent)
+        return self._squad_registry
+
     # ===================================================================
     # Periodic Autosave
     # ===================================================================
@@ -660,11 +675,7 @@ class AgentManager:
             pass
 
         try:
-            from nls.agentic.squad_registry import SquadRegistry
-
-            if not hasattr(self, "_squad_registry"):
-                self._squad_registry = SquadRegistry(self.agents_dir.parent)
-            squad = self._squad_registry.get_for_agent(agent_id)
+            squad = self._resolve_squad_registry().get_for_agent(agent_id)
             if squad is not None:
                 result["squad_id"] = squad.id
                 result["squad_name"] = squad.name

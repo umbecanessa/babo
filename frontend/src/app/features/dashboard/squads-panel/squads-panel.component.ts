@@ -38,6 +38,8 @@ export interface SquadConfirmRequest {
   leadId?: string;
   squad?: Squad;
   memberId?: string;
+  /** Checkbox label when action is delete_squad. */
+  deleteAgentsOptionLabel?: string;
 }
 
 @Component({
@@ -328,12 +330,12 @@ export class SquadsPanelComponent implements OnInit {
     this.confirmDialog.set(null);
   }
 
-  executeConfirm(): void {
+  executeConfirm(result: { optionChecked: boolean } = { optionChecked: false }): void {
     const dialog = this.confirmDialog();
     if (!dialog) return;
     this.confirmDialog.set(null);
     if (dialog.action === 'delete_squad' && dialog.squadId && dialog.leadId) {
-      this.performDeleteSquad(dialog.squadId, dialog.leadId);
+      this.performDeleteSquad(dialog.squadId, dialog.leadId, result.optionChecked);
     } else if (dialog.action === 'remove_member' && dialog.squad && dialog.memberId) {
       this.performRemoveMember(dialog.squad, dialog.memberId);
     }
@@ -545,21 +547,25 @@ export class SquadsPanelComponent implements OnInit {
 
 
 
-  deleteSquad(id: string, leadId: string): void {
+  deleteSquad(sq: Squad): void {
+    const memberIds = this.memberIdsOrdered(sq);
+    const n = memberIds.length;
     this.confirmDialog.set({
       title: 'Delete squad?',
       message:
-        'Members keep their jobs and agents. The shared squad inbox and coordination context will be removed.',
+        'By default, agents stay on your fleet as independents — only the shared squad inbox and coordination context are removed.',
       confirmLabel: 'Delete squad',
       variant: 'danger',
       action: 'delete_squad',
-      squadId: id,
-      leadId,
+      squadId: sq.id,
+      leadId: sq.lead_agent_id,
+      deleteAgentsOptionLabel:
+        `Also delete all ${n} agent${n === 1 ? '' : 's'} in this squad (permanent)`,
     });
   }
 
-  private performDeleteSquad(id: string, leadId: string): void {
-    this.api.deleteSquad(id, leadId).subscribe({
+  private performDeleteSquad(id: string, leadId: string, deleteAgents: boolean): void {
+    this.api.deleteSquad(id, leadId, deleteAgents).subscribe({
       next: () => {
         this.loadSquads();
         this.squadsChanged.emit();

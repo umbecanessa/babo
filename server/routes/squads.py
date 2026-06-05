@@ -232,6 +232,7 @@ async def delete_squad(
     squad_id: str,
     request: Request,
     caller_agent_id: str | None = Query(None),
+    delete_agents: bool = Query(False),
     auth: dict[str, Any] = Depends(verify_auth),
 ) -> dict[str, Any]:
     reg = _registry(request)
@@ -240,11 +241,30 @@ async def delete_squad(
         raise HTTPException(404, "Squad not found")
     caller = caller_agent_id or resolve_caller_agent_id(request)
     require_lead_or_owner(squad, caller, auth, action="delete this squad")
-    for aid in squad.all_member_ids:
+    member_ids = list(squad.all_member_ids)
+    for aid in member_ids:
         _sync_agent_squad(request, aid, None)
     if not reg.delete(squad_id):
         raise HTTPException(404, "Squad not found")
-    return {"deleted": squad_id}
+
+    agents_deleted: list[str] = []
+    if delete_agents:
+        am = request.app.state.agent_manager
+        cm = getattr(request.app.state, "connection_manager", None)
+        for aid in member_ids:
+            try:
+                await am.delete_agent(aid)
+                agents_deleted.append(aid)
+                if cm is not None:
+                    await cm.stop_relay(aid)
+            except Exception as exc:
+                logger.error("Failed to delete agent %s during squad delete: %s", aid, exc)
+                raise HTTPException(
+                    500,
+                    f"Squad removed but failed deleting agent {aid}: {exc}",
+                ) from exc
+
+    return {"deleted": squad_id, "agents_deleted": agents_deleted}
 
 
 @router.get("/by-agent/{agent_id}")

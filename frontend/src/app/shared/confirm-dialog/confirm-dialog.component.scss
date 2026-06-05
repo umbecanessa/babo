@@ -18,6 +18,26 @@
   color: var(--text-muted);
 }
 
+.confirm-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  background: var(--overlay-1);
+  border: 1px solid var(--overlay-2);
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  cursor: pointer;
+
+  input {
+    margin-top: 2px;
+    flex-shrink: 0;
+  }
+}
+
 .confirm-actions {
   display: flex;
   gap: 10px;

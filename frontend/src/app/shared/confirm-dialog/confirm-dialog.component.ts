@@ -3,9 +3,15 @@ import {
   HostListener,
   input,
   output,
+  signal,
+  OnInit,
   ChangeDetectionStrategy,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
+
+export interface ConfirmDialogResult {
+  optionChecked: boolean;
+}
 
 @Component({
   selector: 'app-confirm-dialog',
@@ -15,15 +21,25 @@ import { CommonModule } from '@angular/common';
   templateUrl: './confirm-dialog.component.html',
   styleUrl: './confirm-dialog.component.scss',
 })
-export class ConfirmDialogComponent {
+export class ConfirmDialogComponent implements OnInit {
   title = input.required<string>();
   message = input.required<string>();
   confirmLabel = input('Confirm');
   cancelLabel = input('Cancel');
   variant = input<'danger' | 'default'>('default');
+  /** Optional checkbox below the message (e.g. delete squad + agents). */
+  showOption = input(false);
+  optionLabel = input('');
+  optionDefault = input(false);
 
-  confirmed = output<void>();
+  confirmed = output<ConfirmDialogResult>();
   cancelled = output<void>();
+
+  optionChecked = signal(false);
+
+  ngOnInit(): void {
+    this.optionChecked.set(this.optionDefault());
+  }
 
   @HostListener('document:keydown.escape')
   onEscape(): void {
@@ -41,6 +57,13 @@ export class ConfirmDialogComponent {
 
   onConfirmClick(event: MouseEvent): void {
     event.stopPropagation();
-    this.confirmed.emit();
+    this.confirmed.emit({
+      optionChecked: this.showOption() ? this.optionChecked() : false,
+    });
+  }
+
+  onOptionChange(event: Event): void {
+    const target = event.target as HTMLInputElement;
+    this.optionChecked.set(target.checked);
   }
 }

@@ -488,3 +488,19 @@ def test_trust_patch_merges_deny_lists(tmp_path: Path):
     trust = load_trust(agents)
     assert "delete_file" in trust.tools_deny
     assert "bash" in trust.tools_deny
+
+
+def test_squad_delete_clears_agent_membership_index(tmp_path: Path):
+    """After delete, agents must not still resolve to the removed squad."""
+    reg = SquadRegistry(tmp_path)
+    squad = reg.create(
+        name="Fleet",
+        lead_agent_id="lead1",
+        member_agent_ids=["m1"],
+    )
+    assert reg.get_for_agent("lead1") is not None
+    assert reg.get_for_agent("m1") is not None
+    assert reg.delete(squad.id) is True
+    assert reg.get_for_agent("lead1") is None
+    assert reg.get_for_agent("m1") is None
+    assert reg.get(squad.id) is None
