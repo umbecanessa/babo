@@ -36,8 +36,10 @@ from .context_supersession import (
 from .orchestration_policy import (
     build_evaluating_action_breadcrumb,
     build_orchestration_wake_message,
+    build_simple_delegate_wake_message,
     invalidate_tool_policy_cache,
     is_conversational_user_turn,
+    is_simple_delegate_monitoring,
     on_evaluating_wave,
     refresh_tool_schemas,
     should_force_coordinator_yield,
@@ -1111,6 +1113,16 @@ async def run_loop(
                 "delegate(s) in prior loop",
                 state.loop_id, state.delegate_count, _running_delegates,
             )
+            if is_simple_delegate_monitoring(
+                state,
+                delegate_manager,
+                team_manager=_cached_team_manager,
+            ):
+                state.simple_delegate_monitoring = True
+                state.must_await_delegates = True
+                if state.active_mode == AgentMode.EXECUTING:
+                    state.active_mode = AgentMode.MONITORING
+                    invalidate_tool_policy_cache(state)
 
     if copilot_queue is not None and hooks.copilot_queue is None:
         hooks.copilot_queue = copilot_queue
@@ -1309,15 +1321,26 @@ async def run_loop(
                     pass
             context.append({
                 "role": "system",
-                "content": build_orchestration_wake_message(
-                    dispatch_source=dispatch_source,
-                    dual_wm=_dual_wm,
-                    plan_progress=_plan_progress,
-                    delegate_summary=_delegate_summary,
-                    coordinator_phase=getattr(state, "coordinator_phase", ""),
-                    plan_audit_issues=_plan_audit_issues,
-                    plan_incomplete_steps=_plan_incomplete_steps,
-                    board_snapshot_lines=_plan_board_lines,
+                "content": (
+                    build_simple_delegate_wake_message(
+                        dispatch_source=dispatch_source,
+                        delegate_summary=_delegate_summary,
+                    )
+                    if is_simple_delegate_monitoring(
+                        state,
+                        delegate_manager,
+                        team_manager=_cached_team_manager,
+                    )
+                    else build_orchestration_wake_message(
+                        dispatch_source=dispatch_source,
+                        dual_wm=_dual_wm,
+                        plan_progress=_plan_progress,
+                        delegate_summary=_delegate_summary,
+                        coordinator_phase=getattr(state, "coordinator_phase", ""),
+                        plan_audit_issues=_plan_audit_issues,
+                        plan_incomplete_steps=_plan_incomplete_steps,
+                        board_snapshot_lines=_plan_board_lines,
+                    )
                 ),
             })
             state.orch_wake_injected = True
@@ -2780,15 +2803,25 @@ async def run_loop(
             try:
                 if delegates_running(delegate_manager):
                     if getattr(state, "must_await_delegates", False):
-                        context.append({
-                            "role": "system",
-                            "content": (
+                        if getattr(state, "simple_delegate_monitoring", False):
+                            _post_launch = (
+                                "[POST-LAUNCH] Background delegate is running. "
+                                "Optional: communicate(status) once, then "
+                                "await_delegates(summary='...') to hand off. "
+                                "You will wake on check-back to monitor — "
+                                "do not plan/read/todo/wait(60+)."
+                            )
+                        else:
+                            _post_launch = (
                                 "[POST-LAUNCH] Wave is executing. Debrief the "
                                 "stakeholder (communicate) if needed, then "
                                 "await_delegates(summary='...') — your "
                                 "management turn is done until escalation, "
                                 "completion, or scheduled review."
-                            ),
+                            )
+                        context.append({
+                            "role": "system",
+                            "content": _post_launch,
                         })
                     elif state.coordinator_burn_iters >= 2:
                         context.append({
@@ -4834,6 +4867,7 @@ async def run_loop(
             # --- Stall injection (before completion check) ---
             from nls.agentic.evaluator import (
                 prose_stream_text,
+                prose_turn_end_extra,
                 refresh_prose_verdict,
             )
 
@@ -4841,8 +4875,10 @@ async def run_loop(
                 state, vllm_client, adapter_name=adapter_name,
             )
             _prose_exit = getattr(state, "last_prose_verdict", "") in (
-                "awaiting_user_input", "duplicate",
+                "awaiting_user_input", "duplicate", "deliverable_done",
             )
+            if getattr(state, "last_prose_verdict", "") == "deliverable_done":
+                state.prose_gate_active = False
 
             _had_errors = any(
                 v > 0 for v in state.tool_errors.values()
@@ -4995,7 +5031,10 @@ async def run_loop(
                     "content": f"[LOOP CONTROL] {stall_msg}",
                 })
                 await emit(on_event, AgentEvent(
-                    EventType.TURN_END, {"iteration": state.iteration},
+                    EventType.TURN_END, {
+                        "iteration": state.iteration,
+                        **prose_turn_end_extra(state),
+                    },
                 ))
             elif await should_complete(
                 state, config, hooks, vllm_client, delegate_manager,
@@ -5020,6 +5059,7 @@ async def run_loop(
                         await emit(on_event, AgentEvent(
                             EventType.TURN_END, {
                                 "iteration": state.iteration,
+                                **prose_turn_end_extra(state),
                             },
                         ))
                         continue
@@ -5040,6 +5080,7 @@ async def run_loop(
                     EventType.TURN_END, {
                         "iteration": state.iteration,
                         "response_text": _streamed,
+                        **prose_turn_end_extra(state),
                     },
                 ))
                 break
@@ -5050,6 +5091,7 @@ async def run_loop(
                         "response_text": prose_stream_text(
                             state, response.text or "",
                         ),
+                        **prose_turn_end_extra(state),
                     },
                 ))
 
@@ -5114,6 +5156,12 @@ async def run_loop(
 
         # TURN_END for tool-call path (text-only path emits above)
         if _iter_tool_calls:
+            from nls.agentic.evaluator import (
+                prose_stream_text,
+                prose_turn_end_extra,
+                refresh_prose_verdict,
+            )
+
             _turn_end_data: dict[str, Any] = {
                 "iteration": state.iteration,
                 "has_tool_calls": True,
@@ -5123,6 +5171,18 @@ async def run_loop(
                     (time.time() - state.start_time) * 1000, 1,
                 ),
             }
+            if (response.text or "").strip():
+                state._last_iter_text = response.text
+                await refresh_prose_verdict(
+                    state,
+                    vllm_client,
+                    adapter_name=adapter_name,
+                    force=True,
+                )
+                _turn_end_data.update(prose_turn_end_extra(state))
+                _streamed = prose_stream_text(state, response.text or "")
+                if _streamed:
+                    _turn_end_data["response_text"] = _streamed
             await emit(on_event, AgentEvent(
                 EventType.TURN_END, _turn_end_data,
             ))

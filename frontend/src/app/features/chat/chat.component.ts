@@ -112,6 +112,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
   private _preToolReasoning = '';
   private _iterTextCommitted = false;
   private _pendingIterText = '';  // text generated alongside tool calls, saved before streamingText is cleared
+  private _toolTurnActive = false;  // true once tool_call_delta starts — prose buffers, not live-streamed
 
   /** User message sent or reply streaming — show stop control in composer. */
   readonly generationActive = computed(() =>
@@ -1220,6 +1221,35 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     this.generationStopping.set(false);
   }
 
+  /** Insert pre-tool prose before the first tool chip for this agentic step. */
+  private _insertAssistantBeforeToolStep(
+    step: number,
+    content: string,
+    reasoning?: string,
+  ): void {
+    const trimmed = (content || '').trim();
+    if (!trimmed) return;
+    const assistantMsg = {
+      type: 'assistant' as any,
+      content: trimmed,
+      reasoning: reasoning || undefined,
+      timestamp: new Date(),
+      agenticStep: step,
+    };
+    this.messages.update(msgs => {
+      const insertIdx = msgs.findIndex(m =>
+        m.type === 'tool_progress'
+        && (m as any).toolProgress?.iteration === step,
+      );
+      if (insertIdx >= 0) {
+        const updated = [...msgs];
+        updated.splice(insertIdx, 0, assistantMsg);
+        return updated;
+      }
+      return [...msgs, assistantMsg];
+    });
+  }
+
   stopGeneration(): void {
     if (this.agenticActive()) {
       this.cancelAgentic();
@@ -1687,6 +1717,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         this._preToolReasoning = '';
         this._iterTextCommitted = false;
         this._pendingIterText = '';
+        this._toolTurnActive = false;
         this.messages.update(msgs => [...msgs, {
           type: 'agentic_start' as any,
           content: `Agent starting task (up to ${msg.max_steps || 15} steps)`,
@@ -1762,24 +1793,36 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         // visible message before it gets cleared for the next step.
         // _pendingIterText holds text that was saved when tool_execution_start
         // fired (before streamingText was cleared).
-        const iterText = this._pendingIterText || this.streamingText();
-        const iterReasoning = this.streamingReasoning();
+        const holdProse = msg.hold_prose === true;
+        const iterText = holdProse ? '' : (this._pendingIterText || this.streamingText());
+        const iterReasoning = holdProse ? '' : this.streamingReasoning();
         this._pendingIterText = '';
-        if (iterText && !this._iterTextCommitted) {
+
+        if (holdProse) {
+          this.streamingText.set('');
+          this.streamingReasoning.set('');
+        } else if (iterText && !this._iterTextCommitted) {
           const thought = parseThinking(iterText);
-          this.messages.update(msgs => [...msgs, {
-            type: 'assistant' as any,
-            content: thought.response || iterText,
-            reasoning: (iterReasoning || thought.thinking) || undefined,
-            timestamp: new Date(),
-            agenticStep: step,
-          }]);
+          const content = thought.response || iterText;
+          const reasoning = (iterReasoning || thought.thinking) || undefined;
+          if (toolCalls.length > 0) {
+            this._insertAssistantBeforeToolStep(step, content, reasoning);
+          } else {
+            this.messages.update(msgs => [...msgs, {
+              type: 'assistant' as any,
+              content,
+              reasoning,
+              timestamp: new Date(),
+              agenticStep: step,
+            }]);
+          }
           this._iterTextCommitted = true;
         } else if (iterReasoning) {
           this._preToolReasoning = iterReasoning;
         }
         this.streamingText.set('');
         this.streamingReasoning.set('');
+        this._toolTurnActive = false;
 
         this._agenticStepEvents.push({
           step,
@@ -1889,6 +1932,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         this.streamingText.set('');
         this.streamingReasoning.set('');
         this._pendingIterText = '';
+        this._toolTurnActive = false;
 
         const exitReason = String(
           msg.exit_reason || msg.abort_reason || '',
@@ -2135,6 +2179,8 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         this.clearAwaitingResponse();
         if (msg.thinking) {
           this.streamingReasoning.update(t => t + (msg.token || ''));
+        } else if (this._toolTurnActive) {
+          this._pendingIterText += msg.token || '';
         } else {
           this.streamingText.update(t => t + (msg.token || ''));
         }
@@ -2162,6 +2208,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         // response text (→ _pendingIterText) so they're rendered correctly:
         // thinking as expandable "Thought" cards, response text as assistant messages.
         if (isFirstDelta && idx === 0) {
+          this._toolTurnActive = true;
           const raw = this.streamingText();
           if (raw) {
             const thinkRe = /<think>([\s\S]*?)<\/think>/g;
@@ -2482,25 +2529,8 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
           }]);
         }
 
-        // Save any streaming text generated alongside this tool call before clearing.
-        // Commit it immediately as a visible message so it doesn't vanish while
-        // tools run and reappear after (no flicker). Only commit once per iteration
-        // (first tool call in the turn) to avoid duplicate messages from parallel calls.
-        // _pendingIterText may already be set by tool_call_delta (which fires first).
-        const textToCommit = this._pendingIterText || (this.streamingText()?.trim() ? this.streamingText() : '');
-        if (textToCommit && !this._iterTextCommitted) {
-          const pendingThought = parseThinking(textToCommit);
-          const pendingReasoning = this.streamingReasoning();
-          this.messages.update(msgs => [...msgs, {
-            type: 'assistant' as any,
-            content: pendingThought.response || textToCommit,
-            reasoning: (pendingReasoning || pendingThought.thinking) || undefined,
-            timestamp: new Date(),
-          }]);
-          this.streamingReasoning.set('');
-          this._pendingIterText = '';
-          this._iterTextCommitted = true;
-        }
+        // Pre-tool prose is committed at agentic_iteration (turn_end) so it
+        // lands before tool chips and respects hold_prose from the backend.
         this.streamingText.set('');
         this._toolCallArgsAcc = {};
         this.messages.update(msgs => {

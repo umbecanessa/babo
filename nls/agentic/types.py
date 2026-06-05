@@ -2188,6 +2188,7 @@ class LoopState:
     # Orchestration policy — coordinator phase and burn counters
     coordinator_phase: str = "idle"
     must_await_delegates: bool = False
+    simple_delegate_monitoring: bool = False
     coordinator_monitor_iters: int = 0
     coordinator_burn_iters: int = 0
     coordinator_wake_prompt_tokens: int = 0

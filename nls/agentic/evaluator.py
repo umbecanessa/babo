@@ -336,6 +336,29 @@ async def should_complete(
         )
         return True
 
+    _last_text_len = len(getattr(state, "_last_iter_text", "") or "")
+    _prose_verdict = getattr(state, "last_prose_verdict", "") or ""
+    if _prose_verdict == "duplicate":
+        logger.info("[EVAL] -> COMPLETE (duplicate prose — suppressed)")
+        return True
+    if _prose_verdict == "awaiting_user_input":
+        logger.info("[EVAL] -> COMPLETE (awaiting user input — yield once)")
+        return True
+    if (
+        _prose_verdict == "deliverable_done"
+        and state.consecutive_text_only >= 1
+        and _last_text_len >= 25
+        and (
+            has_substantive_tool_success(state)
+            or not requires_substantive_delivery(state)
+        )
+    ):
+        logger.info(
+            "[EVAL] -> COMPLETE (prose verdict deliverable_done, text_len=%d)",
+            _last_text_len,
+        )
+        return True
+
     # Active plan/team check — must come before the implicit delivery
     # shortcut.  If the orchestrator just launched a team and then
     # writes a status update, that is NOT task completion.
@@ -465,35 +488,12 @@ async def should_complete(
         "send notification" in (g or "").lower()
         for g in state.goals
     )
-    _last_text_len = len(getattr(state, "_last_iter_text", "") or "")
     _implicit_min_chars = 100
     if (
         _spec.profile in ("conversational", "solo_structured")
         and state.total_tool_calls <= 5
     ):
         _implicit_min_chars = 25
-
-    _prose_verdict = getattr(state, "last_prose_verdict", "") or ""
-    if _prose_verdict == "duplicate":
-        logger.info("[EVAL] -> COMPLETE (duplicate prose — suppressed)")
-        return True
-    if _prose_verdict == "awaiting_user_input":
-        logger.info("[EVAL] -> COMPLETE (awaiting user input — yield once)")
-        return True
-    if (
-        _prose_verdict == "deliverable_done"
-        and state.consecutive_text_only >= 1
-        and _last_text_len >= _implicit_min_chars
-        and (
-            has_substantive_tool_success(state)
-            or not requires_substantive_delivery(state)
-        )
-    ):
-        logger.info(
-            "[EVAL] -> COMPLETE (prose verdict deliverable_done, text_len=%d)",
-            _last_text_len,
-        )
-        return True
 
     if (
         state.consecutive_text_only >= 1
@@ -984,6 +984,7 @@ async def refresh_prose_verdict(
     vllm_client: Any = None,
     *,
     adapter_name: str | None = None,
+    force: bool = False,
 ) -> None:
     """Classify the latest prose-only loop iteration via micro-inference."""
     from nls.agentic.goals import evaluate_prose_turn, prose_fingerprint
@@ -995,7 +996,7 @@ async def refresh_prose_verdict(
         state.prose_gate_active = False
         return
 
-    if not should_run_prose_eval(state):
+    if not force and not should_run_prose_eval(state):
         state.last_prose_verdict = ""
         state.prose_show_to_user = True
         state.prose_gate_active = False
@@ -1037,6 +1038,23 @@ def prose_stream_text(state: "LoopState", response_text: str) -> str:
     if not getattr(state, "prose_show_to_user", True):
         return ""
     return response_text or ""
+
+
+def prose_hold_from_stream(state: "LoopState") -> bool:
+    """True when streamed prose was classified as held or duplicate."""
+    if not (getattr(state, "_last_iter_text", "") or "").strip():
+        return False
+    verdict = getattr(state, "last_prose_verdict", "")
+    if verdict == "duplicate":
+        return True
+    return not getattr(state, "prose_show_to_user", True)
+
+
+def prose_turn_end_extra(state: "LoopState") -> dict[str, bool]:
+    """Extra TURN_END fields so the UI can discard held prose."""
+    if prose_hold_from_stream(state):
+        return {"hold_prose": True}
+    return {}
 
 
 def _diverse_bash_signatures(state: "LoopState", window: int) -> bool:

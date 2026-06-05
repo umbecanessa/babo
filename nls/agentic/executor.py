@@ -29,7 +29,9 @@ from .orchestration_policy import (
     block_tool_call,
     checkback_interval_seconds,
     invalidate_tool_policy_cache,
+    is_simple_delegate_monitoring,
     on_await_delegates,
+    on_delegate_batch_launched,
     on_evaluating_wave,
     on_team_launched,
 )
@@ -3103,14 +3105,30 @@ async def execute_tools(
                     )
                 return ordered_results, digest_count
 
-            # Check if a plan exists — strongly nudge toward team workflow
+            # Nudge team workflow only for orchestrated profiles with team-shaped plans.
             _plan_hint = ""
+            _team_tool = tools.get("team")
+            _team_manager = getattr(_team_tool, "_tm", None) if _team_tool else None
+            _simple_delegate = is_simple_delegate_monitoring(
+                state, delegate_manager, team_manager=_team_manager,
+            )
+            _profile = normalize_profile(
+                getattr(state, "orchestration_profile", None),
+            )
             _plan_tool = tools.get("plan")
-            if _plan_tool and hasattr(_plan_tool, "_store"):
+            if (
+                not _simple_delegate
+                and _profile in ("orchestrated", "squad_lead")
+                and _plan_tool
+                and hasattr(_plan_tool, "_store")
+            ):
                 try:
-                    _plans = _plan_tool._store.list_plans()
-                    _active = [p for p in _plans if p.status in ("in_progress", "pending")]
-                    if _active:
+                    from .coordinator_guard import plan_requires_team_delegation
+
+                    _active_plan = _plan_tool._store.find_active()
+                    if _active_plan is not None and plan_requires_team_delegation(
+                        _active_plan,
+                    ):
                         _plan_hint = (
                             "\n\n⚠️ WRONG TOOL — You have an active plan with "
                             "delegatable steps. You MUST use "
@@ -3124,30 +3142,45 @@ async def execute_tools(
                 except Exception:
                     pass
 
-            _spawn_msg = (
-                f"{len(specs)} sub-agent(s) spawned in background (batch {batch.batch_id}):\n"
-                + "\n".join(f"  - {lbl}" for lbl in task_labels)
-                + "\n\nEngineering manager — team is executing:\n"
-                "- Optional: communicate(status) once.\n"
-                "- Required: await_delegates(summary='...') to end this turn.\n"
-                "- You wake to steer, review, and advance the board — "
-                "not to IC or idle-poll."
-                + _plan_hint
-            )
+            if _simple_delegate:
+                _spawn_msg = (
+                    f"{len(specs)} sub-agent(s) spawned in background "
+                    f"(batch {batch.batch_id}):\n"
+                    + "\n".join(f"  - {lbl}" for lbl in task_labels)
+                    + "\n\nBackground work is running:\n"
+                    "- Optional: communicate(status) once.\n"
+                    "- Required: await_delegates(summary='...') to hand off "
+                    "and exit this turn.\n"
+                    "- You will wake on check-back to monitor progress — "
+                    "use delegate_status, not plan/team/wave tools."
+                )
+            else:
+                _spawn_msg = (
+                    f"{len(specs)} sub-agent(s) spawned in background (batch {batch.batch_id}):\n"
+                    + "\n".join(f"  - {lbl}" for lbl in task_labels)
+                    + "\n\nEngineering manager — team is executing:\n"
+                    "- Optional: communicate(status) once.\n"
+                    "- Required: await_delegates(summary='...') to end this turn.\n"
+                    "- You wake to steer, review, and advance the board — "
+                    "not to IC or idle-poll."
+                    + _plan_hint
+                )
             _record_phase = None
             if hooks and hooks.wm_orch_set_coordinator_phase:
                 _record_phase = hooks.wm_orch_set_coordinator_phase
-            on_team_launched(
-                state, batch.batch_id, record_phase=_record_phase,
-            )
-            state.active_mode = AgentMode.MONITORING
+            if _simple_delegate:
+                on_delegate_batch_launched(
+                    state, batch.batch_id, record_phase=_record_phase,
+                )
+            else:
+                on_team_launched(
+                    state, batch.batch_id, record_phase=_record_phase,
+                )
+                state.active_mode = AgentMode.MONITORING
             invalidate_tool_policy_cache(state)
 
             # Auto-schedule a periodic check-back so the orchestrator is
-            # re-invoked every 2 minutes while delegates are running.
-            # This prevents the orchestrator from daydreaming and forgetting
-            # about its delegates.  The job is named after the batch so it
-            # can be cancelled when the batch completes.
+            # re-invoked while delegates are running.
             _checkback_job_name = f"delegate_checkback_{batch.batch_id}"
             _scheduler_tool = tools.get("scheduler")
             _sched_mgr = getattr(_scheduler_tool, "_manager", None)
@@ -3158,18 +3191,29 @@ async def execute_tools(
                     f"[AGENT_MSG|agent_id={_agent_id}|batch={batch.batch_id}] "
                     if _agent_id else ""
                 )
-                _checkback_msg = (
-                    f"{_routing}[DELEGATE CHECK-BACK — EM REVIEW] "
-                    f"Batch {batch.batch_id} ({len(specs)} sub-agent(s)).\n\n"
-                    "Management check-in — review the board, not idle-poll.\n\n"
-                    "1) delegate_status(list) — holistic view\n"
-                    "2) hint stuck members with ONE concrete next step\n"
-                    "3) wrap_up completed members\n"
-                    "4) When batch done: switch_mode(evaluating), review, "
-                    "update plan/Kanban, launch next wave\n"
-                    "5) If still running cleanly: await_delegates(summary='...')\n\n"
-                    f"Cancel when done: scheduler(remove, name='{_checkback_job_name}')"
-                )
+                if _simple_delegate:
+                    _checkback_msg = (
+                        f"{_routing}[DELEGATE CHECK-BACK] "
+                        f"Batch {batch.batch_id} ({len(specs)} sub-agent(s)).\n\n"
+                        "1) delegate_status(list) — check progress\n"
+                        "2) Optional: communicate(status) if the user should know\n"
+                        "3) When running cleanly: await_delegates(summary='...')\n\n"
+                        "Do NOT plan/read/todo/wait(60+) — monitor and hand off.\n"
+                        f"Cancel when done: scheduler(remove, name='{_checkback_job_name}')"
+                    )
+                else:
+                    _checkback_msg = (
+                        f"{_routing}[DELEGATE CHECK-BACK — EM REVIEW] "
+                        f"Batch {batch.batch_id} ({len(specs)} sub-agent(s)).\n\n"
+                        "Management check-in — review the board, not idle-poll.\n\n"
+                        "1) delegate_status(list) — holistic view\n"
+                        "2) hint stuck members with ONE concrete next step\n"
+                        "3) wrap_up completed members\n"
+                        "4) When batch done: switch_mode(evaluating), review, "
+                        "update plan/Kanban, launch next wave\n"
+                        "5) If still running cleanly: await_delegates(summary='...')\n\n"
+                        f"Cancel when done: scheduler(remove, name='{_checkback_job_name}')"
+                    )
                 _checkback_secs = checkback_interval_seconds(delegates_active=True)
                 try:
                     _sched_mgr.add_job(_SJ(

@@ -6,7 +6,9 @@ import pytest
 
 from nls.agentic.evaluator import (
     detect_stall,
+    prose_hold_from_stream,
     prose_stream_text,
+    prose_turn_end_extra,
     refresh_prose_verdict,
     should_complete,
     should_run_prose_eval,
@@ -52,6 +54,51 @@ async def test_duplicate_prose_suppressed():
 
     done = await should_complete(state, LoopConfig(), None, vllm_client=None)
     assert done is True
+
+
+@pytest.mark.asyncio
+async def test_refresh_prose_verdict_force_runs_for_tool_accompanying_text():
+    state = LoopState(user_input="read files")
+    state.goals = ["Study repo"]
+    state.consecutive_text_only = 0
+    state.total_tool_calls = 3
+    state._last_iter_text = "I'll read the main entry points next."
+
+    class _FakeClient:
+        pass
+
+    with pytest.MonkeyPatch.context() as mp:
+        async def _fake_eval(*_a, **_k):
+            return "should_continue", False
+
+        mp.setattr(
+            "nls.agentic.goals.evaluate_prose_turn",
+            _fake_eval,
+        )
+        await refresh_prose_verdict(
+            state, _FakeClient(), force=True,
+        )
+
+    assert state.last_prose_verdict == "should_continue"
+    assert state.prose_show_to_user is False
+    assert prose_turn_end_extra(state) == {"hold_prose": True}
+
+
+def test_prose_turn_end_extra_flags_held_and_duplicate():
+    state = LoopState()
+    state._last_iter_text = "Premature status update."
+    state.last_prose_verdict = "should_continue"
+    state.prose_show_to_user = False
+    assert prose_hold_from_stream(state) is True
+    assert prose_turn_end_extra(state) == {"hold_prose": True}
+
+    state.last_prose_verdict = "duplicate"
+    assert prose_hold_from_stream(state) is True
+
+    state.prose_show_to_user = True
+    state.last_prose_verdict = "deliverable_done"
+    assert prose_hold_from_stream(state) is False
+    assert prose_turn_end_extra(state) == {}
 
 
 @pytest.mark.asyncio
@@ -153,6 +200,50 @@ def test_skip_prose_eval_pure_conversational_chat():
     state._last_iter_text = "Thank you! I'm Babo."
 
     assert should_run_prose_eval(state) is False
+
+
+@pytest.mark.asyncio
+async def test_deliverable_done_skips_stall_and_completes():
+    """deliverable_done must complete even with active plan and consec_text>=2."""
+    state = LoopState(user_input="study the repo")
+    state.goals = ["Study codebase"]
+    state.orchestration_profile = "solo_structured"
+    state.consecutive_text_only = 3
+    state.total_tool_calls = 24
+    state.tool_successes = {"read": 17, "bash": 5}
+    state._last_iter_text = (
+        "Here is my comprehensive architecture summary of the repo..."
+        * 20
+    )
+    state.last_prose_verdict = "deliverable_done"
+    state.prose_show_to_user = True
+
+    class _Hooks:
+        def has_active_plan(self):
+            return True
+
+    done = await should_complete(
+        state, LoopConfig(), _Hooks(), vllm_client=None,
+    )
+    assert done is True
+
+
+@pytest.mark.asyncio
+async def test_study_summary_heuristic_deliverable_done():
+    prose = (
+        "World of Kogaea architecture summary.\n\n"
+        "## Project Structure\n"
+        "The monorepo contains game-api, platform-api, and unity-client."
+    )
+    verdict, show = await evaluate_prose_turn(
+        None,
+        goals=["Study codebase"],
+        action_summary="\n".join([f"read file{i}.cs: OK" for i in range(8)]),
+        prose=prose * 4,
+        consecutive_text_only=1,
+    )
+    assert verdict == "deliverable_done"
+    assert show is True
 
 
 def test_prose_eval_runs_after_conversational_used_tools():

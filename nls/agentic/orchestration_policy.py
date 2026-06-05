@@ -103,6 +103,32 @@ def _effective_orchestration_profile(inputs: ToolPolicyInputs) -> str:
     return inputs.orchestration_profile
 
 
+def is_simple_delegate_monitoring(
+    state: LoopState,
+    delegate_manager: Any | None,
+    *,
+    team_manager: Any | None = None,
+) -> bool:
+    """True when raw delegate(s) run without team wave orchestration."""
+    if not delegates_running(delegate_manager):
+        return False
+    if getattr(state, "simple_delegate_monitoring", False):
+        return True
+    from nls.agentic.orchestration_profile_spec import normalize_profile
+
+    prof = normalize_profile(getattr(state, "orchestration_profile", None))
+    if prof not in ("solo_structured", "conversational"):
+        return False
+    if team_manager is not None:
+        try:
+            for team in team_manager.list_teams(include_terminal=False):
+                if team.status in ("created", "active", "running"):
+                    return False
+        except Exception:
+            pass
+    return True
+
+
 def _apply_profile_cap(
     allowed: frozenset[str],
     profile: str,
@@ -154,6 +180,16 @@ MONITORING_DELEGATES_ACTIVE_TOOLS = frozenset({
 # Immediately after team launch — force exit path.
 POST_LAUNCH_TOOLS = frozenset({
     "communicate", "await_delegates", "switch_mode",
+})
+
+# Raw delegate() on solo_structured — monitor without plan/team/wave EM stack.
+SIMPLE_DELEGATE_POST_LAUNCH_TOOLS = frozenset({
+    "communicate", "await_delegates", "switch_mode", "delegate_status",
+})
+
+SIMPLE_DELEGATE_MONITOR_TOOLS = frozenset({
+    "communicate", "await_delegates", "switch_mode", "delegate_status",
+    "scheduler", "adopt_orchestration_profile",
 })
 
 # Tools allowed during partial completion review (some members still running).
@@ -221,6 +257,7 @@ class ToolPolicyInputs:
     all_unlocked: frozenset[str]
     orchestration_profile: str = "solo_structured"
     evaluating_wave_delivery: bool = False
+    simple_delegate_monitoring: bool = False
 
 
 def build_tool_policy_inputs(
@@ -242,6 +279,16 @@ def build_tool_policy_inputs(
             getattr(state, "coordinator_phase", "") == PHASE_EVALUATING_WAVE
             and not delegates_running(delegate_manager)
         ),
+        simple_delegate_monitoring=bool(
+            getattr(state, "simple_delegate_monitoring", False)
+            or is_simple_delegate_monitoring(
+                state, delegate_manager,
+                team_manager=(
+                    getattr(hooks, "_cached_team_manager", None)
+                    or getattr(hooks, "team_manager", None)
+                ) if hooks else None,
+            )
+        ),
     )
 
 
@@ -254,6 +301,7 @@ def compute_tool_policy_fingerprint(inputs: ToolPolicyInputs) -> str:
         "1" if inputs.suppress_raw_delegate else "0",
         "1" if inputs.is_coordinator else "0",
         "1" if inputs.evaluating_wave_delivery else "0",
+        "1" if inputs.simple_delegate_monitoring else "0",
         inputs.orchestration_profile,
         ",".join(sorted(inputs.all_unlocked)),
     ))
@@ -272,6 +320,13 @@ def _base_tools_for_mode(mode: AgentMode, all_unlocked: frozenset[str]) -> froze
 def resolve_allowed_tools(inputs: ToolPolicyInputs) -> frozenset[str]:
     """Single policy: effective tool names for schema + executor enforcement."""
     allowed = _base_tools_for_mode(inputs.mode, inputs.all_unlocked)
+
+    if inputs.simple_delegate_monitoring and inputs.delegates_active:
+        if inputs.must_await_delegates:
+            base = SIMPLE_DELEGATE_POST_LAUNCH_TOOLS
+        else:
+            base = SIMPLE_DELEGATE_MONITOR_TOOLS
+        return base & inputs.all_unlocked
 
     if not inputs.is_coordinator:
         # EXECUTING is the full IC surface; conversational profile caps apply
@@ -655,6 +710,24 @@ def block_terminate_intervention(
             "Only terminate if there is zero useful output on disk."
         )
     return None
+
+
+def on_delegate_batch_launched(
+    state: LoopState,
+    batch_id: str,
+    *,
+    record_phase: Callable[[str, str], None] | None = None,
+) -> None:
+    """After raw delegate() — lighter monitoring than team wave launch."""
+    state.must_await_delegates = True
+    state.coordinator_phase = PHASE_AWAITING_DELEGATES
+    state.coordinator_monitor_iters = 0
+    state.coordinator_burn_iters = 0
+    state.active_mode = AgentMode.MONITORING
+    state.simple_delegate_monitoring = True
+    invalidate_tool_policy_cache(state)
+    if record_phase:
+        record_phase(PHASE_AWAITING_DELEGATES, f"delegate_batch={batch_id}")
 
 
 def on_team_launched(
@@ -1048,6 +1121,28 @@ def build_evaluating_action_breadcrumb(
             "[BREADCRUMB] Call plan(action='read') then the next management "
             "tool (team/plan/verify) NOW — do not post status updates."
         )
+    return "\n".join(lines)
+
+
+def build_simple_delegate_wake_message(
+    *,
+    dispatch_source: str,
+    delegate_summary: str = "",
+) -> str:
+    """Compact wake for solo_structured raw delegate() monitoring."""
+    lines = [
+        "[DELEGATE MONITOR]",
+        "A background sub-agent is running. Your job is to check progress "
+        "and hand off — not to re-read the repo or manage plan/wave boards.",
+        "1) delegate_status(list) — see running/completed delegates",
+        "2) Optional: communicate(status) once if the user should know",
+        "3) When the batch is running cleanly: "
+        "await_delegates(summary='...') to exit",
+        "Do NOT call plan, todo, team, or long wait(60+) idle polls.",
+    ]
+    if delegate_summary:
+        lines.append(f"Delegates: {delegate_summary}")
+    lines.append(f"Wake source: {dispatch_source or 'orchestration'}")
     return "\n".join(lines)
 
 

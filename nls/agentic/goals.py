@@ -466,7 +466,10 @@ _PROSE_EVAL_SYSTEM = (
     "- deliverable_done: agent reports verified success and the deliverable "
     "is complete (even if task_complete was not called).\n"
     "- should_continue: agent should keep working with tools; prose is "
-    "premature status or incomplete. Set show_to_user to false to hold it.\n\n"
+    "premature status or incomplete. Set show_to_user to false to hold it.\n"
+    "- For explore/study/read-heavy tasks: if ACTIONS show extensive reading "
+    "and PROSE is a substantive summary or architecture report, prefer "
+    "deliverable_done with show_to_user true.\n\n"
     "show_to_user: false when holding premature prose (should_continue) or "
     "duplicate; true when exiting on awaiting_user_input or deliverable_done.\n"
     "Return ONLY the JSON object."
@@ -895,6 +898,7 @@ def _heuristic_prose_verdict(
     prior_hash: str = "",
     last_error: str = "",
     consecutive_text_only: int = 0,
+    action_summary: str = "",
 ) -> tuple[ProseVerdict, bool]:
     """Rule-based fallback when micro-inference is unavailable."""
     text = (prose or "").strip()
@@ -917,6 +921,17 @@ def _heuristic_prose_verdict(
         if any(m in text_low for m in _AWAITING_USER_MARKERS):
             if "?" in text[-400:] or "please" in text_low:
                 return "awaiting_user_input", True
+
+    read_actions = action_summary.lower().count("read ")
+    if (
+        read_actions >= 5
+        and len(text) >= 400
+        and any(
+            m in text_low
+            for m in ("summary", "architecture", "overview", "structure", "analysis")
+        )
+    ):
+        return "deliverable_done", True
 
     return "should_continue", False
 
@@ -948,6 +963,7 @@ async def evaluate_prose_turn(
             prior_hash=prior_prose_hash,
             last_error=last_error,
             consecutive_text_only=consecutive_text_only,
+            action_summary=action_summary,
         )
 
     hints_block = ""
@@ -1018,4 +1034,5 @@ async def evaluate_prose_turn(
         prior_hash=prior_prose_hash,
         last_error=last_error,
         consecutive_text_only=consecutive_text_only,
+        action_summary=action_summary,
     )

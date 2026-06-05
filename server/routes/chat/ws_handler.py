@@ -2435,6 +2435,7 @@ async def _dispatch_agentic_event(
             "working_memory": _wm_snap,
             "duration_ms": round(data.get("duration_ms", 0), 1),
             "signals_count": 0,
+            "hold_prose": bool(data.get("hold_prose")),
             **_sa_tag,
         })
         _resp_text = data.get("response_text", "").strip()

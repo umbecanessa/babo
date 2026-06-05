@@ -435,8 +435,6 @@ async def generate(
     in_think_block = False
     think_buf = ""
     structured_calls = None
-    visible_chars = 0
-    _MAX_VISIBLE_CHARS = 3000
 
     try:
         async for chunk in vllm_client.generate_stream(
@@ -457,7 +455,6 @@ async def generate(
                 acc_tokens.append(chunk)
                 think_buf += chunk
                 if not in_think_block:
-                    visible_chars += len(chunk)
                     if "<think>" in think_buf:
                         in_think_block = True
                         pre = think_buf.split("<think>", 1)[0]
@@ -477,13 +474,6 @@ async def generate(
                                 {"token": think_buf, "iteration": iteration},
                             ))
                             think_buf = ""
-                    if visible_chars > _MAX_VISIBLE_CHARS:
-                        logger.warning(
-                            "Visible text exceeded %d chars — "
-                            "likely spiral, stopping generation",
-                            _MAX_VISIBLE_CHARS,
-                        )
-                        break
                 else:
                     if "</think>" in think_buf:
                         in_think_block = False
