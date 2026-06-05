@@ -2077,6 +2077,12 @@ class LoopConfig:
     on_escalation: Callable[..., Any] | None = None
     escalation_wait_seconds: float = 300.0
 
+    # --- User budget extension (orchestrator) ---
+    prompt_user_on_budget_exhaust: bool = True
+    budget_prompt_wait_seconds: float = 600.0
+    budget_prompt_options: tuple[int, ...] = (10, 20, 40)
+    max_user_budget_prompts: int = 3
+
 
 @dataclass
 class LoopGuards:
@@ -2199,6 +2205,13 @@ class LoopState:
     orchestrator_recovery: bool = False
     # Cap guard-driven iteration extensions (audit loops without teams).
     guard_iteration_extensions: int = 0
+    # User-facing budget extension prompts (orchestrator).
+    user_budget_prompts: int = 0
+    budget_declined_by_user: bool = False
+    budget_prompt_timed_out: bool = False
+    session_key: str = ""
+    consecutive_single_read_iters: int = 0
+    parallel_read_nudge_given: bool = False
 
     # Context supersession + read cache metrics (per loop)
     supersession_stubs_applied: int = 0

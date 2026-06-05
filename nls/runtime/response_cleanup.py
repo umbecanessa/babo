@@ -54,3 +54,47 @@ def strip_nls_artifacts(text: str) -> str:
     cleaned = _BRACKET_SIGNAL_RE.sub("", cleaned)
     cleaned = re.sub(r"\n{3,}", "\n\n", cleaned)
     return cleaned.strip()
+
+
+# Python-style pseudo tool calls leaked when chat mode runs without tools.
+_PSEUDO_PYTHON_TOOL_RE = re.compile(
+    r"^[a-z][a-z0-9_]*\([^)]*\)\s*$",
+    re.IGNORECASE,
+)
+
+
+def sanitize_channel_outbound(text: str) -> str:
+    """Remove tool-call debris before sending text to Discord/Telegram/etc.
+
+    Chat-mode channel turns have no tool schemas; the model sometimes prints
+    ``channel_inspect(...)`` or ``<tool_call>`` blocks as plain text.
+    """
+    if not text:
+        return ""
+    try:
+        from nls.agentic.types import _strip_toolcall_pollution
+
+        cleaned = _strip_toolcall_pollution(text.strip())
+    except Exception:
+        cleaned = strip_nls_artifacts(text.strip())
+
+    kept: list[str] = []
+    for line in cleaned.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if _PSEUDO_PYTHON_TOOL_RE.match(stripped):
+            continue
+        kept.append(line)
+    result = "\n".join(kept).strip()
+    if not result and text.strip():
+        if _PSEUDO_PYTHON_TOOL_RE.match(text.strip()):
+            return ""
+    return result
+
+
+def is_channel_outbound_tool_leak(text: str) -> bool:
+    """True when *text* is only tool syntax and must not be sent to a channel."""
+    if not text or not text.strip():
+        return False
+    return not sanitize_channel_outbound(text)

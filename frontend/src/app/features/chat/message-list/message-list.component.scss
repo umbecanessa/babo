@@ -1481,6 +1481,96 @@ $drowsy: var(--accent-warn);
   font-style: italic;
 }
 
+// Loop budget extension prompt
+$budget-accent: #38bdf8;
+
+.budget-row {
+  justify-content: flex-start;
+}
+
+.budget-bubble {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  margin: 6px 16px;
+  background: rgba(56, 189, 248, 0.06);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  border-left: 3px solid $budget-accent;
+  border-radius: 10px;
+  max-width: min(560px, 92%);
+  animation: msg-in 0.3s ease-out;
+
+  p {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--text-primary);
+    white-space: pre-wrap;
+  }
+}
+
+.budget-indicator {
+  display: flex;
+  align-items: center;
+}
+
+.budget-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: $budget-accent;
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.5);
+  animation: drowsy-pulse 3s ease-in-out infinite;
+}
+
+.budget-reason {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.budget-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.budget-btn {
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border: 1px solid transparent;
+  background: transparent;
+  transition: background 0.15s, border-color 0.15s;
+
+  &.budget-extend {
+    border-color: rgba(56, 189, 248, 0.35);
+    color: $budget-accent;
+
+    &:hover {
+      background: rgba(56, 189, 248, 0.1);
+      border-color: rgba(56, 189, 248, 0.55);
+    }
+  }
+
+  &.budget-stop {
+    border-color: rgba(148, 163, 184, 0.35);
+    color: var(--text-secondary);
+
+    &:hover {
+      background: rgba(148, 163, 184, 0.08);
+    }
+  }
+}
+
+.budget-responded {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
 // ═══════════════════════════════════════════════════════════════
 // AGENTIC LOOP CARDS (indigo accent)
 // ═══════════════════════════════════════════════════════════════

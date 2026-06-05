@@ -183,6 +183,45 @@ class SquadManager:
         source = f"squad_{kind}:{squad.id}"
         self._enqueue_dispatch(squad.lead_agent_id, prompt, source)
 
+    def _wake_member(
+        self,
+        squad: Squad,
+        member_id: str,
+        kind: str,
+        detail: str = "",
+    ) -> None:
+        if not self._enqueue_dispatch or not member_id:
+            return
+        if not squad.is_member(member_id) or squad.is_lead(member_id):
+            return
+        prompt = detail.strip() or format_squad_wake_prompt(
+            squad, kind=kind, detail=detail,
+        )
+        source = f"squad_member_{kind}:{squad.id}"
+        self._enqueue_dispatch(member_id, prompt, source)
+
+    def build_member_checkback_detail(self, squad: Squad, member_id: str) -> str:
+        """Background wake from member Job charter (channel-agnostic)."""
+        from nls.runtime.job_background import (
+            build_job_background_wake_prompt,
+            job_allows_background_work,
+        )
+        from nls.runtime.job_trust import load_job
+
+        agent_dir = self._agent_dir(member_id)
+        job = load_job(agent_dir)
+        if not job_allows_background_work(job, agent_dir):
+            return ""
+        squad_blurb = (
+            f"Squad '{squad.name}' ({squad.id}). Lead: {squad.lead_agent_id}. "
+            f"Peers: {', '.join(m for m in squad.all_member_ids if m != member_id)}."
+        )
+        return build_job_background_wake_prompt(
+            job,
+            wake_label="SQUAD MEMBER CHECKBACK",
+            squad_blurb=squad_blurb,
+        )
+
     def get_squad_for_agent(self, agent_id: str) -> Squad | None:
         return self._registry.get_for_agent(agent_id)
 
@@ -362,11 +401,16 @@ class SquadManager:
             "title", "mission", "persona", "playbook", "in_scope", "out_of_scope",
             "refusal_template", "refusal_examples", "escalation_paths",
             "default_profile", "strategic_priorities",
+            "background_enabled", "background_interval_seconds",
         }
         for key, val in fields.items():
             if key not in allowed or val is None:
                 continue
             setattr(job, key, val)
+        from nls.runtime.job_background import is_stock_job
+
+        if not is_stock_job(job):
+            job.background_enabled = True
         save_job(agent_dir, job)
         self._sync_runtime_job_trust(agent_id)
         return job.to_dict()
@@ -643,13 +687,17 @@ class SquadManager:
                 f"SQUAD LEAD: You lead squad '{squad.name}' ({squad.id}).\n"
                 f"Members: {', '.join(peers) or '(none)'}\n"
                 "Coordinate via the squad tool: approve inbox items, assign work, "
-                "resolve squad_escalate requests. You may speak for the owner on policy."
+                "resolve squad_escalate requests. You may speak for the owner on policy.\n"
+                "Shared coordination channels (any platform): peer agent messages are "
+                "team traffic; cross-surface inbound appears as [SURFACE INBOX] while "
+                "Home is active."
             )
         return (
             f"SQUAD MEMBER: You are in squad '{squad.name}' ({squad.id}).\n"
             f"Lead: {squad.lead_agent_id}\n"
             f"Peers: {', '.join(m for m in squad.all_member_ids if m != agent_id)}\n"
-            "Use squad(action='propose') for shared inbox; squad_escalate to reach your lead."
+            "Use squad(action='propose') for shared inbox; squad_escalate to reach your lead.\n"
+            "Your Job charter defines when and how to use linked channels for coordination."
         )
 
     def _get_todo_manager(self) -> Any | None:
@@ -1355,17 +1403,23 @@ class SquadManager:
         lead_agent_id: str,
         **kwargs: Any,
     ) -> dict[str, Any]:
-        from nls.runtime.discord_squad_readiness import audit_squad_discord_channel
+        from nls.runtime.squad_channel_readiness import audit_squad_channel
 
         self._require_lead(squad, lead_agent_id)
         channel_id = str(kwargs.get("channel_id") or "").strip()
+        platform = str(kwargs.get("channel") or "").strip().lower()
         if not channel_id:
             raise ValueError(
-                "channel_id (Discord channel snowflake) is required for "
-                "check_channel_readiness — get it from channel_inspect(action='get')."
+                "channel_id is required for check_channel_readiness — "
+                "Discord snowflake, Telegram chat_id, or Slack channel ID "
+                "(from channel_inspect(action='get'))."
             )
-        faces, report, playbook = await audit_squad_discord_channel(lead_agent_id, channel_id)
+        faces, report, playbook = await audit_squad_channel(
+            lead_agent_id, channel_id, platform=platform,
+        )
+        plat = playbook.get("platform") or platform or "discord"
         return {
+            "channel": plat,
             "channel_id": channel_id,
             "report": report,
             "all_ready": playbook.get("all_ready", False),
@@ -1376,8 +1430,8 @@ class SquadManager:
                     "agent_id": f.agent_id,
                     "name": f.name,
                     "role": f.role,
-                    "discord_bot": f.bot_username,
-                    "discord_bot_id": f.bot_id,
+                    "bot_username": f.bot_username,
+                    "bot_id": f.bot_id,
                     "in_guild": f.in_guild,
                     "ok": f.issue == "OK — listening",
                     "issue": f.issue,
@@ -1478,6 +1532,8 @@ class SquadManager:
             if mission:
                 job.mission = mission
             job.default_profile = job.default_profile or "solo_structured"
+            if mission or (job_title and job_title.strip()):
+                job.background_enabled = True
             save_job(agent_dir, job)
 
             squad = self._add_member_to_squad(squad, new_id)

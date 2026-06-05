@@ -39,6 +39,8 @@ class EventType(str, Enum):
     COMMUNICATE = "communicate"
     ASK_USER = "ask_user"
     USER_ANSWER = "user_answer"
+    LOOP_BUDGET_PROMPT = "loop_budget_prompt"
+    BUDGET_DECISION = "budget_decision"
 
     # Planning
     PLAN_UPDATE = "plan_update"

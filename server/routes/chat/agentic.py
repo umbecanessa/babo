@@ -132,6 +132,31 @@ async def _run_agentic_with_receive(
                             app, agent_id, websocket,
                             source="command:agentic",
                         )
+                elif cmd in ("budget_extend", "budget_stop"):
+                    if cmd == "budget_stop":
+                        copilot_queue.put_nowait({"action": "terminate"})
+                        extra = 0
+                    else:
+                        extra = int(msg.get("extra_iterations", 0) or 0)
+                        if extra <= 0:
+                            extra = 10
+                        copilot_queue.put_nowait({
+                            "action": "extend",
+                            "extra_iterations": extra,
+                        })
+                    try:
+                        await websocket.send_json({
+                            "type": "budget_command_result",
+                            "ok": True,
+                            "action": cmd,
+                            "extra_iterations": extra,
+                        })
+                    except Exception:
+                        pass
+                    logger.info(
+                        "Agent %s: budget command %s during agentic (extra=%s)",
+                        agent_id, cmd, extra,
+                    )
             elif msg.get("type") == "user_answer":
                 content = msg.get("content", "").strip()
                 if content:

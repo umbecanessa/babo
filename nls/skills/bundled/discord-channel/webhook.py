@@ -8,7 +8,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 
 from .adapter import _channel_display_name
-from nls.skills.channel_adapter_util import broadcast_channel_event, strip_signal_tags
+from nls.skills.channel_adapter_util import broadcast_channel_event, prepare_channel_outbound, strip_signal_tags
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["discord-channel"])
@@ -103,10 +103,17 @@ async def discord_inbound(agent_id: str, request: Request):
             channel_adapter=adapter,
             reply_target=channel_id,
             session_key=session_key,
+            sender_name=sender_name,
+            channel_label=normalized["metadata"].get("channel_name", ""),
+            raw_content=text,
         )
-        clean = strip_signal_tags(response_text) if response_text else ""
-        if not clean and response_text:
-            clean = response_text.strip()
+        clean = prepare_channel_outbound(response_text or "")
+        if response_text and response_text.strip() and not clean:
+            logger.warning(
+                "Discord webhook [%s]: blocked tool-call leak outbound (%r)",
+                agent_id,
+                (response_text or "")[:120],
+            )
         if clean:
             history.append({"role": "user", "content": text})
             history.append({"role": "assistant", "content": clean})

@@ -124,6 +124,9 @@ class Squad:
     checkback_interval_seconds: int = 1800
     proposal_sla_seconds: int = 14400
     last_checkback_at: float = 0.0
+    member_checkback_enabled: bool = True
+    member_checkback_interval_seconds: int = 3600
+    member_last_checkback_at: dict[str, float] = field(default_factory=dict)
     created_at: float = 0.0
     updated_at: float = 0.0
 

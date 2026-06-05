@@ -1329,6 +1329,12 @@
   color: var(--ask-user-banner-text);
   font-size: 12px;
   line-height: 1.4;
+
+  &.budget-composer-banner {
+    border-color: rgba(56, 189, 248, 0.35);
+    background: rgba(56, 189, 248, 0.08);
+    color: var(--text-primary);
+  }
 }
 
 .input-wrapper.agentic-active {

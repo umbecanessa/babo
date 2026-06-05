@@ -24,12 +24,15 @@ _ORCHESTRATION_PREFIXES = (
     "squad_checkback:",
     "squad_escalation:",
     "squad_item_done:",
+    "job_background:",
+    "squad_member_checkback:",
 )
 
 _SQUAD_ORCHESTRATION_PREFIXES = (
     "squad_checkback:",
     "squad_escalation:",
     "squad_item_done:",
+    "squad_member_checkback:",
 )
 
 

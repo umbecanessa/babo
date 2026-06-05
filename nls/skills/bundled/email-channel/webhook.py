@@ -311,14 +311,15 @@ async def _handle_conversation(
             )
 
             clean_response = _strip_signal_tags(response_text)
-            if not clean_response:
-                logger.warning(
-                    "Email [%s]: response became empty after signal-tag "
-                    "stripping — using original. Original: %s",
-                    agent_id, response_text[:200],
-                )
-                clean_response = response_text.strip()
+            from nls.skills.channel_adapter_util import prepare_channel_outbound
 
+            clean_response = prepare_channel_outbound(clean_response)
+            if response_text.strip() and not clean_response:
+                logger.warning(
+                    "Email [%s]: response was tool-call leak — not sending (%r)",
+                    agent_id,
+                    response_text[:120],
+                )
             if clean_response:
                 in_reply_to = normalized.get("message_id", "") or normalized["metadata"].get("in_reply_to", "")
                 references = normalized["metadata"].get("references", "")

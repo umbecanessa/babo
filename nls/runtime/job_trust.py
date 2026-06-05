@@ -99,6 +99,9 @@ class JobDocument:
     escalation_paths: list[str] = field(default_factory=list)
     default_profile: str = ""
     strategic_priorities: list[str] = field(default_factory=list)
+    background_enabled: bool = False
+    background_interval_seconds: int = 0
+    last_background_wake_at: float = 0.0
     updated_at: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:

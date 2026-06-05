@@ -253,21 +253,23 @@ async def whatsapp_inbound(agent_id: str, request: Request):
             reply_target=reply_jid,
             session_key=session_key,
             attachments=attachments,
+            sender_name=sender_name,
+            raw_content=text or "[media]",
         )
         if response_text:
             history.append({"role": "user", "content": text})
             history.append({"role": "assistant", "content": response_text})
 
-        clean_response = _SIGNAL_TAG_RE.sub("", response_text).strip() if response_text else ""
+        from nls.skills.channel_adapter_util import prepare_channel_outbound
 
-        if not clean_response and response_text:
+        clean_response = prepare_channel_outbound(response_text or "")
+
+        if response_text and response_text.strip() and not clean_response:
             logger.warning(
-                "WhatsApp [%s]: response was non-empty (%d chars) but "
-                "became empty after signal-tag stripping — sending "
-                "fallback. Original: %s",
-                agent_id, len(response_text), response_text[:200],
+                "WhatsApp [%s]: blocked tool-call leak outbound (%r)",
+                agent_id,
+                response_text[:120],
             )
-            clean_response = response_text.strip()
 
         if not clean_response:
             logger.warning(

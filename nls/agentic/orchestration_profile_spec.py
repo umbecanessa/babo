@@ -58,6 +58,11 @@ _SQUAD_LEAD_ONLY_BEHAVIORAL_DOMAINS = frozenset({
     "squad_inbox_discipline",
 })
 
+# Visible to any agent in a squad (lead or member).
+_SQUAD_SHARED_BEHAVIORAL_DOMAINS = frozenset({
+    "squad_channel_coordination",
+})
+
 # Plan-linked instruction domains in RING_INSTRUCTIONS.
 _PLAN_INSTRUCTION_DOMAINS = frozenset({
     "plan_requirements",

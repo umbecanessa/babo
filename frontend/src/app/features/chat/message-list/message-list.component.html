@@ -21,6 +21,7 @@
            [class.channel-outbound-row]="msg.type === 'channel_outbound'"
            [class.channel-skipped-row]="msg.type === 'channel_skipped'"
            [class.drowsy-row]="msg.type === 'drowsy'"
+           [class.budget-row]="msg.type === 'loop_budget_prompt'"
            [class.agentic-row]="msg.type === 'agentic_start' || msg.type === 'agentic_iteration' || msg.type === 'agentic_complete' || msg.type === 'turn_thinking' || msg.type === 'tool_output_chunk' || msg.type === 'tool_progress' || msg.type === 'browser_navigation' || msg.type === 'copilot_ack' || msg.type === 'ask_user'"
            [class.activity-row]="msg.type === 'activity_status'"
            [class.delegate-row]="msg.type === 'delegate_card' && !isInGroupedWave($index)">
@@ -222,6 +223,32 @@
               </div>
             } @else {
               <span class="drowsy-responded">Responded</span>
+            }
+          </div>
+        } @else if (msg.type === 'loop_budget_prompt') {
+          <div class="budget-bubble">
+            <div class="budget-indicator">
+              <div class="budget-dot"></div>
+            </div>
+            <p>{{ msg.content }}</p>
+            @if (msg.loopBudget?.reason) {
+              <span class="budget-reason">{{ msg.loopBudget?.reason }}</span>
+            }
+            @if (!isBudgetResponded($index)) {
+              <div class="budget-actions">
+                @for (opt of msg.loopBudget?.options || [10, 20, 40]; track opt) {
+                  <button
+                    class="budget-btn budget-extend"
+                    (click)="onBudgetAction($index, 'extend', opt)">
+                    +{{ opt }} steps
+                  </button>
+                }
+                <button class="budget-btn budget-stop" (click)="onBudgetAction($index, 'stop')">
+                  Stop
+                </button>
+              </div>
+            } @else {
+              <span class="budget-responded">Responded</span>
             }
           </div>
         } @else if (msg.type === 'delegate_card' && msg.delegate && !isInGroupedWave($index) && msg.delegate.teamId && isFirstInWave($index) && getWaveMemberIndices($index).length > 1) {

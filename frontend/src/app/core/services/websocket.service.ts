@@ -20,6 +20,16 @@ export interface DrowsyData {
   actions: string[];
 }
 
+export interface LoopBudgetData {
+  reason: string;
+  requestId: string;
+  iteration: number;
+  maxIterations: number;
+  options: number[];
+  sessionKey?: string;
+  waitSeconds?: number;
+}
+
 // ---------------------------------------------------------------------------
 // Agentic loop event data
 // ---------------------------------------------------------------------------
@@ -83,6 +93,8 @@ export interface ChatMessage {
     | 'drive_action'
     | 'reach_out'
     | 'drowsy'
+    | 'loop_budget_prompt'
+    | 'budget_decision'
     | 'agentic_start'
     | 'agentic_iteration'
     | 'agentic_complete'
@@ -135,6 +147,7 @@ export interface ChatMessage {
   tool?: { name: string; query: string; source: string; preview: string; success: boolean };
   drive?: DriveActionData;
   drowsy?: DrowsyData;
+  loopBudget?: LoopBudgetData;
   agentic?: AgenticIterationData;
   agenticComplete?: AgenticCompleteData;
   activityText?: string;

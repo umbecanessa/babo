@@ -17,6 +17,13 @@ def strip_signal_tags(text: str) -> str:
     return _SIGNAL_TAG_RE.sub("", text).strip()
 
 
+def prepare_channel_outbound(text: str) -> str:
+    """Signal-tag strip + tool-leak sanitize for public channel replies."""
+    from nls.runtime.response_cleanup import sanitize_channel_outbound
+
+    return sanitize_channel_outbound(strip_signal_tags(text or ""))
+
+
 def get_relay_base_url(cfg: dict[str, Any]) -> str:
     if cfg.get("webhook_relay_base_url"):
         return str(cfg["webhook_relay_base_url"]).rstrip("/")

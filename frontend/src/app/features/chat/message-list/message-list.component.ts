@@ -46,9 +46,15 @@ export class MessageListComponent implements OnChanges, AfterViewChecked, OnDest
   @Input() awaitingResponse = false;
   @Input() agenticActive = false;
   @Input() askUserPending = false;
+  @Input() budgetPromptPending = false;
   @Input() agentId = '';
   @Output() drowsyAction = new EventEmitter<{
     action: 'confirm' | 'deny';
+    index: number;
+  }>();
+  @Output() budgetAction = new EventEmitter<{
+    action: 'extend' | 'stop';
+    extraIterations?: number;
     index: number;
   }>();
   @Output() expandBrowser = new EventEmitter<any>();
@@ -83,6 +89,7 @@ export class MessageListComponent implements OnChanges, AfterViewChecked, OnDest
   private _manuallyToggledAgentic = new Set<number>();
   expandedThinking = new Set<number>();
   drowsyResponded = new Set<number>();
+  budgetResponded = new Set<number>();
   reviewResolved: Record<string, 'approved' | 'rejected'> = {};
   reviewLoading: Record<string, boolean> = {};
 
@@ -326,6 +333,7 @@ export class MessageListComponent implements OnChanges, AfterViewChecked, OnDest
   get showGenerationIndicator(): boolean {
     return this.agenticActive
       && !this.askUserPending
+      && !this.budgetPromptPending
       && !this.streamingText?.trim()
       && !this.streamingReasoning?.trim()
       && this.isLastMessageAgenticIteration();
@@ -334,6 +342,11 @@ export class MessageListComponent implements OnChanges, AfterViewChecked, OnDest
   /** True while ask_user is blocking the loop. */
   get showAskUserIndicator(): boolean {
     return this.agenticActive && this.askUserPending;
+  }
+
+  /** True while a budget extension prompt is blocking the loop. */
+  get showBudgetPromptIndicator(): boolean {
+    return this.agenticActive && this.budgetPromptPending;
   }
 
   /** True after the user sends until tokens or a reply arrive. */
@@ -365,11 +378,15 @@ export class MessageListComponent implements OnChanges, AfterViewChecked, OnDest
   /** True when any in-flight indicator should display. */
   get showPendingIndicator(): boolean {
     return this.showAskUserIndicator
+      || this.showBudgetPromptIndicator
       || this.showAwaitingIndicator
       || this.showGenerationIndicator;
   }
 
   get pendingLabel(): string {
+    if (this.showBudgetPromptIndicator) {
+      return 'Waiting for your decision…';
+    }
     if (this.showAskUserIndicator) {
       return 'Waiting for your answer…';
     }
@@ -463,6 +480,23 @@ export class MessageListComponent implements OnChanges, AfterViewChecked, OnDest
   /** Handle drowsy action button click. */
   onDrowsyAction(index: number, action: 'confirm' | 'deny'): void {
     this.drowsyAction.emit({ action, index });
+  }
+
+  /** Handle budget extension prompt button click. */
+  onBudgetAction(index: number, action: 'extend' | 'stop', extraIterations?: number): void {
+    this.budgetAction.emit({ action, extraIterations, index });
+  }
+
+  markBudgetResponded(index: number): void {
+    this.budgetResponded.add(index);
+  }
+
+  clearBudgetResponded(index: number): void {
+    this.budgetResponded.delete(index);
+  }
+
+  isBudgetResponded(index: number): boolean {
+    return this.budgetResponded.has(index);
   }
 
   /** Mark a drowsy card responded after the server accepted the command. */

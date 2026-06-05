@@ -152,6 +152,8 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
   // Ask-user state (agent waiting for human input)
   askUserPending = signal(false);
+  budgetPromptPending = signal(false);
+  private _pendingBudgetIndex: number | null = null;
 
   // Google Workspace connect modal (triggered by agent or UI)
   googleModalOpen = signal(false);
@@ -391,6 +393,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     this.agenticActive.set(false);
     this.agenticStopping.set(false);
     this.askUserPending.set(false);
+    this.budgetPromptPending.set(false);
     this.activityStatus.set('');
     this.agenticStep.set(0);
     this.streamingText.set('');
@@ -498,6 +501,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     }
     this.agenticActive.set(snap.agenticActive ?? false);
     this.askUserPending.set(snap.askUserPending ?? false);
+    this.budgetPromptPending.set(snap.budgetPromptPending ?? false);
     this.agenticStep.set(snap.agenticStep ?? 0);
     this.agenticMaxSteps.set(snap.agenticMaxSteps ?? 0);
     this.activityStatus.set(snap.activityStatus ?? '');
@@ -541,6 +545,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       latestProbeSignals: this.latestProbeSignals(),
       agenticActive: this.agenticActive(),
       askUserPending: this.askUserPending(),
+      budgetPromptPending: this.budgetPromptPending(),
       agenticStep: this.agenticStep(),
       agenticMaxSteps: this.agenticMaxSteps(),
       activityStatus: this.activityStatus(),
@@ -573,7 +578,8 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     const surfaceSend =
       dest.mode === 'surface'
       && !this.agenticActive()
-      && !this.askUserPending();
+      && !this.askUserPending()
+      && !this.budgetPromptPending();
 
     if (surfaceSend) {
       const meta = this.activeThreadMeta();
@@ -610,8 +616,10 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       sessionKey: threadKey !== 'websocket:main' ? threadKey : undefined,
     }]);
 
-    // If the agent is waiting for an answer, route as user_answer
-    if (this.askUserPending()) {
+    // If the agent is waiting for a budget decision or ask_user answer, route as user_answer
+    if (this.budgetPromptPending()) {
+      this.ws.send({ type: 'user_answer', content: text, session_key: threadKey });
+    } else if (this.askUserPending()) {
       this.ws.send({ type: 'user_answer', content: text, session_key: threadKey });
       this.askUserPending.set(false);
     } else {
@@ -793,6 +801,22 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     }
     this._pendingDrowsyIndex = event.index;
     this.messageList?.markDrowsyResponded(event.index);
+  }
+
+  onBudgetAction(event: { action: 'extend' | 'stop'; extraIterations?: number; index: number }) {
+    const cmd = event.action === 'stop' ? 'budget_stop' : 'budget_extend';
+    const sent = this.ws.sendCommand(cmd, {
+      extra_iterations: event.extraIterations ?? 10,
+    });
+    if (!sent) {
+      this.toast.show(
+        'Not connected — could not send budget response. Reopen chat and try again.',
+        'error',
+      );
+      return;
+    }
+    this._pendingBudgetIndex = event.index;
+    this.messageList?.markBudgetResponded(event.index);
   }
 
   ngAfterViewChecked() {
@@ -1859,6 +1883,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         this.agenticActive.set(false);
         this.agenticStopping.set(false);
         this.askUserPending.set(false);
+        this.budgetPromptPending.set(false);
         this.activityStatus.set('');
         this.agenticStep.set(0);
         this.streamingText.set('');
@@ -1964,8 +1989,12 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
           this._updateBackgroundCardDetail(elapsed ? `${text} (${(elapsed / 1000).toFixed(1)}s)` : text);
           break;
         }
-        if (statusType === 'waiting_for_user' || /waiting for your answer/i.test(text)) {
+        if (statusType === 'waiting_for_budget' || /waiting for your decision/i.test(text)) {
+          this.budgetPromptPending.set(true);
+          this.askUserPending.set(false);
+        } else if (statusType === 'waiting_for_user' || /waiting for your answer/i.test(text)) {
           this.askUserPending.set(true);
+          this.budgetPromptPending.set(false);
         }
         if (!text.trim()) {
           if (statusType !== 'generating' || !this.agenticActive()) {
@@ -2736,6 +2765,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       case 'ask_user': {
         this.clearAwaitingResponse();
         this.askUserPending.set(true);
+        this.budgetPromptPending.set(false);
         this.activityStatus.set('Waiting for your answer…');
         const question = msg.question || 'I need more information to continue.';
         this.messages.update(msgs => [...msgs, {
@@ -2762,6 +2792,84 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
           'info',
           0,
         );
+        break;
+      }
+
+      case 'loop_budget_prompt': {
+        this.clearAwaitingResponse();
+        this.budgetPromptPending.set(true);
+        this.askUserPending.set(false);
+        this.activityStatus.set('Waiting for your decision…');
+        const question = msg.question || 'I need more steps to continue.';
+        const options = Array.isArray(msg.options)
+          ? msg.options.map((o: unknown) => Number(o)).filter((o: number) => o > 0)
+          : [10, 20, 40];
+        this.messages.update(msgs => [...msgs, {
+          type: 'loop_budget_prompt' as any,
+          content: question,
+          requestId: msg.request_id || '',
+          sessionKey: msg.session_key || msg.sessionKey || this.currentThread(),
+          timestamp: new Date(),
+          loopBudget: {
+            reason: msg.reason || '',
+            requestId: msg.request_id || '',
+            iteration: msg.iteration || 0,
+            maxIterations: msg.max_iterations || 0,
+            options: options.length ? options : [10, 20, 40],
+            sessionKey: msg.session_key || msg.sessionKey || this.currentThread(),
+            waitSeconds: msg.wait_seconds || 600,
+          },
+        }]);
+        if (typeof msg.source === 'string' && msg.source.startsWith('user:channel')) {
+          const sk = msg.session_key || msg.sessionKey || this.currentThread();
+          this.conversations.addInboxItem({
+            sessionKey: sk,
+            kind: 'ask_user',
+            preview: question.slice(0, 120),
+            channel: sk.split(':')[0] || 'channel',
+            timestamp: new Date(),
+            priority: 100,
+          });
+          this.panels.onAskUserFromChannel();
+          this.syncInboxBadge();
+        }
+        this.toast.show(
+          question.length > 200 ? `${question.slice(0, 197)}…` : question,
+          'info',
+          0,
+        );
+        break;
+      }
+
+      case 'budget_decision': {
+        this.budgetPromptPending.set(false);
+        this.activityStatus.set('');
+        this.toast.dismissAll();
+        if (msg.action === 'extend') {
+          const newMax = Number(msg.max_iterations) || 0;
+          if (newMax > 0) {
+            this.agenticMaxSteps.set(newMax);
+          } else if (msg.extra_iterations) {
+            this.agenticMaxSteps.update(v => v + Number(msg.extra_iterations));
+          }
+          this.messages.update(msgs => [...msgs, {
+            type: 'status' as any,
+            content: `Continuing with +${msg.extra_iterations || 0} steps (up to ${this.agenticMaxSteps()} total)…`,
+            timestamp: new Date(),
+          }]);
+        }
+        break;
+      }
+
+      case 'budget_command_result': {
+        const pending = this._pendingBudgetIndex;
+        if (!msg.ok) {
+          if (pending != null) {
+            this.messageList?.clearBudgetResponded(pending);
+            this._pendingBudgetIndex = null;
+          }
+          this.toast.show(msg.content || 'Budget response failed.', 'error');
+        }
         break;
       }
 

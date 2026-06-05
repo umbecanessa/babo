@@ -1136,6 +1136,10 @@ def build_config_v4(agent_config: dict[str, Any]) -> Any:
         enable_parallel_tools=cfg.get("enable_parallel_tools", True),
         enable_cognitive_digest=cfg.get("enable_cognitive_digest", True),
         enable_delegation=cfg.get("enable_delegation", True),
+        prompt_user_on_budget_exhaust=cfg.get("prompt_user_on_budget_exhaust", True),
+        budget_prompt_wait_seconds=cfg.get("budget_prompt_wait_seconds", 600.0),
+        budget_prompt_options=tuple(cfg.get("budget_prompt_options", [10, 20, 40])),
+        max_user_budget_prompts=cfg.get("max_user_budget_prompts", 3),
     )
 
 
@@ -1161,6 +1165,7 @@ def build_hooks_v4(
     self_state: Any | None = None,
     network_dynamics: Any | None = None,
     outbound_gate: Any | None = None,
+    foreground_session_key: str = "",
 ) -> LoopHooks:
     """Build v4 LoopHooks wiring NLS cognitive layer to the v4 loop.
 
@@ -2311,9 +2316,25 @@ def build_hooks_v4(
         q = hooks_ref[0].copilot_queue if hooks_ref else None
         if q is None:
             logger.debug("[STEERING] copilot_queue is None (hooks_ref=%s)", bool(hooks_ref))
-            return []
         msgs: list[dict] = []
         _has_hint = False
+
+        if agent_id:
+            from nls.runtime.surface_inbox import drain_surface_inbox_steering
+
+            _active_sk = foreground_session_key or "websocket:main"
+            for _surf in drain_surface_inbox_steering(agent_id, _active_sk):
+                msgs.append(_surf)
+                logger.info(
+                    "[STEERING] surface inbox: %.80s",
+                    _surf.get("content", "")[:80],
+                )
+
+        if q is None:
+            if msgs:
+                logger.info("[STEERING] surface-only drain produced %d msgs", len(msgs))
+            return msgs
+
         _q_size = q.qsize()
         while not q.empty():
             try:

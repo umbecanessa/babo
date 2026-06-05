@@ -299,12 +299,14 @@
             [awaitingResponse]="awaitingResponse()"
             [agenticActive]="agenticActive()"
             [askUserPending]="askUserPending()"
+            [budgetPromptPending]="budgetPromptPending()"
             [agentId]="agentId"
             (expandBrowser)="onExpandBrowser($event)"
             (openUrl)="onOpenUrl($event)"
             (delegateToggle)="toggleDelegateExpanded($event)"
             (messageFeedback)="onMessageFeedback($event)"
             (drowsyAction)="onDrowsyAction($event)"
+            (budgetAction)="onBudgetAction($event)"
           />
         </div>
 
@@ -408,7 +410,11 @@
                 <div class="composer-destination-hint">{{ composerDest().hint }}</div>
               }
               @if (agenticActive()) {
-                @if (askUserPending()) {
+                @if (budgetPromptPending()) {
+                  <div class="ask-user-composer-banner budget-composer-banner">
+                    Step limit reached — reply with <strong>10</strong>, <strong>20</strong>, or <strong>40</strong> for more steps, or <strong>stop</strong> to wrap up.
+                  </div>
+                } @else if (askUserPending()) {
                   <div class="ask-user-composer-banner">
                     Reply below — the agent is waiting for your answer before it can continue.
                   </div>
@@ -424,7 +430,7 @@
                     (keydown)="onKeyDown($event)"
                     (input)="adjustTextareaHeight()"
                     rows="1"
-                    placeholder="{{ askUserPending() ? 'Type your answer…' : 'Send guidance to the agent while it works...' }}"
+                    placeholder="{{ budgetPromptPending() ? 'Reply 10, 20, 40, or stop…' : (askUserPending() ? 'Type your answer…' : 'Send guidance to the agent while it works...') }}"
                     class="chat-textarea"
                   ></textarea>
                   @if (inputText.trim() || pendingAttachments().length) {

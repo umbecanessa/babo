@@ -3861,9 +3861,9 @@ class CryptexMemory:
                 "consolidation_status": "permanent",
                 "content": (
                     "AUTONOMOUS / IDLE RESEARCH DISCIPLINE:\n"
-                    "- During idle time your curiosity and soul wish drive your exploration. "
-                    "Research, plan, and build freely — but in alignment with your soul wish, "
-                    "not with whatever active user project happens to be in recent files.\n"
+                    "- During idle time your curiosity and soul wish drive exploration "
+                    "ONLY after user tasks, idle todos, plan work, and Job background "
+                    "(background_enabled charter) are clear.\n"
                     "- Write all idle-time artifacts to .autonomous/ — "
                     "NEVER write unsolicited files into the user's named project directories.\n"
                     "- Plans and todos you create during idle time are YOUR autonomous work. "
@@ -3902,7 +3902,31 @@ class CryptexMemory:
                     "integration on the lead; members via squad inbox) vs MULTI FACE (each "
                     "speaking agent has its own credentials on their Tools page). "
                     "channel_inspect(action='get') for scoped channel detail. ask_user() "
-                    "before assuming multi-face; never copy credentials to members."
+                    "before assuming multi-face; never copy credentials to members.\n"
+                    "MULTI-FACE COORDINATION CHANNEL: Lead + member bots may share a "
+                    "channel on any platform (Discord, Telegram, Slack, …). Bot-to-bot "
+                    "messages are intentional — read recent context, reply via the "
+                    "appropriate channel send tool, @mention when needed. "
+                    "While you work on Home, channel inbound surfaces as [SURFACE INBOX] "
+                    "steering each agentic iteration — do not ignore teammate updates."
+                ),
+            },
+            {
+                "domain": "squad_channel_coordination",
+                "render_mode": "coordinator",
+                "consolidation_status": "permanent",
+                "content": (
+                    "SQUAD CHANNEL COORDINATION (lead + members, any platform):\n"
+                    "In multi-face mode each speaking agent has its own channel credentials.\n"
+                    "- Shared coordination channel(s): post status and ideas using the "
+                    "send tool for that platform — your Job/playbook defines which surfaces.\n"
+                    "- Peer bot messages are normal; you do not need the owner to relay.\n"
+                    "- Read recent thread context before repeating; @mention for targeted asks.\n"
+                    "- Cross-surface awareness: active Home turn + channel inbound → "
+                    "[SURFACE INBOX] steering (not a parallel chat leak).\n"
+                    "- Background: [JOB BACKGROUND] and squad checkbacks follow your Job "
+                    "charter when background_enabled — before private daydreaming.\n"
+                    "Discover surfaces with channel_inspect; never print pseudo tool calls."
                 ),
             },
             {
@@ -3916,6 +3940,8 @@ class CryptexMemory:
                     "they send for public replies; members use squad inbox/todos.\n"
                     "Multi-face fleet: each speaking agent needs its own credentials on THEIR "
                     "agent (Dashboard → member → Tools → channel skill) with scope per role.\n"
+                    "Admin/coordination channel: squad bots may share one channel on any "
+                    "platform for live discussion — inbound from peer bots is coordination, not spam.\n"
                     "Summary in Channels ring; detail via channel_inspect(action='get', channel=...)."
                 ),
             },

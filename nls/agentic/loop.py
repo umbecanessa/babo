@@ -597,6 +597,219 @@ async def _try_escalate(
         return False
 
 
+async def _await_user_budget_extend(
+    reason: str,
+    state: LoopState,
+    config: LoopConfig,
+    copilot_queue: asyncio.Queue | None,
+    context: list[dict],
+    on_event: Callable[[AgentEvent], Any] | None,
+    *,
+    has_active_team: bool = False,
+    slog_path: str | None = None,
+) -> bool:
+    """Pause the orchestrator and ask the user to extend or stop."""
+    from nls.agentic.budget_prompt import (
+        BudgetDecision,
+        clamp_extension,
+        format_budget_prompt_message,
+        parse_budget_decision,
+        should_prompt_user_for_budget,
+    )
+
+    if not should_prompt_user_for_budget(
+        reason, config, state,
+        has_active_team=has_active_team,
+        copilot_queue=copilot_queue,
+    ):
+        return False
+
+    import uuid as _uuid
+
+    state.user_budget_prompts += 1
+    options = tuple(int(o) for o in (config.budget_prompt_options or (10, 20, 40)))
+    request_id = _uuid.uuid4().hex[:12]
+    elapsed = time.time() - state.start_time if state.start_time else 0.0
+    prompt_text = format_budget_prompt_message(
+        reason,
+        iteration=state.iteration,
+        max_iterations=config.max_iterations,
+        options=options,
+        elapsed_seconds=elapsed,
+        timeout_seconds=config.total_timeout_seconds,
+    )
+
+    await emit(on_event, AgentEvent(
+        EventType.LOOP_BUDGET_PROMPT,
+        {
+            "reason": reason,
+            "question": prompt_text,
+            "request_id": request_id,
+            "iteration": state.iteration,
+            "max_iterations": config.max_iterations,
+            "options": list(options),
+            "session_key": state.session_key,
+            "source": state.dispatch_source,
+            "elapsed_seconds": round(elapsed, 1),
+            "timeout_seconds": config.total_timeout_seconds,
+            "wait_seconds": config.budget_prompt_wait_seconds,
+        },
+    ))
+    await emit(on_event, AgentEvent(
+        EventType.STATUS,
+        {
+            "message": "Waiting for your decision\u2026",
+            "status": "waiting_for_budget",
+            "elapsed_ms": 0,
+        },
+    ))
+
+    logger.info(
+        "[LOOP:%s] USER BUDGET PROMPT (reason=%s) — waiting up to %.0fs",
+        state.loop_id, reason, config.budget_prompt_wait_seconds,
+    )
+    _slog(slog_path, {
+        "event": "budget_prompt_start",
+        "reason": reason,
+        "iteration": state.iteration,
+        "options": list(options),
+        "wait_seconds": config.budget_prompt_wait_seconds,
+    })
+
+    _loop = asyncio.get_running_loop()
+    _deadline = _loop.time() + float(config.budget_prompt_wait_seconds)
+    decision: BudgetDecision | None = None
+
+    while decision is None:
+        _remaining = _deadline - _loop.time()
+        if _remaining <= 0:
+            logger.info("[LOOP:%s] budget prompt timed out", state.loop_id)
+            _slog(slog_path, {"event": "budget_prompt_timeout", "reason": reason})
+            break
+        try:
+            item = await asyncio.wait_for(
+                copilot_queue.get(),
+                timeout=_remaining,
+            )
+        except asyncio.TimeoutError:
+            logger.info("[LOOP:%s] budget prompt timed out", state.loop_id)
+            _slog(slog_path, {"event": "budget_prompt_timeout", "reason": reason})
+            break
+
+        parsed = parse_budget_decision(item, options)
+        if parsed is not None:
+            decision = parsed
+            break
+        if isinstance(item, dict) and "role" in item:
+            context.append(item)
+            logger.info(
+                "[LOOP:%s] budget wait: steering msg re-queued",
+                state.loop_id,
+            )
+        elif isinstance(item, str) and item.strip():
+            context.append({"role": "user", "content": item.strip()})
+            logger.info(
+                "[LOOP:%s] budget wait: string steering re-queued",
+                state.loop_id,
+            )
+
+    if decision is None or decision.action == "terminate":
+        _wrap_iters = 3
+        if decision is None:
+            timeout_msg = (
+                "[BUDGET TIMEOUT] The user did not respond within "
+                f"{int(config.budget_prompt_wait_seconds)}s. "
+                "Summarize progress and wrap up."
+            )
+            context.append({"role": "system", "content": timeout_msg})
+            state.exit_reason = "budget_prompt_timeout"
+            state.budget_prompt_timed_out = True
+        else:
+            context.append({
+                "role": "system",
+                "content": (
+                    "[USER STOP] The user chose not to extend the step budget. "
+                    "Summarize what you accomplished and wrap up now."
+                ),
+            })
+            state.exit_reason = "user_budget_declined"
+            state.budget_declined_by_user = True
+        extra = clamp_extension(config, _wrap_iters)
+        if extra > 0:
+            config.max_iterations += extra
+            state.consecutive_errors = 0
+            state.stall_nudges_given = 0
+            state.exit_reason = ""
+            await emit(on_event, AgentEvent(
+                EventType.BUDGET_DECISION,
+                {
+                    "action": "terminate",
+                    "extra_iterations": extra,
+                    "max_iterations": config.max_iterations,
+                    "request_id": request_id,
+                },
+            ))
+            await emit(on_event, AgentEvent(
+                EventType.STATUS,
+                {"message": "", "status": ""},
+            ))
+            _slog(slog_path, {
+                "event": "budget_prompt_declined",
+                "reason": reason,
+                "timed_out": decision is None,
+                "wrap_up_iters": extra,
+            })
+            return True
+        _slog(slog_path, {
+            "event": "budget_prompt_declined",
+            "reason": reason,
+            "timed_out": decision is None,
+        })
+        return False
+
+    extra = clamp_extension(config, decision.extra_iterations)
+    if extra <= 0:
+        state.exit_reason = "max_total_iterations"
+        return False
+
+    config.max_iterations += extra
+    if config.max_iterations > config.max_total_iterations:
+        config.max_iterations = config.max_total_iterations
+    _time_bump = max(extra * 30.0, 120.0)
+    config.total_timeout_seconds += _time_bump
+    state.consecutive_errors = 0
+    state.stall_nudges_given = 0
+    state.exit_reason = ""
+    if decision.message:
+        context.append({"role": "user", "content": decision.message})
+
+    await emit(on_event, AgentEvent(
+        EventType.BUDGET_DECISION,
+        {
+            "action": "extend",
+            "extra_iterations": extra,
+            "max_iterations": config.max_iterations,
+            "request_id": request_id,
+        },
+    ))
+    await emit(on_event, AgentEvent(
+        EventType.STATUS,
+        {"message": "", "status": ""},
+    ))
+
+    logger.info(
+        "[LOOP:%s] user extended budget +%d (new max=%d, timeout=%.0fs)",
+        state.loop_id, extra, config.max_iterations,
+        config.total_timeout_seconds,
+    )
+    _slog(slog_path, {
+        "event": "budget_prompt_extended",
+        "extra_iterations": extra,
+        "max_iterations": config.max_iterations,
+    })
+    return True
+
+
 async def _await_completion_review(
     state: "LoopState",
     config: "LoopConfig",
@@ -802,6 +1015,7 @@ async def run_loop(
     delegate_manager: Any | None = None,
     active_tool_names: set[str] | None = None,
     dispatch_source: str = "",
+    session_key: str = "",
 ) -> LoopResult:
     """Core v5 agentic loop. Thin orchestrator — all logic in modules.
 
@@ -817,6 +1031,7 @@ async def run_loop(
     enter_file_cache_scope(state.loop_id)
     enter_loop_metrics_scope()
     state.dispatch_source = dispatch_source or ""
+    state.session_key = (session_key or "").strip()
     if state_holder is not None:
         state_holder.append(state)
     _session_log_path = _open_session_log(config, state)
@@ -1247,6 +1462,12 @@ async def run_loop(
 
     from nls.agentic.profile_guard_policy import inject_prompt_structured_hints
     inject_prompt_structured_hints(user_input, state.hints)
+    from nls.agentic.budget_prompt import (
+        HINT_EXPLORE_PARALLEL_READS,
+        boost_explore_read_hints,
+        explore_parallel_reads_system_note,
+    )
+    boost_explore_read_hints(user_input, state.hints)
 
     try:
         from nls.agentic.fleet_triage_policy import (
@@ -1461,6 +1682,11 @@ async def run_loop(
                 "Call chat_history(action='search', query='<keywords>') "
                 "before answering from memory."
             ),
+        })
+    if HINT_EXPLORE_PARALLEL_READS in _hint_tokens:
+        context.append({
+            "role": "system",
+            "content": explore_parallel_reads_system_note(),
         })
     if "setup:instruction_skill" in _hint_tokens:
         try:
@@ -2298,6 +2524,13 @@ async def run_loop(
                     guard_reason in ("max_iterations", "total_timeout", "tool_call_budget", "consecutive_errors")
                     or guard_reason.startswith("per_tool_retry_limit:")
                 )
+                if _escalatable and await _await_user_budget_extend(
+                    guard_reason, state, config, copilot_queue, context,
+                    on_event,
+                    has_active_team=_has_team,
+                    slog_path=_session_log_path,
+                ):
+                    continue
                 if _escalatable and await _try_escalate(
                     guard_reason, state, config, copilot_queue, context,
                     slog_path=_session_log_path,
@@ -2325,6 +2558,8 @@ async def run_loop(
                     _final_reason in ("max_iterations", "total_timeout")
                     and tools
                     and state.delegate_count == 0
+                    and not state.budget_declined_by_user
+                    and not state.budget_prompt_timed_out
                 ):
                     try:
                         _plan_tool = tools.get("plan")
@@ -3368,6 +3603,30 @@ async def run_loop(
                     "role": "system",
                     "content": _truncated_file_nudge,
                 })
+
+            _read_only_batch = (
+                _iter_tool_names
+                and all(n == "read" for n in _iter_tool_names)
+                and len(_iter_tool_names) == 1
+            )
+            if _read_only_batch:
+                state.consecutive_single_read_iters += 1
+            elif _iter_tool_names:
+                state.consecutive_single_read_iters = 0
+            if (
+                state.consecutive_single_read_iters >= 3
+                and not state.parallel_read_nudge_given
+                and HINT_EXPLORE_PARALLEL_READS in _hint_tokens
+            ):
+                state.parallel_read_nudge_given = True
+                context.append({
+                    "role": "system",
+                    "content": explore_parallel_reads_system_note(),
+                })
+                logger.info(
+                    "[LOOP:%s] iter %d: parallel-read nudge injected",
+                    state.loop_id, state.iteration,
+                )
 
             # Supersede immediately after tool batch — next generate() sees thin context.
             _apply_context_supersession_pass(

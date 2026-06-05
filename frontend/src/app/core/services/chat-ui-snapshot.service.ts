@@ -26,6 +26,7 @@ export interface ChatUiSnapshot {
   } | null;
   agenticActive: boolean;
   askUserPending?: boolean;
+  budgetPromptPending?: boolean;
   agenticStep: number;
   agenticMaxSteps: number;
   activityStatus: string;

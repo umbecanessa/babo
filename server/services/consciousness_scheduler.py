@@ -607,6 +607,13 @@ class ConsciousnessScheduler:
         )
         inner_loop.start()
 
+        try:
+            from nls.skills.channel_processing import flush_pending_channel_events
+
+            flush_pending_channel_events(agent_id, inner_loop)
+        except Exception:
+            pass
+
         entry.state = AgentConsciousnessState.CONSCIOUS
         entry.inner_loop = inner_loop
         entry.last_conscious_at = time.time()

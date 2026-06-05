@@ -90,6 +90,46 @@ async def _handle_command(
             app, agent_id, websocket, source="command",
         )
 
+    elif command in ("budget_extend", "budget_stop"):
+        copilot_queue = getattr(websocket.state, "copilot_queue", None)
+        if copilot_queue is None:
+            await websocket.send_json({
+                "type": "budget_command_result",
+                "ok": False,
+                "action": command,
+                "content": "No active task is waiting for a budget decision.",
+            })
+            return
+        try:
+            if command == "budget_stop":
+                copilot_queue.put_nowait({"action": "terminate"})
+                extra = 0
+            else:
+                extra = int(data.get("extra_iterations", 0) or 0)
+                if extra <= 0:
+                    extra = 10
+                copilot_queue.put_nowait({
+                    "action": "extend",
+                    "extra_iterations": extra,
+                })
+            await websocket.send_json({
+                "type": "budget_command_result",
+                "ok": True,
+                "action": command,
+                "extra_iterations": extra,
+            })
+            logger.info(
+                "Agent %s: budget command %s (extra=%s)",
+                agent_id, command, extra,
+            )
+        except Exception as exc:
+            await websocket.send_json({
+                "type": "budget_command_result",
+                "ok": False,
+                "action": command,
+                "content": str(exc),
+            })
+
     elif command == "dream_config":
         dmn = getattr(runtime, "dmn", None)
         if dmn is None:

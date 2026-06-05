@@ -11,6 +11,7 @@ from typing import Any
 
 import httpx
 
+from nls.skills.channel_adapter_util import prepare_channel_outbound
 from nls.skills.channel_adapter_util import (
     broadcast_channel_event,
     chunk_message,
@@ -1329,10 +1330,11 @@ class DiscordAdapter:
             channel_adapter=self,
             reply_target=channel_id,
             session_key=session_key,
+            sender_name=sender_name,
+            channel_label=normalized["metadata"].get("channel_name", ""),
+            raw_content=text,
         )
-        clean = strip_signal_tags(response_text) if response_text else ""
-        if not clean and response_text:
-            clean = response_text.strip()
+        clean = prepare_channel_outbound(response_text or "")
         if clean:
             history.append({"role": "user", "content": text})
             history.append({"role": "assistant", "content": clean})

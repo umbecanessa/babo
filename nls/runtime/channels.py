@@ -962,6 +962,7 @@ _TOOL_PROGRESS_LABELS: dict[str, str] = {
     "plan": "Updating the plan...",
     "skill": "Using a skill...",
     "ask_user": "Asking you a question...",
+    "loop_budget_prompt": "Need your decision to continue...",
     "escalate": "Asking orchestrator for help...",
 }
 
@@ -1047,7 +1048,11 @@ class ChannelProgressReporter:
         return (time.monotonic() - self._last_send) < interval
 
     async def _send(self, text: str) -> None:
-        text = _scrub_credentials(text)
+        from nls.runtime.response_cleanup import sanitize_channel_outbound
+
+        text = sanitize_channel_outbound(_scrub_credentials(text))
+        if not text:
+            return
         try:
             await self._adapter.send(
                 self._target, text, agent_id=self._agent_id,
@@ -1088,6 +1093,32 @@ class ChannelProgressReporter:
             question = data.get("question", "")
             if question:
                 await self._send(question)
+            return
+
+        if etype == "loop_budget_prompt":
+            from nls.agentic.budget_prompt import format_channel_budget_prompt
+
+            question = data.get("question", "")
+            if not question:
+                question = format_channel_budget_prompt(
+                    data.get("reason", "max_iterations"),
+                    iteration=int(data.get("iteration", 0) or 0),
+                    max_iterations=int(data.get("max_iterations", 0) or 0),
+                    options=data.get("options") or [10, 20, 40],
+                    elapsed_seconds=data.get("elapsed_seconds"),
+                    timeout_seconds=data.get("timeout_seconds"),
+                )
+            if question:
+                await self._send(question)
+            return
+
+        if etype == "budget_decision":
+            new_max = data.get("max_iterations")
+            if new_max:
+                try:
+                    self._max_iterations = int(new_max)
+                except (TypeError, ValueError):
+                    pass
             return
 
         if etype == "tool_execution_start":

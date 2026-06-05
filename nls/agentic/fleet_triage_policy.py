@@ -168,15 +168,27 @@ def fleet_squad_lead_operations_message() -> str:
         "Plan A — standard pipeline:\n"
         f"  {DISCORD_PLAN_A_PIPELINE}\n"
         f"{guidance}\n"
-        "Member config: squad(action='configure_member', ...) with interaction_mode top-level only."
+        "Member config: squad(action='configure_member', ...) with interaction_mode top-level only.\n"
+        "DISCORD ADMIN CHANNEL: In multi-face mode each bot has its own token but may share "
+        "squad coordination channels on any linked platform. Peer bot messages there are "
+        "normal — read recent thread context; you do not need @mentions to notice teammates. "
+        "Cross-surface: while you work on Home, channel inbound appears in [SURFACE INBOX] "
+        "steering — drain it and reply on the appropriate channel when your Job calls for it. "
+        "Encourage members to coordinate per their Job charters; use "
+        "squad(action='brief') for private nudges and squad(action='approve') for inbox work."
     )
 
 
 def fleet_squad_member_message() -> str:
     return (
-        "[SQUAD MEMBER]\n"
-        "You are a squad member — use squad(action='propose'|...) and squad_escalate to the lead. "
-        "Discord inbound arrives on your own bot when channel scope is synced and enabled."
+        "[SQUAD MEMBER — channel coordination]\n"
+        "You are a squad member with your own Job and channel bot(s) when multi-face is configured.\n"
+        "- squad(action='propose') for work needing lead approval; squad_escalate when blocked.\n"
+        "- Your Job/playbook defines which channels to use and what to post — not hardcoded rules.\n"
+        "- Background [SQUAD MEMBER CHECKBACK] runs only when Job background_enabled is on.\n"
+        "- Peer bot traffic on shared channels is expected; read context before repeating.\n"
+        "- While busy on another surface, channel inbound may queue — reply when your turn frees.\n"
+        "Do NOT print tool names as text; always invoke tools (channel_inspect, channel send tools)."
     )
 
 

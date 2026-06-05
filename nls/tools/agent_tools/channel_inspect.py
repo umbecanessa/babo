@@ -77,8 +77,14 @@ class ChannelInspectTool:
                 "channel_id": {
                     "type": "string",
                     "description": (
-                        "Required for squad_readiness — Discord text channel snowflake."
+                        "Required for squad_readiness — Discord snowflake, Telegram "
+                        "chat_id, or Slack channel ID."
                     ),
+                },
+                "channel": {
+                    "type": "string",
+                    "enum": ["discord", "telegram", "slack"],
+                    "description": "Platform when channel_id shape is ambiguous.",
                 },
             },
         }
@@ -114,15 +120,16 @@ class ChannelInspectTool:
         try:
             if action == "squad_readiness":
                 channel_id = str(params.get("channel_id") or "").strip()
+                platform = str(params.get("channel") or "").strip().lower()
                 if not channel_id:
                     return ToolResult(
                         content="Error: channel_id is required for squad_readiness.",
                         is_error=True,
                     )
-                from nls.runtime.discord_squad_readiness import audit_squad_discord_channel
+                from nls.runtime.squad_channel_readiness import audit_squad_channel
 
-                _, report, _playbook = await audit_squad_discord_channel(
-                    self._agent_id, channel_id,
+                _, report, _playbook = await audit_squad_channel(
+                    self._agent_id, channel_id, platform=platform,
                 )
                 return ToolResult(content=report)
             if action == "list":

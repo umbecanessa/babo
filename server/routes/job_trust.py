@@ -52,6 +52,8 @@ class JobPatchModel(BaseModel):
     escalation_paths: list[str] | None = None
     default_profile: str | None = None
     strategic_priorities: list[str] | None = None
+    background_enabled: bool | None = None
+    background_interval_seconds: int | None = None
 
 
 def _agent_dir(request: Request, agent_id: str):

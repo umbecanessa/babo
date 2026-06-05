@@ -448,6 +448,13 @@ class AgentManager:
         logger.info("Agent %s loaded and ready for serving", agent_id)
 
         try:
+            from nls.runtime.surface_inbox import load_agent_inbox
+
+            load_agent_inbox(agent_id)
+        except Exception as exc:
+            logger.debug("Agent %s surface inbox load skipped: %s", agent_id, exc)
+
+        try:
             from server.main import app
 
             sm = getattr(app.state, "squad_manager", None)

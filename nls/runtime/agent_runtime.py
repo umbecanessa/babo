@@ -264,6 +264,8 @@ class AgentRuntime:
         # is running.  Used to distinguish user/channel turns (high priority)
         # from autonomous/DMN loops (preemptable by scheduler check-backs).
         self._foreground_source: str = "idle"
+        self._foreground_session_key: str = ""
+        self._foreground_copilot_queue: Any | None = None
         # Serialize foreground agentic loops so only one runs at a time
         # per agent (prevents cross-channel conflicts: WS + WhatsApp).
         import asyncio as _aio
@@ -4035,6 +4037,7 @@ class AgentRuntime:
         pre_extracted_hints: list[str] | None = None,
         pre_triage: Any | None = None,
         context_id: str | None = None,
+        session_key: str | None = None,
     ) -> Any:
         """Run the agentic loop (v2/v3/v5) through AgentRuntime."""
         # Rotate cryptex to the project's context if provided
@@ -4076,6 +4079,7 @@ class AgentRuntime:
                 pre_extracted_goals=pre_extracted_goals,
                 pre_extracted_hints=pre_extracted_hints,
                 pre_triage=pre_triage,
+                session_key=session_key,
             )
 
     async def _run_agentic_locked(
@@ -4101,13 +4105,19 @@ class AgentRuntime:
         pre_extracted_goals: list[str] | None = None,
         pre_extracted_hints: list[str] | None = None,
         pre_triage: Any | None = None,
+        session_key: str | None = None,
     ) -> Any:
         """Inner agentic loop body, serialized by _agentic_lock."""
         import time as _time
         from nls.agentic.bridge import build_hooks, build_config
 
+        _fg_session = (session_key or "").strip() or "websocket:main"
+        _prev_copilot = self._foreground_copilot_queue
         self._foreground_processing += 1
         self._foreground_source = source
+        self._foreground_session_key = _fg_session
+        if copilot_queue is not None:
+            self._foreground_copilot_queue = copilot_queue
         try:
             self._turn_count += 1
             self._last_interaction = _time.time()
@@ -4465,6 +4475,7 @@ class AgentRuntime:
                     self_state=self.self_state,
                     network_dynamics=self.network_dynamics,
                     outbound_gate=self._outbound_gate,
+                    foreground_session_key=_fg_session,
                 )
     
                 # Expose the accumulator on the runtime so the inner loop
@@ -4692,6 +4703,7 @@ class AgentRuntime:
                     delegate_manager=self.delegate_manager,
                     active_tool_names=_active_tool_names,
                     dispatch_source=source,
+                    session_key=_fg_session,
                 )
     
             # Schedule safety net on the final agentic exchange.
@@ -4737,6 +4749,8 @@ class AgentRuntime:
             self._foreground_processing = max(0, self._foreground_processing - 1)
             if self._foreground_processing == 0:
                 self._foreground_source = "idle"
+                self._foreground_session_key = ""
+            self._foreground_copilot_queue = _prev_copilot
             if self.visual_cortex is not None:
                 self.visual_cortex.set_agent_active(False)
 

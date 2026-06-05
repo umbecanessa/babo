@@ -749,6 +749,26 @@ class InnerLoop:
             if dispatched:
                 return
 
+        # --- Job charter background (before drives/DMN; after todos/plan) ---
+        _JOB_BG_MIN_IDLE_BREATHS = 5
+        if (
+            drive_goal is None
+            and not drives_are_blocked
+            and not _team_active
+            and not _has_pending_todos
+            and not _plan_work_open
+            and self_state.turns_since_input >= _JOB_BG_MIN_IDLE_BREATHS
+            and not getattr(self, "_autonomous_executing", False)
+        ):
+            dispatched = await self._maybe_dispatch_job_background(
+                rt,
+                has_pending_todos=_has_pending_todos,
+                plan_work_open=_plan_work_open,
+                team_active=_team_active,
+            )
+            if dispatched:
+                return
+
         # --- DMN activation (network dynamics-aware) ---
         # Phase 7: DMN eligibility is now governed by the NetworkDynamics
         # module when available.  The three-network model (ECN/SN/DMN)
@@ -809,6 +829,26 @@ class InnerLoop:
                 )
             dmn_eligible = False
             active_dream_eligible = False
+
+        # Job charter background outranks daydreaming when due.
+        try:
+            from nls.runtime.job_background import job_background_due_for_runtime
+
+            if job_background_due_for_runtime(
+                rt,
+                has_pending_todos=_has_pending_todos,
+                plan_work_open=_plan_work_open,
+                team_active=_team_active,
+            ):
+                if dmn_eligible or active_dream_eligible:
+                    logger.info(
+                        "Agent %s: DMN suppressed — job background due",
+                        agent_id,
+                    )
+                dmn_eligible = False
+                active_dream_eligible = False
+        except Exception:
+            pass
 
         if dmn_eligible:
             try:
@@ -1388,13 +1428,8 @@ class InnerLoop:
 
         # ── DEFER ──
         if depth == EngagementDepth.DEFER:
-            try:
-                await _reply(
-                    "Got it \u2014 I'm currently busy with a task. "
-                    "I'll get to this once I'm free."
-                )
-            except Exception:
-                logger.debug("Channel DEFER ack send failed", exc_info=True)
+            # Cross-surface defer is handled in process_channel_message; do not
+            # auto-reply "I'm busy" into the channel (confuses users).
             return False  # caller persists to BackgroundQueue
 
         # ── DROP ──
@@ -1457,6 +1492,7 @@ class InnerLoop:
                     copilot_queue=copilot_queue,
                     on_event=on_event_cb,
                     source="user:channel",
+                    session_key=session_key or "",
                 )
             else:
                 result = await rt.process_message_agentic_v2(
@@ -1469,12 +1505,25 @@ class InnerLoop:
                 )
 
             # Send final response back through channel
-            final_text = getattr(result, "final_response", "") or ""
+            from nls.runtime.response_cleanup import sanitize_channel_outbound
+
+            _raw_final = getattr(result, "final_response", "") or ""
+            final_text = sanitize_channel_outbound(_raw_final)
             if final_text:
                 try:
                     await _reply(final_text)
                 except Exception:
                     logger.debug("Channel final reply failed", exc_info=True)
+                if session_key:
+                    from nls.runtime.surface_inbox import mark_session_inbox_handled
+
+                    mark_session_inbox_handled(agent_id, session_key)
+            elif _raw_final.strip():
+                logger.warning(
+                    "Agent %s: blocked tool-call leak on channel final reply (%r)",
+                    agent_id,
+                    _raw_final[:120],
+                )
 
         except Exception:
             logger.warning(
@@ -1867,6 +1916,12 @@ class InnerLoop:
             context=f"run:{source}",
         ):
             return ""
+        if self._pending_dispatches and any(
+            (src or "").startswith("job_background:")
+            or (src or "").startswith("squad_member_checkback:")
+            for _, src in self._pending_dispatches
+        ):
+            return ""
         self._autonomous_executing = True
         _cm = self.connection_manager
         _t0 = time.time()
@@ -2153,6 +2208,16 @@ class InnerLoop:
             except Exception as _he:
                 logger.debug("Failed to save autonomous history: %s", _he)
 
+            if source.startswith("job_background:") or source.startswith(
+                "squad_member_checkback:",
+            ):
+                try:
+                    from nls.runtime.job_background import record_background_wake
+
+                    record_background_wake(pathlib.Path(rt.agent_dir))
+                except Exception:
+                    pass
+
             return final
 
         except asyncio.CancelledError:
@@ -2346,6 +2411,99 @@ class InnerLoop:
             except Exception:
                 pass
 
+        return True
+
+    # ===================================================================
+    # Job charter background → v2 dispatch
+    # ===================================================================
+
+    async def _maybe_dispatch_job_background(
+        self,
+        rt: Any,
+        *,
+        has_pending_todos: bool = False,
+        plan_work_open: bool = False,
+        team_active: bool = False,
+    ) -> bool:
+        """Wake agent from Job charter when background_enabled and idle."""
+        if getattr(rt, "is_user_busy", getattr(rt, "is_busy", False)):
+            return False
+        if not self._can_dispatch_v2(rt):
+            return False
+
+        # Squad members: scheduler owns job-background wakes.
+        try:
+            from server.main import app
+
+            sm = getattr(app.state, "squad_manager", None)
+            if sm is not None:
+                squad = sm.get_squad_for_agent(rt.agent_id)
+                if (
+                    squad is not None
+                    and not squad.is_lead(rt.agent_id)
+                    and getattr(squad, "member_checkback_enabled", True)
+                ):
+                    return False
+                if (
+                    squad is not None
+                    and squad.is_lead(rt.agent_id)
+                    and getattr(squad, "checkback_enabled", True)
+                ):
+                    from nls.runtime.job_background import MIN_BACKGROUND_INTERVAL_SECONDS
+
+                    last_sq = float(getattr(squad, "last_checkback_at", 0) or 0)
+                    if last_sq > 0 and (time.time() - last_sq) < MIN_BACKGROUND_INTERVAL_SECONDS:
+                        return False
+        except Exception:
+            pass
+
+        if self._pending_dispatches and any(
+            (src or "").startswith("job_background:")
+            or (src or "").startswith("squad_member_checkback:")
+            for _, src in self._pending_dispatches
+        ):
+            return False
+
+        from nls.runtime.job_background import (
+            background_wake_due,
+            build_job_background_wake_prompt,
+            job_allows_background_work,
+            job_background_blocked,
+        )
+        from nls.runtime.job_trust import load_job
+
+        if job_background_blocked(
+            has_pending_todos=has_pending_todos,
+            plan_work_open=plan_work_open,
+            team_active=team_active,
+            user_busy=False,
+        ):
+            return False
+
+        agent_dir = pathlib.Path(getattr(rt, "agent_dir", "") or "")
+        if not agent_dir.is_dir():
+            return False
+        job = load_job(agent_dir)
+        if not job_allows_background_work(job, agent_dir):
+            return False
+        if not background_wake_due(job):
+            return False
+
+        prompt = build_job_background_wake_prompt(job)
+        logger.info(
+            "Agent %s: Job background dispatch (title=%s)",
+            rt.agent_id, job.display_title,
+        )
+        try:
+            await self._dispatch_autonomous_v2(
+                rt, prompt, source=f"job_background:{rt.agent_id}",
+            )
+        except Exception:
+            logger.warning(
+                "Agent %s: job background dispatch failed",
+                rt.agent_id, exc_info=True,
+            )
+            return False
         return True
 
     # ===================================================================

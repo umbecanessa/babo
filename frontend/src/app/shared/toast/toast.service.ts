@@ -51,6 +51,14 @@ export class ToastService {
     this.toasts.update(list => list.filter(t => t.id !== id));
   }
 
+  /** Dismiss every visible toast (e.g. after budget / ask_user resolved). */
+  dismissAll(): void {
+    for (const id of [...this.timers.keys()]) {
+      this.clearTimer(id);
+    }
+    this.toasts.set([]);
+  }
+
   toggleExpand(id: number): void {
     this.toasts.update(list =>
       list.map(t => (t.id === id ? { ...t, expanded: !t.expanded } : t)),

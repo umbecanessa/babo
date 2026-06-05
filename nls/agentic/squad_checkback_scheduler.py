@@ -78,7 +78,53 @@ class SquadCheckbackScheduler:
         for squad in self._registry.list_squads():
             if self._maybe_wake(squad):
                 n += 1
+            n += self._maybe_wake_members(squad)
         return n
+
+    def _maybe_wake_members(self, squad: Squad) -> int:
+        if squad.paused or not getattr(squad, "member_checkback_enabled", True):
+            return 0
+        if self._manager is None:
+            return 0
+        now = time.time()
+        wakes = 0
+        last_map = getattr(squad, "member_last_checkback_at", None) or {}
+        for member_id in squad.all_member_ids:
+            if member_id == squad.lead_agent_id:
+                continue
+            if self._has_dispatch_prefix and self._has_dispatch_prefix(
+                member_id, squad.id,
+            ):
+                continue
+            try:
+                from nls.runtime.job_background import (
+                    background_wake_due,
+                    job_allows_background_work,
+                )
+                from nls.runtime.job_trust import load_job
+
+                agent_dir = self._manager._agent_dir(member_id)
+                job = load_job(agent_dir)
+                if not job_allows_background_work(job, agent_dir):
+                    continue
+                if not background_wake_due(job, now):
+                    continue
+            except Exception:
+                continue
+            detail = self._manager.build_member_checkback_detail(squad, member_id)
+            if not (detail or "").strip():
+                continue
+            self._manager._wake_member(squad, member_id, "checkback", detail)
+            last_map[member_id] = now
+            wakes += 1
+            logger.info(
+                "Squad %s: member checkback wake for %s",
+                squad.id, member_id,
+            )
+        if wakes:
+            squad.member_last_checkback_at = last_map
+            self._registry.save(squad)
+        return wakes
 
     def _maybe_wake(self, squad: Squad) -> bool:
         if squad.paused or not squad.lead_agent_id:

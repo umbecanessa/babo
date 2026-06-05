@@ -136,8 +136,15 @@ _SHARED_PARAMS: dict[str, Any] = {
     "channel_id": {
         "type": "string",
         "description": (
-            "Discord channel snowflake for check_channel_readiness and "
-            "invite_squad_bots."
+            "Target channel/chat id for check_channel_readiness "
+            "(Discord snowflake, Telegram chat_id, Slack C… id)."
+        ),
+    },
+    "channel": {
+        "type": "string",
+        "enum": ["discord", "telegram", "slack"],
+        "description": (
+            "Platform for check_channel_readiness when channel_id shape is ambiguous."
         ),
     },
     "mirror_lead_channel_scope": {

@@ -1426,6 +1426,9 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                             pre_extracted_goals=_pre_goals,
                             pre_extracted_hints=_pre_hints,
                             pre_triage=_turn_triage,
+                            session_key=getattr(
+                                websocket.state, "session_key", "websocket:main",
+                            ),
                         )
                         agentic_result = await _run_agentic_with_receive(
                             websocket,
@@ -2334,6 +2337,43 @@ async def _dispatch_agentic_event(
                 "type": "activity_status",
                 "text": "Waiting for your answer\u2026",
                 "status": "waiting_for_user",
+            })
+
+    elif etype == "loop_budget_prompt":
+        await websocket.send_json({
+            "type": "loop_budget_prompt",
+            "question": data.get("question", ""),
+            "reason": data.get("reason", ""),
+            "request_id": data.get("request_id", ""),
+            "iteration": data.get("iteration", 0),
+            "max_iterations": data.get("max_iterations", 0),
+            "options": data.get("options") or [10, 20, 40],
+            "session_key": data.get("session_key", ""),
+            "source": data.get("source", ""),
+            "elapsed_seconds": data.get("elapsed_seconds"),
+            "timeout_seconds": data.get("timeout_seconds"),
+            "wait_seconds": data.get("wait_seconds", 600),
+        })
+        if not _sa_tag:
+            await websocket.send_json({
+                "type": "activity_status",
+                "text": "Waiting for your decision\u2026",
+                "status": "waiting_for_budget",
+            })
+
+    elif etype == "budget_decision":
+        await websocket.send_json({
+            "type": "budget_decision",
+            "action": data.get("action", ""),
+            "extra_iterations": data.get("extra_iterations", 0),
+            "max_iterations": data.get("max_iterations", 0),
+            "request_id": data.get("request_id", ""),
+        })
+        if not _sa_tag:
+            await websocket.send_json({
+                "type": "activity_status",
+                "text": "",
+                "status": "",
             })
 
     elif etype == "communicate":

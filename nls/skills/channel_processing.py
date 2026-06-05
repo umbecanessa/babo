@@ -26,6 +26,33 @@ _pending_queues: dict[tuple[str, str], asyncio.Queue] = {}
 # Background autonomous dispatches use a separate queue (not tied to a WS session).
 _autonomous_copilot_queues: dict[str, asyncio.Queue] = {}
 
+# Cross-surface defer when inner loop is not up yet — flushed on register/wake.
+_pending_channel_events: dict[str, list[Any]] = {}
+
+
+def stash_deferred_channel_event(agent_id: str, event: Any) -> None:
+    """Hold CHANNEL_MESSAGE until inner loop is available."""
+    _pending_channel_events.setdefault(agent_id, []).append(event)
+    logger.info(
+        "Channel [%s]: stashed deferred event (pending=%d)",
+        agent_id,
+        len(_pending_channel_events[agent_id]),
+    )
+
+
+def flush_pending_channel_events(agent_id: str, inner_loop: Any) -> int:
+    """Push stashed channel events into the inner loop (FIFO)."""
+    pending = _pending_channel_events.pop(agent_id, [])
+    for event in pending:
+        inner_loop.push_event(event)
+    if pending:
+        logger.info(
+            "Channel [%s]: flushed %d stashed channel event(s) to inner loop",
+            agent_id,
+            len(pending),
+        )
+    return len(pending)
+
 _TASK_PATTERNS = re.compile(
     r"\b(search|find|look\s*up|fetch|get|open|go\s+to|navigate|browse|run|execute|"
     r"create|make|build|write|generate|deploy|install|set\s*up|configure|"
@@ -473,6 +500,7 @@ async def _direct_channel_dispatch(
                 copilot_queue=copilot_queue,
                 on_event=on_event,
                 source="user:channel",
+                session_key=session_key or "",
             )
         else:
             result = await runtime.process_message_agentic_v2(
@@ -503,6 +531,9 @@ async def process_channel_message(
     reply_target: str | None = None,
     session_key: str | None = None,
     attachments: list[dict[str, Any]] | None = None,
+    sender_name: str = "",
+    channel_label: str = "",
+    raw_content: str = "",
 ) -> str:
     """Process an inbound channel message through the same pipeline as chat.
 
@@ -526,8 +557,45 @@ async def process_channel_message(
             user_input = f"{voice_text}\n{user_input}"
         user_input = _augment_with_attachments(user_input, attachments)
 
+    _channel_source = "channel"
+    if channel_adapter is not None:
+        _channel_source = getattr(channel_adapter, "channel_name", "channel")
+
+    if session_key:
+        from nls.runtime.surface_inbox import (
+            record_surface_inbound,
+            should_defer_cross_surface,
+            try_feed_active_copilot,
+        )
+
+        record_surface_inbound(
+            agent_id,
+            session_key=session_key,
+            channel=_channel_source,
+            channel_label=channel_label,
+            sender_name=sender_name or "?",
+            content=raw_content or user_input,
+            runtime=runtime,
+        )
+
+        cross_surface_deferred = should_defer_cross_surface(runtime, session_key)
+        if cross_surface_deferred:
+            try_feed_active_copilot(runtime, user_input)
+            logger.info(
+                "Channel [%s]: cross-surface defer — copilot + background queue "
+                "(foreground=%s, inbound=%s)",
+                agent_id,
+                getattr(runtime, "_foreground_session_key", ""),
+                session_key,
+            )
+    else:
+        cross_surface_deferred = False
+
     model_manager = getattr(app.state, "model_manager", None)
     registry = getattr(app.state, "adapter_registry", None)
+    # Channel turns need tools (discord_send, channel_inspect, …). Do not fall
+    # back to chat mode when agentic async is available — chat mode leaks pseudo
+    # tool calls like ``channel_inspect(...)`` as plain outbound text.
     agentic_enabled = (
         model_manager is not None
         and registry is not None
@@ -535,7 +603,6 @@ async def process_channel_message(
             hasattr(runtime, "process_message_agentic_v2")
             or hasattr(runtime, "process_message_agentic_async")
         )
-        and runtime.is_agentic_enabled()
     )
 
     # V5 is self-routing: the model's first generation decides whether to call
@@ -548,12 +615,6 @@ async def process_channel_message(
         logger.info("Channel [%s]: agentic entry (think=%s)", agent_id, needs_thinking)
 
         from nls.engine.events import AgentEvent, EventType
-
-        _channel_source = "channel"
-        if channel_adapter is not None:
-            _channel_source = getattr(
-                channel_adapter, "channel_name", "channel",
-            )
 
         from nls.runtime.squad_channel_policy import channel_delivery_allowed
 
@@ -592,17 +653,25 @@ async def process_channel_message(
         _cs_obj = getattr(app.state, "consciousness_scheduler", None)
         _il = _cs_obj.get_inner_loop(agent_id) if _cs_obj is not None else None
         if _il is not None:
+            flush_pending_channel_events(agent_id, _il)
             _il.push_event(_ch_event)
             logger.info(
                 "Channel [%s]: event pushed to inner loop (channel=%s, target=%s)",
                 agent_id, _channel_source, reply_target or "none",
+            )
+        elif cross_surface_deferred:
+            stash_deferred_channel_event(agent_id, _ch_event)
+            logger.info(
+                "Channel [%s]: cross-surface defer — stashed until inner loop "
+                "available (foreground=%s)",
+                agent_id,
+                getattr(runtime, "_foreground_session_key", ""),
             )
         else:
             logger.warning(
                 "Channel [%s]: no inner loop — falling back to direct dispatch",
                 agent_id,
             )
-            # Fallback: direct agentic call when inner loop is unavailable
             return await _direct_channel_dispatch(
                 runtime, agent_id, user_input, _trimmed_history,
                 channel_adapter, reply_target, session_key, needs_thinking, app,
@@ -625,8 +694,18 @@ async def process_channel_message(
         finally:
             if _cs is not None:
                 _cs.on_user_message_complete(agent_id)
+        from nls.runtime.response_cleanup import sanitize_channel_outbound
+
+        raw = ""
         if hasattr(result, "response"):
-            return result.response or ""
+            raw = result.response or ""
         elif isinstance(result, dict):
-            return result.get("response", "")
-        return ""
+            raw = result.get("response", "")
+        cleaned = sanitize_channel_outbound(raw)
+        if raw.strip() and not cleaned:
+            logger.warning(
+                "Channel [%s]: chat response was tool-call leak — not sending (%r)",
+                agent_id,
+                raw[:120],
+            )
+        return cleaned

@@ -407,6 +407,7 @@ def test_set_member_job_and_lead_job(tmp_path: Path):
     )
     job = load_job(agents / "m1")
     assert job.title == "Community Moderator"
+    assert job.background_enabled is True
 
     with pytest.raises(ValueError, match="owner_confirmed"):
         mgr.handle_action("lead1", "set_lead_job", title="Lead")

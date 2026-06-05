@@ -500,6 +500,41 @@ export class ChatWorkbenchService {
         break;
       }
 
+      case 'loop_budget_prompt': {
+        if (isSubAgent) break;
+        const question = (msg.question || '').trim();
+        this._removeEntry(`${corrNs}agentic`);
+        this._upsert(`${corrNs}budget-prompt`, {
+          lane,
+          kind: 'activity',
+          title: 'Step limit reached',
+          subtitle: question.slice(0, 200) || 'Reply 10, 20, 40, or stop',
+          status: 'running',
+          toolLabel: 'Budget',
+          ...surfaceFields,
+        });
+        break;
+      }
+
+      case 'budget_decision': {
+        if (isSubAgent) break;
+        this._removeEntry(`${corrNs}budget-prompt`);
+        if (msg.action === 'extend') {
+          this._upsert(`${corrNs}budget-extended`, {
+            lane,
+            kind: 'activity',
+            title: 'Budget extended',
+            subtitle: `+${msg.extra_iterations || 0} steps (max ${msg.max_iterations || '?'})`,
+            status: 'ok',
+            toolLabel: 'Budget',
+            ...surfaceFields,
+          });
+        } else {
+          this._removeEntry(`${corrNs}budget-extended`);
+        }
+        break;
+      }
+
       case 'communicate': {
         const text = (msg.message || '').trim();
         if (!text) break;
@@ -873,8 +908,23 @@ export class ChatWorkbenchService {
         const isCrunching = /crunching\s+data/i.test(text);
         const isWaiting = statusType === 'waiting_for_user'
           || /waiting for your answer/i.test(text);
+        const isBudgetWait = statusType === 'waiting_for_budget'
+          || /waiting for your decision/i.test(text);
         const isOrchestratorPing =
           formatted.chips.some((c) => c.label === 'Check-in') || !!teamId;
+
+        if (isBudgetWait) {
+          this._removeEntry(`${corrNs}agentic`);
+          this._upsert(`${corrNs}budget-prompt`, {
+            lane,
+            kind: 'activity',
+            title: 'Waiting for your decision',
+            subtitle: text.slice(0, 160),
+            status: 'running',
+            toolLabel: 'Budget',
+          });
+          break;
+        }
 
         if (isWaiting) {
           this._removeEntry(`${corrNs}agentic`);
