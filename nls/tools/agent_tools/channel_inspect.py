@@ -34,9 +34,9 @@ class ChannelInspectTool:
         channels = ", ".join(known_channels())
         return (
             "Inspect this agent's channel integrations — connection status, scoped "
-            f"channels, and non-secret settings ({channels}). Use before asking the "
-            "owner for bot tokens or channel names. Rings show summary; this tool "
-            "returns full detail."
+            f"channels, and non-secret settings ({channels}). Squad leads: "
+            "action=squad_readiness + channel_id to see which squad bots are in a "
+            "Discord channel; target_agent_id for member detail."
         )
 
     @property
@@ -47,10 +47,11 @@ class ChannelInspectTool:
             "properties": {
                 "action": {
                     "type": "string",
-                    "enum": ["list", "get"],
+                    "enum": ["list", "get", "squad_readiness"],
                     "description": (
                         "list: one-line status for every channel skill. "
-                        "get: detailed config for one channel."
+                        "get: detailed config for one channel. "
+                        "squad_readiness: lead-only — which squad bots can access channel_id."
                     ),
                 },
                 "channel": {
@@ -66,6 +67,19 @@ class ChannelInspectTool:
                         "effective_enabled=true (actively listening)."
                     ),
                 },
+                "target_agent_id": {
+                    "type": "string",
+                    "description": (
+                        "Squad lead only: inspect another squad member's channel config "
+                        "(defaults to this agent). Not used for squad_readiness."
+                    ),
+                },
+                "channel_id": {
+                    "type": "string",
+                    "description": (
+                        "Required for squad_readiness — Discord text channel snowflake."
+                    ),
+                },
             },
         }
 
@@ -75,16 +89,44 @@ class ChannelInspectTool:
         signal: Any | None = None,
     ) -> ToolResult:
         action = str(params.get("action") or "").strip().lower()
-        data_root = resolve_data_root(self._agent_id, self._agent_dir)
+        target_agent_id = str(params.get("target_agent_id") or "").strip() or self._agent_id
+
+        if target_agent_id != self._agent_id:
+            try:
+                from nls.runtime.skill_config_service import assert_squad_lead_may_configure
+
+                assert_squad_lead_may_configure(self._agent_id, target_agent_id)
+            except (PermissionError, ValueError) as exc:
+                return ToolResult(content=f"Error: {exc}", is_error=True)
+            except Exception as exc:
+                return ToolResult(content=f"Error: {exc}", is_error=True)
+
+        inspect_dir = self._agent_dir if target_agent_id == self._agent_id else None
+        data_root = resolve_data_root(target_agent_id, inspect_dir)
         if data_root is None:
             return ToolResult(
                 content="Error: could not resolve data directory for channel inspection.",
                 is_error=True,
             )
 
+        inspect_id = target_agent_id
+
         try:
+            if action == "squad_readiness":
+                channel_id = str(params.get("channel_id") or "").strip()
+                if not channel_id:
+                    return ToolResult(
+                        content="Error: channel_id is required for squad_readiness.",
+                        is_error=True,
+                    )
+                from nls.runtime.discord_squad_readiness import audit_squad_discord_channel
+
+                _, report = await audit_squad_discord_channel(
+                    self._agent_id, channel_id,
+                )
+                return ToolResult(content=report)
             if action == "list":
-                return ToolResult(content=inspect_all_channels(data_root, self._agent_id))
+                return ToolResult(content=inspect_all_channels(data_root, inspect_id))
             if action == "get":
                 channel = str(params.get("channel") or "").strip().lower()
                 if not channel:
@@ -96,13 +138,13 @@ class ChannelInspectTool:
                 return ToolResult(
                     content=inspect_channel(
                         data_root,
-                        self._agent_id,
+                        inspect_id,
                         channel,
                         active_only=active_only,
                     ),
                 )
             return ToolResult(
-                content=f"Unknown action '{action}'. Use list or get.",
+                content=f"Unknown action '{action}'. Use list, get, or squad_readiness.",
                 is_error=True,
             )
         except Exception as exc:

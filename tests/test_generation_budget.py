@@ -17,6 +17,7 @@ from nls.agentic.generation_budget import (
     clear_truncated_write_attempt,
     content_looks_truncated,
     file_tool_call_looks_truncated,
+    first_pass_thinking_spiral,
     is_thinking_spiral,
     output_budget_exhausted,
     record_truncated_file_events,
@@ -213,6 +214,43 @@ def test_is_thinking_spiral_not_when_tools_called():
     config = LoopConfig(max_new_tokens=16000)
     budget = analyze_generation_budget(response, config)
     assert not is_thinking_spiral(response, budget)
+
+
+def test_first_pass_thinking_spiral_rescued():
+    assert first_pass_thinking_spiral(
+        thinking_rescued=True,
+        completion_tokens=8192,
+        initial_thinking_len=500,
+        had_tool_calls=False,
+        needs_tools=True,
+    )
+
+
+def test_first_pass_thinking_spiral_budget_without_rescue_flag():
+    assert first_pass_thinking_spiral(
+        thinking_rescued=False,
+        completion_tokens=8192,
+        initial_thinking_len=2000,
+        had_tool_calls=False,
+        needs_tools=True,
+    )
+
+
+def test_first_pass_thinking_spiral_not_when_tools_or_no_goals():
+    assert not first_pass_thinking_spiral(
+        thinking_rescued=True,
+        completion_tokens=8192,
+        initial_thinking_len=2000,
+        had_tool_calls=True,
+        needs_tools=True,
+    )
+    assert not first_pass_thinking_spiral(
+        thinking_rescued=True,
+        completion_tokens=8192,
+        initial_thinking_len=2000,
+        had_tool_calls=False,
+        needs_tools=False,
+    )
 
 
 def test_build_reasoning_prefill():

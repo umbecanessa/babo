@@ -37,10 +37,27 @@ logger = logging.getLogger(__name__)
 
 DISCORD_API = "https://discord.com/api/v10"
 MAX_MESSAGE_LENGTH = 2000
+_MENTION_ID_RE = re.compile(r"<@!?(\d+)>")
 _PERM_VIEW = 1024
 _PERM_SEND = 2048
 _PERM_HISTORY = 65536
 _BOT_PERMS = _PERM_VIEW | _PERM_SEND | _PERM_HISTORY
+
+
+def extract_discord_user_mention_ids(text: str) -> list[str]:
+    """Snowflake user ids from ``<@123>`` / ``<@!123>`` mention markup."""
+    return list(dict.fromkeys(_MENTION_ID_RE.findall(text or "")))
+
+
+def discord_send_payload(content: str, *, reply_to: str | None = None) -> dict[str, Any]:
+    """Build Discord message payload with allowed_mentions for user pings."""
+    payload: dict[str, Any] = {"content": content}
+    if reply_to:
+        payload["message_reference"] = {"message_id": str(reply_to)}
+    mention_ids = extract_discord_user_mention_ids(content)
+    if mention_ids:
+        payload["allowed_mentions"] = {"parse": [], "users": mention_ids}
+    return payload
 
 
 def discord_setup_gaps(cfg: dict[str, Any]) -> list[str]:
@@ -108,7 +125,8 @@ class DiscordSendTool:
         bot = self._adapter._bot_usernames.get(self._agent_id or "", "")
         base = (
             "Send a Discord message. Use contacts to look up discord_id first. "
-            "Provide channel_id (text channel snowflake) or user id for DMs."
+            "Provide channel_id (text channel snowflake) or user id for DMs. "
+            "To @mention users/bots use <@snowflake_id> in text (renders as a ping)."
         )
         if bot:
             base += f" Bot username: {bot}."
@@ -286,6 +304,51 @@ class DiscordSetupTool:
         )
 
 
+class DiscordManageTool:
+    """Deprecated alias — use channel_manage(channel='discord', ...)."""
+
+    def __init__(self, adapter: "DiscordAdapter", agent_id: str | None = None) -> None:
+        self._agent_id = agent_id or ""
+
+    @property
+    def name(self) -> str:
+        return "discord_manage"
+
+    @property
+    def description(self) -> str:
+        return (
+            "Deprecated — use channel_manage(channel='discord', action=...) instead. "
+            "Same server-side token; never bash/python with tokens."
+        )
+
+    @property
+    def parameters(self) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "required": ["action"],
+            "properties": {
+                "action": {"type": "string"},
+                "channel_id": {"type": "string"},
+                "bot_user_id": {"type": "string"},
+                "enabled": {"type": "boolean"},
+                "require_mention": {"type": "boolean"},
+            },
+        }
+
+    async def execute(
+        self,
+        params: dict[str, Any],
+        signal: asyncio.Event | None = None,
+    ) -> ToolResult:
+        from nls.runtime.channel_manage import dispatch_channel_manage
+
+        action = str(params.get("action") or "").strip().lower()
+        ok, msg = await dispatch_channel_manage(
+            self._agent_id, "discord", action, dict(params),
+        )
+        return ToolResult(content=msg, is_error=not ok)
+
+
 class DiscordAdapter:
     channel_name: str = "discord"
 
@@ -352,9 +415,7 @@ class DiscordAdapter:
             return False
         headers = {"Authorization": f"Bot {token}"}
         for chunk in chunk_message(message, MAX_MESSAGE_LENGTH):
-            payload: dict[str, Any] = {"content": chunk}
-            if reply_to:
-                payload["message_reference"] = {"message_id": str(reply_to)}
+            payload = discord_send_payload(chunk, reply_to=reply_to)
             try:
                 async with httpx.AsyncClient(timeout=15.0) as client:
                     resp = await client.post(
@@ -390,6 +451,9 @@ class DiscordAdapter:
         payload: dict[str, Any] = {}
         if caption:
             payload["content"] = caption
+            mention_ids = extract_discord_user_mention_ids(caption)
+            if mention_ids:
+                payload["allowed_mentions"] = {"parse": [], "users": mention_ids}
         if reply_to:
             payload["message_reference"] = {"message_id": str(reply_to)}
         data: dict[str, Any] = {}
@@ -449,11 +513,78 @@ class DiscordAdapter:
             "sync_error": self._last_sync_error.get(aid, ""),
         }
 
+    def channel_manage_actions(self) -> list[str]:
+        return ["sync", "list", "enable", "grant_bot_access", "squad_readiness"]
+
+    async def manage_channel(
+        self,
+        agent_id: str,
+        action: str,
+        params: dict[str, Any],
+    ) -> tuple[bool, str]:
+        from nls.runtime.channel_manage import format_scoped_channel_status
+
+        act = (action or "").strip().lower()
+        if act in ("sync", "list"):
+            if act == "sync":
+                await self.sync_channels_from_platform(agent_id, auto_enable=True)
+            status = self.get_status(agent_id=agent_id)
+            return True, format_scoped_channel_status("Discord", status)
+
+        channel_id = str(params.get("channel_id") or "").strip()
+        if act == "squad_readiness":
+            if not channel_id:
+                return False, "Error: channel_id required"
+            try:
+                from nls.runtime.discord_squad_readiness import audit_squad_discord_channel
+
+                _, report = await audit_squad_discord_channel(agent_id, channel_id)
+                return True, report
+            except Exception as exc:
+                return False, f"Error: {exc}"
+
+        if act == "enable":
+            if not channel_id:
+                return False, "Error: channel_id required"
+            enabled = params.get("enabled")
+            if enabled is None:
+                enabled = True
+            require_mention = params.get("require_mention")
+            rm = bool(require_mention) if require_mention is not None else None
+            updated = await self.apply_channel_desired(
+                agent_id, channel_id, enabled=bool(enabled), require_mention=rm,
+            )
+            warn = updated.pop("_permission_warning", "")
+            lines = [f"Channel {channel_id} enabled={enabled} on this agent."]
+            if warn:
+                lines.append(f"Warning: {warn}")
+            return True, "\n".join(lines)
+
+        if act == "grant_bot_access":
+            bot_user_id = str(params.get("bot_user_id") or "").strip()
+            if not channel_id or not bot_user_id:
+                return False, "Error: channel_id and bot_user_id required"
+            ok, msg = await self.grant_channel_member_access(
+                agent_id, channel_id, bot_user_id, grant=True,
+            )
+            if not ok:
+                return False, f"Failed: {msg}"
+            return True, (
+                f"Granted channel {channel_id} access to user/bot {bot_user_id}. "
+                "Run squad(action='sync_member_channels', ...) on members if scope empty."
+            )
+
+        supported = ", ".join(self.channel_manage_actions())
+        return False, f"Unknown action '{action}'. Supported: {supported}"
+
     def create_send_tool(self, agent_id: str | None = None) -> DiscordSendTool:
         return DiscordSendTool(self, agent_id)
 
     def create_setup_tool(self, agent_id: str | None = None) -> DiscordSetupTool:
         return DiscordSetupTool(self, agent_id)
+
+    def create_manage_tool(self, agent_id: str | None = None) -> DiscordManageTool:
+        return DiscordManageTool(self, agent_id)
 
     def _active_runtime_agent_ids(self) -> set[str]:
         try:
@@ -872,12 +1003,33 @@ class DiscordAdapter:
         *,
         grant: bool,
     ) -> str:
-        """Push channel permission overwrite. Returns user-facing warning if it fails."""
+        """Push channel permission overwrite for this agent's bot."""
         cfg = self._agent_cfg(agent_id)
-        token = cfg.get("bot_token", "")
         bot_id = self._bot_ids.get(agent_id, cfg.get("bot_id", ""))
-        if not token or not bot_id:
+        if not bot_id:
             return ""
+        ok, msg = await self.grant_channel_member_access(
+            agent_id, channel_id, str(bot_id), grant=grant,
+        )
+        return "" if ok else msg
+
+    async def grant_channel_member_access(
+        self,
+        agent_id: str,
+        channel_id: str,
+        target_user_id: str,
+        *,
+        grant: bool = True,
+    ) -> tuple[bool, str]:
+        """Grant or revoke channel access for a user/bot id (Manage Channels on caller)."""
+        cfg = self._agent_cfg(agent_id)
+        token = str(cfg.get("bot_token") or "").strip()
+        target_user_id = str(target_user_id or "").strip()
+        channel_id = str(channel_id or "").strip()
+        if not token:
+            return False, "No bot_token configured on this agent"
+        if not channel_id or not target_user_id:
+            return False, "channel_id and target_user_id are required"
         headers = {"Authorization": f"Bot {token}", "Content-Type": "application/json"}
         overwrite = {
             "type": 1,
@@ -887,28 +1039,89 @@ class DiscordAdapter:
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
                 resp = await client.put(
-                    f"{DISCORD_API}/channels/{channel_id}/permissions/{bot_id}",
+                    f"{DISCORD_API}/channels/{channel_id}/permissions/{target_user_id}",
                     headers=headers,
                     json=overwrite,
                 )
                 if resp.status_code in (200, 204):
-                    return ""
+                    return True, ""
                 logger.warning(
-                    "Discord permission push [%s] ch=%s status=%s",
-                    agent_id, channel_id, resp.status_code,
+                    "Discord grant access [%s] ch=%s target=%s status=%s",
+                    agent_id, channel_id, target_user_id, resp.status_code,
                 )
                 if resp.status_code == 403:
-                    return (
-                        "Could not update Discord channel permissions (403). "
-                        "Grant the bot Manage Roles or manually allow it in that channel."
+                    return False, (
+                        "403 — this bot lacks Manage Channel / Manage Permissions on that "
+                        "channel. Re-invite the admin bot with Manage Channels, or add "
+                        "member bots manually in Discord channel settings."
                     )
-                return (
-                    f"Discord permission update returned HTTP {resp.status_code}. "
-                    "The channel scope was saved in Babo; verify bot access in Discord."
-                )
+                body = (resp.text or "")[:200]
+                return False, f"HTTP {resp.status_code}: {body}"
         except Exception as exc:
-            logger.warning("Discord permission push failed: %s", exc)
-            return f"Discord permission update failed: {exc}"
+            logger.warning("Discord grant access failed: %s", exc)
+            return False, str(exc)
+
+    def _squad_peer_bot_ids(self, agent_id: str | None) -> set[str]:
+        """Discord bot snowflakes for other agents in the same squad."""
+        if not agent_id:
+            return set()
+        try:
+            from server.main import app
+
+            sm = getattr(app.state, "squad_manager", None)
+            if sm is None:
+                return set()
+            squad = sm.get_squad_for_agent(agent_id)
+            if squad is None:
+                return set()
+            peers: set[str] = set()
+            for peer_id in squad.all_member_ids:
+                if peer_id == agent_id:
+                    continue
+                peer_cfg = self._agent_configs.get(peer_id) or {}
+                bid = str(
+                    peer_cfg.get("bot_id")
+                    or self._bot_ids.get(peer_id, "")
+                ).strip()
+                if bid:
+                    peers.add(bid)
+            return peers
+        except Exception:
+            return set()
+
+    def _bot_inbound_allowed(
+        self,
+        message: dict[str, Any],
+        agent_id: str | None,
+    ) -> bool:
+        """Allow squad-mate bot messages (@mention or mention-free scoped channel)."""
+        author = message.get("author") or {}
+        if not author.get("bot"):
+            return True
+
+        receiver = agent_id or ""
+        cfg = self._agent_cfg(receiver)
+        bot_id = str(self._bot_ids.get(receiver, cfg.get("bot_id", "")))
+        sender_id = str(author.get("id", ""))
+        if not sender_id or sender_id == bot_id:
+            return False
+
+        if sender_id not in self._squad_peer_bot_ids(receiver):
+            return False
+
+        mention_ids = {str(m.get("id", "")) for m in message.get("mentions", [])}
+        if bot_id and bot_id in mention_ids:
+            return True
+
+        cid = str(message.get("channel_id") or "")
+        if not cid or message.get("guild_id") is None:
+            return False
+
+        scoped = scoped_channels_from_config(cfg)
+        entry = (scoped.get("channels") or {}).get(cid)
+        if isinstance(entry, dict) and entry.get("effective_enabled"):
+            return not bool(entry.get("require_mention", True))
+        return False
 
     def normalize_gateway_message(
         self,
@@ -919,7 +1132,7 @@ class DiscordAdapter:
         channel_id = str(message.get("channel_id") or "")
         guild_id = message.get("guild_id")
         author = message.get("author") or {}
-        if author.get("bot"):
+        if author.get("bot") and not self._bot_inbound_allowed(message, agent_id):
             return None
         if not channel_id:
             return None

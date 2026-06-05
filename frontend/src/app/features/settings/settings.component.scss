@@ -226,8 +226,8 @@ $red: var(--accent-danger);
 
 .field-select {
   width: 100%;
-  background: $bg-1;
-  border: 1px solid $border;
+  background: var(--field-bg);
+  border: 1px solid var(--field-border);
   color: $text;
   padding: 8px 12px;
   border-radius: 6px;
@@ -241,7 +241,7 @@ $red: var(--accent-danger);
   }
 
   option {
-    background: $bg-1;
+    background: var(--field-bg);
     color: $text;
   }
 }

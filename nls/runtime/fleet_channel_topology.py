@@ -301,7 +301,9 @@ def render_topology_guidance(
         lines.append(f"\nCURRENT MODE: MULTI PUBLIC FACE ({plat_label})")
         lines.append(
             "Multiple agents have their own channel credentials. Inbound routes per "
-            "agent_id; scope channels in Tools so roles do not overlap."
+            "agent_id; scope channels in Tools so roles do not overlap. "
+            "Squad lead tests members via discord_send in a shared scoped channel "
+            "(@mention member bot ids — lead sends as itself, members wake on mention)."
         )
 
     if snap.squad_name:
@@ -345,7 +347,9 @@ def spawn_member_channel_note(*, multi_face_recommended: bool = False) -> str:
     base = (
         "Channel setup: new members do NOT inherit the lead's Discord/Slack bot. "
         "SINGLE FACE — member works via squad inbox only. "
-        "MULTI FACE — owner links discord-channel on THIS member's Tools with a new bot token."
+        "MULTI FACE — lead uses squad(action='configure_member', target_agent_id=..., "
+        "channel='discord', skill_config={bot_token, owner_identity}, "
+        "interaction_mode='shared_only', owner_confirmed=true) — one call per member."
     )
     if multi_face_recommended:
         return base + " For mod/QA in public channels, multi-face is usually required."

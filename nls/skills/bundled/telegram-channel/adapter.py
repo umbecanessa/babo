@@ -376,6 +376,28 @@ class TelegramAdapter:
             "enabled": cfg.get("enabled", False),
         }
 
+    def channel_manage_actions(self) -> list[str]:
+        return ["list"]
+
+    async def manage_channel(
+        self,
+        agent_id: str,
+        action: str,
+        params: dict[str, Any],
+    ) -> tuple[bool, str]:
+        from nls.runtime.channel_manage import format_simple_channel_status
+
+        act = (action or "").strip().lower()
+        if act == "list":
+            status = self.get_status(agent_id=agent_id)
+            cfg = self._agent_cfg(agent_id)
+            lines = [format_simple_channel_status("Telegram", status)]
+            groups = cfg.get("groups") or {}
+            if groups:
+                lines.append(f"  groups policy keys: {', '.join(groups.keys())}")
+            return True, "\n".join(lines)
+        return False, "Telegram supports action=list only (use skill_configure for policy)."
+
     # -- per-agent config --------------------------------------------------
 
     def update_config(self, new_config: dict[str, Any], agent_id: str) -> None:

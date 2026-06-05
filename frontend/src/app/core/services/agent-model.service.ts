@@ -325,7 +325,7 @@ export class AgentModelService {
       return;
     }
     const defaultId = this.defaultModelId();
-    const orch = draft.orchestratorModelId ?? defaultId;
+    const orch = draft.orchestratorModelId;
     const snapshot: AgentSessionInference = {
       orchestratorModelId: orch || null,
       delegateModelId: draft.delegateModelId,
@@ -338,7 +338,7 @@ export class AgentModelService {
     this.sessionByAgent.set(runtimeAgentId, { ...snapshot });
     this.bumpSession();
 
-    if (orch) {
+    if (orch && orch !== defaultId) {
       try {
         await this.hotReloadInference({ hf_model: orch });
       } catch {

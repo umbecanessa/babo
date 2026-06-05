@@ -1241,15 +1241,10 @@ class AgentRuntime:
             if getattr(t, "name", "") not in names
         ]
         try:
-            from nls.tools.tool_setup import (
-                _populate_tools_ring,
-                tools_to_openai_schema,
-            )
+            from nls.tools.tool_setup import _populate_tools_ring
 
-            self._openai_tools = tools_to_openai_schema(self._agent_tools)
             _populate_tools_ring(self.working_memory, self._agent_tools)
-            if hasattr(self, "refresh_tools"):
-                self.refresh_tools()
+            self.refresh_tools()
             logger.info("Agent %s: removed tools %s", self.agent_id, sorted(names))
         except Exception as exc:
             logger.warning(
@@ -1264,13 +1259,9 @@ class AgentRuntime:
             return
         try:
             from nls.tools.agent_tools.squad import SquadSetupTool
-            from nls.tools.tool_setup import (
-                _populate_tools_ring,
-                tools_to_openai_schema,
-            )
+            from nls.tools.tool_setup import _populate_tools_ring
 
             self._agent_tools.append(SquadSetupTool(sm, self.agent_id))
-            self._openai_tools = tools_to_openai_schema(self._agent_tools)
             _populate_tools_ring(self.working_memory, self._agent_tools)
             self.refresh_tools()
             logger.info("Agent %s: squad_setup tool registered", self.agent_id)
@@ -1296,10 +1287,7 @@ class AgentRuntime:
                 SquadReportDoneTool,
                 SquadTool,
             )
-            from nls.tools.tool_setup import (
-                _populate_tools_ring,
-                tools_to_openai_schema,
-            )
+            from nls.tools.tool_setup import _populate_tools_ring
 
             self._agent_tools.extend([
                 SquadTool(sm, self.agent_id),
@@ -1307,7 +1295,6 @@ class AgentRuntime:
                 SquadMessageTool(sm, self.agent_id),
                 SquadReportDoneTool(sm, self.agent_id),
             ])
-            self._openai_tools = tools_to_openai_schema(self._agent_tools)
             _populate_tools_ring(self.working_memory, self._agent_tools)
             self.refresh_tools()
             logger.info("Agent %s: squad tools registered", self.agent_id)
@@ -1577,6 +1564,20 @@ class AgentRuntime:
             pass
         return base
 
+    def _triage_continuation_context(
+        self,
+        user_input: str,
+        *,
+        history: list[dict] | None = None,
+    ) -> str:
+        from nls.agentic.profile_guard_policy import build_triage_continuation_context
+
+        return build_triage_continuation_context(
+            user_input,
+            history=history,
+            working_memory=self._ring_working_memory(),
+        )
+
     def _upsert_fleet_topology_ring(self, ring: Any) -> None:
         try:
             from server.main import app as _app
@@ -1804,8 +1805,9 @@ class AgentRuntime:
                     f"Discord: CONNECTED ({_dsummary}). "
                     "Bot token is already configured in Babo — do NOT ask the user "
                     "for a token and do NOT call discord_setup. "
-                    "Use discord_send for messages; channel_inspect(action='get', "
-                    "channel='discord') for scoped channel detail."
+                    "Use discord_send / slack_send for messages; channel_manage(channel=..., "
+                    "action=...) for sync/scope/admin; channel_inspect for read-only detail. "
+                    "NEVER bash/python/curl with bot tokens."
                 ),
                 slot_type="fact",
                 salience=0.95,
@@ -2133,12 +2135,27 @@ class AgentRuntime:
         )
         return self._babo_cloud_vllm_client
 
+    def _model_served_by_local_vllm(self, model_id: str) -> bool:
+        """True when the install-default LAN client serves this model id."""
+        if not self.vllm_client or not model_id:
+            return False
+        mid = model_id.strip()
+        local_default = (
+            getattr(self.vllm_client, "default_model", "") or ""
+        ).strip()
+        install_default = os.environ.get("NLS_HF_MODEL", "").strip()
+        return mid == local_default or (
+            bool(install_default) and mid == install_default
+        )
+
     def _vllm_for_message(
         self, model_override: str | None
     ) -> tuple[Any, str | None]:
         """Pick LAN install-default vs Babo Cloud relay for this agent's model."""
         adapter = (model_override or "").strip() or None
         if adapter and _is_openai_api_model_id(adapter):
+            if self._model_served_by_local_vllm(adapter):
+                return self.vllm_client, adapter
             cloud = self._get_babo_cloud_vllm_client()
             if cloud is not None:
                 return cloud, adapter
@@ -2399,6 +2416,7 @@ class AgentRuntime:
         thinking_text = ""
         in_thinking = False
         past_thinking = False
+        self._last_stream_thinking_rescued = False
 
         _vllm, _adapter = self.inference_pipeline(model_override)
         if _vllm is None:
@@ -2474,6 +2492,7 @@ class AgentRuntime:
                 "text (thinking_len=%d) — rescuing thinking as response",
                 self.agent_id, len(thinking_text),
             )
+            self._last_stream_thinking_rescued = True
             accumulated_text = thinking_text
             thinking_text = ""
             yield accumulated_text
@@ -4480,6 +4499,18 @@ class AgentRuntime:
                 except Exception:
                     pass
 
+                try:
+                    from server.main import app as _app
+
+                    _sm = getattr(_app.state, "squad_manager", None)
+                    if (
+                        _sm is not None
+                        and _sm.get_squad_for_agent(self.agent_id) is not None
+                    ):
+                        self.sync_squad_tools()
+                except Exception:
+                    pass
+
                 tool_dict = {t.name: t for t in self._agent_tools}
 
                 # Deferred tool loading: the executor gets the FULL tool
@@ -5080,12 +5111,16 @@ class AgentRuntime:
                 _vllm, user_input, history=history, adapter_name=_adapter,
                 tool_catalog=self._tool_catalog_for_triage(),
                 environment_context=self._channel_status_for_triage(),
+                continuation_context=self._triage_continuation_context(
+                    user_input, history=history,
+                ),
             )
         except Exception:
             logger.warning(
                 "Agent %s: turn triage failed", self.agent_id, exc_info=True,
             )
             triage = _heuristic_triage(user_input)
+            triage.classifier_inferred = False
 
         from nls.agentic.profile_guard_policy import boost_triage_for_work_continuation
 
@@ -5098,7 +5133,7 @@ class AgentRuntime:
             triage,
             user_input,
             history=history,
-            working_memory=self.dual_wm or self.working_memory,
+            working_memory=self._ring_working_memory(),
         )
         triage.reconcile_orchestration_depth()
         triage.reconcile_fleet_vs_skill_hints()

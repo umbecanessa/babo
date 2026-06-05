@@ -292,6 +292,7 @@
 
         <div class="chat-messages" #messagesContainer>
           <app-message-list
+            #messageList
             [messages]="filteredMessages()"
             [streamingText]="streamingText()"
             [streamingReasoning]="streamingReasoning()"
@@ -303,6 +304,7 @@
             (openUrl)="onOpenUrl($event)"
             (delegateToggle)="toggleDelegateExpanded($event)"
             (messageFeedback)="onMessageFeedback($event)"
+            (drowsyAction)="onDrowsyAction($event)"
           />
         </div>
 

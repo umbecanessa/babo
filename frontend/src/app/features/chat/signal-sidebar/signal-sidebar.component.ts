@@ -28,6 +28,7 @@ export type ActivityKind =
   | 'channel'         // external channel event (Telegram, WhatsApp, Email)
   | 'sleep_start'     // agent started sleeping
   | 'sleep_complete'  // sleep cycle completed
+  | 'drowsy'          // asking permission to sleep
   | 'intention'       // prospective memory intention triggered
   | 'episode'         // narrative episode start/end
   | 'network'         // network switch event
@@ -372,6 +373,7 @@ export class SignalSidebarComponent implements OnChanges, OnInit, OnDestroy {
       case 'channel':        return '\uD83D\uDCE1';
       case 'sleep_start':    return '\uD83C\uDF19';
       case 'sleep_complete': return '\u2600\uFE0F';
+      case 'drowsy':         return '\uD83D\uDE34';
       case 'intention':      return '\u23F0';
       case 'episode':        return '\uD83C\uDFAC';
       case 'network':        return '\uD83E\uDDE0';
@@ -392,6 +394,7 @@ export class SignalSidebarComponent implements OnChanges, OnInit, OnDestroy {
       case 'channel':        return 'Channel';
       case 'sleep_start':    return 'Sleep';
       case 'sleep_complete': return 'Woke Up';
+      case 'drowsy':         return 'Drowsy';
       case 'intention':      return 'Intention';
       case 'episode':        return 'Episode';
       case 'network':        return 'Network';

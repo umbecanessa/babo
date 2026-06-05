@@ -371,24 +371,29 @@ export class WebSocketService {
     this.sendPayload(payload);
   }
 
-  sendCommand(command: string, args?: Record<string, any>): void {
-    this.sendPayload({ type: 'command', command, ...args });
+  sendCommand(command: string, args?: Record<string, any>): boolean {
+    return this.sendPayload({ type: 'command', command, ...args });
   }
 
-  send(data: Record<string, any>): void {
-    this.sendPayload(data);
+  send(data: Record<string, any>): boolean {
+    return this.sendPayload(data);
   }
 
-  private sendPayload(payload: Record<string, any>): void {
+  private sendPayload(payload: Record<string, any>): boolean {
     if (this.useRawWs) {
       const ws = this.rawWsForCurrent();
       if (ws?.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify(payload));
+        return true;
       }
-      return;
+      return false;
     }
 
-    this.socket?.emit('message', payload);
+    if (this.socket?.connected) {
+      this.socket.emit('message', payload);
+      return true;
+    }
+    return false;
   }
 
   sendAbort(): void {

@@ -42,6 +42,8 @@ class TurnTriage:
     goals: list[str] = field(default_factory=list)
     hints: list[str] = field(default_factory=list)
     deferred: list[dict] = field(default_factory=list)
+    # True when goals/hints came from triage micro-inference; False for heuristic fallback.
+    classifier_inferred: bool = True
 
     @property
     def is_conversational(self) -> bool:
@@ -365,6 +367,17 @@ _TURN_TRIAGE_SYSTEM_BASE = (
     '"Define mod and QA member jobs","Create squad with squad_setup",'
     '"Spawn members and set_member_job"],"hints":["fleet:squad_candidate"],'
     '"deferred":[]}\n\n'
+    'User: (after assistant asked for separate Mod/QA Discord bot tokens; '
+    'discord already CONNECTED on lead; squad exists)\n'
+    'User: "Mod bot token: … QA bot token: …"\n'
+    '{"intent":"TASK_THINK","thinking":true,"profile":"solo_structured",'
+    '"goals":["Spawn Mod and QA squad members if missing",'
+    '"Configure each member via squad configure_member with its bot token",'
+    '"Set member jobs and verify channel scope via channel_inspect target_agent_id"],'
+    '"hints":["fleet:squad_candidate","continuation:credential"],'
+    '"deferred":[]}\n'
+    'NEVER setup:configure_bundled on the lead when INSTALLED CHANNEL STATUS '
+    'shows discord CONNECTED and CONTINUATION CONTEXT mentions multi-face/squad.\n\n'
     'WRONG for squad staffing (never combine fleet + skill hints):\n'
     '{"hints":["fleet:squad_candidate","setup:native_skill"],'
     '"goals":["Scaffold native Discord skill"],...}\n\n'
@@ -640,6 +653,29 @@ def _parse_triage_blob(blob: str) -> TurnTriage | None:
     return None
 
 
+def _append_triage_history(
+    msgs: list[dict],
+    history: list[dict] | None,
+) -> None:
+    """History for triage: full last assistant turn, truncated earlier turns."""
+    if not history:
+        return
+    last_asst_idx: int | None = None
+    for idx in range(len(history) - 1, -1, -1):
+        if history[idx].get("role") == "assistant":
+            last_asst_idx = idx
+            break
+    tail = history[-6:]
+    for rel_idx, turn in enumerate(tail):
+        role = turn.get("role", "user")
+        content = turn.get("content") or ""
+        if role not in ("user", "assistant") or not content:
+            continue
+        abs_idx = len(history) - len(tail) + rel_idx
+        cap = 2000 if abs_idx == last_asst_idx else 500
+        msgs.append({"role": role, "content": content[:cap]})
+
+
 async def triage_turn(
     vllm_client: Any,
     user_input: str,
@@ -648,6 +684,7 @@ async def triage_turn(
     adapter_name: str | None = None,
     tool_catalog: str | None = None,
     environment_context: str | None = None,
+    continuation_context: str | None = None,
 ) -> TurnTriage:
     """Single micro-inference: intent, thinking, profile, goals, hints, deferred."""
     if not (user_input or "").strip():
@@ -660,15 +697,15 @@ async def triage_turn(
         _system = build_triage_system_prompt(tool_catalog=tool_catalog)
         if environment_context:
             _system = f"{_system}\n\n{environment_context.strip()}"
+        if continuation_context:
+            _system = (
+                f"{_system}\n\nCONTINUATION CONTEXT (trust over keyword guesses):\n"
+                f"{continuation_context.strip()}"
+            )
         msgs: list[dict] = [
             {"role": "system", "content": _system},
         ]
-        if history:
-            for turn in history[-6:]:
-                role = turn.get("role", "user")
-                content = turn.get("content") or ""
-                if role in ("user", "assistant") and content:
-                    msgs.append({"role": role, "content": content[:300]})
+        _append_triage_history(msgs, history)
         msgs.append({"role": "user", "content": user_input})
         _micro_msgs, _micro_body = _prepare_micro_inference(
             msgs, vllm_client, adapter_name=adapter_name,
@@ -690,6 +727,7 @@ async def triage_turn(
         if start != -1 and end != -1:
             triage = _parse_triage_blob(text[start : end + 1])
             if triage is not None:
+                triage.classifier_inferred = True
                 logger.info(
                     "Turn triage: intent=%s thinking=%s profile=%s goals=%d",
                     triage.intent,
@@ -702,6 +740,7 @@ async def triage_turn(
         logger.warning("Turn triage failed", exc_info=True)
 
     fallback = _heuristic_triage(user_input)
+    fallback.classifier_inferred = False
     logger.info(
         "Turn triage heuristic: intent=%s profile=%s goals=%d",
         fallback.intent,

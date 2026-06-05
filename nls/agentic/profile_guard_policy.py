@@ -140,6 +140,76 @@ def wm_get_tactical_goal_strings(working_memory: Any | None) -> list[str]:
         return []
 
 
+def wm_get_task_hint_strings(working_memory: Any | None) -> list[str]:
+    """Read persisted Task.Hints from Cryptex/WM."""
+    if working_memory is None:
+        return []
+    try:
+        rings: list[Any] = [working_memory]
+        for attr in ("personal", "common", "professional"):
+            child = getattr(working_memory, attr, None)
+            if child is not None and child is not working_memory:
+                rings.append(child)
+        for ring in rings:
+            slots = getattr(ring, "_slots", None)
+            if not slots:
+                continue
+            for slot in slots:
+                if getattr(slot, "domain", "") != "Task.Hints":
+                    continue
+                raw = (getattr(slot, "content", "") or "").strip()
+                if raw:
+                    return [h.strip() for h in raw.split("|") if h.strip()]
+    except Exception:
+        pass
+    return []
+
+
+def build_triage_continuation_context(
+    user_input: str,
+    *,
+    history: list[dict] | None = None,
+    working_memory: Any | None = None,
+) -> str:
+    """Factual continuation state for triage input — not post-hoc goal overrides."""
+    parts: list[str] = []
+    wm_goals = wm_get_tactical_goal_strings(working_memory)
+    if wm_goals:
+        parts.append(
+            "Persisted tactical goals (continue unless the user changed topic):\n"
+            + "\n".join(f"  • {g}" for g in wm_goals[:5])
+        )
+    wm_hints = wm_get_task_hint_strings(working_memory)
+    if wm_hints:
+        parts.append(
+            "Persisted task hints:\n"
+            + "\n".join(f"  • {h}" for h in wm_hints[:8])
+        )
+    last_asst = _last_assistant_message(history)
+    if last_asst:
+        parts.append(
+            "Last assistant message (user may be replying to this):\n"
+            + last_asst[:2000]
+        )
+    if looks_like_credential_continuation_turn(user_input, history=history):
+        parts.append(
+            "The latest user message looks like pasted credentials. Classify using "
+            "the last assistant message and persisted goals — e.g. fleet member bot "
+            "tokens after multi-face squad setup: use squad(action='configure_member') "
+            "on the target member — NOT lead skill_configure."
+        )
+    return "\n\n".join(parts)
+
+
+def _triage_has_classifier_output(triage: Any) -> bool:
+    """True when micro-inference returned goals or hints — do not heuristic-stomp."""
+    if not getattr(triage, "classifier_inferred", True):
+        return False
+    goals = [g for g in (getattr(triage, "goals", None) or []) if g and str(g).strip()]
+    hints = [h for h in (getattr(triage, "hints", None) or []) if h and str(h).strip()]
+    return bool(goals or hints)
+
+
 def wm_has_orchestration_activity(working_memory: Any | None) -> bool:
     """True when WM shows active teams, coordinator work, or pending escalations."""
     if working_memory is None:
@@ -406,7 +476,20 @@ def reconcile_triage_continuation_phase(
     history: list[dict] | None = None,
     working_memory: Any | None = None,
 ) -> None:
-    """Repair triage when the user continues setup with credentials, not greenfield build."""
+    """Fallback repair when triage classifier returned empty structure.
+
+    When classifier_inferred is true and goals/hints are non-empty, triage output
+    is authoritative — this function does not replace it with keyword heuristics.
+    """
+    if _triage_has_classifier_output(triage):
+        logger.debug(
+            "Turn triage continuation reconcile: skipped — classifier output preserved "
+            "(goals=%d hints=%d)",
+            len(getattr(triage, "goals", None) or []),
+            len(getattr(triage, "hints", None) or []),
+        )
+        return
+
     ui = (user_input or "").strip()
     recent_for_restart = ui
     if history:
@@ -654,7 +737,6 @@ def boost_triage_for_work_continuation(
     if looks_like_credential_continuation_turn(ui, history=history):
         triage.intent = "TASK_THINK"
         triage.thinking = True
-        reconcile_triage_continuation_phase(triage, ui, history=history)
         return
     surface = conversational_tool_surface(
         ui, history=history, intent=getattr(triage, "intent", ""),

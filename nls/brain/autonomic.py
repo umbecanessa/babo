@@ -3732,6 +3732,10 @@ class AutonomicNervousSystem:
             "ANS: voluntary sleep requested (reason: %s)", reason,
         )
 
+    def request_sleep(self, reason: str = "") -> None:
+        """Alias for :meth:`request_voluntary_sleep` (tool JSON name)."""
+        self.request_voluntary_sleep(reason)
+
     def check_sleep_trigger(
         self,
         hypothalamus: Any | None = None,

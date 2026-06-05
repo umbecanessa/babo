@@ -68,6 +68,8 @@
 
   /* Modals — opaque panel on dimmed scrim (not glass-bg) */
   --modal-bg: var(--bg-secondary);
+  --field-bg: var(--modal-bg);
+  --field-border: var(--overlay-3);
   --modal-z: 1100;
   --modal-z-confirm: 1200;
   --modal-z-system: 10000;
@@ -406,7 +408,7 @@ a {
   animation: slide-up 0.4s ease-out;
 }
 
-// Form controls — theme-aware across all pages
+// Form controls — theme-aware across all pages (opaque fields, not glass wash)
 select,
 textarea,
 input[type='text'],
@@ -418,8 +420,19 @@ input[type='url'] {
   color: var(--text-primary);
 }
 
+select {
+  background-color: var(--field-bg);
+  border: 1px solid var(--field-border);
+  color: var(--text-primary);
+}
+
 select option {
-  background: var(--bg-secondary);
+  background-color: var(--field-bg);
+  color: var(--text-primary);
+}
+
+select option:checked {
+  background-color: var(--accent-tint-bg);
   color: var(--text-primary);
 }
 

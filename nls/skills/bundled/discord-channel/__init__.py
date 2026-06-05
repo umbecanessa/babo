@@ -36,7 +36,9 @@ meta = SkillMeta(
             "3. Call skill_configure(skill_name='discord-channel') for owner_identity and "
             "interaction policy (interaction_mode preset — not raw dm_policy values)\n"
             "4. They can invite the bot to servers/channels in Discord — scope syncs back here\n"
-            f"5. {INTERACTION_SETUP_HINT}\n"
+            "5. Use channel_manage(channel='discord', action=...) for admin — "
+            "NEVER bash/python/curl with bot tokens (tokens stay server-side).\n"
+            f"6. {INTERACTION_SETUP_HINT}\n"
             "If invalid token, ask them to reset it in the Developer Portal."
         ),
         completion_event="channel_connected",
@@ -115,5 +117,6 @@ def register(app, ctx):
     ctx.include_router(router, prefix="/skills/discord-channel")
     ctx.register_tool_factory(adapter.create_send_tool)
     ctx.register_tool_factory(adapter.create_setup_tool)
+    ctx.register_tool_factory(adapter.create_manage_tool)
     ctx.on_startup(adapter.startup)
     ctx.on_shutdown(adapter.shutdown)

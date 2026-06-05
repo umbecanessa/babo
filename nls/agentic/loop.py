@@ -47,6 +47,7 @@ from .orchestration_policy import (
     iter_tool_names,
     delegates_running,
 )
+from .squad_tool_refresh import apply_if_squad_setup_created, ensure_squad_tools_in_loop
 from .tool_mode_policy import (
     apply_dispatch_mode,
     apply_tool_mode_transition,
@@ -947,6 +948,18 @@ async def run_loop(
     # otherwise switching to a broader mode can't recover tools.
     _all_schemas: list[dict] = list(_base_schemas)
     _all_unlocked: set[str] = set(state.unlocked_tools)
+    if ensure_squad_tools_in_loop(
+        config.agent_id,
+        tools,
+        _all_schemas,
+        _all_unlocked,
+        base_schemas=_base_schemas,
+        state=state,
+    ):
+        logger.info(
+            "[LOOP:%s] squad tools bootstrapped at loop start for agent %s",
+            state.loop_id, config.agent_id,
+        )
 
     # Pre-populate from first_tool_calls
     if first_tool_calls:
@@ -2011,6 +2024,18 @@ async def run_loop(
                     state, context, _pre_name, result, _pre_args,
                 )
 
+                _squad_nudge = apply_if_squad_setup_created(
+                    _pre_name, _pre_args, result,
+                    agent_id=config.agent_id,
+                    tools=tools,
+                    all_schemas=_all_schemas,
+                    all_unlocked=_all_unlocked,
+                    base_schemas=_base_schemas,
+                    state=state,
+                )
+                if _squad_nudge:
+                    context.append({"role": "system", "content": _squad_nudge})
+
                 if not result.is_error:
                     _pbc_hint = _breadcrumb_engine.evaluate(
                         _build_bc_ctx(_pre_name, result, state, _deferred_actions, anchor)
@@ -2971,6 +2996,17 @@ async def run_loop(
                 _register_appended_tool_outcome(
                     state, context, _tool_name, result, _args_raw,
                 )
+                _squad_nudge = apply_if_squad_setup_created(
+                    _tool_name, _args_raw, result,
+                    agent_id=config.agent_id,
+                    tools=tools,
+                    all_schemas=_all_schemas,
+                    all_unlocked=_all_unlocked,
+                    base_schemas=_base_schemas,
+                    state=state,
+                )
+                if _squad_nudge:
+                    context.append({"role": "system", "content": _squad_nudge})
                 _status_tag = "OK" if not result.is_error else "FAIL"
                 _action_hint = ""
                 try:
@@ -3379,7 +3415,7 @@ async def run_loop(
                 _responding_comm = frozenset({
                     "communicate", "ask_user", "contacts",
                     "whatsapp_send", "telegram_send", "email_send",
-                    "discord_send", "slack_send",
+                    "discord_send", "discord_manage", "channel_manage", "slack_send",
                     "gmail_send", "gmail_reply",
                 })
                 _non_comm_calls = [
@@ -4450,7 +4486,7 @@ async def run_loop(
                 _resp_comm_tools = frozenset({
                     "communicate", "ask_user", "contacts",
                     "whatsapp_send", "telegram_send", "email_send",
-                    "discord_send", "slack_send",
+                    "discord_send", "discord_manage", "channel_manage", "slack_send",
                     "gmail_send", "gmail_reply",
                 })
                 # No tool calls at all → definitely delivered a text response

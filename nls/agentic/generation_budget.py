@@ -302,6 +302,27 @@ def build_thinking_length_nudge(
     return build_thinking_spiral_nudge_tier1()
 
 
+def first_pass_thinking_spiral(
+    *,
+    thinking_rescued: bool,
+    completion_tokens: int,
+    initial_thinking_len: int,
+    had_tool_calls: bool,
+    needs_tools: bool,
+    max_new_tokens: int = 8192,
+    min_thinking_chars: int = 800,
+) -> bool:
+    """First chat stream ended in thinking-only output — force agentic handoff."""
+    if not needs_tools or had_tool_calls:
+        return False
+    if thinking_rescued:
+        return True
+    if initial_thinking_len < min_thinking_chars:
+        return False
+    budget_ratio = completion_tokens / max(max_new_tokens, 1)
+    return budget_ratio >= 0.85 or completion_tokens >= max_new_tokens - 64
+
+
 def is_thinking_spiral(
     response: GenerationResult,
     budget: GenerationBudgetAnalysis,

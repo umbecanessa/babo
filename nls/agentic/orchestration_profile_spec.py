@@ -394,6 +394,7 @@ def profile_anchor_message(profile: str | None) -> str:
             "[ORCHESTRATION DEPTH: squad_lead] You lead a persistent squad. "
             "Use squad tools to approve inbox items, assign member todos, "
             "spawn_member (create + job + brief), add_member, remove_member, "
+            "inspect_member_config, configure_member (member skill/channel config), "
             "set_member_job (update member charters), set_lead_job (your job — only "
             "after ask_user owner_confirmed=true), request_trust_change (owner "
             "dashboard approval), pause_member, request_delete_member (owner confirms), "

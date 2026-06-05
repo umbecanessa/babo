@@ -77,36 +77,18 @@ async def _handle_command(
             })
 
     elif command == "sleep_confirm":
-        inner_loop = _get_inner_loop(app, agent_id)
-        if inner_loop is not None and inner_loop.is_drowsy:
-            inner_loop.confirm_sleep()
-            await websocket.send_json({
-                "type": "status",
-                "agent_status": "sleeping",
-                "sleep_reason": "User confirmed drowsy request",
-            })
-            logger.info("Agent %s: user confirmed sleep", agent_id)
-        else:
-            await websocket.send_json({
-                "type": "status",
-                "content": "Agent is not drowsy -- nothing to confirm.",
-            })
+        from server.routes.chat.sleep_negotiation import apply_sleep_confirm
+
+        await apply_sleep_confirm(
+            app, agent_id, websocket, source="command",
+        )
 
     elif command == "sleep_deny":
-        inner_loop = _get_inner_loop(app, agent_id)
-        if inner_loop is not None and inner_loop.is_drowsy:
-            inner_loop.deny_sleep()
-            await websocket.send_json({
-                "type": "status",
-                "agent_status": "alive",
-                "content": "Sleep denied -- staying awake.",
-            })
-            logger.info("Agent %s: user denied sleep", agent_id)
-        else:
-            await websocket.send_json({
-                "type": "status",
-                "content": "Agent is not drowsy -- nothing to deny.",
-            })
+        from server.routes.chat.sleep_negotiation import apply_sleep_deny
+
+        await apply_sleep_deny(
+            app, agent_id, websocket, source="command",
+        )
 
     elif command == "dream_config":
         dmn = getattr(runtime, "dmn", None)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+from typing import Any
 
 from fastapi import WebSocket, WebSocketDisconnect
 
@@ -18,6 +19,7 @@ async def _run_agentic_with_receive(
     copilot_queue: asyncio.Queue,
     agent_id: str,
     browser_pending: dict[str, asyncio.Future] | None = None,
+    app: Any | None = None,
 ):
     """Run an agentic coroutine concurrently with WebSocket receive.
 
@@ -114,31 +116,69 @@ async def _run_agentic_with_receive(
                         "(orchestrator only)",
                         agent_id,
                     )
+                elif cmd in ("sleep_confirm", "sleep_deny") and app is not None:
+                    from server.routes.chat.sleep_negotiation import (
+                        apply_sleep_confirm,
+                        apply_sleep_deny,
+                    )
+
+                    if cmd == "sleep_confirm":
+                        await apply_sleep_confirm(
+                            app, agent_id, websocket,
+                            source="command:agentic",
+                        )
+                    else:
+                        await apply_sleep_deny(
+                            app, agent_id, websocket,
+                            source="command:agentic",
+                        )
             elif msg.get("type") == "user_answer":
                 content = msg.get("content", "").strip()
                 if content:
-                    copilot_queue.put_nowait(content)
-                    logger.info(
-                        "Agent %s: user_answer received: %.80s",
-                        agent_id, content,
-                    )
+                    handled = False
+                    if app is not None:
+                        from server.routes.chat.sleep_negotiation import (
+                            try_handle_drowsy_text,
+                        )
+
+                        handled = await try_handle_drowsy_text(
+                            app, agent_id, websocket, content,
+                            source="user_answer:agentic",
+                        )
+                    if not handled:
+                        copilot_queue.put_nowait(content)
+                        logger.info(
+                            "Agent %s: user_answer received: %.80s",
+                            agent_id, content,
+                        )
 
             else:
                 content = msg.get("content", "").strip()
                 if content:
-                    copilot_queue.put_nowait(content)
-                    logger.info(
-                        "Agent %s: co-pilot message queued: %.80s",
-                        agent_id, content,
-                    )
-                    try:
-                        await websocket.send_json({
-                            "type": "copilot_ack",
-                            "content": content,
-                            "message": "Message received.",
-                        })
-                    except Exception:
-                        pass
+                    handled = False
+                    if app is not None:
+                        from server.routes.chat.sleep_negotiation import (
+                            try_handle_drowsy_text,
+                        )
+
+                        handled = await try_handle_drowsy_text(
+                            app, agent_id, websocket, content,
+                            source="copilot:agentic",
+                        )
+                    if not handled:
+                        copilot_queue.put_nowait(content)
+                        logger.info(
+                            "Agent %s: co-pilot message queued: %.80s",
+                            agent_id, content,
+                        )
+                        try:
+                            await websocket.send_json({
+                                "type": "copilot_ack",
+                                "content": content,
+                                "message": "Message received.",
+                            })
+                        except Exception:
+                            pass
 
         return task.result()
 

@@ -354,6 +354,44 @@ class SlackAdapter:
             "channels": scoped,
         }
 
+    def channel_manage_actions(self) -> list[str]:
+        return ["sync", "list", "enable"]
+
+    async def manage_channel(
+        self,
+        agent_id: str,
+        action: str,
+        params: dict[str, Any],
+    ) -> tuple[bool, str]:
+        from nls.runtime.channel_manage import format_scoped_channel_status
+
+        act = (action or "").strip().lower()
+        if act in ("sync", "list"):
+            if act == "sync":
+                await self.sync_channels_from_platform(agent_id, auto_enable=True)
+            status = self.get_status(agent_id=agent_id)
+            return True, format_scoped_channel_status("Slack", status)
+
+        if act == "enable":
+            channel_id = str(params.get("channel_id") or "").strip()
+            if not channel_id:
+                return False, "Error: channel_id required"
+            enabled = params.get("enabled")
+            if enabled is None:
+                enabled = True
+            require_mention = params.get("require_mention")
+            rm = bool(require_mention) if require_mention is not None else None
+            await self.apply_channel_desired(
+                agent_id, channel_id, enabled=bool(enabled), require_mention=rm,
+            )
+            return True, (
+                f"Slack channel {channel_id} enabled={enabled} "
+                f"(bot joins/leaves via conversations API)."
+            )
+
+        supported = ", ".join(self.channel_manage_actions())
+        return False, f"Unknown action '{action}'. Supported: {supported}"
+
     def create_send_tool(self, agent_id: str | None = None) -> SlackSendTool:
         return SlackSendTool(self, agent_id)
 

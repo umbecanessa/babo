@@ -97,5 +97,8 @@ def fleet_squad_bootstrap_message() -> str:
         "There is no squad() tool until the squad exists — do not call squad(action=...).\n"
         "Use channel_inspect(action='get', channel='discord') to see scoped channels.\n"
         "After creation: adopt_orchestration_profile(profile='squad_lead'), "
-        "squad(action='spawn_member', ...), squad(action='set_member_job', ...)."
+        "squad(action='spawn_member', ...), squad(action='set_member_job', ...).\n"
+        "MULTI FACE member tokens: one configure_member call per member — "
+        "skill_config={bot_token, owner_identity}, interaction_mode='shared_only' "
+        "(top-level), owner_confirmed=true. Not skill_configure on the lead."
     )

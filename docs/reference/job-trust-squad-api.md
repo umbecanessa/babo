@@ -241,7 +241,7 @@ Defined in `nls/tools/agent_tools/squad.py`:
 
 **All members:** `inspect`, `list_inbox`, `propose`
 
-**Lead only:** `approve`, `reject`, `assign`, `reassign`, `resolve_escalation`, `brief`, `checkback`, `pause`, `resume`, `status`, `add_member`, `remove_member`, `disband_member`, `pause_member`, `resume_member`, `spawn_member`, `set_member_job`, `set_lead_job` (owner_confirmed), `request_trust_change`, `request_delete_member`, `list_pending`
+**Lead only:** `approve`, `reject`, `assign`, `reassign`, `resolve_escalation`, `brief`, `checkback`, `pause`, `resume`, `status`, `add_member`, `remove_member`, `disband_member`, `pause_member`, `resume_member`, `spawn_member`, `set_member_job`, `set_lead_job` (owner_confirmed), `request_trust_change`, `request_delete_member`, `list_pending`, `inspect_member_config`, `configure_member`
 
 Triage may emit hint `fleet:squad_candidate` when the owner describes a multi-agent fleet; the loop injects a bootstrap nudge.
 
@@ -257,6 +257,8 @@ Triage may emit hint `fleet:squad_candidate` when the owner describes a multi-ag
 | `request_trust_change` | Queue trust patch — owner approves on dashboard |
 | `pause_member` / `resume_member` | Pause/resume member consciousness loop |
 | `spawn_member` | Create agent (`genesis_version` optional), set job, add to squad, brief |
+| `inspect_member_config` | Lead inspects member skill config (schema-aware, secrets masked) |
+| `configure_member` | Lead applies skill config on member (`skill_name` or `channel`, `skill_config`, `owner_confirmed=true` for secrets); wires Discord gateway when `bot_token` saved |
 | `request_delete_member` | Queue owner-approved delete; sole member disbands squad on approve |
 | `list_pending` | List pending owner actions |
 

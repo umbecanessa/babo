@@ -550,8 +550,8 @@
   select {
     padding: 10px 12px;
     border-radius: var(--radius-sm);
-    border: 1px solid var(--overlay-3);
-    background: var(--bg-primary);
+    border: 1px solid var(--field-border);
+    background: var(--field-bg);
     color: var(--text-primary);
     font-size: 14px;
 
@@ -559,6 +559,11 @@
       outline: none;
       border-color: color-mix(in srgb, var(--accent-primary) 45%, var(--glass-border));
       box-shadow: 0 0 0 3px var(--accent-primary-glow);
+    }
+
+    option {
+      background: var(--field-bg);
+      color: var(--text-primary);
     }
   }
 

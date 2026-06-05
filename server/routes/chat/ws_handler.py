@@ -351,6 +351,16 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                 answer = msg.get("content", "").strip()
                 session_key = msg.get("session_key", "websocket:main")
                 if answer:
+                    from server.routes.chat.sleep_negotiation import (
+                        try_handle_drowsy_text,
+                    )
+
+                    if await try_handle_drowsy_text(
+                        app, agent_id, websocket, answer,
+                        source="user_answer",
+                    ):
+                        continue
+
                     from nls.skills.channel_processing import (
                         try_feed_autonomous_answer,
                         try_feed_pending_answer,
@@ -513,6 +523,15 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                 "Agent %s: received message (%d chars): %.80s",
                 agent_id, len(user_input), user_input,
             )
+
+            from server.routes.chat.sleep_negotiation import try_handle_drowsy_text
+
+            if await try_handle_drowsy_text(
+                app, agent_id, websocket, user_input,
+                source="message",
+            ):
+                continue
+
             _request_model = runtime.resolve_orchestrator_model(
                 (msg.get("model") or "").strip() or None
             )
@@ -951,6 +970,7 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                 # the model replied in chat without API tool_calls (common on
                 # remote relays). Local vLLM keeps the battle-tested path:
                 # enter agentic only when the first stream actually has tools.
+                from nls.agentic.generation_budget import first_pass_thinking_spiral
                 from nls.agentic.goals import substantial_answer
 
                 _cloud_inference = not _runtime_uses_local_vllm(runtime)
@@ -964,12 +984,27 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                     if _turn_triage is not None
                     else _message_implies_agentic_work(user_input)
                 )
+                _first_pass_spiral = first_pass_thinking_spiral(
+                    thinking_rescued=bool(
+                        getattr(runtime, "_last_stream_thinking_rescued", False),
+                    ),
+                    completion_tokens=int(
+                        getattr(runtime, "_last_stream_completion_tokens", 0) or 0,
+                    ),
+                    initial_thinking_len=len(_initial_thinking or ""),
+                    had_tool_calls=bool(first_response_has_tools),
+                    needs_tools=bool(_needs_agentic_tools and _pre_goals),
+                )
+                _effective_substantial = (
+                    _substantial and not _first_pass_spiral
+                )
                 _force_agentic = not first_response_has_tools and (
                     (_pre_goals and not _visible_answer)
                     or _pseudo_tool_call
+                    or _first_pass_spiral
                     or (
                         _needs_agentic_tools
-                        and not _substantial
+                        and not _effective_substantial
                         and (
                             _profile in (
                                 "solo_structured", "orchestrated",
@@ -987,6 +1022,15 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                         "forcing agentic loop",
                         agent_id,
                     )
+                if _first_pass_spiral and _force_agentic:
+                    logger.info(
+                        "Agent %s: first-pass thinking spiral — forcing "
+                        "agentic loop (rescued=%s thinking_len=%d completion=%d)",
+                        agent_id,
+                        getattr(runtime, "_last_stream_thinking_rescued", False),
+                        len(_initial_thinking or ""),
+                        getattr(runtime, "_last_stream_completion_tokens", 0),
+                    )
                 if _force_agentic:
                     logger.info(
                         "Agent %s: forcing agentic loop — goals=%d "
@@ -995,11 +1039,13 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                         len(_pre_goals),
                         _cloud_inference,
                         _profile,
-                        _substantial,
+                        _effective_substantial,
                         len(_visible_answer),
                     )
                     first_response_has_tools = True
-                    if _pre_goals and not (full_response or "").strip():
+                    if _first_pass_spiral or (
+                        _pre_goals and not (full_response or "").strip()
+                    ):
                         full_response = None
                         try:
                             await websocket.send_json({
@@ -1388,6 +1434,7 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                             copilot_queue,
                             agent_id,
                             browser_pending=browser_pending,
+                            app=app,
                         )
 
                         websocket.state.agentic_running = False

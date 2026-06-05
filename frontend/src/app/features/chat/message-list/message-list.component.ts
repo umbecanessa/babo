@@ -47,7 +47,10 @@ export class MessageListComponent implements OnChanges, AfterViewChecked, OnDest
   @Input() agenticActive = false;
   @Input() askUserPending = false;
   @Input() agentId = '';
-  @Output() drowsyAction = new EventEmitter<'confirm' | 'deny'>();
+  @Output() drowsyAction = new EventEmitter<{
+    action: 'confirm' | 'deny';
+    index: number;
+  }>();
   @Output() expandBrowser = new EventEmitter<any>();
   @Output() openUrl = new EventEmitter<string>();
   @Output() delegateToggle = new EventEmitter<number>();
@@ -459,8 +462,17 @@ export class MessageListComponent implements OnChanges, AfterViewChecked, OnDest
 
   /** Handle drowsy action button click. */
   onDrowsyAction(index: number, action: 'confirm' | 'deny'): void {
+    this.drowsyAction.emit({ action, index });
+  }
+
+  /** Mark a drowsy card responded after the server accepted the command. */
+  markDrowsyResponded(index: number): void {
     this.drowsyResponded.add(index);
-    this.drowsyAction.emit(action);
+  }
+
+  /** Allow retry if the sleep command failed to send or apply. */
+  clearDrowsyResponded(index: number): void {
+    this.drowsyResponded.delete(index);
   }
 
   /** Check if a drowsy message has been responded to. */

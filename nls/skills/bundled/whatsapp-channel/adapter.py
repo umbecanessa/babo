@@ -494,6 +494,23 @@ class WhatsAppAdapter:
             "linked_phone": cfg.get("linked_phone", ""),
         }
 
+    def channel_manage_actions(self) -> list[str]:
+        return ["list"]
+
+    async def manage_channel(
+        self,
+        agent_id: str,
+        action: str,
+        params: dict[str, Any],
+    ) -> tuple[bool, str]:
+        from nls.runtime.channel_manage import format_simple_channel_status
+
+        if (action or "").strip().lower() == "list":
+            return True, format_simple_channel_status(
+                "WhatsApp", self.get_status(agent_id=agent_id),
+            )
+        return False, "WhatsApp supports action=list only (pairing via Tools UI)."
+
     # -- per-agent config --------------------------------------------------
 
     def update_config(self, new_config: dict[str, Any], agent_id: str) -> None:

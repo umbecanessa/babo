@@ -286,6 +286,25 @@ class SkillContext:
         """
         self.tool_factories.append(factory)
 
+    def register_channel_manage(
+        self,
+        channel_key: str,
+        handler: Callable[..., Any],
+        *,
+        actions: list[str] | None = None,
+    ) -> None:
+        """Register admin handler for a custom channel skill.
+
+        Handler signature: ``async (agent_id, action, params) -> (ok: bool, message: str)``.
+        Optionally set ``handler.manage_actions = [...]`` or pass ``actions=``.
+        """
+        from nls.runtime.channel_manage import register_channel_manage_handler
+
+        key = channel_key.strip().lower()
+        if actions:
+            handler.manage_actions = actions  # type: ignore[attr-defined]
+        register_channel_manage_handler(key, handler)
+
     def on_startup(self, hook: Callable[[], Awaitable[None]]) -> None:
         self.startup_hooks.append(hook)
 

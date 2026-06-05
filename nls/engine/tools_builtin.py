@@ -261,13 +261,22 @@ class RequestSleepTool:
         reason = ""
         if params:
             reason = str(params.get("reason", ""))
-        if self._ans is not None and hasattr(self._ans, "request_sleep"):
-            try:
-                self._ans.request_sleep(reason=reason)
-            except Exception as exc:
-                return BuiltinToolResult(success=False, error=str(exc))
+        if self._ans is not None:
+            request_fn = getattr(
+                self._ans, "request_voluntary_sleep", None,
+            ) or getattr(self._ans, "request_sleep", None)
+            if request_fn is not None:
+                try:
+                    request_fn(reason=reason or "voluntary_nap")
+                except Exception as exc:
+                    return BuiltinToolResult(success=False, error=str(exc))
+            else:
+                return BuiltinToolResult(
+                    success=False,
+                    error="ANS sleep request not available on this agent",
+                )
         return BuiltinToolResult(
             success=True,
-            text="Sleep request acknowledged.",
+            text="Sleep request acknowledged — drowsy negotiation will follow.",
             metadata={"reason": reason},
         )

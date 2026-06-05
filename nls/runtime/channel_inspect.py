@@ -312,6 +312,17 @@ def inspect_channel(
             lines.extend(ch_rows)
         elif channel in ("discord", "slack"):
             lines.append("  scoped channels: none synced yet (open Tools → channel scope or call sync API)")
+            if adapter is not None:
+                try:
+                    status = adapter.get_status(agent_id)
+                    sync_err = str(status.get("sync_error") or "").strip()
+                    active = int(status.get("active_channel_count") or 0)
+                    if sync_err:
+                        lines.append(f"  sync_error: {sync_err}")
+                    if active:
+                        lines.append(f"  active listening: {active} channel(s)")
+                except Exception:
+                    pass
     elif channel == "telegram":
         if safe.get("bot_token"):
             lines.append("  credentials: bot token saved (masked)")

@@ -332,6 +332,13 @@ def setup_tools(
     except Exception as exc:
         logger.warning("Agent %s: channel_inspect tool init failed: %s", agent_id, exc)
 
+    # Channel manage — sync/scope/admin for bundled + custom channel skills
+    try:
+        from .agent_tools.channel_manage import create_channel_manage_tool
+        tools.append(create_channel_manage_tool(agent_id, agent_dir))
+    except Exception as exc:
+        logger.warning("Agent %s: channel_manage tool init failed: %s", agent_id, exc)
+
     # Email ledger — history of sent and received emails
     try:
         from .agent_tools.email_ledger import EmailLedger, EmailHistoryTool

@@ -87,6 +87,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
   @ViewChild('fileInput') fileInput!: ElementRef<HTMLInputElement>;
   @ViewChild('folderInput') folderInput!: ElementRef<HTMLInputElement>;
   @ViewChild(SignalSidebarComponent) signalSidebar?: SignalSidebarComponent;
+  @ViewChild('messageList') messageList?: MessageListComponent;
   agent = signal<Agent | null>(null);
   agentOnline = signal(true);
   messages = signal<ChatMessage[]>([]);
@@ -142,6 +143,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
   lastAgenticResult = signal<{ steps: number; tools: number; durationMs: number; aborted: boolean } | null>(null);
   backgroundTaskActive = signal(false);
   private _backgroundTaskId: number = 0;
+  private _pendingDrowsyIndex: number | null = null;
   /** Suppress activity-sidebar writes while handling delegate (sub_agent) events. */
   private _activitySidebarSuppressDepth = 0;
   private _bgPlanSteps: string[] = [];
@@ -779,22 +781,18 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     });
   }
 
-  onDrowsyAction(action: 'confirm' | 'deny') {
-    if (action === 'confirm') {
-      this.ws.sendCommand('sleep_confirm');
-      this.messages.update(msgs => [...msgs, {
-        type: 'status',
-        content: 'You said: "Rest up." Agent is going to sleep...',
-        timestamp: new Date(),
-      }]);
-    } else {
-      this.ws.sendCommand('sleep_deny');
-      this.messages.update(msgs => [...msgs, {
-        type: 'status',
-        content: 'You said: "Stay awake." Agent will keep going.',
-        timestamp: new Date(),
-      }]);
+  onDrowsyAction(event: { action: 'confirm' | 'deny'; index: number }) {
+    const cmd = event.action === 'confirm' ? 'sleep_confirm' : 'sleep_deny';
+    const sent = this.ws.sendCommand(cmd);
+    if (!sent) {
+      this.toast.show(
+        'Not connected — could not send sleep response. Reopen chat and try again.',
+        'error',
+      );
+      return;
     }
+    this._pendingDrowsyIndex = event.index;
+    this.messageList?.markDrowsyResponded(event.index);
   }
 
   ngAfterViewChecked() {
@@ -1613,6 +1611,15 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       case 'drowsy': {
         // Agent is drowsy and requesting permission to sleep.
         // Show as an amber-bordered bubble with action buttons.
+        this.nlsMetadata.update(m => ({
+          ...m,
+          ans: { ...(m?.ans || {}), state: 'drowsy' },
+        }));
+        this.activities.update(acts => [{
+          id: Date.now(), kind: 'drowsy' as ActivityKind,
+          text: msg.content || 'Agent is feeling drowsy…',
+          tags: [], signals: 0, factsStored: 0, timestamp: new Date(),
+        }, ...acts].slice(0, 15));
         this.messages.update(msgs => [...msgs, {
           type: 'drowsy' as any,
           content: msg.content || "I'm feeling drowsy...",
@@ -2838,8 +2845,8 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         break;
       }
 
-      case 'sleep_start':
-        // Dismiss any pending drowsy negotiation card — agent has accepted sleep
+      case 'sleep_start': {
+        const sleepReason = msg.sleep_reason || msg.reason || 'consolidating memories';
         this.messages.update(msgs => msgs.filter(m => m.type !== 'drowsy'));
         this.nlsMetadata.update(m => ({
           ...m,
@@ -2847,10 +2854,34 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         }));
         this.activities.update(acts => [{
           id: Date.now(), kind: 'sleep_start' as ActivityKind,
-          text: msg.reason || 'Agent is sleeping...', tags: [],
+          text: sleepReason, tags: [],
           signals: 0, factsStored: 0, timestamp: new Date(),
         }, ...acts].slice(0, 15));
         break;
+      }
+
+      case 'sleep_command_result': {
+        const pending = this._pendingDrowsyIndex;
+        if (!msg.ok) {
+          if (pending != null) {
+            this.messageList?.clearDrowsyResponded(pending);
+            this._pendingDrowsyIndex = null;
+          }
+          this.toast.show(msg.content || 'Sleep response could not be applied.', 'error');
+          break;
+        }
+        this._pendingDrowsyIndex = null;
+        if (msg.action === 'deny') {
+          this.messages.update(msgs => [...msgs, {
+            type: 'status',
+            content: 'You said: "Stay awake." Agent will keep going.',
+            timestamp: new Date(),
+          }]);
+          this.messages.update(msgs => msgs.filter(m => m.type !== 'drowsy'));
+        }
+        // confirm: status(agent_status=sleeping) already added the chat bubble
+        break;
+      }
 
       case 'sleep_complete': {
         const nls = msg.nls || {};

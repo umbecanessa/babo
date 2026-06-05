@@ -38,12 +38,21 @@ _LEAD_ONLY_ACTIONS = frozenset({
     "set_member_job",
     "set_lead_job",
     "request_trust_change",
+    "inspect_member_config",
+    "configure_member",
+    "sync_member_channels",
+    "check_channel_readiness",
+    "invite_squad_bots",
 })
 
 _ASYNC_ACTIONS = frozenset({
     "pause_member",
     "resume_member",
     "spawn_member",
+    "configure_member",
+    "sync_member_channels",
+    "check_channel_readiness",
+    "invite_squad_bots",
 })
 
 _ALL_ACTIONS = _MEMBER_ACTIONS | _LEAD_ONLY_ACTIONS
@@ -94,6 +103,54 @@ _SHARED_PARAMS: dict[str, Any] = {
     "tags": {"type": "array", "items": {"type": "string"}},
     "reject_reason": {"type": "string"},
     "message": {"type": "string", "description": "Brief, delete reason, or list_inbox status filter."},
+    "skill_name": {
+        "type": "string",
+        "description": "Bundled skill to inspect/configure on a member (e.g. discord-channel).",
+    },
+    "channel": {
+        "type": "string",
+        "description": "Channel alias for inspect/configure_member (discord, slack, telegram, …).",
+    },
+    "skill_config": {
+        "type": "object",
+        "description": (
+            "Config patch for configure_member — keys match the skill's config_schema "
+            "(e.g. bot_token, owner_identity). Requires owner_confirmed=true for secrets."
+        ),
+        "additionalProperties": True,
+    },
+    "interaction_mode": {
+        "type": "string",
+        "enum": [
+            "owner_private_only",
+            "shared_only",
+            "owner_plus_shared",
+            "trusted_allowlist",
+            "open_community",
+        ],
+        "description": (
+            "Reachability preset — TOP-LEVEL parameter only (not inside skill_config). "
+            "Sets dm_policy/groups/scoped_channels from preset."
+        ),
+    },
+    "channel_id": {
+        "type": "string",
+        "description": (
+            "Discord channel snowflake for check_channel_readiness and "
+            "invite_squad_bots."
+        ),
+    },
+    "mirror_lead_channel_scope": {
+        "type": "boolean",
+        "description": (
+            "For configure_member / sync_member_channels on discord-channel: copy "
+            "lead's enabled channels when member scope is empty (default true)."
+        ),
+    },
+    "interaction_intent": {
+        "type": "string",
+        "description": "Natural-language interaction policy (resolved via micro-inference).",
+    },
 }
 
 
@@ -122,6 +179,12 @@ def _pass_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
         "action_classes_allow": kwargs.get("action_classes_allow"),
         "action_classes_deny": kwargs.get("action_classes_deny"),
         "channel_overlays": kwargs.get("channel_overlays"),
+        "skill_name": kwargs.get("skill_name", ""),
+        "channel": kwargs.get("channel", ""),
+        "skill_config": kwargs.get("skill_config"),
+        "interaction_mode": kwargs.get("interaction_mode", ""),
+        "interaction_intent": kwargs.get("interaction_intent", ""),
+        "context_turns": kwargs.get("context_turns"),
     }
 
 
@@ -213,17 +276,26 @@ class SquadTool:
             "checkback, pause/resume squad, add_member, remove_member, pause_member, "
             "resume_member, spawn_member, set_member_job (members), set_lead_job "
             "(your job — owner_confirmed after ask_user), request_trust_change "
-            "(owner dashboard approval), request_delete_member, status, list_pending.\n"
-            "Discord/Slack: see channel.fleet_topology in context — single public face "
-            "(lead bot only) vs multi-face (each speaking agent needs its own bot token "
-            "on that agent's Tools integration)."
+            "(owner dashboard approval — trust/policy expansions only), "
+            "inspect_member_config and configure_member (member skill/channel config — "
+            "schema-driven, any bundled channel skill; owner_confirmed=true for secrets), "
+            "sync_member_channels (re-sync Discord scope; mirrors lead channels when empty), "
+            "check_channel_readiness (which squad bots can view/listen in a channel_id), "
+            "invite_squad_bots (lead bot grants member bots access to channel_id — needs "
+            "Manage Channels), request_delete_member, status, list_pending.\n"
+            "Discord admin: channel_manage(channel='discord', ...) — never "
+            "bash/python with tokens. Multi-face: check_channel_readiness then "
+            "invite_squad_bots before discord_send @mentions.\n"
         )
 
     @property
     def parameters(self) -> dict[str, Any]:
         props = dict(_SHARED_PARAMS)
         props["action"] = {"type": "string", "enum": sorted(_ALL_ACTIONS)}
-        props["name"] = {"type": "string", "description": "Unused except spawn context."}
+        props["name"] = {
+            "type": "string",
+            "description": "Member display name for spawn_member (alias for title).",
+        }
         return {
             "type": "object",
             "required": ["action"],
@@ -261,10 +333,14 @@ class SquadTool:
 
         try:
             if action in _ASYNC_ACTIONS:
+                _async_kw = {
+                    k: v for k, v in kwargs.items()
+                    if k != "action"
+                }
                 result = await self._sm.handle_action_async(
                     self._caller,
                     action,
-                    **kwargs,
+                    **_async_kw,
                 )
             else:
                 result = self._sm.handle_action(self._caller, action, **_pass_kwargs(kwargs))

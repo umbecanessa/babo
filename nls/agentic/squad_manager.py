@@ -423,6 +423,127 @@ class SquadManager:
             out["channel_overlays"] = overlays
         return out
 
+    def _agent_display_name(self, agent_id: str) -> str:
+        if self._get_runtime:
+            rt = self._get_runtime(agent_id)
+            if rt is not None:
+                name = str(getattr(rt, "agent_name", "") or "").strip()
+                if name:
+                    return name
+        try:
+            from server.main import app
+
+            am = getattr(app.state, "agent_manager", None)
+            if am is not None and hasattr(am, "_ensure_agent_meta"):
+                meta = am._ensure_agent_meta(agent_id)
+                return str(meta.get("name") or "").strip()
+        except Exception:
+            pass
+        return ""
+
+    def _member_roster(self, squad: Squad) -> list[dict[str, str]]:
+        roster: list[dict[str, str]] = []
+        for aid in squad.all_member_ids:
+            entry: dict[str, str] = {
+                "agent_id": aid,
+                "name": self._agent_display_name(aid) or aid,
+                "role": "lead" if squad.is_lead(aid) else "member",
+            }
+            discord_meta = self._discord_bot_meta(aid)
+            if discord_meta.get("bot_id"):
+                entry["discord_bot_id"] = discord_meta["bot_id"]
+            if discord_meta.get("bot_username"):
+                entry["discord_bot"] = discord_meta["bot_username"]
+            roster.append(entry)
+        return roster
+
+    def _discord_bot_meta(self, agent_id: str) -> dict[str, str]:
+        try:
+            from nls.runtime.channel_agent_config import load_agent_channel_config
+            from nls.runtime.channel_inspect import resolve_data_root
+
+            data_root = resolve_data_root(agent_id)
+            if data_root is None:
+                return {}
+            cfg = load_agent_channel_config(data_root, agent_id, "discord")
+            if not cfg:
+                return {}
+            meta = {
+                "bot_id": str(cfg.get("bot_id") or "").strip(),
+                "bot_username": str(cfg.get("bot_username") or "").strip(),
+            }
+            if meta["bot_id"]:
+                return meta
+            try:
+                from server.main import app
+
+                sl = getattr(app.state, "skill_loader", None)
+                sk = sl.skills.get("discord-channel") if sl else None
+                adapter = getattr(sk.context, "adapter", None) if sk and sk.context else None
+                if adapter is not None:
+                    status = adapter.get_status(agent_id)
+                    meta["bot_id"] = str(status.get("bot_id") or "").strip()
+                    if not meta["bot_username"]:
+                        meta["bot_username"] = str(
+                            status.get("bot_username") or "",
+                        ).strip()
+            except Exception:
+                pass
+            return meta
+        except Exception:
+            return {}
+
+    def _format_member_roster(self, squad: Squad) -> str:
+        return "; ".join(
+            f"{m['name']} ({m['agent_id']}) [{m['role']}]"
+            for m in self._member_roster(squad)
+        )
+
+    def _resolve_squad_target(
+        self,
+        squad: Squad,
+        raw: str,
+        *,
+        for_action: str = "",
+    ) -> str:
+        target = (raw or "").strip()
+        label = for_action or "this action"
+        if not target:
+            raise ValueError(
+                f"target_agent_id is required for {label}. "
+                f"Squad members: {self._format_member_roster(squad)}"
+            )
+        if squad.is_member(target):
+            return target
+
+        lowered = target.lower()
+        name_matches: list[str] = []
+        prefix_matches: list[str] = []
+        for aid in squad.all_member_ids:
+            name = self._agent_display_name(aid).lower()
+            if name and name == lowered:
+                name_matches.append(aid)
+            elif aid.lower().startswith(lowered) and len(lowered) >= 4:
+                prefix_matches.append(aid)
+        if len(name_matches) == 1:
+            return name_matches[0]
+        if len(name_matches) > 1:
+            raise ValueError(
+                f"Ambiguous target {target!r} — use agent_id. "
+                f"Matches: {', '.join(name_matches)}"
+            )
+        if len(prefix_matches) == 1:
+            return prefix_matches[0]
+        if len(prefix_matches) > 1:
+            raise ValueError(
+                f"Ambiguous target {target!r} — use full agent_id. "
+                f"Matches: {', '.join(prefix_matches)}"
+            )
+        raise ValueError(
+            f"target_agent_id must be a squad member (got {target!r}). "
+            f"Squad members: {self._format_member_roster(squad)}"
+        )
+
     def create_squad_for_agent(
         self,
         caller_agent_id: str,
@@ -463,7 +584,8 @@ class SquadManager:
             "role": "lead",
             "note": (
                 "Squad created. Call adopt_orchestration_profile(profile='squad_lead'). "
-                "Use spawn_member to add agents, set_member_job to refine member charters."
+                "Use squad(action='spawn_member', ...) to add agents, "
+                "squad(action='set_member_job', ...) to refine member charters."
             ),
             "channel_topology": _topology_note_for_lead(caller_agent_id),
         }
@@ -618,6 +740,12 @@ class SquadManager:
         action_classes_allow: list[str] | None = None,
         action_classes_deny: list[str] | None = None,
         channel_overlays: list[dict[str, Any]] | None = None,
+        skill_name: str = "",
+        channel: str = "",
+        skill_config: dict[str, Any] | None = None,
+        interaction_mode: str = "",
+        interaction_intent: str = "",
+        context_turns: list[dict] | None = None,
     ) -> dict[str, Any]:
         action = (action or "").strip().lower()
         squad = self._registry.get(squad_id) if squad_id else self._registry.get_for_agent(caller_agent_id)
@@ -627,7 +755,11 @@ class SquadManager:
         self.require_membership(caller_agent_id, squad.id)
 
         if action == "inspect":
-            return {"squad": squad.to_dict(), "role": "lead" if squad.is_lead(caller_agent_id) else "member"}
+            return {
+                "squad": squad.to_dict(),
+                "role": "lead" if squad.is_lead(caller_agent_id) else "member",
+                "members": self._member_roster(squad),
+            }
 
         if action == "list_inbox":
             status_filter = reason if reason in INBOX_STATUSES else ""
@@ -810,9 +942,11 @@ class SquadManager:
         if action == "brief":
             if not squad.is_lead(caller_agent_id):
                 raise PermissionError("Only the squad lead may brief members")
-            target = target_agent_id or assignee_agent_id
-            if not target or not squad.is_member(target):
-                raise ValueError("target_agent_id must be a squad member")
+            target = self._resolve_squad_target(
+                squad,
+                target_agent_id or assignee_agent_id,
+                for_action="brief",
+            )
             rt = self._get_runtime(target) if self._get_runtime else None
             if rt is None:
                 raise RuntimeError(f"Agent runtime {target} not loaded")
@@ -887,9 +1021,11 @@ class SquadManager:
 
         if action == "set_member_job":
             self._require_lead(squad, caller_agent_id)
-            target = (target_agent_id or assignee_agent_id).strip()
-            if not target or not squad.is_member(target):
-                raise ValueError("target_agent_id must be a squad member")
+            target = self._resolve_squad_target(
+                squad,
+                target_agent_id or assignee_agent_id,
+                for_action="set_member_job",
+            )
             if target == caller_agent_id:
                 raise ValueError(
                     "Use set_lead_job with owner_confirmed=true after ask_user() for your own job"
@@ -924,6 +1060,15 @@ class SquadManager:
                 raise ValueError("Provide title and/or description for your lead job")
             job = self._apply_job_patch_fields(caller_agent_id, job_fields)
             return {"agent_id": caller_agent_id, "job": job}
+
+        if action == "inspect_member_config":
+            return self._inspect_member_config(
+                squad,
+                caller_agent_id,
+                target_agent_id=target_agent_id or assignee_agent_id,
+                skill_name=skill_name,
+                channel=channel,
+            )
 
         if action == "request_trust_change":
             self._require_lead(squad, caller_agent_id)
@@ -973,6 +1118,7 @@ class SquadManager:
         action: str,
         **kwargs: Any,
     ) -> dict[str, Any]:
+        kwargs = {k: v for k, v in kwargs.items() if k != "action"}
         action = (action or "").strip().lower()
         squad_id = kwargs.get("squad_id", "")
         squad = self._registry.get(squad_id) if squad_id else self._registry.get_for_agent(caller_agent_id)
@@ -982,19 +1128,21 @@ class SquadManager:
         self._require_lead(squad, caller_agent_id)
 
         target = (kwargs.get("target_agent_id") or kwargs.get("assignee_agent_id") or "").strip()
-        title = kwargs.get("title", "")
+        title = (kwargs.get("title") or kwargs.get("name") or "").strip()
         description = kwargs.get("description", "")
         message = kwargs.get("message", "")
 
         if action == "pause_member":
-            if not target or not squad.is_member(target):
-                raise ValueError("target_agent_id must be a squad member")
+            target = self._resolve_squad_target(
+                squad, target, for_action="pause_member",
+            )
             await self._pause_agent(target)
             return {"paused": target}
 
         if action == "resume_member":
-            if not target or not squad.is_member(target):
-                raise ValueError("target_agent_id must be a squad member")
+            target = self._resolve_squad_target(
+                squad, target, for_action="resume_member",
+            )
             await self._unpause_agent(target)
             return {"resumed": target}
 
@@ -1006,6 +1154,34 @@ class SquadManager:
                 job_title=title.strip() or "Squad member",
                 mission=(description or message).strip(),
                 genesis_version=(kwargs.get("genesis_version") or "").strip(),
+            )
+
+        if action == "configure_member":
+            return await self._configure_member(
+                squad,
+                caller_agent_id,
+                **kwargs,
+            )
+
+        if action == "sync_member_channels":
+            return await self._sync_member_channels(
+                squad,
+                caller_agent_id,
+                **kwargs,
+            )
+
+        if action == "check_channel_readiness":
+            return await self._check_channel_readiness(
+                squad,
+                caller_agent_id,
+                **kwargs,
+            )
+
+        if action == "invite_squad_bots":
+            return await self._invite_squad_bots(
+                squad,
+                caller_agent_id,
+                **kwargs,
             )
 
         raise ValueError(f"Unknown async squad action: {action}")
@@ -1032,6 +1208,236 @@ class SquadManager:
             raise ValueError(f"Failed to resume agent {agent_id}")
         if am.get_runtime(agent_id) is None:
             await am.load_agent(agent_id)
+
+    async def _configure_member(
+        self,
+        squad: Squad,
+        lead_agent_id: str,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        from nls.runtime.skill_config_service import (
+            SkillConfigService,
+            assert_squad_lead_may_configure,
+            ensure_member_runtime,
+            finalize_discord_member_channels,
+            resolve_skill_name,
+            wire_channel_after_config,
+        )
+
+        self._require_lead(squad, lead_agent_id)
+        raw_target = (
+            kwargs.get("target_agent_id") or kwargs.get("assignee_agent_id") or ""
+        )
+        target = self._resolve_squad_target(
+            squad, raw_target, for_action="configure_member",
+        )
+        assert_squad_lead_may_configure(lead_agent_id, target)
+
+        skill_name = resolve_skill_name(
+            str(kwargs.get("skill_name") or ""),
+            str(kwargs.get("channel") or ""),
+        )
+        if not skill_name:
+            raise ValueError("skill_name or channel is required for configure_member")
+
+        config_patch = kwargs.get("skill_config") or kwargs.get("config")
+        if isinstance(config_patch, str):
+            import json
+            try:
+                config_patch = json.loads(config_patch)
+            except Exception:
+                config_patch = {}
+        if config_patch is not None and not isinstance(config_patch, dict):
+            config_patch = {}
+
+        owner_confirm = bool(
+            kwargs.get("owner_confirmed", False) or kwargs.get("owner_confirm", False)
+        )
+        interaction_mode = str(kwargs.get("interaction_mode") or "").strip().lower()
+        interaction_intent = str(kwargs.get("interaction_intent") or "").strip()
+
+        await ensure_member_runtime(target)
+
+        svc = SkillConfigService(target, inference_agent_id=lead_agent_id)
+        outcome = await svc.apply(
+            skill_name,
+            config_patch if isinstance(config_patch, dict) else {},
+            interaction_mode=interaction_mode,
+            interaction_intent=interaction_intent,
+            owner_confirm=owner_confirm,
+            context_turns=kwargs.get("context_turns"),
+            configure_tool_label="squad(action='configure_member')",
+        )
+        if not outcome.ok:
+            raise ValueError(outcome.content)
+
+        wire_note = None
+        if isinstance(config_patch, dict):
+            wire_note = await wire_channel_after_config(
+                target, skill_name, config_patch,
+            )
+        elif skill_name == "discord-channel":
+            wire_note = await wire_channel_after_config(target, skill_name, {})
+
+        scope_note = None
+        if skill_name == "discord-channel":
+            mirror = kwargs.get("mirror_lead_channel_scope")
+            if mirror is None:
+                mirror = True
+            scope_note = await finalize_discord_member_channels(
+                target,
+                lead_agent_id=lead_agent_id,
+                mirror_lead_scope=bool(mirror),
+            )
+
+        rt = await ensure_member_runtime(target)
+        if rt is not None:
+            try:
+                if hasattr(rt, "sync_job_trust"):
+                    rt.sync_job_trust(squad=squad)
+                if hasattr(rt, "_refresh_channel_awareness"):
+                    rt._refresh_channel_awareness()
+            except Exception as exc:
+                logger.debug("post configure_member runtime refresh: %s", exc)
+
+        result: dict[str, Any] = {
+            "agent_id": target,
+            "skill_name": skill_name,
+            "message": outcome.content,
+        }
+        if wire_note:
+            result["gateway"] = wire_note
+        if scope_note:
+            result["channel_scope"] = scope_note
+        return result
+
+    async def _sync_member_channels(
+        self,
+        squad: Squad,
+        lead_agent_id: str,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        from nls.runtime.skill_config_service import (
+            assert_squad_lead_may_configure,
+            finalize_discord_member_channels,
+            resolve_skill_name,
+        )
+
+        self._require_lead(squad, lead_agent_id)
+        raw_target = (
+            kwargs.get("target_agent_id") or kwargs.get("assignee_agent_id") or ""
+        )
+        target = self._resolve_squad_target(
+            squad, raw_target, for_action="sync_member_channels",
+        )
+        assert_squad_lead_may_configure(lead_agent_id, target)
+
+        channel = resolve_skill_name(
+            str(kwargs.get("skill_name") or ""),
+            str(kwargs.get("channel") or "discord"),
+        )
+        if channel != "discord-channel":
+            raise ValueError("sync_member_channels currently supports discord only")
+
+        mirror = kwargs.get("mirror_lead_channel_scope")
+        if mirror is None:
+            mirror = True
+        note = await finalize_discord_member_channels(
+            target,
+            lead_agent_id=lead_agent_id,
+            mirror_lead_scope=bool(mirror),
+        )
+        return {"agent_id": target, "channel_scope": note or "Discord scope sync completed."}
+
+    async def _check_channel_readiness(
+        self,
+        squad: Squad,
+        lead_agent_id: str,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        from nls.runtime.discord_squad_readiness import audit_squad_discord_channel
+
+        self._require_lead(squad, lead_agent_id)
+        channel_id = str(kwargs.get("channel_id") or "").strip()
+        if not channel_id:
+            raise ValueError(
+                "channel_id (Discord channel snowflake) is required for "
+                "check_channel_readiness — get it from channel_inspect(action='get')."
+            )
+        faces, report = await audit_squad_discord_channel(lead_agent_id, channel_id)
+        return {
+            "channel_id": channel_id,
+            "report": report,
+            "faces": [
+                {
+                    "agent_id": f.agent_id,
+                    "name": f.name,
+                    "role": f.role,
+                    "discord_bot": f.bot_username,
+                    "discord_bot_id": f.bot_id,
+                    "ok": f.issue == "OK — listening",
+                    "issue": f.issue,
+                }
+                for f in faces
+            ],
+        }
+
+    async def _invite_squad_bots(
+        self,
+        squad: Squad,
+        lead_agent_id: str,
+        **kwargs: Any,
+    ) -> dict[str, Any]:
+        from nls.runtime.discord_squad_readiness import invite_squad_bots_to_channel
+
+        self._require_lead(squad, lead_agent_id)
+        channel_id = str(kwargs.get("channel_id") or "").strip()
+        if not channel_id:
+            raise ValueError(
+                "channel_id is required for invite_squad_bots — lead bot needs "
+                "Manage Channels on that channel."
+            )
+        results, report = await invite_squad_bots_to_channel(lead_agent_id, channel_id)
+        return {
+            "channel_id": channel_id,
+            "report": report,
+            "results": results,
+        }
+
+    def _inspect_member_config(
+        self,
+        squad: Squad,
+        lead_agent_id: str,
+        *,
+        target_agent_id: str,
+        skill_name: str = "",
+        channel: str = "",
+    ) -> dict[str, Any]:
+        from nls.runtime.skill_config_service import (
+            SkillConfigService,
+            assert_squad_lead_may_configure,
+            resolve_skill_name,
+        )
+
+        self._require_lead(squad, lead_agent_id)
+        target = self._resolve_squad_target(
+            squad, target_agent_id, for_action="inspect_member_config",
+        )
+        assert_squad_lead_may_configure(lead_agent_id, target)
+
+        resolved = resolve_skill_name(skill_name, channel)
+        if not resolved:
+            raise ValueError("skill_name or channel is required for inspect_member_config")
+
+        svc = SkillConfigService(target)
+        outcome = svc.inspect(resolved)
+        if not outcome.ok:
+            raise ValueError(outcome.content)
+        return {
+            "agent_id": target,
+            "skill_name": resolved,
+            "inspect": outcome.content,
+        }
 
     async def _spawn_member(
         self,
@@ -1097,9 +1503,11 @@ class SquadManager:
             "squad_id": squad.id,
             "brief": brief_msg,
             "channel_setup": (
-                "This member has no Discord/Slack yet. SINGLE FACE: they work via "
-                "squad inbox only. MULTI FACE: owner links discord-channel on this "
-                f"agent ({new_id}) in Tools with a NEW bot token — never copy the lead's."
+                "MULTI FACE: squad(action='configure_member', target_agent_id='"
+                f"{new_id}', channel='discord', skill_config={{'bot_token': '...', "
+                "'owner_identity': '<owner username>'}}, interaction_mode='shared_only', "
+                "owner_confirmed=true) after owner pastes this member's bot token. "
+                "SINGLE FACE: member works via squad inbox only."
             ),
         }
 
