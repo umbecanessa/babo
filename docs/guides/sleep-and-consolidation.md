@@ -46,7 +46,26 @@ LLM-driven summarization:
 | **Scheduled** | Circadian bedtime / nap windows (if configured) |
 | **Signal pressure** | Enough LEARN/REFLECT signals accumulated |
 | **Manual** | `/sleep` in chat |
+| **Voluntary (drowsy)** | Agent requests sleep via `request_sleep` tool when signal buffer is full; owner confirms or denies |
 | **Post-orchestration** | After heavy team runs (runtime-dependent) |
+
+---
+
+## Drowsy sleep negotiation
+
+When signal pressure crosses the drowsy threshold, the inner loop enters **drowsy** state and the UI shows an amber card with **Rest up** / **Stay awake** buttons.
+
+| Path | Behavior |
+|------|----------|
+| **Confirm** | `sleep_confirm` command, drowsy card **Rest up**, or short natural-language yes (`yes`, `go ahead`, `rest up`, …) |
+| **Deny** | `sleep_deny` command, **Stay awake**, or short no (`no`, `stay awake`, …) |
+| **Timeout** | If no response within ~2 minutes, sleep proceeds anyway (same as pre-negotiation behavior) |
+
+Implementation: `server/routes/chat/sleep_negotiation.py` — shared handlers for slash commands, WebSocket drowsy text, agentic `user_answer`, and copilot paths.
+
+After confirm, the runtime broadcasts `sleep_command_result` (ok) and `sleep_start` with `sleep_reason`. Deny clears drowsy state without sleeping.
+
+The agent may also call the built-in **`request_sleep`** tool during a loop when it wants consolidation — same drowsy negotiation applies.
 
 ---
 
@@ -55,6 +74,7 @@ LLM-driven summarization:
 - New user messages can **queue wake** depending on scheduler policy
 - Agents in active conversation may **defer** sleep until idle
 - UI status badge shows **sleeping**
+- While **drowsy** (awaiting confirm), status shows drowsy; sidebar activity records the negotiation
 
 ---
 

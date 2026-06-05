@@ -15,8 +15,13 @@ Two schedulers manage **offline consolidation** and **autonomous inner loops**.
 |--------|-----------|
 | Signal pressure | ANS `on_sleep_requested` |
 | Manual | `/sleep` command or admin POST |
+| Voluntary | Agent `request_sleep` tool → drowsy negotiation |
 | Circadian | Agent config bedtime windows |
 | Post-orchestration | Runtime hooks after large team runs |
+
+### Drowsy negotiation
+
+Before consolidation, high signal load may set the inner loop **drowsy**. The UI prompts the owner; confirm/deny flows through `server/routes/chat/sleep_negotiation.py` (slash commands, drowsy card, agentic text). On timeout (~2 min), sleep proceeds without confirm.
 
 ### Pipeline
 

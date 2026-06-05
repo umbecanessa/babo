@@ -131,7 +131,35 @@ Add identity field to contacts (`my_id` column pattern: `discord_id`, `slack_id`
 
 ---
 
-## Step 8: Legacy tool deprecation
+## Step 9: `manage_channel` / `channel_manage`
+
+Agents call the unified **`channel_manage`** tool (`nls/tools/agent_tools/channel_manage.py`). Dispatch lives in `nls/runtime/channel_manage.py`.
+
+**Bundled skills:** implement `manage_channel(agent_id, action, params)` on the adapter and optionally `channel_manage_actions()` for the action list. See `discord-channel/adapter.py` and `slack-channel/adapter.py`.
+
+**Custom skills:** either implement `manage_channel` on the adapter or register at skill load:
+
+```python
+from nls.runtime.channel_manage import register_channel_manage_handler
+
+async def my_manage(agent_id: str, action: str, params: dict) -> tuple[bool, str]:
+    ...
+
+my_manage.manage_actions = ["sync", "list", "enable"]  # optional
+register_channel_manage_handler("my-channel-key", my_manage)
+```
+
+Or from `SkillContext`:
+
+```python
+ctx.register_channel_manage("my-channel-key", my_manage)
+```
+
+Never expose raw credentials in tool results — read tokens server-side from saved skill config.
+
+---
+
+## Step 10: Legacy tool deprecation
 
 If replacing a JSON tool in `nls/config/tools/`, filter it in `server/routes/admin.py` `get_agent_tools` when the bundled skill is enabled.
 
@@ -151,6 +179,7 @@ Uses NestJS Resend APIs — see `email-channel` + `channels.controller.ts` `emai
 4. Verify agent reply on provider
 5. Test channel scope API + Tools UI toggles
 6. Test outbound guard (send to disallowed ID should fail)
+7. Test `channel_manage(channel='...', action='help')` lists expected actions
 
 ---
 

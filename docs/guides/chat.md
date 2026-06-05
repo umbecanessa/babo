@@ -42,9 +42,16 @@ Click tool cards to expand JSON output. Download cards appear when the agent use
 | Command | Action |
 |---------|--------|
 | `/sleep` | Start a consolidation sleep cycle |
-| `/sleep_confirm` | Confirm sleep when prompted |
+| `/sleep_confirm` | Confirm sleep when the drowsy card is shown |
+| `/sleep_deny` | Decline sleep and keep the agent awake |
 
 Sleep is useful after long teaching sessions or before ending work for the day.
+
+### Drowsy card
+
+When signal pressure is high, the agent may enter **drowsy** state. An amber inline card appears in the message list with **Rest up** and **Stay awake**. Either button sends `sleep_confirm` / `sleep_deny` over the WebSocket. Short replies like "yes" or "go ahead" also confirm while drowsy.
+
+The **signal sidebar** records a `drowsy` activity entry when negotiation starts. After confirm, status shows **sleeping** and consolidation events stream as usual.
 
 Full command list and wire format: **[Chat slash commands](../reference/chat-commands.md)**.
 

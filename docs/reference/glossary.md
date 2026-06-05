@@ -16,9 +16,11 @@
 | **Cryptex** | Layered long-term memory rings (`nls/brain/working_memory.py`) |
 | **Consciousness scheduler** | Chooses which agents run autonomous inner loops |
 | **Consolidation sleep** | LLM summarization into durable memory (not weight training) |
+| **Drowsy negotiation** | Pre-sleep confirm window when signal buffer is full — UI card + `sleep_confirm` / natural-language yes/no |
 | **Job** | Owner-defined employment charter (`data/agents/{id}/job.json`) — title, mission, scope, refusal voice |
 | **Trust** | Owner-defined action rails (`trust.json`) — tool allow/deny, per-channel profile caps |
 | **Squad** | Persistent multi-agent group on the dashboard with a lead, shared inbox, and squad tools |
+| **`channel_manage`** | Unified agent tool for channel admin (sync, scope, permissions) — dispatches to skill adapters |
 | **`squad_lead`** | Orchestration profile for a squad lead — extends `orchestrated` with squad coordination depth |
 | **Team** | Ephemeral sub-agent wave inside one parent agentic run (`TeamManager`, Projects UI) |
 | **Delegate / sub-agent** | Child agentic run with scoped context (`nls/agentic/orchestrator.py`) |

@@ -126,7 +126,8 @@ Response includes `ready: true` only after the Gateway receives Discord `READY` 
 | Tool | Purpose |
 |------|---------|
 | `discord_setup` | Validate token during onboarding |
-| `discord_send` | Outbound text/files (`channel_id`, optional `reply_to_message_id`) |
+| `discord_send` | Outbound text/files (`channel_id`, optional `reply_to_message_id`); peer @mentions use `allowed_mentions` |
+| `channel_manage` | Admin: `help`, sync scope, inspect config, grant bot access — preferred over legacy `discord_manage` |
 | `contacts` | `discord_id` field for first-contact outbound |
 | `skill_configure` | Owner, DM policy, allowlist |
 
@@ -140,6 +141,26 @@ When the skill is **enabled**, the agent can only send to:
 - `owner_identity` / `allow_from`
 
 This prevents accidental broadcast to arbitrary snowflake IDs.
+
+---
+
+## Multi-face Discord squads
+
+Squads often run **one bot per agent** (lead + members). Each bot has its own token and snowflake.
+
+**Lead workflow:**
+
+1. `squad(action='inspect')` — note each member's Discord bot id.
+2. `squad(action='check_channel_readiness', channel_id='...')` — verify every squad bot can see/send in the target guild channel.
+3. `squad(action='invite_squad_bots', channel_id='...')` — OAuth invites when bots are missing from the guild.
+4. `squad(action='configure_member', ...)` / `sync_member_channels` — enable member skills and scope without running member chat loops.
+5. `discord_send(channel_id='...', text='<@MEMBER_BOT_ID> ping')` — lead @mentions member bots for cross-bot tests.
+
+Member inbound respects `require_mention` and Babo channel scope. Squad peer pings require the target bot to be in the guild with read/send access.
+
+**Never** pass bot tokens through bash or Python — use `channel_manage`, `squad`, and `discord_send` only.
+
+See [Job, Trust & Squads](../job-trust-and-squads.md#discord-multi-face-squads).
 
 ---
 

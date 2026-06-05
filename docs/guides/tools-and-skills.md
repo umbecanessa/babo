@@ -36,7 +36,9 @@ Policy: `nls/skills_setup_policy.py`.
 
 ### Agent tools
 
-Built-in tools the loop can call (read, bash, browser, plan, team, etc.). Expand cards for parameter schemas.
+Built-in tools the loop can call (read, bash, browser, plan, team, squad, **channel_manage**, etc.). Expand cards for parameter schemas.
+
+**`channel_manage`** — channel-agnostic admin (sync scope, inspect config, grant access). Preferred over legacy per-channel manage tools when the bundled skill is enabled.
 
 ### Connected extensions
 

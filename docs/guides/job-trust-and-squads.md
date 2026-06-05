@@ -169,7 +169,9 @@ Registered on agents that belong to a squad (`AgentRuntime.sync_squad_tools()`):
 | Tool | Typical caller | Purpose |
 |------|----------------|---------|
 | `squad_setup` | Solo agent (pre-squad) | **`create`** squad with self as lead (requires `owner_confirmed` after `ask_user`) |
-| `squad` | Lead (full); members (read/propose) | inbox, fleet ops, **`set_member_job`**, **`set_lead_job`** (owner_confirmed), **`request_trust_change`**, **`spawn_member`**, etc. |
+| `squad` | Lead (full); members (read/propose) | inbox, fleet ops, member config, Discord readiness, … |
+| `channel_manage` | Any agent with skill enabled | Channel admin: sync scope, inspect config, grant access |
+| `channel_inspect` | Lead (optional `target_agent_id`) | Read-only skill/channel status for self or member |
 | `squad_escalate` | Members | Wake lead with open escalation |
 | `squad_message` | Any member | Internal peer message (optional wake) |
 | `squad_report_done` | Members | Complete approved squad todo → notify lead |
@@ -183,6 +185,9 @@ Registered on agents that belong to a squad (`AgentRuntime.sync_squad_tools()`):
 - **`add_member` / `remove_member`** — roster changes push `[SQUAD ROSTER UPDATE]` dispatches and refresh Cryptex membership on all affected runtimes.
 - **`pause_member` / `resume_member`** — per-agent consciousness pause (lead only).
 - **`request_delete_member`** — queues a pending action; **owner approves/denies** on the dashboard squad card before the agent is deleted.
+- **`inspect_member_config` / `configure_member`** — lead reads or writes a member's bundled skill config (schema-driven; `owner_confirmed=true` for secrets).
+- **`sync_member_channels`** — lead triggers Discord/Slack scope sync for a member (mirrors lead channels when member scope is empty).
+- **`check_channel_readiness` / `invite_squad_bots`** — audit and fix multi-bot guild channel access before cross-bot @mention tests.
 
 ### Dashboard squad UI
 
@@ -237,6 +242,48 @@ Typical fleet layout:
 
 The lead coordinates via squad tools; members escalate to the lead, not the owner’s private channel unless Trust allows.
 
+### Discord multi-face squads
+
+Each squad member is a **separate Discord bot application** (separate token, separate snowflake). The lead bot and member bots are not the same identity.
+
+| Role | Discord identity | Typical use |
+|------|------------------|-------------|
+| Lead | Lead bot token | Owner-facing coordination, `squad` tools, shared inbox |
+| Member | Member bot token | Domain work in scoped guild channels |
+
+**Per-member setup:** create a Discord app → connect in Babo (Tools → Discord) for that **member agent** → enable `discord-channel` → sync channel scope → invite the bot to the guild.
+
+**Lead-driven member channel setup** (member loop not required):
+
+```python
+squad(action='inspect_member_config', target_agent_id='member-uuid')
+squad(action='configure_member', target_agent_id='member-uuid',
+      skill='discord-channel', config={'enabled': True, 'require_mention': True})
+squad(action='sync_member_channels', target_agent_id='member-uuid', channel='discord')
+```
+
+**Guild readiness before cross-bot @mentions:**
+
+```python
+squad(action='check_channel_readiness', channel_id='123456789012345678')
+squad(action='invite_squad_bots', channel_id='123456789012345678')
+```
+
+Readiness checks each connected squad bot: guild membership, channel visibility, send permission, and Babo scope. `invite_squad_bots` returns OAuth invite URLs when bots are missing from the guild.
+
+**Multi-face testing:** the lead sends as **itself** and @mentions member snowflakes from `squad(action='inspect')`:
+
+```python
+discord_send(channel_id='...', text='<@MOD_BOT_ID> please ack')
+```
+
+Use `channel_manage(channel='discord', ...)` for Discord admin — **never** paste bot tokens into bash or Python.
+
+| Tool | Purpose |
+|------|---------|
+| `channel_manage` | Unified channel admin (`help`, `inspect`, `sync`, `configure`, …) |
+| `channel_inspect` | Read-only channel/skill status (lead may pass `target_agent_id`) |
+
 ---
 
 ## Example: three-agent Discord fleet
@@ -272,6 +319,9 @@ NestJS continues to handle auth, agent metadata, and channel relay. Job, trust, 
 | Squad registry / manager | `nls/agentic/squad_registry.py`, `squad_manager.py` |
 | Checkback scheduler | `nls/agentic/squad_checkback_scheduler.py` |
 | Squad tools | `nls/tools/agent_tools/squad.py` |
+| Channel admin | `nls/tools/agent_tools/channel_manage.py`, `nls/runtime/channel_manage.py` |
+| Discord squad readiness | `nls/runtime/discord_squad_readiness.py` |
+| Member skill config | `nls/runtime/skill_config_service.py` |
 | Profile spec | `nls/agentic/orchestration_profile_spec.py` (`squad_lead`) |
 | Depth nudges | `nls/agentic/profile_depth_policy.py` |
 | REST | `server/routes/job_trust.py`, `squads.py`, `squad_access.py` |

@@ -22,6 +22,21 @@ Client sends a message whose payload includes `command` (string). The handler di
 | `abort` | Set agentic abort signal if a task is running |
 | `status` | Snapshot: facts, hormones, ANS, heartbeat, optional `sections` filter |
 
+Send as `{ "type": "command", "command": "sleep_confirm" }` (or via `websocket.service.ts` `sendCommand()`).
+
+### Sleep command responses
+
+| Event | When |
+|-------|------|
+| `sleep_command_result` | After `sleep_confirm` / `sleep_deny` — `{ ok, action: "confirm" \| "deny", content? }` |
+| `status` | On successful confirm — `{ agent_status: "sleeping", sleep_reason }` |
+
+If the agent is not drowsy, confirm/deny returns `sleep_command_result` with `ok: false`.
+
+### Natural-language confirm/deny
+
+While drowsy, a normal chat message matching short affirmatives or denials is handled **before** the agentic loop (`try_handle_drowsy_text` in `sleep_negotiation.py`). Examples: `yes`, `go ahead`, `rest up` → confirm; `no`, `stay awake` → deny.
+
 Unknown commands return `{ type: "status", content: "Unknown command: ..." }`.
 
 ---

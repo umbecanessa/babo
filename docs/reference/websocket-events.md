@@ -29,6 +29,8 @@ Events are JSON messages with a `type` field. Chat streaming types are sent dire
 | `activity_status` | Short status line ("Running: …") |
 | `turn_thinking` | Per-iteration thinking summary |
 | `probe_signal` | Learning-signal vector for sidebar |
+| `drowsy` | Agent wants sleep — show amber confirm card (`signal_count`, optional message) |
+| `sleep_command_result` | Result of `sleep_confirm` / `sleep_deny` (`ok`, `action`, optional `content`) |
 | `delegate_start` / `delegate_end` / `delegate_progress` | Sub-agent delegation |
 | `browser_navigation` | Agent browser workspace update |
 | `ask_user` / `user_answer` / `communicate` | Interactive prompts |
@@ -40,7 +42,8 @@ Events are JSON messages with a `type` field. Chat streaming types are sent dire
 | `type` | Meaning |
 |--------|---------|
 | `sleep_start` / `sleep_cycle` / `sleep_complete` | Sleep pipeline |
-| `sleep_triggered` / `drowsy` | Sleep prompts |
+| `sleep_triggered` | Sleep queued (manual or pressure) |
+| `drowsy` | Drowsy negotiation started — UI should prompt confirm/deny |
 | `daydream` / `dream_finding` | DMN / dream events |
 | `drive_action` / `reach_out` | Autonomous drive engine |
 | `safety_net_learned` | Safety-net capture |

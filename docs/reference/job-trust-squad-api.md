@@ -241,7 +241,7 @@ Defined in `nls/tools/agent_tools/squad.py`:
 
 **All members:** `inspect`, `list_inbox`, `propose`
 
-**Lead only:** `approve`, `reject`, `assign`, `reassign`, `resolve_escalation`, `brief`, `checkback`, `pause`, `resume`, `status`, `add_member`, `remove_member`, `disband_member`, `pause_member`, `resume_member`, `spawn_member`, `set_member_job`, `set_lead_job` (owner_confirmed), `request_trust_change`, `request_delete_member`, `list_pending`, `inspect_member_config`, `configure_member`
+**Lead only:** `approve`, `reject`, `assign`, `reassign`, `resolve_escalation`, `brief`, `checkback`, `pause`, `resume`, `status`, `add_member`, `remove_member`, `disband_member`, `pause_member`, `resume_member`, `spawn_member`, `set_member_job`, `set_lead_job` (owner_confirmed), `request_trust_change`, `request_delete_member`, `list_pending`, `inspect_member_config`, `configure_member`, `sync_member_channels`, `check_channel_readiness`, `invite_squad_bots`
 
 Triage may emit hint `fleet:squad_candidate` when the owner describes a multi-agent fleet; the loop injects a bootstrap nudge.
 
@@ -259,8 +259,26 @@ Triage may emit hint `fleet:squad_candidate` when the owner describes a multi-ag
 | `spawn_member` | Create agent (`genesis_version` optional), set job, add to squad, brief |
 | `inspect_member_config` | Lead inspects member skill config (schema-aware, secrets masked) |
 | `configure_member` | Lead applies skill config on member (`skill_name` or `channel`, `skill_config`, `owner_confirmed=true` for secrets); wires Discord gateway when `bot_token` saved |
+| `sync_member_channels` | `{ target_agent_id, channel }` — sync Discord/Slack scope for a member; mirrors lead scope when member has none |
+| `check_channel_readiness` | `{ channel_id }` — per-bot guild visibility, send permission, Babo scope for lead + all members |
+| `invite_squad_bots` | `{ channel_id }` — OAuth invite URLs for squad bots not in the guild (lead bot needs Manage Channels to grant access) |
 | `request_delete_member` | Queue owner-approved delete; sole member disbands squad on approve |
 | `list_pending` | List pending owner actions |
+
+### `channel_manage` tool
+
+Defined in `nls/tools/agent_tools/channel_manage.py`; dispatch in `nls/runtime/channel_manage.py`.
+
+| Param | Description |
+|-------|-------------|
+| `channel` | Channel key: `discord`, `slack`, `telegram`, … |
+| `action` | Run `channel_manage(channel='discord')` with no action for help text |
+| `channel_id` | Guild/channel snowflake when action requires it |
+| `config` | Partial skill config for `configure` actions |
+
+Bundled adapters implement `manage_channel` on the skill adapter. Custom skills may call `register_channel_manage_handler()` at register time.
+
+**Deprecated:** per-channel `discord_manage` — use `channel_manage(channel='discord', ...)`.
 
 ---
 
