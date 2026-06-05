@@ -1,5 +1,6 @@
 @use "tailwindcss";
-@import "@xterm/xterm/css/xterm.css";
+@use "@xterm/xterm/css/xterm.css";
+@use "./app/shared/styles/modal";
 
 // ─── LIGHT THEME (default) ───────────────────────────────────────────
 :root {
@@ -262,8 +263,6 @@ a {
     text-decoration: underline;
   }
 }
-
-@import './app/shared/styles/modal';
 
 .glass-panel {
   background: var(--glass-bg);

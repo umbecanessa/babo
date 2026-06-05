@@ -2769,9 +2769,6 @@ $indigo-light: var(--accent-primary);
   &.done {
     border-color: rgba(52, 211, 153, 0.2);
   }
-  &.partial {
-    border-color: color-mix(in srgb, var(--accent-warning, #d4a017) 35%, transparent);
-  }
 }
 
 .delegate-member-header {
@@ -2877,6 +2874,11 @@ $indigo-light: var(--accent-primary);
 
 // ── Delegate (sub-agent) card ─────────────────────────────────
 
+.delegate-card.partial,
+.delegate-member-card.partial {
+  border-color: rgba(212, 160, 23, 0.35);
+}
+
 .delegate-card {
   width: 100%;
   max-width: 720px;
@@ -2897,8 +2899,7 @@ $indigo-light: var(--accent-primary);
     background: rgba(52, 211, 153, 0.04);
   }
   &.partial {
-    border-color: color-mix(in srgb, var(--accent-warning, #d4a017) 35%, transparent);
-    background: color-mix(in srgb, var(--accent-warning, #d4a017) 8%, transparent);
+    background: rgba(212, 160, 23, 0.04);
   }
   &.error {
     border-color: rgba(248, 113, 113, 0.25);
