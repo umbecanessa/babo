@@ -121,7 +121,7 @@ class ChannelInspectTool:
                     )
                 from nls.runtime.discord_squad_readiness import audit_squad_discord_channel
 
-                _, report = await audit_squad_discord_channel(
+                _, report, _playbook = await audit_squad_discord_channel(
                     self._agent_id, channel_id,
                 )
                 return ToolResult(content=report)

@@ -459,9 +459,14 @@ def block_tool_call(
                 if h and h.strip()
             }
             if tool_name in ("team", "delegate") and "fleet:squad_candidate" in _hint_tokens:
-                from nls.agentic.fleet_triage_policy import fleet_squad_team_block_message
+                from nls.agentic.fleet_triage_policy import (
+                    agent_in_squad,
+                    fleet_squad_team_block_message,
+                )
 
-                return fleet_squad_team_block_message()
+                _agent_id = getattr(hooks, "agent_id", "") if hooks else ""
+                if not agent_in_squad(_agent_id or ""):
+                    return fleet_squad_team_block_message()
             _msg = tool_not_allowed_message(
                 tool_name,
                 mode,

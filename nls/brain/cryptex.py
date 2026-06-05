@@ -1801,17 +1801,22 @@ class CryptexMemory:
         self._ring_priorities = priorities
         return phase
 
-    def activate_skill_discovery_boost(self, reason: str = "") -> None:
+    def activate_skill_discovery_boost(
+        self,
+        reason: str = "",
+        *,
+        unlocked_tools: set[str] | frozenset[str] | None = None,
+    ) -> None:
         """Upsert a high-salience skills-ring slot for stall/hint recovery."""
         from nls.agentic.skill_discovery_boost import (
-            SKILL_DISCOVERY_PROMPT,
             SKILL_DISCOVERY_SLOT_DOMAIN,
+            skill_discovery_prompt,
         )
 
         skills_ring = self._rings.get(RING_SKILLS)
         if skills_ring is None:
             return
-        body = SKILL_DISCOVERY_PROMPT
+        body = skill_discovery_prompt(unlocked_tools)
         if reason:
             body = f"{body}\n\nTrigger: {reason[:200]}"
         skills_ring.upsert_slot(

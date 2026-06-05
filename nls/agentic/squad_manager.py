@@ -1364,10 +1364,13 @@ class SquadManager:
                 "channel_id (Discord channel snowflake) is required for "
                 "check_channel_readiness — get it from channel_inspect(action='get')."
             )
-        faces, report = await audit_squad_discord_channel(lead_agent_id, channel_id)
+        faces, report, playbook = await audit_squad_discord_channel(lead_agent_id, channel_id)
         return {
             "channel_id": channel_id,
             "report": report,
+            "all_ready": playbook.get("all_ready", False),
+            "oauth_invites": playbook.get("oauth_invites", []),
+            "next_steps": playbook.get("next_steps", []),
             "faces": [
                 {
                     "agent_id": f.agent_id,
@@ -1375,6 +1378,7 @@ class SquadManager:
                     "role": f.role,
                     "discord_bot": f.bot_username,
                     "discord_bot_id": f.bot_id,
+                    "in_guild": f.in_guild,
                     "ok": f.issue == "OK — listening",
                     "issue": f.issue,
                 }
@@ -1397,10 +1401,15 @@ class SquadManager:
                 "channel_id is required for invite_squad_bots — lead bot needs "
                 "Manage Channels on that channel."
             )
-        results, report = await invite_squad_bots_to_channel(lead_agent_id, channel_id)
+        results, report, playbook = await invite_squad_bots_to_channel(
+            lead_agent_id, channel_id,
+        )
         return {
             "channel_id": channel_id,
             "report": report,
+            "all_ready": playbook.get("all_ready", False),
+            "oauth_invites": playbook.get("oauth_invites", []),
+            "next_steps": playbook.get("next_steps", []),
             "results": results,
         }
 

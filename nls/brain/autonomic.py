@@ -1649,13 +1649,13 @@ class AutonomicNervousSystem:
                     if self._is_infrastructure_credential(domain, fact):
                         wm = getattr(self, "_wm_ref", None)
                         if wm is not None:
-                            try:
-                                wm.upsert_credential(
-                                    domain=domain, content=fact,
-                                    source="ans", salience=1.0,
-                                )
-                            except Exception:
-                                pass
+                            from nls.runtime.channel_credential_policy import (
+                                upsert_wm_credential,
+                            )
+
+                            upsert_wm_credential(
+                                wm, domain=domain, fact=fact, source="ans",
+                            )
                         continue
                     sig = self.inject_signal(
                         signal_type="LEARN",
@@ -2096,18 +2096,16 @@ class AutonomicNervousSystem:
             if self._is_infrastructure_credential(domain, fact):
                 wm = getattr(self, "_wm_ref", None)
                 if wm is not None:
-                    try:
-                        wm.upsert_credential(
-                            domain=domain, content=fact,
-                            source="ans", salience=1.0,
-                        )
+                    from nls.runtime.channel_credential_policy import upsert_wm_credential
+
+                    if upsert_wm_credential(
+                        wm, domain=domain, fact=fact, source="ans",
+                    ):
                         logger.info(
                             "ANS: routed credential to WM slot (domain=%s)",
                             domain,
                         )
                         continue
-                    except Exception:
-                        logger.debug("upsert_credential failed", exc_info=True)
 
             sig = self.inject_signal(
                 signal_type="LEARN",
@@ -2538,11 +2536,14 @@ class AutonomicNervousSystem:
                 if _target_ring == "credentials":
                     wm = working_memory
                     if hasattr(wm, "upsert_credential"):
-                        wm.upsert_credential(
-                            domain=domain, content=fact,
-                            source="ans", salience=1.0,
+                        from nls.runtime.channel_credential_policy import (
+                            upsert_wm_credential,
                         )
-                        count += 1
+
+                        if upsert_wm_credential(
+                            wm, domain=domain, fact=fact, source="ans",
+                        ):
+                            count += 1
                     continue
 
                 ring = working_memory.get_ring(_target_ring)
@@ -2993,8 +2994,15 @@ class AutonomicNervousSystem:
                         wm = getattr(self, "_wm_ref", None)
                         if wm is not None:
                             try:
+                                from nls.runtime.channel_credential_policy import (
+                                    prepare_wm_credential_slot,
+                                )
+
+                                prepared = prepare_wm_credential_slot(domain, fact)
+                                if prepared is None:
+                                    continue
                                 wm.upsert_credential(
-                                    domain=domain, content=fact,
+                                    domain=domain, content=prepared,
                                     source="ans", salience=1.0,
                                 )
                             except Exception:
@@ -3008,13 +3016,13 @@ class AutonomicNervousSystem:
                         )
                         wm = getattr(self, "_wm_ref", None)
                         if wm is not None:
-                            try:
-                                wm.upsert_credential(
-                                    domain=domain, content=fact,
-                                    source="ans", salience=1.0,
-                                )
-                            except Exception:
-                                pass
+                            from nls.runtime.channel_credential_policy import (
+                                upsert_wm_credential,
+                            )
+
+                            upsert_wm_credential(
+                                wm, domain=domain, fact=fact, source="ans",
+                            )
                         continue
                     facts.append((domain, fact))
         return facts[:8], replacements, ans_signals

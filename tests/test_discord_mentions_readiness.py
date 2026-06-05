@@ -46,7 +46,19 @@ def test_issue_when_probe_unavailable():
     assert "could not verify" in issue
 
 
-def test_issue_ok_when_listening():
+def test_issue_when_bot_not_in_guild():
+    issue = _issue_for_face(
+        configured=True,
+        api_can_view=None,
+        scoped=False,
+        listening=False,
+        platform_access=None,
+        bot_username="Babo Mod",
+        in_guild=False,
+    )
+    assert "not in this Discord server" in issue
+    assert "oauth_invite_url" in issue
+
     issue = _issue_for_face(
         configured=True,
         api_can_view=True,

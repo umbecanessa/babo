@@ -335,6 +335,27 @@ def test_fleet_squad_intent_detection():
     assert "squad_setup" in fleet_active_tool_names()
     assert "squad_setup" in fleet_squad_bootstrap_message()
 
+    from unittest.mock import patch
+
+    with patch(
+        "nls.agentic.fleet_triage_policy.agent_in_squad",
+        return_value=True,
+    ):
+        goals3, hints3 = apply_fleet_hint_policy(
+            [HINT_FLEET_SQUAD, "setup:native_skill"],
+            ["Scaffold native Discord skill"],
+            agent_id="lead-in-squad",
+        )
+        assert HINT_FLEET_SQUAD not in hints3
+
+    with patch(
+        "nls.agentic.fleet_triage_policy.squad_role_for_agent",
+        return_value="lead",
+    ):
+        lead_tools = fleet_active_tool_names("lead-in-squad")
+        assert "squad" in lead_tools
+        assert "squad_setup" not in lead_tools
+
     from nls.engine.thalamic_router import predict_tools
 
     predicted = predict_tools(

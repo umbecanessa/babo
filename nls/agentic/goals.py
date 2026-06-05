@@ -90,11 +90,13 @@ class TurnTriage:
         self.profile = profile
         self.hints = hints
 
-    def reconcile_fleet_vs_skill_hints(self) -> None:
+    def reconcile_fleet_vs_skill_hints(self, *, agent_id: str = "") -> None:
         """Strip conflicting skill-setup hints/goals when triage emitted fleet staffing."""
         from nls.agentic.fleet_triage_policy import apply_fleet_hint_policy
 
-        self.goals, self.hints = apply_fleet_hint_policy(self.hints, self.goals)
+        self.goals, self.hints = apply_fleet_hint_policy(
+            self.hints, self.goals, agent_id=agent_id,
+        )
 
 _THINKING_BLOCK_RE = re.compile(
     r"<think>.*?</think>",

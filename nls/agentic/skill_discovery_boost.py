@@ -12,9 +12,16 @@ SKILL_DISCOVERY_PROMPT = (
     "1. clawhub(action='search', query='<keyword>') — find community skills\n"
     "2. discover_tools(query='<keyword>') — find deferred tools\n"
     "3. clawhub(action='install', slug='...') then follow skill instructions\n"
-    "4. wm(action='borrow', domain='Project.Credential.*') if auth is missing\n"
+    "4. wm(action='borrow', domain='Project.Credential.*') only for non-Discord auth gaps\n"
     "Do NOT loop on the same failing bash command."
 )
+
+
+def skill_discovery_prompt(unlocked_tools: set[str] | frozenset[str] | None = None) -> str:
+    """Dynamic stall prompt — prefer squad/channel tools when registered."""
+    from nls.agentic.channel_tool_policy import skill_discovery_prompt as _channel_prompt
+
+    return _channel_prompt(unlocked_tools)
 
 
 def trigger_skill_discovery_boost(
@@ -24,6 +31,7 @@ def trigger_skill_discovery_boost(
     reason: str = "stalled",
     ttl_iters: int = 6,
     orchestration_profile: str | None = None,
+    unlocked_tools: set[str] | frozenset[str] | None = None,
 ) -> None:
     """Raise skills/tools ring priority for the next few iterations."""
     from nls.agentic.profile_guard_policy import skill_discovery_on_stall_enabled
@@ -42,14 +50,18 @@ def trigger_skill_discovery_boost(
     compositor = getattr(hooks, "_cryptex_compositor", None)
     if compositor is not None and hasattr(compositor, "activate_skill_discovery_boost"):
         try:
-            compositor.activate_skill_discovery_boost(reason)
+            compositor.activate_skill_discovery_boost(
+                reason, unlocked_tools=unlocked_tools,
+            )
         except Exception:
             pass
 
     sub = getattr(hooks, "_sub_cryptex", None)
     if sub is not None and hasattr(sub, "activate_skill_discovery_boost"):
         try:
-            sub.activate_skill_discovery_boost(reason)
+            sub.activate_skill_discovery_boost(
+                reason, unlocked_tools=unlocked_tools,
+            )
         except Exception:
             pass
 

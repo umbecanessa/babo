@@ -926,7 +926,9 @@ async def run_loop(
         )
 
         if fleet_hint_active(state.hints):
-            _fleet_force_tools = set(fleet_active_tool_names())
+            _fleet_force_tools = set(
+                fleet_active_tool_names(getattr(hooks, "agent_id", "") or ""),
+            )
     except Exception:
         pass
     for _tool_name, _tool_obj in tools.items():
@@ -1251,28 +1253,31 @@ async def run_loop(
             apply_fleet_hint_policy,
             fleet_active_tool_names,
             fleet_hint_active,
-            fleet_squad_bootstrap_message,
         )
 
         state.goals, state.hints = apply_fleet_hint_policy(
             list(state.hints or []),
             list(state.goals or []),
+            agent_id=getattr(hooks, "agent_id", "") or "",
         )
         if fleet_hint_active(state.hints):
-            state.unlocked_tools.update(fleet_active_tool_names())
+            state.unlocked_tools.update(
+                fleet_active_tool_names(getattr(hooks, "agent_id", "") or ""),
+            )
     except Exception:
         pass
 
     try:
-        from nls.agentic.fleet_triage_policy import (
-            fleet_hint_active,
-            fleet_squad_bootstrap_message,
-        )
+        from nls.agentic.fleet_triage_policy import fleet_loop_context_message
 
-        if fleet_hint_active(state.hints):
+        _fleet_msg = fleet_loop_context_message(
+            getattr(hooks, "agent_id", "") or "",
+            list(state.hints or []),
+        )
+        if _fleet_msg:
             context.append({
                 "role": "system",
-                "content": fleet_squad_bootstrap_message(),
+                "content": _fleet_msg,
             })
     except Exception:
         pass
@@ -2464,6 +2469,7 @@ async def run_loop(
                 iteration=state.iteration,
                 reason="stall_detected",
                 orchestration_profile=state.orchestration_profile,
+                unlocked_tools=state.unlocked_tools,
             )
             logger.info(
                 "[LOOP:%s] iter %d: STALL nudge #%d injected",
@@ -2517,6 +2523,7 @@ async def run_loop(
                             iteration=state.iteration,
                             reason="orchestrator_hint",
                             orchestration_profile=state.orchestration_profile,
+                            unlocked_tools=state.unlocked_tools,
                         )
                     logger.info(
                         "[LOOP:%s] iter %d: STEERING injected %d msgs "
@@ -3392,6 +3399,7 @@ async def run_loop(
                         iteration=state.iteration,
                         reason="error_recovery",
                         orchestration_profile=state.orchestration_profile,
+                        unlocked_tools=state.unlocked_tools,
                     )
                     logger.info(
                         "[LOOP:%s] iter %d: ERROR_RECOVERY directive "
@@ -3979,6 +3987,7 @@ async def run_loop(
                                 iteration=state.iteration,
                                 reason="orchestrator_hint_post_tool",
                                 orchestration_profile=state.orchestration_profile,
+                                unlocked_tools=state.unlocked_tools,
                             )
                             logger.info(
                                 "[LOOP:%s] iter %d: ORCHESTRATOR HINT "

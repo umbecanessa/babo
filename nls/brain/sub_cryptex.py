@@ -1116,11 +1116,17 @@ class SubCryptex:
         )
         return True
 
-    def activate_skill_discovery_boost(self, reason: str = "", ttl_iters: int = 8) -> None:
+    def activate_skill_discovery_boost(
+        self,
+        reason: str = "",
+        ttl_iters: int = 8,
+        *,
+        unlocked_tools: set[str] | frozenset[str] | None = None,
+    ) -> None:
         """Promote skills ring when delegate is stuck or receives a hint."""
         from nls.agentic.skill_discovery_boost import (
-            SKILL_DISCOVERY_PROMPT,
             SKILL_DISCOVERY_SLOT_DOMAIN,
+            skill_discovery_prompt,
         )
 
         self._skill_boost_remaining = max(self._skill_boost_remaining, ttl_iters)
@@ -1128,7 +1134,7 @@ class SubCryptex:
         ring = self._rings.get(RING_SKILLS)
         if ring is None:
             return
-        body = SKILL_DISCOVERY_PROMPT
+        body = skill_discovery_prompt(unlocked_tools)
         if reason:
             body = f"{body}\n\nTrigger: {reason[:200]}"
         ring.upsert_slot(

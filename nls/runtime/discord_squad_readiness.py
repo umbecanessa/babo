@@ -29,6 +29,7 @@ class ChannelFaceStatus:
     scoped: bool
     listening: bool
     platform_access: bool | None
+    in_guild: bool | None = None
     issue: str = ""
 
 
@@ -69,15 +70,22 @@ def _issue_for_face(
     listening: bool,
     platform_access: bool | None,
     bot_username: str,
+    in_guild: bool | None = None,
 ) -> str:
     if not configured:
-        return "Discord not configured on this agent"
+        return "Discord not configured on this agent — squad(action='configure_member', ...)."
+    if in_guild is False:
+        label = f"@{bot_username}" if bot_username else "This bot"
+        return (
+            f"{label} is not in this Discord server — owner must open oauth_invite_url "
+            "from invite_squad_bots / check_channel_readiness next_steps."
+        )
     if api_can_view is False:
         label = f"@{bot_username}" if bot_username else "This bot"
         return (
-            f"{label} cannot view this channel — use "
-            "squad(action='invite_squad_bots', channel_id=...) or add the bot manually "
-            "in Discord channel settings."
+            f"{label} cannot view this channel — run "
+            "squad(action='invite_squad_bots', channel_id=...) or "
+            "channel_manage(action='grant_bot_access', channel_id=..., bot_user_id=...)."
         )
     if api_can_view is None and configured:
         label = f"@{bot_username}" if bot_username else "This bot"
@@ -100,8 +108,14 @@ def _issue_for_face(
 async def audit_squad_discord_channel(
     lead_agent_id: str,
     channel_id: str,
-) -> tuple[list[ChannelFaceStatus], str]:
+) -> tuple[list[ChannelFaceStatus], str, dict[str, Any]]:
     from server.main import app
+    from nls.runtime.discord_squad_playbook import (
+        build_playbook,
+        fetch_channel_guild_id,
+        playbook_summary,
+        probe_bot_in_guild,
+    )
 
     sm = getattr(app.state, "squad_manager", None)
     if sm is None:
@@ -121,13 +135,22 @@ async def audit_squad_discord_channel(
     if lead_entry and lead_entry.get("name"):
         channel_name = str(lead_entry["name"])
 
+    lead_token = str((lead_cfg or {}).get("bot_token") or "").strip()
+    guild_id = await fetch_channel_guild_id(lead_token, channel_id)
+
     faces: list[ChannelFaceStatus] = []
+    in_guild_by_agent: dict[str, bool | None] = {}
     for aid in squad.all_member_ids:
         meta = _agent_meta(sm, aid, squad)
         cfg = _load_discord_cfg(aid)
         entry = _channel_entry(cfg, channel_id)
         token = str((cfg or {}).get("bot_token") or "").strip()
         api_view = await probe_bot_channel_view(token, channel_id) if cfg else None
+
+        in_guild: bool | None = None
+        if guild_id and token and meta["role"] != "lead":
+            in_guild = await probe_bot_in_guild(token, guild_id)
+        in_guild_by_agent[aid] = in_guild
 
         configured = bool(cfg and token)
         scoped = entry is not None
@@ -145,6 +168,7 @@ async def audit_squad_discord_channel(
             scoped=scoped,
             listening=listening,
             platform_access=platform_access if isinstance(platform_access, bool) else None,
+            in_guild=in_guild,
         )
         face.issue = _issue_for_face(
             configured=face.configured,
@@ -153,32 +177,38 @@ async def audit_squad_discord_channel(
             listening=face.listening,
             platform_access=face.platform_access,
             bot_username=face.bot_username,
+            in_guild=in_guild,
         )
         faces.append(face)
+
+    playbook = build_playbook(
+        faces, channel_id, guild_id=guild_id, in_guild_by_agent=in_guild_by_agent,
+    )
 
     lines = [f"Squad channel readiness — #{channel_name} ({channel_id}):"]
     blocked = [f for f in faces if f.issue != "OK — listening"]
     for f in faces:
         bot = f"@{f.bot_username}" if f.bot_username else "(no bot)"
         lines.append(f"  • {f.name} [{f.role}] {bot}: {f.issue}")
-    if blocked:
-        lines.append(
-            "\n@mentions will not notify bots that cannot view the channel. "
-            "Fix order: squad(action='invite_squad_bots', channel_id=...) then "
-            "squad(action='sync_member_channels', target_agent_id=...) per member."
-        )
-    else:
-        lines.append("\nAll squad bots can view and listen in this channel.")
+    summary = playbook_summary(playbook)
+    if summary:
+        lines.append("")
+        lines.append(summary)
 
-    return faces, "\n".join(lines)
+    return faces, "\n".join(lines), playbook
 
 
 async def invite_squad_bots_to_channel(
     lead_agent_id: str,
     channel_id: str,
-) -> tuple[list[dict[str, Any]], str]:
+) -> tuple[list[dict[str, Any]], str, dict[str, Any]]:
     """Grant squad member bots channel access via lead bot, then sync member scope."""
     from server.main import app
+    from nls.runtime.discord_squad_playbook import (
+        build_playbook,
+        oauth_invite_url,
+        playbook_summary,
+    )
 
     sm = getattr(app.state, "squad_manager", None)
     if sm is None:
@@ -197,7 +227,9 @@ async def invite_squad_bots_to_channel(
     if not channel_id:
         raise ValueError("channel_id is required")
 
-    faces, before = await audit_squad_discord_channel(lead_agent_id, channel_id)
+    faces, before, playbook_before = await audit_squad_discord_channel(
+        lead_agent_id, channel_id,
+    )
     results: list[dict[str, Any]] = []
 
     for face in faces:
@@ -211,10 +243,29 @@ async def invite_squad_bots_to_channel(
                 "message": "No discord bot_id on this agent",
             })
             continue
+
+        if face.in_guild is False:
+            url = oauth_invite_url(face.bot_id)
+            results.append({
+                "agent_id": face.agent_id,
+                "name": face.name,
+                "bot_id": face.bot_id,
+                "ok": False,
+                "oauth_invite_url": url,
+                "message": (
+                    "Bot not in guild — owner must open oauth_invite_url, then re-run "
+                    "invite_squad_bots."
+                ),
+            })
+            continue
+
         ok, msg = await adapter.grant_channel_member_access(
             lead_agent_id, channel_id, face.bot_id, grant=True,
         )
         sync_note = ""
+        oauth_url = ""
+        if not ok and "not a member of this guild" in (msg or "").lower():
+            oauth_url = oauth_invite_url(face.bot_id)
         if ok:
             from nls.runtime.skill_config_service import finalize_discord_member_channels
 
@@ -222,25 +273,35 @@ async def invite_squad_bots_to_channel(
                 face.agent_id,
                 lead_agent_id=lead_agent_id,
             ) or ""
-        results.append({
+        entry: dict[str, Any] = {
             "agent_id": face.agent_id,
             "name": face.name,
             "bot_id": face.bot_id,
             "ok": ok,
             "message": msg or sync_note or "access granted",
-        })
+        }
+        if oauth_url:
+            entry["oauth_invite_url"] = oauth_url
+        results.append(entry)
 
-    _, after = await audit_squad_discord_channel(lead_agent_id, channel_id)
+    _, after, playbook_after = await audit_squad_discord_channel(
+        lead_agent_id, channel_id,
+    )
     lines = [f"Invite squad bots to channel {channel_id}:", before, "", "Actions taken:"]
     if not results:
         lines.append("  • (none — all squad bots already OK or not configured)")
     for r in results:
         status = "OK" if r["ok"] else "FAILED"
-        lines.append(f"  • {r['name']}: {status} — {r.get('message', '')}")
+        line = f"  • {r['name']}: {status} — {r.get('message', '')}"
+        if r.get("oauth_invite_url"):
+            line += f"\n    oauth_invite_url: {r['oauth_invite_url']}"
+        lines.append(line)
     lines.append("")
     lines.append("After:")
     lines.append(after.split("\n", 1)[-1] if "\n" in after else after)
-    return results, "\n".join(lines)
+    lines.append("")
+    lines.append(playbook_summary(playbook_after))
+    return results, "\n".join(lines), playbook_after
 
 
 def _load_discord_cfg(agent_id: str) -> dict[str, Any] | None:

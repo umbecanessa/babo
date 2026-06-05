@@ -4527,7 +4527,7 @@ class AgentRuntime:
 
                     _predicted = _predict_tools(user_input)
                     if fleet_hint_active(_fleet_hints):
-                        _predicted |= set(fleet_active_tool_names())
+                        _predicted |= set(fleet_active_tool_names(self.agent_id))
                     _active_tool_names = set(CORE_TOOLS) | _predicted
                     _dt = tool_dict.get("discover_tools")
                     if _dt is not None and hasattr(_dt, "set_registry"):

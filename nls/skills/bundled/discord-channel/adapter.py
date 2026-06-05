@@ -538,7 +538,7 @@ class DiscordAdapter:
             try:
                 from nls.runtime.discord_squad_readiness import audit_squad_discord_channel
 
-                _, report = await audit_squad_discord_channel(agent_id, channel_id)
+                _, report, _playbook = await audit_squad_discord_channel(agent_id, channel_id)
                 return True, report
             except Exception as exc:
                 return False, f"Error: {exc}"
@@ -1049,14 +1049,10 @@ class DiscordAdapter:
                     "Discord grant access [%s] ch=%s target=%s status=%s",
                     agent_id, channel_id, target_user_id, resp.status_code,
                 )
-                if resp.status_code == 403:
-                    return False, (
-                        "403 — this bot lacks Manage Channel / Manage Permissions on that "
-                        "channel. Re-invite the admin bot with Manage Channels, or add "
-                        "member bots manually in Discord channel settings."
-                    )
-                body = (resp.text or "")[:200]
-                return False, f"HTTP {resp.status_code}: {body}"
+                body = (resp.text or "")[:500]
+                from nls.runtime.discord_squad_playbook import grant_access_error_message
+
+                return False, grant_access_error_message(resp.status_code, body)
         except Exception as exc:
             logger.warning("Discord grant access failed: %s", exc)
             return False, str(exc)
