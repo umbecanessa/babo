@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import logging
 import re
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -230,3 +231,24 @@ def extract_trajectory(thinking: str, max_chars: int = 600) -> str:
             tail = tail[nl + 1:].lstrip()
 
     return tail
+
+
+def build_reasoning_prefill(
+    trajectory: str,
+    mode: str,
+    *,
+    last_error: str = "",
+) -> dict[str, Any] | None:
+    """Build an incomplete assistant message for cross-iteration reasoning continuation.
+
+    The message opens ``<think>`` without closing it so the backend
+    can use ``continue_final_message=True`` and the model picks up mid-thought.
+    """
+    if not trajectory or mode == "restart":
+        return None
+
+    content = f"<think>\n{trajectory.rstrip()}"
+    if mode == "evaluate" and last_error:
+        err = last_error.strip()[:300]
+        content += f"\n\n[Previous action failed: {err}]"
+    return {"role": "assistant", "content": content}

@@ -97,7 +97,11 @@ from .types import (
     virtual_tool_schemas_for_loop,
     virtual_tool_names_for_loop,
 )
-from nls.brain.thinking import assess_coherence, extract_trajectory
+from nls.brain.thinking import (
+    assess_coherence,
+    build_reasoning_prefill,
+    extract_trajectory,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -2614,7 +2618,9 @@ async def run_loop(
             EventType.TURN_START, {"iteration": state.iteration},
         ))
 
-        thinking = enable_thinking
+        thinking = (
+            enable_thinking and state.consecutive_thinking_spirals < 2
+        )
 
         # V5 reasoning continuation: build prefill message from trajectory
         _cortisol = 0.2
@@ -2632,14 +2638,13 @@ async def run_loop(
             has_trajectory=bool(_reasoning_trajectory),
         )
 
-        # Reasoning continuation (prefill) is DISABLED.
-        # continue_final_message=True bypasses the Qwen3.5 template's
-        # thinking flow control, causing the model to put its entire
-        # response inside <think> blocks with zero visible text.
-        # Without prefill, the template handles thinking properly and
-        # the model produces both reasoning AND visible text.
-        # TODO: revisit if vLLM adds proper thinking-aware continuation.
         _prefill: dict | None = None
+        if thinking and _thinking_mode in ("continue", "evaluate") and _reasoning_trajectory:
+            _prefill = build_reasoning_prefill(
+                _reasoning_trajectory,
+                _thinking_mode,
+                last_error=state.last_error_preview if _thinking_mode == "evaluate" else "",
+            )
 
         async def _gen_heartbeat() -> None:
             """Emit periodic status while generation is in progress."""
@@ -2735,9 +2740,10 @@ async def run_loop(
         from nls.agentic.generation_budget import (
             analyze_generation_budget,
             build_file_tool_recovery_nudge,
-            build_thinking_length_nudge,
+            build_thinking_spiral_recovery_nudge,
             clear_truncated_write_attempt,
             extract_file_tool_target,
+            is_thinking_spiral,
             record_truncated_file_events,
             should_suppress_error_recovery,
         )
@@ -2885,6 +2891,7 @@ async def run_loop(
 
         if response.tool_calls:
             state.consecutive_text_only = 0
+            state.consecutive_thinking_spirals = 0
             _iter_tool_names = [
                 tc.get("function", {}).get("name", "")
                 for tc in response.tool_calls
@@ -4466,12 +4473,15 @@ async def run_loop(
             # substantive (>150 chars) and we already have tool results,
             # prompt the model to surface its conclusion as visible text
             # instead of wasting iterations on stall nudges.
-            if _budget.thinking_budget_exhausted:
+            if is_thinking_spiral(response, _budget):
+                state.consecutive_thinking_spirals += 1
+                _spiral_tier = state.consecutive_thinking_spirals
                 logger.info(
-                    "[LOOP:%s] iter %d: THINKING_BUDGET_EXhausted nudge "
+                    "[LOOP:%s] iter %d: THINKING_SPIRAL tier=%d "
                     "(finish_reason=%s thinking_len=%d completion_tokens=%d)",
                     state.loop_id,
                     state.iteration,
+                    _spiral_tier,
                     response.finish_reason,
                     len(response.thinking),
                     response.completion_tokens,
@@ -4479,10 +4489,7 @@ async def run_loop(
                 _reasoning_trajectory = ""
                 context.append({
                     "role": "system",
-                    "content": build_thinking_length_nudge(
-                        len(response.thinking),
-                        config.max_new_tokens,
-                    ),
+                    "content": build_thinking_spiral_recovery_nudge(_spiral_tier),
                 })
                 state.consecutive_text_only = 0
                 await emit(on_event, AgentEvent(

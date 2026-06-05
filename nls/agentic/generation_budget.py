@@ -297,12 +297,56 @@ def build_thinking_length_nudge(
     thinking_len: int,
     max_new_tokens: int,
 ) -> str:
+    """Legacy alias — prefer tier-1 spiral nudge for thinking-loop recovery."""
+    _ = thinking_len, max_new_tokens
+    return build_thinking_spiral_nudge_tier1()
+
+
+def is_thinking_spiral(
+    response: GenerationResult,
+    budget: GenerationBudgetAnalysis,
+    *,
+    min_thinking_chars: int = 800,
+) -> bool:
+    """Detect extended internal reasoning with no tool action."""
+    if response.tool_calls:
+        return False
+    if budget.thinking_budget_exhausted:
+        return True
+
+    thinking = (response.thinking or "").strip()
+    if not thinking or len(thinking) < min_thinking_chars:
+        return False
+
+    text = (response.text or "").strip()
+    if text:
+        return False
+
+    finish = (getattr(response, "finish_reason", "") or "").strip().lower()
+    if finish == "length" or len(thinking) >= 2000:
+        return True
+    return False
+
+
+def build_thinking_spiral_nudge_tier1() -> str:
     return (
-        f"REASONING BUDGET EXHAUSTED: you used the full {max_new_tokens}-token "
-        f"output budget on internal reasoning (~{thinking_len} chars) without "
-        "calling any tool.\n"
-        "Stop extended planning. On your NEXT turn, call a tool immediately:\n"
-        "  - write() a small stub first, then edit() to expand,\n"
-        "  - or read() the reference file you need.\n"
-        "Do not spend another turn thinking — act now."
+        "THINKING LOOP DETECTED: you have spiraled into extended internal reasoning "
+        "without acting. You already thought about this enough — wrap it up and execute.\n"
+        "On your NEXT turn, call a tool immediately or give a concise final answer. "
+        "Do not spend another turn re-planning."
     )
+
+
+def build_thinking_spiral_nudge_tier2() -> str:
+    return (
+        "THINKING LOOP — SECOND STRIKE: you repeated extended reasoning without acting. "
+        "Thinking is DISABLED for this turn — act now with a tool call or concise answer.\n"
+        "You already analyzed enough. Execute immediately; do not re-plan."
+    )
+
+
+def build_thinking_spiral_recovery_nudge(consecutive_spirals: int) -> str:
+    """Tier-1 nudge on first spiral; tier-2 (thinking off) on second+."""
+    if consecutive_spirals >= 2:
+        return build_thinking_spiral_nudge_tier2()
+    return build_thinking_spiral_nudge_tier1()

@@ -10,15 +10,20 @@ from nls.agentic.generation_budget import (
     analyze_generation_budget,
     build_file_tool_recovery_nudge,
     build_thinking_length_nudge,
+    build_thinking_spiral_nudge_tier1,
+    build_thinking_spiral_nudge_tier2,
+    build_thinking_spiral_recovery_nudge,
     classify_truncated_file_tool,
     clear_truncated_write_attempt,
     content_looks_truncated,
     file_tool_call_looks_truncated,
+    is_thinking_spiral,
     output_budget_exhausted,
     record_truncated_file_events,
     should_suppress_error_recovery,
 )
 from nls.agentic.types import GenerationResult, LoopConfig
+from nls.brain.thinking import build_reasoning_prefill
 
 
 def test_output_budget_exhausted_at_cap():
@@ -163,6 +168,66 @@ def test_nudge_messages_actionable():
     assert "16000" in msg
     assert "stub" in msg.lower()
 
+    tier1 = build_thinking_spiral_nudge_tier1()
+    assert "THINKING LOOP" in tier1
+    assert "tool" in tier1.lower()
+
+    tier2 = build_thinking_spiral_nudge_tier2()
+    assert "DISABLED" in tier2
+
+    assert build_thinking_spiral_recovery_nudge(1) == tier1
+    assert build_thinking_spiral_recovery_nudge(2) == tier2
+
     think_nudge = build_thinking_length_nudge(12000, 16000)
-    assert "16000" in think_nudge
-    assert "tool" in think_nudge.lower()
+    assert "THINKING LOOP" in think_nudge
+
+
+def test_is_thinking_spiral_budget_exhausted():
+    response = GenerationResult(
+        thinking="plan " * 500,
+        completion_tokens=16000,
+        finish_reason="length",
+    )
+    config = LoopConfig(max_new_tokens=16000)
+    budget = analyze_generation_budget(response, config)
+    assert is_thinking_spiral(response, budget)
+
+
+def test_is_thinking_spiral_long_thinking_no_tools():
+    response = GenerationResult(
+        thinking="x" * 2500,
+        completion_tokens=5000,
+        finish_reason="stop",
+    )
+    config = LoopConfig(max_new_tokens=16000)
+    budget = analyze_generation_budget(response, config)
+    assert is_thinking_spiral(response, budget)
+
+
+def test_is_thinking_spiral_not_when_tools_called():
+    response = GenerationResult(
+        thinking="x" * 2500,
+        tool_calls=[{"function": {"name": "read", "arguments": "{}"}}],
+        finish_reason="tool_calls",
+    )
+    config = LoopConfig(max_new_tokens=16000)
+    budget = analyze_generation_budget(response, config)
+    assert not is_thinking_spiral(response, budget)
+
+
+def test_build_reasoning_prefill():
+    prefill = build_reasoning_prefill("I'll read the file next.", "continue")
+    assert prefill is not None
+    assert prefill["role"] == "assistant"
+    assert "<think>" in prefill["content"]
+    assert "read the file" in prefill["content"]
+    assert "</think>" not in prefill["content"]
+
+    assert build_reasoning_prefill("", "continue") is None
+    assert build_reasoning_prefill("x", "restart") is None
+
+    eval_prefill = build_reasoning_prefill(
+        "retrying", "evaluate", last_error="file not found",
+    )
+    assert eval_prefill is not None
+    assert "file not found" in eval_prefill["content"]

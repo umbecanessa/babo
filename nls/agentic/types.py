@@ -2100,6 +2100,7 @@ class LoopState:
     iteration: int = 0
     total_tool_calls: int = 0
     consecutive_text_only: int = 0
+    consecutive_thinking_spirals: int = 0
     consecutive_errors: int = 0
     overflow_retries: int = 0
     transient_retries: int = 0
