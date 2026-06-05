@@ -117,6 +117,7 @@ export interface ChatMessage {
     | 'safety_net_learned'
     | 'delegate_start'
     | 'delegate_end'
+    | 'delegate_batch_pill'
     | 'delegate_card'
     | 'channel_inbound'
     | 'channel_outbound'
@@ -187,11 +188,18 @@ export interface ChatMessage {
   /** Heartbeat status + elapsed */
   statusType?: string;
   elapsedMs?: number;
+  /** Sub-agent batch pill (compact chat surface for detached batches). */
+  batchId?: string;
+  batchCount?: number;
+  batchRunning?: number;
+  batchDone?: number;
+  batchComplete?: boolean;
   /** Sub-agent delegation card */
   delegate?: {
     number: number;
     task: string;
     status: 'running' | 'done' | 'error';
+    partialTimeout?: boolean;
     toolCalls: { name: string; args?: any; callId?: string; result?: string; isError?: boolean }[];
     summary?: string;
     iterations?: number;

@@ -1261,88 +1261,22 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                             })
                             return await asyncio.wait_for(fut, timeout=10.0)
 
-                        # Wire DelegateManager callbacks for batch
-                        # completion (WS broadcast + copilot_queue injection)
+                        # Wire DelegateManager callbacks for batch completion
                         _dm = getattr(runtime, "delegate_manager", None)
                         if _dm is not None:
                             _cm = getattr(app.state, "connection_manager", None)
+                            runtime._foreground_copilot_queue = copilot_queue
+                            from server.services.delegate_batch_hooks import (
+                                wire_runtime_batch_complete,
+                            )
 
-                            async def _on_batch_complete(batch_id, results):
-                                _summaries = []
-                                for r in results:
-                                    status = "done" if r.success else r.exit_reason
-                                    _summaries.append(
-                                        f"#{r.delegate_number} [{status}]: "
-                                        f"{r.summary[:200]}"
-                                    )
-                                _payload = {
-                                    "type": "delegate_batch_complete",
-                                    "batch_id": batch_id,
-                                    "count": len(results),
-                                    "results_summary": "\n".join(_summaries),
-                                }
-                                if _cm is not None:
-                                    await _cm.broadcast(agent_id, _payload)
-
-                                # Cancel the periodic check-back job now that
-                                # the batch is complete — no more check-ins needed.
-                                _sched_mgr = getattr(
-                                    app.state, "scheduler_manager", None,
-                                )
-                                if _sched_mgr is not None:
-                                    _job_name = f"delegate_checkback_{batch_id}"
-                                    if _sched_mgr.remove_job(_job_name):
-                                        logger.info(
-                                            "Agent %s: removed delegate check-back "
-                                            "job '%s' (batch complete)",
-                                            agent_id, _job_name,
-                                        )
-                                _compile_prompt = (
-                                    f"[DELEGATE_RESULTS] All {len(results)} "
-                                    f"sub-agents completed (batch {batch_id})."
-                                    f"\n\nResults:\n"
-                                    + "\n".join(_summaries)
-                                    + "\n\nCompile these results into a full "
-                                    "report and DELIVER to the user via their "
-                                    "preferred channel (see [CHANNEL ROUTING] "
-                                    "if present). Do NOT just post in chat if "
-                                    "the user requested delivery elsewhere."
-                                )
-                                # Also inject into copilot_queue as fallback
-                                # (picked up if an agentic loop is running)
-                                copilot_queue.put_nowait(_compile_prompt)
-
-                                # Proactively trigger autonomous dispatch via
-                                # inner loop so the orchestrator compiles and
-                                # delivers results without waiting for the user.
-                                _cs = getattr(
-                                    app.state, "consciousness_scheduler", None,
-                                )
-                                _entry = (
-                                    _cs._agents.get(agent_id)
-                                    if _cs is not None else None
-                                )
-                                _il = (
-                                    getattr(_entry, "inner_loop", None)
-                                    if _entry is not None else None
-                                )
-                                if _il is not None:
-                                    _il.enqueue_autonomous_dispatch(
-                                        _compile_prompt,
-                                        source="delegate_batch_complete",
-                                    )
-                                    logger.info(
-                                        "Agent %s: delegate batch %s — "
-                                        "autonomous dispatch enqueued",
-                                        agent_id, batch_id,
-                                    )
-                                else:
-                                    logger.info(
-                                        "Agent %s: delegate batch %s complete "
-                                        "— %d results in copilot_queue "
-                                        "(no inner loop for auto-dispatch)",
-                                        agent_id, batch_id, len(results),
-                                    )
+                            wire_runtime_batch_complete(
+                                _dm,
+                                agent_id,
+                                get_copilot_queue=lambda: getattr(
+                                    runtime, "_foreground_copilot_queue", None,
+                                ),
+                            )
 
                             _tm_for_progress = getattr(runtime, "_team_manager", None)
 
@@ -1365,7 +1299,6 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                                     except Exception:
                                         pass
 
-                            _dm._on_batch_complete = _on_batch_complete
                             _dm._on_delegate_progress = _on_progress
 
                         # Wire copilot_queue into TeamManager so escalation
@@ -2241,6 +2174,16 @@ async def _dispatch_agentic_event(
             **_sa_tag,
         })
 
+    elif etype == "delegate_batch_started":
+        await websocket.send_json({
+            "type": "delegate_batch_started",
+            "batch_id": data.get("batch_id", ""),
+            "count": data.get("count", 0),
+            "delegate_numbers": data.get("delegate_numbers", []),
+            "iteration": data.get("iteration", 0),
+            "simple_delegate": data.get("simple_delegate", False),
+        })
+
     elif etype == "delegate_spawn":
         _spawn_payload: dict = {
             "type": "delegate_start",
@@ -2249,6 +2192,8 @@ async def _dispatch_agentic_event(
             "max_steps": data.get("max_steps", 8),
             "iteration": data.get("iteration", 0),
         }
+        if data.get("batch_id"):
+            _spawn_payload["batch_id"] = data["batch_id"]
         if data.get("team_id"):
             _spawn_payload["team_id"] = data["team_id"]
         if data.get("wave_attempt") is not None:
@@ -2282,7 +2227,7 @@ async def _dispatch_agentic_event(
         await websocket.send_json(_start_payload)
 
     elif etype == "delegate_complete":
-        await websocket.send_json({
+        _end_payload: dict = {
             "type": "delegate_end",
             "delegate_number": data.get("delegate_number", 0),
             "delegate_task": data.get("delegate_task", ""),
@@ -2291,7 +2236,12 @@ async def _dispatch_agentic_event(
             "aborted": data.get("aborted", False),
             "summary": data.get("summary", ""),
             "iteration": data.get("iteration", 0),
-        })
+        }
+        if data.get("batch_id"):
+            _end_payload["batch_id"] = data["batch_id"]
+        if data.get("partial"):
+            _end_payload["partial"] = True
+        await websocket.send_json(_end_payload)
 
     elif etype == "delegate_failed":
         await websocket.send_json({
@@ -2306,7 +2256,7 @@ async def _dispatch_agentic_event(
         })
 
     elif etype == "delegate_end":
-        await websocket.send_json({
+        _generic_end: dict = {
             "type": "delegate_end",
             "delegate_number": data.get("delegate_number", 0),
             "delegate_task": data.get("delegate_task", ""),
@@ -2315,7 +2265,12 @@ async def _dispatch_agentic_event(
             "aborted": data.get("aborted", False),
             "summary": data.get("summary", ""),
             "iteration": data.get("iteration", 0),
-        })
+        }
+        if data.get("batch_id"):
+            _generic_end["batch_id"] = data["batch_id"]
+        if data.get("partial"):
+            _generic_end["partial"] = True
+        await websocket.send_json(_generic_end)
 
     elif etype == "browser_navigation":
         await websocket.send_json({

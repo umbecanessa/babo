@@ -24,7 +24,8 @@
            [class.budget-row]="msg.type === 'loop_budget_prompt'"
            [class.agentic-row]="msg.type === 'agentic_start' || msg.type === 'agentic_iteration' || msg.type === 'agentic_complete' || msg.type === 'turn_thinking' || msg.type === 'tool_output_chunk' || msg.type === 'tool_progress' || msg.type === 'browser_navigation' || msg.type === 'copilot_ack' || msg.type === 'ask_user'"
            [class.activity-row]="msg.type === 'activity_status'"
-           [class.delegate-row]="msg.type === 'delegate_card' && !isInGroupedWave($index)">
+           [class.delegate-row]="msg.type === 'delegate_card' && !isInGroupedWave($index)"
+           [class.delegate-batch-row]="msg.type === 'delegate_batch_pill'">
 
         @if (msg.type === 'user') {
           <div class="msg-bubble user-bubble transcript-user">
@@ -283,7 +284,8 @@
                   @if (member.delegate) {
                     <div class="delegate-member-card"
                          [class.running]="member.delegate.status === 'running'"
-                         [class.done]="member.delegate.status === 'done'"
+                         [class.done]="member.delegate.status === 'done' && !member.delegate.partialTimeout"
+                         [class.partial]="member.delegate.status === 'done' && member.delegate.partialTimeout"
                          [class.error]="member.delegate.status === 'error'">
                       <button type="button" class="delegate-member-header"
                               (click)="delegateToggle.emit(member.delegate.number)">
@@ -344,14 +346,32 @@
               <div class="delegate-wave-collapsed">{{ waveSubtitle(memberIndices) }} — expand for details</div>
             }
           </div>
+        } @else if (msg.type === 'delegate_batch_pill') {
+          <div class="delegate-batch-pill" [class.complete]="msg.batchComplete">
+            <span class="delegate-batch-icon" aria-hidden="true">
+              @if (msg.batchComplete) {
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-success)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              } @else {
+                <span class="delegate-spinner"></span>
+              }
+            </span>
+            <span class="delegate-batch-text">{{ msg.content }}</span>
+            @if (agentId) {
+              <a class="delegate-batch-link" [routerLink]="['/projects', agentId]">Projects</a>
+            }
+          </div>
         } @else if (msg.type === 'delegate_card' && msg.delegate) {
           <!-- Single sub-agent card (no team group) -->
           <div class="delegate-card" [class.running]="msg.delegate.status === 'running'"
-               [class.done]="msg.delegate.status === 'done'" [class.error]="msg.delegate.status === 'error'">
+               [class.done]="msg.delegate.status === 'done' && !msg.delegate.partialTimeout"
+               [class.partial]="msg.delegate.status === 'done' && msg.delegate.partialTimeout"
+               [class.error]="msg.delegate.status === 'error'">
             <button type="button" class="delegate-card-header" (click)="delegateToggle.emit(msg.delegate.number)">
               <span class="delegate-card-icon">
                 @if (msg.delegate.status === 'running') {
                   <span class="delegate-spinner"></span>
+                } @else if (msg.delegate.status === 'done' && msg.delegate.partialTimeout) {
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-warning, #d4a017)" stroke-width="2.5"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="13"></line><circle cx="12" cy="16.5" r="0.5" fill="currentColor"></circle></svg>
                 } @else if (msg.delegate.status === 'done') {
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent-success)" stroke-width="2.5"><polyline points="20 6 9 17 4 12"></polyline></svg>
                 } @else {
@@ -367,7 +387,7 @@
                     <span class="delegate-card-badge running">working...</span>
                   }
                 } @else {
-                  <span class="delegate-card-stats">{{ msg.delegate.totalToolCalls || msg.delegate.toolCalls.length }} tools</span>
+                  <span class="delegate-card-stats">{{ msg.delegate.totalToolCalls || msg.delegate.toolCalls.length }} tools@if (msg.delegate.partialTimeout) { · partial}</span>
                 }
               </span>
               <span class="delegate-card-chevron" [class.expanded]="msg.delegate.expanded">

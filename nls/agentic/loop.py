@@ -39,8 +39,10 @@ from .orchestration_policy import (
     build_simple_delegate_wake_message,
     invalidate_tool_policy_cache,
     is_conversational_user_turn,
+    is_delegate_checkback_dispatch,
     is_simple_delegate_monitoring,
     on_evaluating_wave,
+    prepare_simple_delegate_monitoring,
     refresh_tool_schemas,
     should_force_coordinator_yield,
     should_suppress_checkback_wake,
@@ -1113,16 +1115,8 @@ async def run_loop(
                 "delegate(s) in prior loop",
                 state.loop_id, state.delegate_count, _running_delegates,
             )
-            if is_simple_delegate_monitoring(
-                state,
-                delegate_manager,
-                team_manager=_cached_team_manager,
-            ):
-                state.simple_delegate_monitoring = True
-                state.must_await_delegates = True
-                if state.active_mode == AgentMode.EXECUTING:
-                    state.active_mode = AgentMode.MONITORING
-                    invalidate_tool_policy_cache(state)
+            # Monitoring policy (mode/tools) is applied on orchestration wake
+            # only — do not hijack a fresh user turn while delegates run.
 
     if copilot_queue is not None and hooks.copilot_queue is None:
         hooks.copilot_queue = copilot_queue
@@ -1268,6 +1262,12 @@ async def run_loop(
             context, dispatch_source,
         )
         if delegates_running(delegate_manager):
+            prepare_simple_delegate_monitoring(
+                state,
+                delegate_manager,
+                team_manager=_cached_team_manager,
+                dispatch_source=dispatch_source,
+            )
             if should_suppress_checkback_wake(
                 _dual_wm, dispatch_source, delegates_active=True,
             ):
@@ -4937,9 +4937,16 @@ async def run_loop(
                 except Exception:
                     pass
             _monitoring_should_yield = (
-                state.active_mode == AgentMode.MONITORING
-                and state.coordinator_mode
-                and _bg_delegates
+                (
+                    state.active_mode == AgentMode.MONITORING
+                    and state.coordinator_mode
+                    and _bg_delegates
+                )
+                or (
+                    getattr(state, "simple_delegate_monitoring", False)
+                    and _bg_delegates
+                    and state.consecutive_text_only >= 1
+                )
             )
             _evaluating_text_spiral = (
                 state.active_mode == AgentMode.EVALUATING
@@ -4984,7 +4991,7 @@ async def run_loop(
                         "this loop.\n"
                         "Call await_delegates(summary='...') NOW to exit "
                         "cleanly. You will be re-activated automatically "
-                        "when waves complete or milestones occur."
+                        "when delegates finish or on the next check-back."
                     )
                 else:
                     stall_msg = (

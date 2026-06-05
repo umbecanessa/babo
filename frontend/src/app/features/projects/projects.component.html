@@ -88,6 +88,20 @@
 
         }
 
+        @if (orchLiveDelegateCount() > 0) {
+
+          <div class="orch-ribbon-divider"></div>
+
+          <div class="orch-ribbon-item">
+
+            <span class="orch-ribbon-val">{{ orchLiveDelegateCount() }}</span>
+
+            <span class="orch-ribbon-label">{{ orchLiveDelegateCount() === 1 ? 'Sub-agent Active' : 'Sub-agents Active' }}</span>
+
+          </div>
+
+        }
+
         @if (orchUnlaunchedCount() > 0) {
 
           <div class="orch-ribbon-divider"></div>
@@ -203,6 +217,8 @@
               [items]="svc.items()"
 
               [plansByTodoId]="svc.plansByTodoId()"
+
+              [liveDelegates]="runView.liveDelegates()"
 
               [compact]="true"
 

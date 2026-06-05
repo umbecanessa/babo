@@ -4312,6 +4312,39 @@ class AgentRuntime:
                     _dm_state_path = self.agent_dir / "delegates.json"
                     if _dm_state_path.exists():
                         self.delegate_manager.load_state(_dm_state_path)
+                    try:
+                        from server.services.delegate_batch_hooks import (
+                            wire_runtime_batch_complete,
+                        )
+
+                        wire_runtime_batch_complete(
+                            self.delegate_manager,
+                            self.agent_id,
+                            get_copilot_queue=lambda: self._foreground_copilot_queue,
+                        )
+                    except Exception:
+                        logger.debug(
+                            "[Agent] agent=%s: runtime batch-complete hook skipped",
+                            self.agent_id,
+                            exc_info=True,
+                        )
+                elif self.delegate_manager is not None:
+                    try:
+                        from server.services.delegate_batch_hooks import (
+                            wire_runtime_batch_complete,
+                        )
+
+                        wire_runtime_batch_complete(
+                            self.delegate_manager,
+                            self.agent_id,
+                            get_copilot_queue=lambda: self._foreground_copilot_queue,
+                        )
+                    except Exception:
+                        logger.debug(
+                            "[Agent] agent=%s: runtime batch-complete hook skipped",
+                            self.agent_id,
+                            exc_info=True,
+                        )
 
                 # Wire delegate_manager into delegate_ring tool
                 if self.delegate_manager is not None:

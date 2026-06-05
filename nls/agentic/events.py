@@ -50,6 +50,7 @@ class EventType(str, Enum):
 
     # Delegation
     DELEGATE_SPAWN = "delegate_spawn"
+    DELEGATE_BATCH_STARTED = "delegate_batch_started"
     DELEGATE_PROGRESS = "delegate_progress"
     DELEGATE_COMPLETE = "delegate_complete"
     DELEGATE_FAILED = "delegate_failed"

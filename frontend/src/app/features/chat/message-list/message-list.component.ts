@@ -4,6 +4,7 @@ import {
   OnChanges, SimpleChanges, OnDestroy,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { ChatMessage, AgenticToolCall, AgenticToolResult, MessageAttachment } from '../../../core/services/websocket.service';
 import {
@@ -35,7 +36,7 @@ export type { SignalTag };
 @Component({
   selector: 'app-message-list',
   standalone: true,
-  imports: [CommonModule, FormsModule, MarkdownPipe],
+  imports: [CommonModule, FormsModule, MarkdownPipe, RouterModule],
   templateUrl: './message-list.component.html',
   styleUrl: './message-list.component.scss',
 })

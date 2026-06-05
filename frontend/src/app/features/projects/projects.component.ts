@@ -91,8 +91,11 @@ export class ProjectsComponent implements OnInit, OnDestroy {
   hasOrchData = computed(
     () =>
       this.svc.activeTeams().length > 0
-      || this.orchPlanStats().total > 0,
+      || this.orchPlanStats().total > 0
+      || this.runView.runningDelegateCount() > 0,
   );
+
+  orchLiveDelegateCount = computed(() => this.runView.runningDelegateCount());
 
   orchUnlaunchedCount = computed(() => this.svc.unlaunchedTeams().length);
 

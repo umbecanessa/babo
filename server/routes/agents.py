@@ -687,6 +687,67 @@ async def get_narrative_episodes(agent_id: str, request: Request):
     }
 
 
+@router.get("/{agent_id}/delegates")
+async def get_agent_delegates(agent_id: str, request: Request):
+    """Return persisted detached-delegate state (for RunView hydrate on connect)."""
+    import json as _json
+
+    agent_dir = request.app.state.settings.agents_dir / agent_id
+    if not agent_dir.exists():
+        raise HTTPException(status_code=404, detail="Agent not found")
+
+    path = agent_dir / "delegates.json"
+    if not path.exists():
+        return {"batches": {}, "delegates": [], "running_count": 0}
+
+    try:
+        raw = _json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"Invalid delegates.json: {exc}") from exc
+
+    batches = raw.get("batches") or {}
+    delegates_out = []
+    running = 0
+    for key, d in (raw.get("delegates") or {}).items():
+        state = str(d.get("state") or "unknown")
+        if state == "running":
+            running += 1
+        summary = str(d.get("summary") or "")
+        timed_out = "timed out after" in summary
+        has_digest = "[DELEGATE KNOWLEDGE DIGEST]" in summary
+        has_artifacts = any(
+            marker in summary
+            for marker in (
+                "files_created",
+                "files_modified",
+                ".md",
+                "ARCHITECTURE",
+                "SUMMARY",
+            )
+        )
+        partial = timed_out and (has_digest or has_artifacts)
+        delegates_out.append({
+            "delegate_number": d.get("delegate_number", int(key) if str(key).isdigit() else -1),
+            "task": d.get("task", ""),
+            "batch_id": d.get("batch_id", ""),
+            "state": state,
+            "iteration": d.get("iteration", 0),
+            "max_iterations": d.get("max_iterations", 0),
+            "total_tool_calls": d.get("total_tool_calls", 0),
+            "summary": summary,
+            "exit_reason": d.get("exit_reason", ""),
+            "elapsed": d.get("elapsed", 0),
+            "partial": partial,
+            "timed_out": timed_out,
+        })
+
+    return {
+        "batches": batches,
+        "delegates": delegates_out,
+        "running_count": running,
+    }
+
+
 @router.get("/{agent_id}/network-dynamics")
 async def get_network_dynamics(agent_id: str, request: Request):
     """Return network dynamics activation levels and transitions."""

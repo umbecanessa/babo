@@ -18,7 +18,7 @@
           }
         </span>
         <span class="run-panel-titles">
-          <span class="run-panel-title">{{ run.title() || 'Current run' }}</span>
+          <span class="run-panel-title">{{ run.displayTitle() }}</span>
           <span class="run-panel-summary">{{ run.headerSummary() }}</span>
         </span>
         @if (run.background()) {
@@ -125,7 +125,12 @@
 
           @if (run.unassignedDelegates().length > 0) {
             <div class="run-unassigned">
-              <span class="run-unassigned-label">Other agents</span>
+              <span class="run-unassigned-label">
+                Sub-agents
+                @if (run.batchCount() && run.steps().length === 0) {
+                  <span class="run-batch-label">· batch {{ run.batchCount() }}</span>
+                }
+              </span>
               @for (d of run.unassignedDelegates(); track delegateTrackKey(d)) {
                 <ng-container *ngTemplateOutlet="delegateBlock; context: { $implicit: d }"></ng-container>
               }
@@ -141,7 +146,8 @@
   <div class="run-delegate"
        [class.queued]="d.status === 'queued'"
        [class.running]="d.status === 'running'"
-       [class.done]="d.status === 'done'"
+       [class.done]="d.status === 'done' && !d.partialTimeout"
+       [class.partial]="d.status === 'done' && d.partialTimeout"
        [class.error]="d.status === 'error'">
     <button type="button" class="run-delegate-header" (click)="run.toggleDelegateExpanded(delegateTrackKey(d))">
       <span class="run-delegate-num">{{ delegateLabel(d) }}</span>
@@ -156,7 +162,7 @@
             working…
           }
         } @else {
-          {{ d.totalToolCalls ?? d.toolCalls.length }} tools
+          {{ d.totalToolCalls ?? d.toolCalls.length }} tools@if (d.partialTimeout) { · partial}
         }
       </span>
       <span class="run-delegate-chevron" [class.expanded]="d.expanded" aria-hidden="true">

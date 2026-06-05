@@ -19,6 +19,7 @@ export interface RunDelegate {
   task: string;
   status: RunDelegateStatus;
   stepId: string;
+  batchId?: string;
   teamId?: string;
   teamName?: string;
   waveAttempt?: number;
@@ -27,6 +28,8 @@ export interface RunDelegate {
   iterations?: number;
   totalToolCalls?: number;
   summary?: string;
+  /** Timed out but produced digest/artifacts — treat as partial success. */
+  partialTimeout?: boolean;
   toolCalls: RunDelegateToolCall[];
   expanded: boolean;
 }
@@ -57,6 +60,8 @@ export interface RunViewSnapshot {
   planId: string;
   title: string;
   todoId?: string;
+  batchId?: string;
+  batchCount?: number;
   steps: RunStep[];
   waves: RunWave[];
   expanded: boolean;

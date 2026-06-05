@@ -108,6 +108,14 @@ export class ProjectService {
       complete: () => finishLoad(),
     });
 
+    this.api.getAgentDelegates(this.agentId).subscribe({
+      next: (data) => {
+        if (gen !== this.loadGeneration) return;
+        this.runView.hydrateDelegates(data);
+      },
+      error: () => {},
+    });
+
     this.api.getTodoLists(this.agentId).subscribe({
       next: (res) => {
         if (gen !== this.loadGeneration) return;

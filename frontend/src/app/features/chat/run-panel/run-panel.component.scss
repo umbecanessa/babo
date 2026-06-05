@@ -399,6 +399,13 @@
   padding: 0 8px 6px;
 }
 
+.run-batch-label {
+  text-transform: none;
+  letter-spacing: normal;
+  font-weight: 600;
+  opacity: 0.75;
+}
+
 .run-delegate {
   border-radius: 8px;
   border: 1px solid var(--glass-border);
@@ -412,6 +419,10 @@
   &.queued {
     border-style: dashed;
     opacity: 0.85;
+  }
+
+  &.partial {
+    border-color: color-mix(in srgb, var(--accent-warning, #d4a017) 40%, var(--glass-border));
   }
 }
 

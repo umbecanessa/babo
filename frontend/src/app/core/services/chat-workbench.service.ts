@@ -820,6 +820,7 @@ export class ChatWorkbenchService {
       }
 
       case 'delegate_start': {
+        if (msg.batch_id) break;
         const dNum =
           typeof msg.delegate_number === 'number' && msg.delegate_number >= 0
             ? msg.delegate_number
@@ -842,18 +843,21 @@ export class ChatWorkbenchService {
           typeof msg.delegate_number === 'number' && msg.delegate_number >= 0
             ? msg.delegate_number
             : 0;
-        const aborted = msg.aborted || false;
+        const partial = !!msg.partial;
+        const aborted = !partial && (msg.aborted || false);
         const summary = (msg.summary || '').slice(0, 200);
         const iters = msg.iterations || 0;
         const tc = msg.tool_calls || 0;
         this._upsert(`delegate-${dNum}`, {
           lane,
           kind: 'agentic',
-          title: aborted
-            ? `Sub-agent #${dNum} stopped`
-            : `Sub-agent #${dNum} completed`,
+          title: partial
+            ? `Sub-agent #${dNum} partial (timed out)`
+            : aborted
+              ? `Sub-agent #${dNum} stopped`
+              : `Sub-agent #${dNum} completed`,
           subtitle: summary || `${iters} steps, ${tc} tools`,
-          status: aborted ? 'error' : 'ok',
+          status: partial ? 'warn' : (aborted ? 'error' : 'ok'),
           toolLabel: 'Delegate',
           delegateNumber: dNum,
         });
@@ -876,6 +880,21 @@ export class ChatWorkbenchService {
           status: 'running',
           toolLabel: 'Delegate',
           delegateNumber: dNum,
+        });
+        break;
+      }
+
+      case 'delegate_batch_started': {
+        const count = msg.count || 0;
+        const batchId = msg.batch_id || 'batch';
+        this._upsert(`delegate-batch-${batchId}`, {
+          lane,
+          kind: 'agentic',
+          title: `${count} sub-agents launched`,
+          subtitle: 'Monitor in Run panel / Projects',
+          status: 'running',
+          toolLabel: 'Delegate',
+          correlationKey: `batch-${batchId}`,
         });
         break;
       }

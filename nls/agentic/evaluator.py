@@ -23,6 +23,7 @@ from enum import Enum, auto
 from typing import Any
 
 from .types import LoopConfig, LoopState
+from .orchestration_policy import is_delegate_checkback_dispatch
 
 logger = logging.getLogger(__name__)
 
@@ -234,6 +235,27 @@ def _delegates_in_background(
     return False
 
 
+def _await_delegates_used_recently(state: "LoopState") -> bool:
+    tail = state.cumulative_actions[-8:] if state.cumulative_actions else []
+    return any("await_delegates" in a for a in tail)
+
+
+def _simple_delegate_blocks_prose_exit(
+    state: "LoopState",
+    delegate_manager: Any | None = None,
+) -> bool:
+    """Block implicit prose exit while detached delegates run without await_delegates."""
+    if not getattr(state, "simple_delegate_monitoring", False):
+        return False
+    if not _delegates_in_background(state, delegate_manager):
+        return False
+    if state.consecutive_text_only < 1:
+        return False
+    if _await_delegates_used_recently(state):
+        return False
+    return True
+
+
 async def should_complete(
     state: "LoopState",
     config: "LoopConfig",
@@ -301,6 +323,13 @@ async def should_complete(
 
     if state.has_pending_escalation:
         logger.info("[EVAL] -> CONTINUE (pending escalation from sub-agents)")
+        return False
+
+    if _simple_delegate_blocks_prose_exit(state, delegate_manager):
+        logger.info(
+            "[EVAL] -> CONTINUE (simple delegate monitoring — "
+            "call await_delegates before prose exit)"
+        )
         return False
 
     if state.consecutive_text_only >= config.consecutive_text_only_limit:
@@ -429,6 +458,21 @@ async def should_complete(
                     logger.info(
                         "[EVAL] -> CONTINUE (monitoring — call "
                         "await_delegates, not task_complete or text-only exit)"
+                    )
+                    return False
+
+                if (
+                    getattr(state, "simple_delegate_monitoring", False)
+                    and _delegates_in_background(state, delegate_manager)
+                    and state.consecutive_text_only >= 1
+                    and not _used_await
+                    and is_delegate_checkback_dispatch(
+                        getattr(state, "dispatch_source", "") or "",
+                    )
+                ):
+                    logger.info(
+                        "[EVAL] -> CONTINUE (simple delegate check-back — "
+                        "call await_delegates before prose exit)"
                     )
                     return False
 

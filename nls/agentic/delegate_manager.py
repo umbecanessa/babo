@@ -766,7 +766,16 @@ class DelegateManager:
             batch.results.append(DelegateResult(
                 delegate_number=ds.delegate_number,
                 task=ds.task,
-                success=(ds.state == "done" and ds.exit_reason in ("task_complete", "orchestrator_terminated")),
+                success=(
+                    ds.state == "done"
+                    and (
+                        ds.exit_reason in ("task_complete", "orchestrator_terminated")
+                        or (
+                            "timed out" in (ds.summary or "")
+                            and "[DELEGATE KNOWLEDGE DIGEST]" in (ds.summary or "")
+                        )
+                    )
+                ),
                 summary=ds.summary,
                 iterations=ds.iteration,
                 total_tool_calls=ds.total_tool_calls,

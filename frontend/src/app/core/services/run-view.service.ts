@@ -64,6 +64,7 @@ function mergeDelegateRecords(a: RunDelegate, b: RunDelegate): RunDelegate {
     number: b.number >= 0 ? b.number : a.number,
     memberKey: b.memberKey || a.memberKey,
     stepId: b.stepId || a.stepId,
+    batchId: b.batchId || a.batchId,
     teamId: b.teamId || a.teamId,
     toolCalls: b.toolCalls.length ? b.toolCalls : a.toolCalls,
     expanded: b.expanded ?? a.expanded,
@@ -102,6 +103,8 @@ export class RunViewService {
   private readonly _archived = signal(false);
   private readonly _recoveryPending = signal(false);
   private readonly _unassigned = signal<RunDelegate[]>([]);
+  private readonly _batchId = signal('');
+  private readonly _batchCount = signal(0);
   private readonly _activeDelegates = new Set<number>();
   private readonly _delegateEventBuffer = new Map<number, unknown[]>();
   private readonly _teamsById = new Map<string, Team>();
@@ -112,6 +115,34 @@ export class RunViewService {
   readonly background = this._background.asReadonly();
   readonly archived = this._archived.asReadonly();
   readonly recoveryPending = this._recoveryPending.asReadonly();
+  readonly batchId = this._batchId.asReadonly();
+  readonly batchCount = this._batchCount.asReadonly();
+
+  readonly displayTitle = computed(() => {
+    const title = this._title();
+    if (title) return title;
+    const running = this.runningDelegateCount();
+    const total = this._unassigned().length || this._batchCount();
+    if (this._steps().length === 0 && total > 0) {
+      return running > 0
+        ? `Sub-agents (${running} running)`
+        : `Sub-agents (${total})`;
+    }
+    return 'Current run';
+  });
+
+  readonly liveDelegates = computed(() => {
+    const out: RunDelegate[] = [];
+    for (const d of this._unassigned()) {
+      if (d.status === 'running' || d.status === 'queued') out.push(d);
+    }
+    for (const s of this._steps()) {
+      for (const d of s.delegates) {
+        if (d.status === 'running' || d.status === 'queued') out.push(d);
+      }
+    }
+    return out;
+  });
 
   readonly needsWrapUp = computed(() => {
     if (this._archived() || this._steps().length === 0) return false;
@@ -207,6 +238,8 @@ export class RunViewService {
     planId: this._planId(),
     title: this._title(),
     todoId: this._todoId(),
+    batchId: this._batchId() || undefined,
+    batchCount: this._batchCount() || undefined,
     steps: this._steps(),
     waves: this._waves(),
     expanded: this._expanded(),
@@ -232,6 +265,8 @@ export class RunViewService {
     this._steps.set([]);
     this._waves.set([]);
     this._unassigned.set([]);
+    this._batchId.set('');
+    this._batchCount.set(0);
     this._expanded.set(false);
     this._background.set(false);
     this._archived.set(false);
@@ -279,6 +314,8 @@ export class RunViewService {
     this._background.set(!!snap.background);
     this._archived.set(!!snap.archived);
     this._unassigned.set(structuredClone(snap.unassignedDelegates || []));
+    this._batchId.set(snap.batchId || '');
+    this._batchCount.set(snap.batchCount ?? 0);
     this._activeDelegates.clear();
     for (const n of data.activeDelegateNumbers || []) {
       if (typeof n === 'number') this._activeDelegates.add(n);
@@ -359,6 +396,76 @@ export class RunViewService {
     );
   }
 
+  /** Seed RunView from REST delegates.json (reconnect / late UI attach). */
+  hydrateDelegates(data: {
+    batches?: Record<string, {
+      batch_id?: string;
+      total?: number;
+      completed?: number;
+      delegate_numbers?: number[];
+    }>;
+    delegates?: Array<{
+      delegate_number: number;
+      task?: string;
+      batch_id?: string;
+      state?: string;
+      iteration?: number;
+      max_iterations?: number;
+      total_tool_calls?: number;
+      summary?: string;
+      partial?: boolean;
+      timed_out?: boolean;
+    }>;
+  } | null | undefined): void {
+    if (!data?.delegates?.length) return;
+
+    const batches = data.batches || {};
+    const batchIds = Object.keys(batches);
+    if (batchIds.length === 1) {
+      const b = batches[batchIds[0]];
+      this._batchId.set(b.batch_id || batchIds[0]);
+      this._batchCount.set(b.total ?? data.delegates.length);
+    }
+
+    const live = data.delegates.filter(d => d.state === 'running');
+    if (live.length > 0 && !this._title() && this._steps().length === 0) {
+      this._title.set(`Sub-agents (${live.length} running)`);
+      this._expanded.set(true);
+    }
+
+    for (const d of data.delegates) {
+      if (d.delegate_number < 0) continue;
+      let status: RunDelegate['status'] = 'done';
+      if (d.state === 'running') status = 'running';
+      else if (d.state === 'queued') status = 'queued';
+      else if (d.state === 'error' || d.state === 'cancelled') status = 'error';
+      else if (d.timed_out && !d.partial) status = 'error';
+
+      const existing = this._findDelegate(d.delegate_number);
+      if (existing?.status === status && status !== 'running') {
+        continue;
+      }
+
+      this._upsertDelegate({
+        number: d.delegate_number,
+        task: d.task || existing?.task || 'Sub-task',
+        status,
+        stepId: existing?.stepId || '',
+        batchId: d.batch_id || existing?.batchId,
+        iterations: d.iteration,
+        maxIterations: d.max_iterations,
+        totalToolCalls: d.total_tool_calls,
+        summary: d.summary || existing?.summary,
+        partialTimeout: !!(d.partial || (d.timed_out && status === 'done')),
+        toolCalls: existing?.toolCalls || [],
+        expanded: status === 'running' || existing?.expanded || false,
+      });
+      if (status === 'running') {
+        this._activeDelegates.add(d.delegate_number);
+      }
+    }
+  }
+
   handleMessage(msg: Record<string, unknown>): boolean {
     if (!msg?.['type']) return false;
     const type = String(msg['type']);
@@ -369,6 +476,9 @@ export class RunViewService {
         return true;
       case 'plan_step_update':
         this._onPlanStepUpdate(msg);
+        return true;
+      case 'delegate_batch_started':
+        this._onDelegateBatchStarted(msg);
         return true;
       case 'delegate_start':
         this._onDelegateStart(msg);
@@ -487,6 +597,17 @@ export class RunViewService {
     if (msg['autonomous'] === true) this._background.set(true);
   }
 
+  private _onDelegateBatchStarted(msg: Record<string, unknown>): void {
+    const batchId = String(msg['batch_id'] || '');
+    const count = Number(msg['count'] ?? 0);
+    if (batchId) this._batchId.set(batchId);
+    if (count > 0) this._batchCount.set(count);
+    if (!this._title() && this._steps().length === 0) {
+      this._title.set(count > 1 ? `Sub-agents (${count})` : 'Sub-agent');
+    }
+    this._expanded.set(true);
+  }
+
   private _onDelegateStart(msg: Record<string, unknown>): void {
     const num = Number(msg['delegate_number'] ?? -1);
     if (num < 0) return;
@@ -503,6 +624,7 @@ export class RunViewService {
       task: String(msg['delegate_task'] || 'Sub-task'),
       status: 'running',
       stepId: String(msg['step_id'] || ''),
+      batchId: msg['batch_id'] != null ? String(msg['batch_id']) : undefined,
       teamId: teamId || undefined,
       teamName: msg['team_name'] != null ? String(msg['team_name']) : undefined,
       waveAttempt: msg['wave_attempt'] != null ? Number(msg['wave_attempt']) : undefined,
@@ -537,14 +659,16 @@ export class RunViewService {
     const num = Number(msg['delegate_number'] ?? -1);
     if (num < 0) return;
     const aborted = !!msg['aborted'];
+    const partial = !!msg['partial'];
     this._mutateDelegate(num, d => ({
       ...d,
-      status: aborted ? 'error' : 'done',
+      status: partial ? 'done' : (aborted ? 'error' : 'done'),
+      partialTimeout: partial || d.partialTimeout,
       summary: String(msg['summary'] || d.summary || ''),
       iterations: Number(msg['iterations'] ?? d.iterations ?? 0),
       totalToolCalls: Number(msg['tool_calls'] ?? d.totalToolCalls ?? d.toolCalls.length),
-      expanded: d.expanded ?? false,
-      toolCalls: aborted
+      expanded: partial ? true : (d.expanded ?? false),
+      toolCalls: aborted && !partial
         ? d.toolCalls.map(tc => (tc.result ? tc : { ...tc, result: 'error' as const, isError: true }))
         : d.toolCalls,
     }));

@@ -336,21 +336,83 @@ describe('RunViewService', () => {
     expect(svc.recoveryPending()).toBe(true);
   });
 
-  it('marks run archived on plan delete tool', () => {
+  it('tracks detached delegate batch without plan steps', () => {
     svc.handleMessage({
-      type: 'agentic_plan',
-      plan_id: 'plan_old',
-      title: 'Old plan',
-      steps: [{ id: 'step-1', label: 'Work', status: 'in_progress' }],
+      type: 'delegate_batch_started',
+      batch_id: 'eb4390cd0eb5',
+      count: 5,
+      simple_delegate: true,
+    });
+    expect(svc.visible()).toBe(false);
+    svc.handleMessage({
+      type: 'delegate_start',
+      delegate_number: 1,
+      delegate_task: 'Study game-api',
+      batch_id: 'eb4390cd0eb5',
     });
     svc.handleMessage({
-      type: 'tool_execution_end',
-      tool_name: 'plan',
-      is_error: false,
-      details: { action: 'delete', plan_id: 'plan_old' },
+      type: 'delegate_start',
+      delegate_number: 2,
+      delegate_task: 'Study platform-api',
+      batch_id: 'eb4390cd0eb5',
     });
-    expect(svc.archived()).toBe(true);
-    expect(svc.title()).toContain('Archived');
-    expect(svc.steps()[0].status).toBe('skipped');
+    expect(svc.visible()).toBe(true);
+    expect(svc.batchId()).toBe('eb4390cd0eb5');
+    expect(svc.batchCount()).toBe(5);
+    expect(svc.displayTitle()).toContain('Sub-agents');
+    expect(svc.unassignedDelegates().length).toBe(2);
+    expect(svc.runningDelegateCount()).toBe(2);
+    expect(svc.liveDelegates().length).toBe(2);
+    expect(svc.expanded()).toBe(true);
+  });
+
+  it('hydrateDelegates seeds batch and running delegates from API', () => {
+    svc.hydrateDelegates({
+      batches: {
+        eb4390: { batch_id: 'eb4390', total: 2, completed: 1 },
+      },
+      delegates: [
+        {
+          delegate_number: 1,
+          task: 'Study api',
+          batch_id: 'eb4390',
+          state: 'running',
+          iteration: 3,
+          max_iterations: 25,
+        },
+        {
+          delegate_number: 2,
+          task: 'Study ui',
+          batch_id: 'eb4390',
+          state: 'done',
+          timed_out: true,
+          partial: true,
+          summary: '(sub-agent timed out)\n\n[DELEGATE KNOWLEDGE DIGEST]',
+        },
+      ],
+    });
+    expect(svc.batchId()).toBe('eb4390');
+    expect(svc.runningDelegateCount()).toBe(1);
+    const d2 = svc.unassignedDelegates().find(d => d.number === 2);
+    expect(d2?.status).toBe('done');
+    expect(d2?.partialTimeout).toBe(true);
+  });
+
+  it('delegate_end partial timeout marks done not error', () => {
+    svc.handleMessage({
+      type: 'delegate_start',
+      delegate_number: 3,
+      delegate_task: 'Study admin',
+    });
+    svc.handleMessage({
+      type: 'delegate_end',
+      delegate_number: 3,
+      aborted: false,
+      partial: true,
+      summary: '(sub-agent timed out after 900s)\n\n[DELEGATE KNOWLEDGE DIGEST]',
+    });
+    const d = svc.unassignedDelegates().find(x => x.number === 3);
+    expect(d?.status).toBe('done');
+    expect(d?.partialTimeout).toBe(true);
   });
 });

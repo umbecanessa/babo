@@ -129,6 +129,59 @@ def is_simple_delegate_monitoring(
     return True
 
 
+def is_delegate_checkback_dispatch(dispatch_source: str) -> bool:
+    """Scheduler (or agent_message) wake while detached delegates may still run."""
+    src = (dispatch_source or "").strip().lower()
+    if not src:
+        return False
+    if src == "scheduler":
+        return True
+    if "delegate_checkback" in src:
+        return True
+    if src.startswith("agent_message") and "delegate check-back" in src:
+        return True
+    return False
+
+
+def prepare_simple_delegate_monitoring(
+    state: LoopState,
+    delegate_manager: Any | None,
+    *,
+    team_manager: Any | None = None,
+    dispatch_source: str = "",
+    force: bool = False,
+) -> bool:
+    """Arm solo_structured delegate monitoring — mode, flags, and tool unlocks."""
+    if delegate_manager is None:
+        return False
+    if not delegates_running(delegate_manager):
+        return False
+
+    active = is_simple_delegate_monitoring(
+        state, delegate_manager, team_manager=team_manager,
+    )
+    if not active and not force:
+        return False
+
+    state.simple_delegate_monitoring = True
+    # Post-launch: force await_delegates + minimal tool surface.
+    # Check-back: full monitor surface (scheduler, delegate_status) — still
+    # must call await_delegates before prose exit (evaluator guard).
+    _checkback = is_delegate_checkback_dispatch(dispatch_source)
+    state.must_await_delegates = not _checkback
+    if state.active_mode in (AgentMode.EXECUTING, AgentMode.CHAT, AgentMode.PLANNING):
+        state.active_mode = AgentMode.MONITORING
+
+    monitor_tools = (
+        SIMPLE_DELEGATE_POST_LAUNCH_TOOLS
+        if getattr(state, "must_await_delegates", False)
+        else SIMPLE_DELEGATE_MONITOR_TOOLS
+    )
+    state.unlocked_tools.update(monitor_tools)
+    invalidate_tool_policy_cache(state)
+    return True
+
+
 def _apply_profile_cap(
     allowed: frozenset[str],
     profile: str,
@@ -326,7 +379,10 @@ def resolve_allowed_tools(inputs: ToolPolicyInputs) -> frozenset[str]:
             base = SIMPLE_DELEGATE_POST_LAUNCH_TOOLS
         else:
             base = SIMPLE_DELEGATE_MONITOR_TOOLS
-        return base & inputs.all_unlocked
+        # Monitor tools are virtual — always allow the policy surface even if
+        # mode filtering trimmed unlocked_tools before refresh ran.
+        effective = frozenset(inputs.all_unlocked) | base
+        return base & effective
 
     if not inputs.is_coordinator:
         # EXECUTING is the full IC surface; conversational profile caps apply

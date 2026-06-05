@@ -777,6 +777,30 @@ export class ApiService {
     return this.http.get<{ teams: any[] }>(`${this.RUNTIME}/api/agents/${agentId}/teams`, { params });
   }
 
+  getAgentDelegates(agentId: string): Observable<{
+    batches: Record<string, {
+      batch_id?: string;
+      total?: number;
+      completed?: number;
+      delegate_numbers?: number[];
+    }>;
+    delegates: Array<{
+      delegate_number: number;
+      task?: string;
+      batch_id?: string;
+      state?: string;
+      iteration?: number;
+      max_iterations?: number;
+      total_tool_calls?: number;
+      summary?: string;
+      partial?: boolean;
+      timed_out?: boolean;
+    }>;
+    running_count: number;
+  }> {
+    return this.http.get(`${this.RUNTIME}/api/agents/${agentId}/delegates`);
+  }
+
   createTeam(agentId: string, body: { plan_id: string; wave: number; name: string; mission?: string; briefing?: string }): Observable<any> {
     return this.http.post(`${this.RUNTIME}/api/agents/${agentId}/teams`, body);
   }

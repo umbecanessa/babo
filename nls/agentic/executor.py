@@ -516,9 +516,9 @@ async def _handle_delegate(
         "step_id": str(args.get("step_id") or "").strip(),
     }))
 
-    # Wall-clock timeout scales with the step budget (approx 30s/step including
-    # possible extension), capped at 900s.
-    _sub_timeout = min(30 * (max_steps + max(10, max_steps // 3)), 900)
+    # Wall-clock timeout scales with the step budget (approx 30–45s/step),
+    # capped at 1200s so deep study delegates can finish write + digest.
+    _sub_timeout = min(45 * (max_steps + max(10, max_steps // 3)), 1200)
 
     from .types import LoopConfig as _LC
     sub_config = _LC(
@@ -1149,9 +1149,11 @@ async def _execute_single(
                 _bg_running = delegate_manager.has_active_delegates()
             except Exception:
                 pass
-        if (
-            _bg_running
-            and state.active_mode in (AgentMode.MONITORING, AgentMode.DELEGATING)
+        _simple_monitor = bool(getattr(state, "simple_delegate_monitoring", False))
+        if _bg_running and (
+            state.active_mode in (AgentMode.MONITORING, AgentMode.DELEGATING)
+            or _simple_monitor
+            or getattr(state, "must_await_delegates", False)
         ):
             return ToolResult(
                 content=(
@@ -1765,7 +1767,7 @@ async def run_delegate_detached(
     task = spec.task
     max_steps = spec.max_steps
 
-    _sub_timeout = min(30 * (max_steps + max(10, max_steps // 3)), 900)
+    _sub_timeout = min(45 * (max_steps + max(10, max_steps // 3)), 1200)
     if on_escalation is not None:
         # Escalation can extend iterations (and inner timeout) multiple
         # times.  The outer asyncio.wait_for must never be the binding
@@ -1786,7 +1788,7 @@ async def run_delegate_detached(
     _ext_budget = max(10, max_steps // 3)
     # Inner timeout: scales with base iteration budget.  For escalation-
     # enabled delegates, extensions bump this dynamically in _try_escalate.
-    _inner_timeout = float(min(30 * (max_steps + _ext_budget), 900) - 30)
+    _inner_timeout = float(min(45 * (max_steps + _ext_budget), 1200) - 30)
     sub_config = _LC(
         max_iterations=max_steps,
         max_iterations_extension=_ext_budget,
@@ -2165,13 +2167,31 @@ async def run_delegate_detached(
         "summary_preview": summary[:500],
     })
 
+    _timed_out = "timed out after" in summary
+    _has_digest = "[DELEGATE KNOWLEDGE DIGEST]" in summary
+    _has_artifacts = any(
+        marker in summary
+        for marker in ("files_created", "files_modified", ".md", "ARCHITECTURE", "SUMMARY")
+    )
+    _partial_success = _timed_out and (_has_digest or _has_artifacts)
+    _aborted = (
+        (sub_result is None or bool(getattr(sub_result, "aborted", False)))
+        and not _partial_success
+    )
+
     await emit(on_event, AgentEvent(EventType.DELEGATE_COMPLETE, {
         "delegate_number": delegate_number,
         "delegate_task": task[:200],
-        "iterations": sub_result.iterations if sub_result else 0,
-        "tool_calls": sub_result.total_tool_calls if sub_result else 0,
-        "summary": summary[:200],
-        "aborted": sub_result is None or getattr(sub_result, "aborted", False),
+        "iterations": sub_result.iterations if sub_result else (
+            _state_holder[0].iteration if _state_holder else 0
+        ),
+        "tool_calls": sub_result.total_tool_calls if sub_result else (
+            _state_holder[0].total_tool_calls if _state_holder else 0
+        ),
+        "summary": summary[:500],
+        "aborted": _aborted,
+        "partial": _partial_success,
+        "batch_id": getattr(spec, "batch_id", "") or "",
         "iteration": iteration,
     }))
 
@@ -3278,6 +3298,34 @@ async def execute_tools(
                     "not scheduled for batch %s",
                     batch.batch_id,
                 )
+            if on_event is not None:
+                await emit(on_event, AgentEvent(
+                    EventType.DELEGATE_BATCH_STARTED,
+                    {
+                        "batch_id": batch.batch_id,
+                        "count": len(specs),
+                        "delegate_numbers": [
+                            s.delegate_number for s in specs
+                        ],
+                        "iteration": state.iteration,
+                        "simple_delegate": _simple_delegate,
+                    },
+                ))
+                for spec in specs:
+                    await emit(on_event, AgentEvent(
+                        EventType.DELEGATE_SPAWN,
+                        {
+                            "delegate_number": spec.delegate_number,
+                            "delegate_task": spec.task[:200],
+                            "max_steps": spec.max_steps,
+                            "iteration": state.iteration,
+                            "batch_id": batch.batch_id,
+                            "step_id": str(
+                                spec.args.get("step_id") or "",
+                            ).strip(),
+                        },
+                    ))
+
             for _idx, _call, _num in assigned:
                 ordered_results[_idx] = ToolResult(content=_spawn_msg)
 

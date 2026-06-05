@@ -2769,6 +2769,9 @@ $indigo-light: var(--accent-primary);
   &.done {
     border-color: rgba(52, 211, 153, 0.2);
   }
+  &.partial {
+    border-color: color-mix(in srgb, var(--accent-warning, #d4a017) 35%, transparent);
+  }
 }
 
 .delegate-member-header {
@@ -2825,6 +2828,53 @@ $indigo-light: var(--accent-primary);
   font-style: italic;
 }
 
+// ── Delegate batch pill (compact detached batch) ──────────────
+
+.delegate-batch-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 720px;
+  margin: 6px 0;
+  padding: 10px 14px;
+  align-self: flex-start;
+  background: var(--accent-primary-glow);
+  border: 1px solid rgba(99, 102, 241, 0.28);
+  border-radius: 999px;
+  font-size: 13px;
+  color: var(--text-primary);
+
+  &.complete {
+    border-color: rgba(52, 211, 153, 0.35);
+    background: rgba(52, 211, 153, 0.06);
+  }
+}
+
+.delegate-batch-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+}
+
+.delegate-batch-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.delegate-batch-link {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-primary);
+  text-decoration: none;
+  white-space: nowrap;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
 // ── Delegate (sub-agent) card ─────────────────────────────────
 
 .delegate-card {
@@ -2845,6 +2895,10 @@ $indigo-light: var(--accent-primary);
   &.done {
     border-color: rgba(52, 211, 153, 0.25);
     background: rgba(52, 211, 153, 0.04);
+  }
+  &.partial {
+    border-color: color-mix(in srgb, var(--accent-warning, #d4a017) 35%, transparent);
+    background: color-mix(in srgb, var(--accent-warning, #d4a017) 8%, transparent);
   }
   &.error {
     border-color: rgba(248, 113, 113, 0.25);

@@ -34,6 +34,7 @@ import { PlatformIntegrationsService } from '../../core/services/platform-integr
 import { googleUsesByo } from '../../core/services/platform-integrations.util';
 import { RunPanelComponent } from './run-panel/run-panel.component';
 import { RunViewService } from '../../core/services/run-view.service';
+import type { RunDelegate } from '../../core/models/run-view.model';
 import { AgentWorkspaceContextService } from '../../core/services/agent-workspace-context.service';
 import { enrichWorkspaceRelativePath } from '../projects/workspace/workspace-path.util';
 import { Day1CoachService } from '../../shared/onboarding/day1-coach.service';
@@ -189,8 +190,6 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       return true;
     });
   });
-
-  /** Active thread metadata for context banners */
   activeThreadMeta = computed(() => {
     const key = this.currentThread();
     return this.conversations.threads().find(t => t.key === key) || null;
@@ -1198,6 +1197,122 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         }
       },
     });
+    this.api.getAgentDelegates(this.agentId).subscribe({
+      next: (data) => {
+        this.runView.hydrateDelegates(data);
+        this._seedChatFromDelegatesApi(data);
+      },
+      error: () => {},
+    });
+  }
+
+  private _allRunDelegates(): RunDelegate[] {
+    const fromSteps = this.runView.steps().flatMap(s => s.delegates || []);
+    const unassigned = this.runView.unassignedDelegates();
+    const byNum = new Map<number, RunDelegate>();
+    for (const d of [...fromSteps, ...unassigned]) {
+      byNum.set(d.number, d);
+    }
+    return [...byNum.values()];
+  }
+
+  private _mapRunDelegateToCard(d: RunDelegate): ChatMessage['delegate'] {
+    return {
+      number: d.number,
+      task: d.task,
+      status: d.status === 'queued' ? 'running' : d.status,
+      partialTimeout: d.partialTimeout,
+      toolCalls: d.toolCalls.map(tc => ({
+        name: tc.name,
+        args: tc.args,
+        callId: tc.callId,
+        result: tc.result,
+        isError: tc.isError,
+      })),
+      summary: d.summary,
+      iterations: d.iterations,
+      totalToolCalls: d.totalToolCalls,
+      maxIterations: d.maxIterations,
+      expanded: d.expanded,
+      teamId: d.teamId,
+      waveAttempt: d.waveAttempt,
+      teamName: d.teamName,
+    };
+  }
+
+  private _syncDelegateCardFromRunView(delegateNumber: number): void {
+    if (delegateNumber < 0) return;
+    const d = this._allRunDelegates().find(x => x.number === delegateNumber);
+    if (!d) return;
+    const delegate = this._mapRunDelegateToCard(d);
+    this.messages.update(msgs => {
+      const idx = msgs.findIndex(
+        m => m.type === 'delegate_card' && m.delegate?.number === delegateNumber,
+      );
+      const card: ChatMessage = {
+        type: 'delegate_card',
+        content: d.task.split('\n')[0],
+        delegate,
+        timestamp: new Date(),
+      };
+      if (idx >= 0) {
+        const updated = [...msgs];
+        updated[idx] = { ...updated[idx], ...card };
+        return updated;
+      }
+      return [...msgs, card];
+    });
+  }
+
+  private _seedChatFromDelegatesApi(data: {
+    batches?: Record<string, { batch_id?: string; total?: number; completed?: number }>;
+    delegates?: Array<{ delegate_number: number; batch_id?: string; state?: string; partial?: boolean }>;
+    running_count?: number;
+  } | null | undefined): void {
+    if (!data?.delegates?.length) return;
+
+    const batchEntries = Object.entries(data.batches || {});
+    if (batchEntries.length === 1) {
+      const [key, batch] = batchEntries[0];
+      const batchId = batch.batch_id || key;
+      const total = batch.total ?? data.delegates.length;
+      const running = data.running_count ?? data.delegates.filter(d => d.state === 'running').length;
+      const done = data.delegates.filter(d => d.state !== 'running' && d.state !== 'queued').length;
+      const partialCount = data.delegates.filter(d => d.partial).length;
+      const complete = running === 0 && done >= total;
+
+      this.messages.update(msgs => {
+        if (msgs.some(m => m.type === 'delegate_batch_pill' && m.batchId === batchId)) {
+          return msgs;
+        }
+        let content: string;
+        if (complete) {
+          content = partialCount > 0
+            ? `All ${total} sub-agents finished (${partialCount} partial) — compiling results…`
+            : `All ${total} sub-agents completed — compiling results…`;
+        } else if (running > 0) {
+          content = `${running} sub-agents working in parallel · ${done}/${total} done`;
+        } else {
+          content = `${done}/${total} sub-agents done`;
+        }
+        return [...msgs, {
+          type: 'delegate_batch_pill' as const,
+          content,
+          batchId,
+          batchCount: total,
+          batchRunning: running,
+          batchDone: done,
+          batchComplete: complete,
+          timestamp: new Date(),
+        }];
+      });
+    }
+
+    for (const d of data.delegates) {
+      if (d.delegate_number >= 0) {
+        this._syncDelegateCardFromRunView(d.delegate_number);
+      }
+    }
   }
 
   private _isOrchestratorToolNoise(msg: ChatMessage): boolean {
@@ -1214,6 +1329,62 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     if (msg['sub_agent'] === true) return false;
     if (msg['autonomous'] === true) return false;
     return this.runView.visible();
+  }
+
+  private _updateDelegateBatchPill(
+    batchId: string,
+    _delegateNumber: number,
+    outcome: 'ok' | 'partial' | 'failed',
+  ): void {
+    if (!batchId) return;
+    this.messages.update(msgs => msgs.map(m => {
+      if (m.type !== 'delegate_batch_pill' || m.batchId !== batchId || m.batchComplete) {
+        return m;
+      }
+      const total = m.batchCount ?? m.batchRunning ?? 0;
+      const done = Math.min(total, (m.batchDone ?? 0) + 1);
+      const running = Math.max(0, total - done);
+      const suffix = outcome === 'failed'
+        ? ' (1 failed)'
+        : outcome === 'partial'
+          ? ' (1 partial)'
+          : '';
+      return {
+        ...m,
+        batchDone: done,
+        batchRunning: running,
+        content: running > 0
+          ? `${running} sub-agents working · ${done}/${total} done${suffix}`
+          : `All sub-agents finished · ${done}/${total} done${suffix}`,
+      };
+    }));
+  }
+
+  private _completeDelegateBatchPill(batchId: string, count: number): void {
+    this.messages.update(msgs => {
+      const idx = msgs.findIndex(m => m.type === 'delegate_batch_pill' && m.batchId === batchId);
+      if (idx >= 0) {
+        const updated = [...msgs];
+        updated[idx] = {
+          ...updated[idx],
+          batchComplete: true,
+          batchDone: count,
+          batchRunning: 0,
+          content: `All ${count} sub-agents completed — compiling results…`,
+        };
+        return updated;
+      }
+      return [...msgs, {
+        type: 'delegate_batch_pill' as const,
+        content: `All ${count} sub-agents completed — compiling results…`,
+        batchId,
+        batchCount: count,
+        batchDone: count,
+        batchRunning: 0,
+        batchComplete: true,
+        timestamp: new Date(),
+      }];
+    });
   }
 
   private clearAwaitingResponse(): void {
@@ -2063,16 +2234,55 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         break;
       }
 
-      case 'delegate_start': {
-        const dlgTask = msg.delegate_task || 'Sub-task';
-        this.activityStatus.set(`Delegating: ${dlgTask.slice(0, 80)}`);
+      case 'delegate_batch_started': {
+        const batchId = msg.batch_id || '';
+        const count = msg.count || 0;
         if (!this.runView.expanded()) {
           this.runView.setExpanded(true);
+        }
+        this.messages.update(msgs => {
+          if (msgs.some(m => m.type === 'delegate_batch_pill' && m.batchId === batchId)) {
+            return msgs;
+          }
+          return [...msgs, {
+            type: 'delegate_batch_pill' as const,
+            content: `${count} sub-agents working in parallel`,
+            batchId,
+            batchCount: count,
+            batchRunning: count,
+            batchDone: 0,
+            timestamp: new Date(),
+          }];
+        });
+        this.activityStatus.set(`${count} sub-agents launched`);
+        break;
+      }
+
+      case 'delegate_start': {
+        const dlgTask = msg.delegate_task || 'Sub-task';
+        if (!msg.batch_id) {
+          this.activityStatus.set(`Delegating: ${dlgTask.slice(0, 80)}`);
+        }
+        if (!this.runView.expanded()) {
+          this.runView.setExpanded(true);
+        }
+        const dNum = msg.delegate_number;
+        if (typeof dNum === 'number' && dNum >= 0) {
+          this._syncDelegateCardFromRunView(dNum);
         }
         break;
       }
 
       case 'delegate_end': {
+        const batchId = msg.batch_id as string | undefined;
+        const dNum = msg.delegate_number;
+        if (batchId && typeof dNum === 'number') {
+          const outcome = msg.partial ? 'partial' : (msg.aborted ? 'failed' : 'ok');
+          this._updateDelegateBatchPill(batchId, dNum, outcome);
+        }
+        if (typeof dNum === 'number' && dNum >= 0) {
+          this._syncDelegateCardFromRunView(dNum);
+        }
         if (this.runView.runningDelegateCount() === 0) {
           this.activityStatus.set('');
         }
@@ -2082,13 +2292,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       case 'delegate_batch_complete': {
         const count = msg.count || 0;
         const batchId = msg.batch_id || '';
-        const resultsSummary = msg.results_summary || '';
-        const notifMsg: ChatMessage = {
-          type: 'system' as any,
-          content: `All ${count} sub-agents completed (batch ${batchId}). Compiling results...`,
-          timestamp: new Date(),
-        };
-        this.messages.update(msgs => [...msgs, notifMsg]);
+        this._completeDelegateBatchPill(batchId, count);
         this.activityStatus.set('Compiling delegate results...');
         break;
       }

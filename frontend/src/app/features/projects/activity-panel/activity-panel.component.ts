@@ -1,13 +1,14 @@
 import { Component, Input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Team, TodoItem, PlanSummary } from '../project.models';
+import type { RunDelegate } from '../../../core/models/run-view.model';
 
 interface ActivityEntry {
   id: string;
   time: number;
   icon: string;
   text: string;
-  category: 'team' | 'member' | 'todo' | 'plan';
+  category: 'team' | 'member' | 'todo' | 'plan' | 'delegate';
   detail?: string;
   teamName?: string;
   memberTask?: string;
@@ -28,6 +29,8 @@ export class ActivityPanelComponent {
   @Input() teams: Team[] = [];
   @Input() items: TodoItem[] = [];
   @Input() plansByTodoId: Record<string, PlanSummary> = {};
+  /** Live sub-agents from RunView (simple delegate batches). */
+  @Input() liveDelegates: RunDelegate[] = [];
   /** Compact layout for Overview side column */
   @Input() compact = false;
   @Input() maxEntries = 0;
@@ -44,6 +47,21 @@ export class ActivityPanelComponent {
 
   private buildEntries(): ActivityEntry[] {
     const entries: ActivityEntry[] = [];
+    const now = Date.now() / 1000;
+
+    for (const d of this.liveDelegates) {
+      entries.push({
+        id: `live-delegate-${d.number}`,
+        time: now,
+        icon: d.status === 'queued' ? '\u23F3' : '\u21BB',
+        text: `#${d.number >= 0 ? d.number : '?'} ${d.status === 'queued' ? 'queued' : 'working'}: ${taskHeadline(d.task)}`,
+        category: 'delegate',
+        memberTask: d.task,
+        detail: d.batchId ? `Batch ${d.batchId}` : undefined,
+        iterations: d.iterations,
+        toolCalls: d.totalToolCalls ?? d.toolCalls?.length,
+      });
+    }
 
     for (const team of this.teams) {
       if (team.status === 'active' && team.created_at) {
@@ -224,6 +242,7 @@ export class ActivityPanelComponent {
       case 'member': return 'var(--accent-primary)';
       case 'todo': return 'var(--accent-success)';
       case 'plan': return 'var(--accent-warn)';
+      case 'delegate': return 'var(--accent-primary)';
       default: return '#6b7280';
     }
   }
@@ -249,4 +268,9 @@ export class ActivityPanelComponent {
     const hrs = Math.floor(mins / 60);
     return `${hrs}h ${mins % 60}m`;
   }
+}
+
+function taskHeadline(task: string): string {
+  const line = (task || '').split('\n').find(l => l.trim()) || task;
+  return line.length > 96 ? line.slice(0, 93) + '…' : line;
 }
