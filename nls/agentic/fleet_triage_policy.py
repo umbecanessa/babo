@@ -116,6 +116,12 @@ def apply_fleet_hint_policy(
         return goals, hints
     if not fleet_hint_active(hints):
         return goals, hints
+    from nls.agentic.job_triage_policy import HINT_JOB_CHARTER, HINT_JOB_CONFIRM
+
+    hints = [
+        h for h in hints
+        if (h or "").strip().lower() not in {HINT_JOB_CHARTER, HINT_JOB_CONFIRM}
+    ]
     return strip_skill_scaffold_goals(goals), strip_skill_setup_hints(hints)
 
 

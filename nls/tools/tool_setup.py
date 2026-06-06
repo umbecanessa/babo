@@ -424,8 +424,10 @@ def setup_tools(
         from server.main import app as _app
 
         _sm = getattr(_app.state, "squad_manager", None)
+        _in_squad = False
         if _sm is not None:
-            if _sm.get_squad_for_agent(agent_id) is not None:
+            _in_squad = _sm.get_squad_for_agent(agent_id) is not None
+            if _in_squad:
                 from .agent_tools.squad import (
                     SquadEscalateTool,
                     SquadMessageTool,
@@ -447,6 +449,21 @@ def setup_tools(
                 logger.info("Agent %s: squad_setup initialized", agent_id)
     except Exception as exc:
         logger.warning("Agent %s: squad tools init failed: %s", agent_id, exc)
+
+    try:
+        from server.main import app as _app
+
+        _sm = getattr(_app.state, "squad_manager", None)
+        _in_squad = (
+            _sm is not None and _sm.get_squad_for_agent(agent_id) is not None
+        )
+        if not _in_squad:
+            from .agent_tools.set_job import create_set_job_tool
+
+            tools.append(create_set_job_tool(agent_dir, agent_id))
+            logger.info("Agent %s: set_job initialized", agent_id)
+    except Exception as exc:
+        logger.warning("Agent %s: set_job init failed: %s", agent_id, exc)
 
     # Wire plan → todo lifecycle auto-sync.
     _todo_tool = next((t for t in tools if getattr(t, "name", "") == "todo"), None)

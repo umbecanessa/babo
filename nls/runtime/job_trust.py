@@ -173,6 +173,163 @@ def save_trust(agent_dir: Path, trust: TrustDocument) -> TrustDocument:
     return trust
 
 
+JOB_PATCH_FIELDS = frozenset({
+    "title", "mission", "persona", "playbook", "in_scope", "out_of_scope",
+    "refusal_template", "refusal_examples", "escalation_paths",
+    "default_profile", "strategic_priorities",
+    "background_enabled", "background_interval_seconds",
+})
+
+
+def job_fields_from_kwargs(**kwargs: Any) -> dict[str, Any]:
+    """Map set_job / squad job kwargs to job.json field names."""
+    mapping = {
+        "title": kwargs.get("title") or kwargs.get("job_title"),
+        "mission": (
+            kwargs.get("mission")
+            or kwargs.get("description")
+            or kwargs.get("job_mission")
+            or kwargs.get("message")
+        ),
+        "persona": kwargs.get("job_persona") or kwargs.get("persona"),
+        "playbook": kwargs.get("job_playbook") or kwargs.get("playbook"),
+        "default_profile": kwargs.get("default_profile"),
+        "in_scope": kwargs.get("in_scope"),
+        "out_of_scope": kwargs.get("out_of_scope"),
+        "refusal_template": kwargs.get("refusal_template"),
+        "refusal_examples": kwargs.get("refusal_examples"),
+        "escalation_paths": kwargs.get("escalation_paths"),
+        "strategic_priorities": kwargs.get("strategic_priorities"),
+        "background_enabled": kwargs.get("background_enabled"),
+        "background_interval_seconds": kwargs.get("background_interval_seconds"),
+    }
+    out: dict[str, Any] = {}
+    for key, val in mapping.items():
+        if val is None or val == "":
+            continue
+        out[key] = val
+    return out
+
+
+def patch_job_fields(agent_dir: Path, fields: dict[str, Any]) -> JobDocument:
+    """Merge job charter fields into job.json."""
+    if not fields:
+        raise ValueError("No job fields to apply")
+    if not agent_dir.exists():
+        raise ValueError(f"Agent directory not found: {agent_dir}")
+    job = load_job(agent_dir)
+    for key, val in fields.items():
+        if key not in JOB_PATCH_FIELDS or val is None:
+            continue
+        setattr(job, key, val)
+    from nls.runtime.job_background import is_stock_job
+
+    if not is_stock_job(job):
+        job.background_enabled = True
+    return save_job(agent_dir, job)
+
+
+def sync_runtime_job_trust_for_agent(agent_id: str) -> None:
+    """Reload job/trust Cryptex slots after a job.json patch."""
+    if not (agent_id or "").strip():
+        return
+    try:
+        from server.main import app
+
+        am = getattr(app.state, "agent_manager", None)
+        if am is None:
+            return
+        rt = am.get_runtime(agent_id)
+        if rt is not None and hasattr(rt, "sync_job_trust"):
+            rt.sync_job_trust()
+    except Exception as exc:
+        logger.debug("job/trust runtime sync skipped for %s: %s", agent_id, exc)
+
+
+TASK_JOB_CANDIDATE_DOMAIN = "Task.JobCandidate"
+
+
+def runtime_working_memory(agent_id: str) -> Any | None:
+    """Return dual_wm or working_memory for an agent runtime, if loaded."""
+    if not (agent_id or "").strip():
+        return None
+    try:
+        from server.main import app
+
+        am = getattr(app.state, "agent_manager", None)
+        if am is None:
+            return None
+        rt = am.get_runtime(agent_id)
+        if rt is None:
+            return None
+        return getattr(rt, "dual_wm", None) or getattr(rt, "working_memory", None)
+    except Exception:
+        return None
+
+
+def _iter_wm_rings(working_memory: Any | None) -> list[Any]:
+    if working_memory is None:
+        return []
+    rings: list[Any] = [working_memory]
+    for attr in ("personal", "common", "professional"):
+        child = getattr(working_memory, attr, None)
+        if child is not None and child is not working_memory:
+            rings.append(child)
+    cryptex_rings = getattr(working_memory, "_rings", None)
+    if isinstance(cryptex_rings, dict):
+        for ring in cryptex_rings.values():
+            if ring is not None and ring not in rings:
+                rings.append(ring)
+    return rings
+
+
+def read_task_job_candidate(working_memory: Any | None) -> dict[str, Any]:
+    """Read triage draft Job charter from WM (Task.JobCandidate)."""
+    for ring in _iter_wm_rings(working_memory):
+        slots = getattr(ring, "_slots", None)
+        if not slots:
+            continue
+        for slot in slots:
+            if getattr(slot, "domain", "") != TASK_JOB_CANDIDATE_DOMAIN:
+                continue
+            raw = (getattr(slot, "content", "") or "").strip()
+            if not raw:
+                return {}
+            try:
+                parsed = json.loads(raw)
+                if isinstance(parsed, dict):
+                    return parsed
+            except json.JSONDecodeError:
+                logger.debug("Task.JobCandidate is not valid JSON")
+    return {}
+
+
+def clear_task_job_candidate(working_memory: Any | None) -> int:
+    """Remove Task.JobCandidate slots from WM/Cryptex. Returns slots removed."""
+    if working_memory is None:
+        return 0
+    removed = 0
+    if hasattr(working_memory, "remove_by_domain"):
+        removed += working_memory.remove_by_domain(TASK_JOB_CANDIDATE_DOMAIN)
+    for ring in _iter_wm_rings(working_memory):
+        if ring is working_memory:
+            continue
+        if hasattr(ring, "remove_by_domain"):
+            removed += ring.remove_by_domain(TASK_JOB_CANDIDATE_DOMAIN)
+    return removed
+
+
+def clear_task_job_candidate_for_agent(agent_id: str) -> None:
+    """Drop stale triage Job draft after owner-confirmed set_job."""
+    wm = runtime_working_memory(agent_id)
+    if wm is None:
+        return
+    try:
+        clear_task_job_candidate(wm)
+    except Exception as exc:
+        logger.debug("Task.JobCandidate clear skipped for %s: %s", agent_id, exc)
+
+
 def _clear_domains_on_ring(ring: Any, prefixes: tuple[str, ...]) -> None:
     if ring is None:
         return

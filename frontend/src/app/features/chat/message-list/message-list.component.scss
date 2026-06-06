@@ -3434,6 +3434,23 @@ $indigo-light: var(--accent-primary);
   .channel-reply-label { color: var(--text-muted); }
 }
 
+.channel-ambient {
+  background: rgba(148, 163, 184, 0.05);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-left: 3px solid rgba(148, 163, 184, 0.25);
+  border-radius: 4px 10px 10px 10px;
+  opacity: 0.92;
+
+  .channel-sender { color: var(--text-secondary); }
+  .channel-ambient-badge {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    margin-left: 6px;
+  }
+}
+
 .channel-outbound {
   background: rgba(52, 211, 153, 0.06);
   border: 1px solid rgba(52, 211, 153, 0.12);

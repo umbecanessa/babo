@@ -48,7 +48,7 @@ import {
   isSilentOrchestrationExit,
 } from './orchestration-ui.util';
 import { ChatPanelService } from '../../core/services/chat-panel.service';
-import { ConversationService } from '../../core/services/conversation.service';
+import { ConversationService, ConversationThread } from '../../core/services/conversation.service';
 import { composerDestination } from '../../core/services/composer-destination.util';
 import { ChatLeftDockComponent } from './chat-left-dock/chat-left-dock.component';
 import { ChatRightDockComponent } from './chat-right-dock/chat-right-dock.component';
@@ -192,7 +192,13 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
   });
   activeThreadMeta = computed(() => {
     const key = this.currentThread();
-    return this.conversations.threads().find(t => t.key === key) || null;
+    const t = this.conversations.threads().find(th => th.key === key);
+    if (!t) return null;
+    if (t.isGroup === undefined) {
+      const flags = this.conversations.threadFlagsFromKey(key);
+      return { ...t, isGroup: flags.isGroup };
+    }
+    return t;
   });
 
   composerDest = computed(() => composerDestination(this.activeThreadMeta()));
@@ -1798,7 +1804,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         this.activities.update(acts => [{
           id: Date.now(),
           kind: 'channel' as const,
-          text: `${msg.direction === 'inbound' ? 'Received from' : 'Sent to'} ${msg.sender || msg.channel}`,
+          text: this.channelEventActivityText(msg),
           tags: [],
           signals: 0,
           factsStored: 0,
@@ -3551,15 +3557,25 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     this.http.get<any>(url).subscribe({
       next: (res) => {
         const sessions: Record<string, any> = res?.sessions || {};
-        const restored: { key: string; label: string; channel: string; sender?: string; subject?: string }[] = [];
+        const restored: ConversationThread[] = [];
         for (const [key, meta] of Object.entries(sessions) as [string, any][]) {
           if (key === 'websocket:main') continue;
           const channel = meta?.channel || key.split(':')[0] || 'websocket';
           if (channel === 'team' || channel === 'delegate') continue;
           const sender = meta?.sender || '';
           const subject = meta?.subject || '';
-          const label = this.conversations.labelFromSessionKey(key, channel, { sender, subject });
-          restored.push({ key, label, channel, sender, subject });
+          const channelName = meta?.channel_name || meta?.channelName || '';
+          const guildName = meta?.guild_name || meta?.guildName || '';
+          const flags = this.conversations.threadFlagsFromKey(key);
+          const label = this.conversations.labelFromSessionKey(key, channel, {
+            sender, subject, channel_name: channelName, guild_name: guildName,
+          });
+          restored.push({
+            key, label, channel, sender, subject,
+            channelName: channelName || undefined,
+            guildName: guildName || undefined,
+            isGroup: flags.isGroup,
+          });
         }
         this.conversations.setThreadsFromRestore(restored);
       },
@@ -3580,21 +3596,45 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
     this.http.get<any>(url).subscribe({
       next: (res) => {
-        if (!res?.messages?.length) return;
+        const ambient = Array.isArray(res?.ambient_timeline) ? res.ambient_timeline : [];
+        const sessionMsgs = Array.isArray(res?.messages) ? res.messages : [];
+        if (!ambient.length && !sessionMsgs.length) return;
 
         let restored: ChatMessage[];
-        if (isChannel) {
-          restored = res.messages.map((m: any) => ({
+        if (isChannel && ambient.length > 0) {
+          restored = ambient.map((row: any) => {
+            const triggered = row.triggered === true;
+            const isAssistant = row.role === 'assistant';
+            let type: ChatMessage['type'];
+            if (isAssistant) {
+              type = 'channel_outbound';
+            } else if (triggered) {
+              type = 'channel_inbound';
+            } else {
+              type = 'channel_ambient';
+            }
+            return {
+              type,
+              content: row.content || '',
+              channel: threadMeta!.channel,
+              sender: row.sender || threadMeta!.sender || threadMeta!.channel,
+              subject: threadMeta!.subject || '',
+              sessionKey,
+              timestamp: row.timestamp ? new Date(row.timestamp) : new Date(),
+            };
+          });
+        } else if (isChannel) {
+          restored = sessionMsgs.map((m: any) => ({
             type: m.role === 'user' ? 'channel_inbound' as any : 'channel_outbound' as any,
             content: m.content || '',
-            channel: threadMeta.channel,
-            sender: threadMeta.sender || threadMeta.channel,
-            subject: threadMeta.subject || '',
+            channel: threadMeta!.channel,
+            sender: threadMeta!.sender || threadMeta!.channel,
+            subject: threadMeta!.subject || '',
             sessionKey,
             timestamp: new Date(m.timestamp || Date.now()),
           }));
         } else {
-          restored = res.messages.map((m: any) => ({
+          restored = sessionMsgs.map((m: any) => ({
             type: m.role === 'user' ? 'user' as const : 'assistant' as const,
             content: m.content || '',
             timestamp: new Date(m.timestamp || Date.now()),
@@ -3603,9 +3643,14 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         }
 
         this.messages.update(msgs => {
+          const other = msgs.filter(m => m.sessionKey !== sessionKey);
           const existing = msgs.filter(m => m.sessionKey === sessionKey);
+          // Server history is authoritative for channel threads (ambient or session-backed).
+          if (isChannel && restored.length > 0) {
+            return [...other, ...restored];
+          }
           if (existing.length > 0) return msgs;
-          return [...msgs, ...restored];
+          return [...other, ...restored];
         });
       },
       error: () => {},
@@ -3613,6 +3658,27 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
   }
 
   /** Called when a channel_event arrives via WebSocket */
+  private channelEventActivityText(event: {
+    direction?: string;
+    sender?: string;
+    channel?: string;
+    subject?: string;
+  }): string {
+    const who = event.sender || event.channel || 'channel';
+    switch (event.direction) {
+      case 'inbound':
+        return event.subject ? `Email from ${who}: ${event.subject}` : `Received from ${who}`;
+      case 'response':
+        return event.subject ? `Replied on email: ${event.subject}` : `Replied on ${event.channel || 'channel'}`;
+      case 'ambient':
+        return `Group activity from ${who}`;
+      case 'skipped':
+        return `Skipped message from ${who}`;
+      default:
+        return `${event.direction || 'Channel event'} · ${who}`;
+    }
+  }
+
   handleChannelEvent(event: any): void {
     const channel = event.channel || '';
     const sessionKey = event.session_key || '';
@@ -3620,15 +3686,47 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
     const existing = this.conversations.threads().find(t => t.key === sessionKey);
     let threadLabel = existing?.label || '';
+    const flags = this.conversations.threadFlagsFromKey(sessionKey);
+    const channelName = event.channel_name || event.channelName || '';
+    const guildName = event.guild_name || event.guildName || '';
     if (!existing) {
-      threadLabel = this.conversations.buildThreadLabel(channel, event);
+      threadLabel = this.conversations.buildThreadLabel(channel, {
+        ...event,
+        session_key: sessionKey,
+        channel_name: channelName,
+        guild_name: guildName,
+      });
       this.conversations.upsertThread({
         key: sessionKey,
         label: threadLabel,
         channel,
         sender: event.sender || '',
         subject: event.subject || '',
+        channelName: channelName || undefined,
+        guildName: guildName || undefined,
+        isGroup: flags.isGroup,
       });
+    } else if (
+      (channelName || guildName)
+      && (
+        !existing.channelName
+        || !existing.guildName
+        || this.conversations.threadLabelLooksLikeId(existing)
+      )
+    ) {
+      this.conversations.upsertThread({
+        ...existing,
+        channelName: channelName || existing.channelName,
+        guildName: guildName || existing.guildName,
+        isGroup: flags.isGroup,
+        label: this.conversations.labelFromSessionKey(sessionKey, channel, {
+          sender: existing.sender || event.sender,
+          subject: existing.subject || event.subject,
+          channel_name: channelName || existing.channelName,
+          guild_name: guildName || existing.guildName,
+        }),
+      });
+      threadLabel = this.conversations.threads().find(t => t.key === sessionKey)?.label || threadLabel;
     } else if (!existing.subject && event.subject) {
       this.conversations.upsertThread({
         ...existing,
@@ -3664,6 +3762,27 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         sessionKey,
         timestamp: new Date(),
       }]);
+      return;
+    }
+
+    if (direction === 'ambient' && inboundContent) {
+      this.messages.update(msgs => {
+        const alreadyShown = msgs.some(m =>
+          m.type === 'channel_ambient'
+          && (m as any).sessionKey === sessionKey
+          && m.content === inboundContent
+        );
+        if (alreadyShown) return msgs;
+        return [...msgs, {
+          type: 'channel_ambient',
+          content: inboundContent,
+          channel,
+          sender,
+          subject: event.subject || '',
+          sessionKey,
+          timestamp: new Date(),
+        }];
+      });
       return;
     }
 

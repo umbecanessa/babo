@@ -20,6 +20,7 @@
            [class.channel-inbound-row]="msg.type === 'channel_inbound'"
            [class.channel-outbound-row]="msg.type === 'channel_outbound'"
            [class.channel-skipped-row]="msg.type === 'channel_skipped'"
+           [class.channel-ambient-row]="msg.type === 'channel_ambient'"
            [class.drowsy-row]="msg.type === 'drowsy'"
            [class.budget-row]="msg.type === 'loop_budget_prompt'"
            [class.agentic-row]="msg.type === 'agentic_start' || msg.type === 'agentic_iteration' || msg.type === 'agentic_complete' || msg.type === 'turn_thinking' || msg.type === 'tool_output_chunk' || msg.type === 'tool_progress' || msg.type === 'browser_navigation' || msg.type === 'copilot_ack' || msg.type === 'ask_user'"
@@ -748,6 +749,16 @@
               @if (msg.subject) {
                 <span class="channel-subject">{{ msg.subject }}</span>
               }
+            </div>
+            <div class="channel-content">{{ msg.content }}</div>
+          </div>
+
+        } @else if (msg.type === 'channel_ambient') {
+          <div class="channel-bubble channel-ambient">
+            <div class="channel-indicator">
+              <span class="channel-icon">👁</span>
+              <span class="channel-sender">{{ msg.sender }}</span>
+              <span class="channel-ambient-badge">group · not replied</span>
             </div>
             <div class="channel-content">{{ msg.content }}</div>
           </div>

@@ -7,7 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 
-from .adapter import _channel_display_name
+from .adapter import enrich_discord_normalized_labels
 from nls.skills.channel_adapter_util import broadcast_channel_event, prepare_channel_outbound, strip_signal_tags, channel_history_content
 
 logger = logging.getLogger(__name__)
@@ -57,8 +57,7 @@ async def discord_inbound(agent_id: str, request: Request):
         return {"ok": True, "status": "skip"}
 
     cfg = adapter._agent_cfg(agent_id)
-    channel_id = normalized["metadata"]["channel_id"]
-    normalized["metadata"]["channel_name"] = _channel_display_name(cfg, channel_id)
+    enrich_discord_normalized_labels(cfg, normalized)
 
     raw_for_policy = message if message.get("author") else (body.get("d") or {})
     skip_reason = adapter.explain_policy_block(raw_for_policy, agent_id=agent_id)
@@ -71,7 +70,11 @@ async def discord_inbound(agent_id: str, request: Request):
         from .adapter import broadcast_channel_policy_skip
 
         logger.info("Discord webhook [%s]: policy rejected — %s", agent_id, skip_reason)
-        broadcast_channel_policy_skip(app, agent_id, normalized, reason=skip_reason)
+        if normalized.get("is_group"):
+            from nls.skills.channel_adapter_util import broadcast_group_ambient_inbound
+            broadcast_group_ambient_inbound(app, agent_id, "discord", normalized)
+        else:
+            broadcast_channel_policy_skip(app, agent_id, normalized, reason=skip_reason)
         return {"ok": True, "status": "policy_rejected", "reason": skip_reason}
 
     adapter.register_known_sender(normalized["sender_id"], agent_id)

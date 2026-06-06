@@ -218,6 +218,9 @@ async def whatsapp_inbound(agent_id: str, request: Request):
 
     if not will_respond:
         logger.debug("WhatsApp: policy rejected message from %s", phone)
+        if is_group:
+            from nls.skills.channel_adapter_util import broadcast_group_ambient_inbound
+            broadcast_group_ambient_inbound(app, agent_id, "whatsapp", normalized)
         return {"ok": True, "status": "policy_rejected"}
 
     session_key = normalized["session_key"]

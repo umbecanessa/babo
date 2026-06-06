@@ -89,6 +89,42 @@ def test_apply_channels_bulk_config():
     assert "2" in out["groups"]
 
 
+def test_lookup_scoped_channel_labels():
+    from nls.skills.channel_scope import enrich_session_index_entry, lookup_scoped_channel_labels
+
+    cfg = {
+        "scoped_channels": {
+            "guilds": {"999": {"id": "999", "name": "Kogaea"}},
+            "channels": {
+                "123": {
+                    "id": "123",
+                    "name": "general",
+                    "guild_id": "999",
+                },
+            },
+        },
+    }
+    labels = lookup_scoped_channel_labels(cfg, "123")
+    assert labels["channel_name"] == "general"
+    assert labels["guild_name"] == "Kogaea"
+
+    enriched = enrich_session_index_entry(
+        cfg,
+        "discord:channel:123",
+        {"channel": "discord", "channel_name": "123"},
+    )
+    assert enriched["channel_name"] == "general"
+    assert enriched["guild_name"] == "Kogaea"
+
+    enriched = enrich_session_index_entry(
+        cfg,
+        "slack:channel:C123",
+        {"channel": "slack", "channel_name": "C123"},
+        workspace_name="Acme Workspace",
+    )
+    assert enriched["guild_name"] == "Acme Workspace"
+
+
 def test_infer_pre_shipped_discord():
     from nls.skills_setup_policy import infer_pre_shipped_channel_skill
 

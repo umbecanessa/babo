@@ -670,8 +670,21 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
 
                         if HINT_FLEET_SQUAD in _pre_hints:
                             _pre_goals, _pre_hints = apply_fleet_hint_policy(
-                                _pre_hints, _pre_goals,
+                                _pre_hints,
+                                _pre_goals,
+                                agent_id=agent_id,
                             )
+                        from nls.agentic.job_triage_policy import apply_job_triage_policy
+
+                        _jc = dict(
+                            getattr(_turn_triage, "job_candidate", None) or {},
+                        )
+                        _pre_goals, _pre_hints, _ = apply_job_triage_policy(
+                            _pre_hints,
+                            _pre_goals,
+                            _jc,
+                            agent_id=agent_id,
+                        )
                     except Exception:
                         pass
                     logger.info(

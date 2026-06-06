@@ -45,7 +45,26 @@ async def list_sessions(agent_id: str, request: Request):
     router_obj = runtime.channel_registry.session_router
     for key, meta in router_obj.list_sessions().items():
         if key != "websocket:main":
-            sessions[key] = meta
+            enriched = dict(meta)
+            channel = enriched.get("channel") or key.split(":")[0]
+            registry = runtime.channel_registry
+            adapter = registry.get(channel) if registry is not None else None
+            if adapter is not None:
+                try:
+                    cfg_fn = getattr(adapter, "_agent_cfg", None)
+                    if cfg_fn is not None:
+                        from nls.skills.channel_scope import enrich_session_index_entry
+                        workspace_name = ""
+                        if channel == "slack":
+                            team_names = getattr(adapter, "_team_names", None) or {}
+                            workspace_name = str(team_names.get(agent_id) or "")
+                        enriched = enrich_session_index_entry(
+                            cfg_fn(agent_id), key, enriched,
+                            workspace_name=workspace_name,
+                        )
+                except Exception:
+                    logger.debug("session label enrich failed for %s", key, exc_info=True)
+            sessions[key] = enriched
 
     # Team/delegate pseudo-threads
     _tm = getattr(runtime, "_team_manager", None)
@@ -111,7 +130,20 @@ async def get_session_history(agent_id: str, session_key: str, request: Request)
         )
 
     chat_msgs = [m for m in history if m.get("role") in ("user", "assistant")]
-    return {"messages": chat_msgs}
+
+    ambient_timeline: list[dict[str, Any]] = []
+    try:
+        from nls.runtime.channel_ambient import ambient_timeline_for_session
+
+        agent_dir = getattr(runtime, "agent_dir", None)
+        if agent_dir is not None:
+            ambient_timeline = ambient_timeline_for_session(
+                agent_dir, session_key,
+            )
+    except Exception:
+        logger.debug("ambient timeline load failed for %s", session_key, exc_info=True)
+
+    return {"messages": chat_msgs, "ambient_timeline": ambient_timeline}
 
 
 def _build_team_thread(runtime, team_id: str) -> dict:

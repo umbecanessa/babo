@@ -151,7 +151,7 @@ def _parse_tool_args(args_str: str | dict) -> dict:
     # LLM sometimes emits steps='[{"label":"..."}]' or
     # acceptance_criteria='["item1","item2"]' as strings instead of
     # parsed JSON.  Also repairs truncated arrays missing closing ']'.
-    for k in ("steps", "acceptance_criteria", "depends_on", "output_files"):
+    for k in ("steps", "acceptance_criteria", "depends_on", "output_files", "in_scope", "out_of_scope"):
         v = args.get(k)
         if not isinstance(v, str):
             continue
@@ -2572,6 +2572,7 @@ async def execute_tools(
         if name not in _resolved_allowed and name not in (
             "get_tool_schema",
             "adopt_orchestration_profile",
+            "set_job",
         ):
             _block_msg = tool_not_allowed_message(
                 name,
@@ -2638,6 +2639,27 @@ async def execute_tools(
                 content=_msg,
                 is_error=not _ok,
                 details=_details,
+            )
+            continue
+
+        if name == "set_job":
+            from pathlib import Path
+
+            from nls.agentic.job_triage_policy import execute_set_job
+
+            _agent_dir = getattr(hooks, "agent_dir", None) if hooks else None
+            if _agent_dir is None:
+                ordered_results[idx] = ToolResult(
+                    content="set_job requires agent context.",
+                    is_error=True,
+                )
+                continue
+            ordered_results[idx] = await execute_set_job(
+                agent_dir=Path(_agent_dir),
+                agent_id=getattr(config, "agent_id", "") or "",
+                args=args,
+                session_key=getattr(state, "session_key", "") or "",
+                dispatch_source=getattr(state, "dispatch_source", "") or "",
             )
             continue
 

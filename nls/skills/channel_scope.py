@@ -79,6 +79,63 @@ def effective_channel_ids(cfg: dict[str, Any]) -> set[str]:
     return out
 
 
+def lookup_scoped_channel_labels(
+    cfg: dict[str, Any],
+    channel_id: str,
+    *,
+    guild_id: str | None = None,
+) -> dict[str, str]:
+    """Resolve display labels for a Discord/Slack channel id from scoped config."""
+    scoped = scoped_channels_from_config(cfg)
+    channels = scoped.get("channels") or {}
+    guilds = scoped.get("guilds") or {}
+    cid = str(channel_id or "")
+    entry = channels.get(cid) if cid else None
+    ch_name = ""
+    gid = str(guild_id) if guild_id else ""
+    if isinstance(entry, dict):
+        ch_name = str(entry.get("name") or "")
+        if not gid and entry.get("guild_id"):
+            gid = str(entry["guild_id"])
+    g_name = ""
+    if gid:
+        gentry = guilds.get(gid)
+        if isinstance(gentry, dict):
+            g_name = str(gentry.get("name") or "")
+    return {
+        "channel_name": ch_name or cid,
+        "guild_name": g_name,
+    }
+
+
+def enrich_session_index_entry(
+    cfg: dict[str, Any],
+    session_key: str,
+    entry: dict[str, Any],
+    *,
+    workspace_name: str = "",
+) -> dict[str, Any]:
+    """Fill channel_name / guild_name on persisted session rows when missing."""
+    out = dict(entry)
+    channel = str(out.get("channel") or session_key.split(":")[0])
+    parts = session_key.split(":")
+    if len(parts) < 3:
+        return out
+    thread_type, ident = parts[1], parts[2]
+    if channel not in ("discord", "slack") or thread_type != "channel":
+        return out
+    labels = lookup_scoped_channel_labels(cfg, ident)
+    stored_ch = str(out.get("channel_name") or "")
+    if not stored_ch or stored_ch == ident:
+        out["channel_name"] = labels["channel_name"]
+    if not out.get("guild_name"):
+        if labels["guild_name"]:
+            out["guild_name"] = labels["guild_name"]
+        elif channel == "slack" and workspace_name:
+            out["guild_name"] = workspace_name
+    return out
+
+
 def merge_observed_channels(
     cfg: dict[str, Any],
     observed: list[dict[str, Any]],

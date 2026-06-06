@@ -60,6 +60,9 @@ def channel_session_metadata(normalized: dict[str, Any]) -> dict[str, Any]:
     ch_name = meta.get("channel_name") or normalized.get("channel_name")
     if ch_name:
         out["channel_name"] = ch_name
+    guild_name = meta.get("guild_name") or normalized.get("guild_name")
+    if guild_name:
+        out["guild_name"] = guild_name
     if meta.get("thread_ts"):
         out["thread_ts"] = meta["thread_ts"]
     return out

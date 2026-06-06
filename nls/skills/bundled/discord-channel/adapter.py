@@ -84,6 +84,25 @@ def _channel_display_name(cfg: dict[str, Any], channel_id: str) -> str:
     return channel_id
 
 
+def enrich_discord_normalized_labels(
+    cfg: dict[str, Any],
+    normalized: dict[str, Any],
+) -> None:
+    """Attach human channel/server names before WS broadcast or session save."""
+    meta = normalized.setdefault("metadata", {})
+    channel_id = str(meta.get("channel_id") or "")
+    if not channel_id:
+        return
+    meta["channel_name"] = _channel_display_name(cfg, channel_id)
+    from nls.skills.channel_scope import lookup_scoped_channel_labels
+    guild_id = meta.get("guild_id")
+    labels = lookup_scoped_channel_labels(
+        cfg, channel_id, guild_id=str(guild_id) if guild_id else None,
+    )
+    if labels["guild_name"]:
+        meta["guild_name"] = labels["guild_name"]
+
+
 def broadcast_channel_policy_skip(
     app: Any,
     agent_id: str,
@@ -108,6 +127,7 @@ def broadcast_channel_policy_skip(
             "content_preview": (normalized.get("content") or "")[:100],
             "session_key": normalized.get("session_key", ""),
             "channel_name": meta.get("channel_name", ""),
+            "guild_name": meta.get("guild_name", ""),
         }))
     except Exception:
         pass
@@ -838,6 +858,9 @@ class DiscordAdapter:
         if normalized is None:
             return
 
+        cfg = self._agent_cfg(agent_id)
+        enrich_discord_normalized_labels(cfg, normalized)
+
         runtime = None
         app = None
         agent_manager = None
@@ -863,7 +886,11 @@ class DiscordAdapter:
             logger.info("Discord [%s]: policy skip — %s", agent_id, reason)
             try:
                 from server.main import app
-                broadcast_channel_policy_skip(app, agent_id, normalized, reason=reason)
+                if normalized.get("is_group"):
+                    from nls.skills.channel_adapter_util import broadcast_group_ambient_inbound
+                    broadcast_group_ambient_inbound(app, agent_id, "discord", normalized)
+                else:
+                    broadcast_channel_policy_skip(app, agent_id, normalized, reason=reason)
             except Exception:
                 pass
             return
@@ -872,9 +899,7 @@ class DiscordAdapter:
         if downloaded:
             normalized["attachments"] = downloaded
 
-        cfg = self._agent_cfg(agent_id)
         channel_id = normalized["metadata"]["channel_id"]
-        normalized["metadata"]["channel_name"] = _channel_display_name(cfg, channel_id)
 
         await self._process_inbound(agent_id, normalized, message)
 

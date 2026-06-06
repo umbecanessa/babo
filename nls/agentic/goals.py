@@ -42,6 +42,7 @@ class TurnTriage:
     goals: list[str] = field(default_factory=list)
     hints: list[str] = field(default_factory=list)
     deferred: list[dict] = field(default_factory=list)
+    job_candidate: dict[str, Any] = field(default_factory=dict)
     # True when goals/hints came from triage micro-inference; False for heuristic fallback.
     classifier_inferred: bool = True
 
@@ -96,6 +97,17 @@ class TurnTriage:
 
         self.goals, self.hints = apply_fleet_hint_policy(
             self.hints, self.goals, agent_id=agent_id,
+        )
+
+    def reconcile_job_charter_hints(self, *, agent_id: str = "") -> None:
+        """Apply solo Job charter policy — strip hints for squad agents."""
+        from nls.agentic.job_triage_policy import apply_job_triage_policy
+
+        self.goals, self.hints, self.job_candidate = apply_job_triage_policy(
+            self.hints,
+            self.goals,
+            self.job_candidate,
+            agent_id=agent_id,
         )
 
 _THINKING_BLOCK_RE = re.compile(
@@ -171,7 +183,8 @@ _TURN_TRIAGE_SYSTEM_BASE = (
     "Classify the user's LATEST message and extract task structure.\n"
     "Return ONE JSON object with these fields:\n"
     '  {"intent": "...", "thinking": true|false, "profile": "...", '
-    '"goals": [...], "hints": [...], "deferred": [...]}\n\n'
+    '"goals": [...], "hints": [...], "deferred": [...], '
+    '"job_candidate": {...}}\n\n'
     + _TURN_TRIAGE_TOOL_CATALOG_PLACEHOLDER
     + "\n\n"
     "INTENT (exactly one):\n"
@@ -248,6 +261,14 @@ _TURN_TRIAGE_SYSTEM_BASE = (
     "is already connected, do NOT ask for bot token or scaffold skills. Emit when they "
     "want persistent agents working together; goals should mention squad_setup / "
     "set_member_job; agent confirms with ask_user() first.\n"
+    "  job:charter_candidate — owner wants YOU (solo agent) to take an ONGOING role "
+    "('be my mod', 'you are my research assistant', 'your job is to monitor X'). "
+    "NOT a one-shot task ('fix this bug', 'send me a report today'). Emit job_candidate "
+    "with draft title/mission/persona/playbook/in_scope/out_of_scope; goals should "
+    "include propose charter + ask_user + set_job after owner_confirmed=true. "
+    "NEVER combine with fleet:squad_candidate. Skip when user is staffing multiple agents.\n"
+    "  continuation:job_confirm — owner said yes/approved after you proposed a Job "
+    "charter; call set_job(owner_confirmed=true, ...) with agreed fields.\n"
     "Also plain-language hints are allowed ('be thorough', etc.).\n"
     "DEFERRED: post-task channel delivery "
     '{"channel":"whatsapp|telegram|email|chat","instruction":"..."}.\n\n'
@@ -380,7 +401,25 @@ _TURN_TRIAGE_SYSTEM_BASE = (
     '"Configure each member via squad configure_member with its bot token",'
     '"Set member jobs and verify channel scope via channel_inspect target_agent_id"],'
     '"hints":["fleet:squad_candidate","continuation:credential"],'
-    '"deferred":[]}\n'
+    '"deferred":[]}\n\n'
+    'User: "I want you to be my Discord community moderator — warn spammers and '
+    'welcome new members"\n'
+    '(solo ongoing role — NOT squad staffing)\n'
+    '{"intent":"TASK_THINK","thinking":true,"profile":"solo_structured",'
+    '"goals":["Propose moderator Job charter","Confirm with ask_user",'
+    '"Apply via set_job after owner_confirmed=true"],'
+    '"hints":["job:charter_candidate"],'
+    '"job_candidate":{"title":"Discord Community Moderator",'
+    '"mission":"Moderate the Discord community: enforce rules, welcome members.",'
+    '"persona":"Fair, friendly, firm.",'
+    '"playbook":"Read context before acting; warn before mute; escalate repeats.",'
+    '"in_scope":["Moderation","Welcoming"],'
+    '"out_of_scope":["Banning without owner approval"]},'
+    '"deferred":[]}\n\n'
+    'User: (after assistant proposed Job charter) "Yes, that looks good"\n'
+    '{"intent":"TASK_THINK","thinking":true,"profile":"solo_structured",'
+    '"goals":["Apply approved Job via set_job(owner_confirmed=true)"],'
+    '"hints":["continuation:job_confirm"],"deferred":[]}\n'
     'NEVER setup:configure_bundled on the lead when INSTALLED CHANNEL STATUS '
     'shows discord CONNECTED and CONTINUATION CONTEXT mentions multi-face/squad.\n\n'
     'WRONG for squad staffing (never combine fleet + skill hints):\n'
@@ -611,6 +650,9 @@ def _parse_triage_dict(parsed: dict) -> TurnTriage:
         d for d in parsed.get("deferred", [])
         if isinstance(d, dict) and d.get("channel")
     ]
+    from nls.agentic.job_triage_policy import normalize_job_candidate
+
+    job_candidate = normalize_job_candidate(parsed.get("job_candidate"))
 
     triage = TurnTriage(
         intent=intent,
@@ -619,10 +661,12 @@ def _parse_triage_dict(parsed: dict) -> TurnTriage:
         goals=goals,
         hints=hints,
         deferred=deferred,
+        job_candidate=job_candidate,
     )
     triage.cap_profile_from_hints()
     triage.reconcile_orchestration_depth()
     triage.reconcile_fleet_vs_skill_hints()
+    triage.reconcile_job_charter_hints()
     return triage
 
 

@@ -96,6 +96,11 @@ async def telegram_inbound(agent_id: str, request: Request):
         )
         return {"ok": True, "status": "skip"}
 
+    chat = message.get("chat", {})
+    chat_title = (chat.get("title") or "").strip()
+    if chat_title:
+        normalized.setdefault("metadata", {})["channel_name"] = chat_title
+
     from nls.skills.channel_ambient import record_inbound_ambient, record_outbound_ambient
 
     will_respond = adapter.should_respond(message, agent_id=agent_id)
@@ -119,6 +124,9 @@ async def telegram_inbound(agent_id: str, request: Request):
             is_mention,
             preview,
         )
+        if normalized.get("is_group"):
+            from nls.skills.channel_adapter_util import broadcast_group_ambient_inbound
+            broadcast_group_ambient_inbound(app, agent_id, "telegram", normalized)
         return {"ok": True, "status": "policy_rejected"}
 
     adapter.register_known_sender(normalized["metadata"]["chat_id"], agent_id)

@@ -25,7 +25,12 @@ _PREVIEW_CHARS = 600
 
 
 def is_shared_channel_session(session_key: str | None) -> bool:
-    """True for group/supergroup/channel sessions (not DM or Home)."""
+    """True for group/supergroup/channel sessions (not DM or Home).
+
+    Email threads (``email:thread:…``) are intentionally excluded: each accepted
+    inbound is appended to the session transcript, which already carries the full
+    reply chain. Ambient logging is for mention-gated *group chat* traffic only.
+    """
     if not session_key or session_key in ("websocket:main",):
         return False
     parts = session_key.split(":")
@@ -337,3 +342,32 @@ def recent_ambient_snippet(
         + "\n".join(lines)
         + "\n\n"
     )
+
+
+def ambient_timeline_for_session(
+    agent_dir: Path,
+    session_key: str,
+    *,
+    limit: int = 500,
+) -> list[dict[str, Any]]:
+    """Chronological ambient rows for UI thread restore (group/channel sessions only)."""
+    if not is_shared_channel_session(session_key):
+        return []
+    rows, _ = query_channel_ambient(
+        agent_dir,
+        session_key=session_key,
+        limit=limit,
+        newest_first=False,
+    )
+    timeline: list[dict[str, Any]] = []
+    for row in rows:
+        timeline.append({
+            "role": row.get("role"),
+            "content": row.get("content") or "",
+            "sender": row.get("sender_name") or row.get("sender_id") or "",
+            "triggered": bool(row.get("triggered")),
+            "is_mention": bool(row.get("is_mention")),
+            "timestamp": row.get("ts"),
+            "message_id": row.get("message_id"),
+        })
+    return timeline

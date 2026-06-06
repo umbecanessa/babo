@@ -211,6 +211,46 @@ class ConsciousnessScheduler:
             agent_id,
         )
 
+    def preempt_background(self, agent_id: str) -> None:
+        """Cancel daydream/DMN without pausing the inner loop.
+
+        Used when a channel message is accepted: stop background inference
+        immediately but let the inner loop dispatch the queued event on the
+        next breath.  Web chat uses :meth:`on_user_message` (pause + cancel).
+        """
+        entry = self._agents.get(agent_id)
+        if entry is None:
+            self.register_agent(agent_id)
+            entry = self._agents[agent_id]
+
+        entry.last_user_message_at = time.time()
+
+        if (
+            entry.state == AgentConsciousnessState.CONSCIOUS
+            and entry.inner_loop is not None
+        ):
+            entry.inner_loop.preempt_background()
+            return
+
+        if entry.state == AgentConsciousnessState.SLEEPING:
+            if self._sleep_scheduler is not None:
+                if self._sleep_scheduler.dequeue(agent_id):
+                    logger.info(
+                        "Agent %s: dequeued from sleep queue for channel preempt",
+                        agent_id,
+                    )
+                    try:
+                        self._wake_requests.put_nowait(agent_id)
+                    except asyncio.QueueFull:
+                        pass
+            return
+
+        if entry.state == AgentConsciousnessState.FROZEN:
+            try:
+                self._wake_requests.put_nowait(agent_id)
+            except asyncio.QueueFull:
+                pass
+
     async def on_user_message(self, agent_id: str) -> None:
         """A user sent a message to this agent.  Highest priority.
 

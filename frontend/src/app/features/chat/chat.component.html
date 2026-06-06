@@ -281,11 +281,14 @@
           </div>
         }
 
-        @if (activeThreadMeta()?.channel === 'telegram' || activeThreadMeta()?.channel === 'whatsapp') {
+        @if (activeThreadMeta()?.channel === 'telegram' || activeThreadMeta()?.channel === 'whatsapp' || activeThreadMeta()?.channel === 'discord' || activeThreadMeta()?.channel === 'slack') {
           <div class="channel-thread-banner" [attr.data-channel]="activeThreadMeta()!.channel">
             <span class="channel-thread-label">{{ activeThreadMeta()!.label }}</span>
+            <span class="channel-thread-kind">
+              {{ activeThreadMeta()?.isGroup ? 'Group' : 'Direct message' }}
+            </span>
             @if (activeThreadMeta()!.sender) {
-              <span class="channel-thread-sender">{{ activeThreadMeta()!.sender }}</span>
+              <span class="channel-thread-sender">last from {{ activeThreadMeta()!.sender }}</span>
             }
           </div>
         }

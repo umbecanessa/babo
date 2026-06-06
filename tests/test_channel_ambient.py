@@ -92,8 +92,33 @@ def test_is_shared_channel_session() -> None:
     assert is_shared_channel_session("discord:channel:123")
     assert is_shared_channel_session("slack:channel:C123")
     assert not is_shared_channel_session("telegram:dm:123")
+    assert not is_shared_channel_session("email:thread:abc123")
     assert not is_shared_channel_session("websocket:main")
     assert not is_shared_channel_session(None)
+
+
+def test_ambient_timeline_for_session(tmp_path: Path) -> None:
+    from nls.runtime.channel_ambient import ambient_timeline_for_session
+
+    norm = _group_norm()
+    append_channel_ambient(tmp_path, norm, triggered=False)
+    append_channel_ambient(
+        tmp_path,
+        _group_norm(content="@bot ping", message_id="2"),
+        triggered=True,
+    )
+    append_channel_ambient_reply(tmp_path, norm, "Sure thing.")
+
+    timeline = ambient_timeline_for_session(tmp_path, norm["session_key"])
+    assert len(timeline) == 3
+    assert timeline[0]["content"] == "should we ship Friday?"
+    assert timeline[0]["triggered"] is False
+    assert timeline[1]["triggered"] is True
+    assert timeline[2]["role"] == "assistant"
+    assert timeline[2]["content"] == "Sure thing."
+
+    assert ambient_timeline_for_session(tmp_path, "email:thread:xyz") == []
+    assert ambient_timeline_for_session(tmp_path, "telegram:dm:123") == []
 
 
 def test_discord_message_id_from_metadata(tmp_path: Path) -> None:

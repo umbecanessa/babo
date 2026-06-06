@@ -1083,6 +1083,9 @@ export interface JobDocument {
   in_scope?: string[];
   out_of_scope?: string[];
   refusal_template?: string;
+  strategic_priorities?: string[];
+  background_enabled?: boolean;
+  background_interval_seconds?: number;
 }
 
 export interface TrustDocument {

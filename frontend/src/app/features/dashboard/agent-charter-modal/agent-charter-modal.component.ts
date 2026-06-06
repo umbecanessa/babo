@@ -46,6 +46,9 @@ export class AgentCharterModalComponent implements OnChanges {
   jobInScope = '';
   jobOutOfScope = '';
   jobRefusalTemplate = '';
+  jobStrategicPriorities = '';
+  jobBackgroundEnabled = false;
+  jobBackgroundIntervalSeconds = 3600;
 
   toolsAllow = '';
   toolsDeny = '';
@@ -93,6 +96,12 @@ export class AgentCharterModalComponent implements OnChanges {
     this.jobInScope = (job.in_scope || []).join('\n');
     this.jobOutOfScope = (job.out_of_scope || []).join('\n');
     this.jobRefusalTemplate = job.refusal_template || '';
+    this.jobStrategicPriorities = (job.strategic_priorities || []).join('\n');
+    this.jobBackgroundEnabled = !!job.background_enabled;
+    this.jobBackgroundIntervalSeconds =
+      job.background_interval_seconds && job.background_interval_seconds > 0
+        ? job.background_interval_seconds
+        : 3600;
     this.loaded.set(true);
   }
 
@@ -169,6 +178,11 @@ export class AgentCharterModalComponent implements OnChanges {
       in_scope: this.linesToList(this.jobInScope),
       out_of_scope: this.linesToList(this.jobOutOfScope),
       refusal_template: this.jobRefusalTemplate.trim(),
+      strategic_priorities: this.linesToList(this.jobStrategicPriorities),
+      background_enabled: this.jobBackgroundEnabled,
+      background_interval_seconds: this.jobBackgroundEnabled
+        ? Math.max(300, Math.floor(this.jobBackgroundIntervalSeconds || 3600))
+        : 0,
     };
   }
 

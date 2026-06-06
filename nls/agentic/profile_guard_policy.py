@@ -63,6 +63,11 @@ HINT_FLEET_SQUAD = frozenset({
     "fleet:squad_candidate",
 })
 
+HINT_JOB_CHARTER = frozenset({
+    "job:charter_candidate",
+    "continuation:job_confirm",
+})
+
 HINT_INSTRUCTION_SKILL_SETUP = frozenset({
     "setup:instruction_skill",
 })
@@ -650,7 +655,9 @@ def tools_denied_by_hints(hints: list[str] | None) -> frozenset[str]:
     if tokens & HINT_FORBID_PLAN:
         denied.update({"plan", "todo"})
     if tokens & HINT_FLEET_SQUAD:
-        denied.update({"team", "delegate"})
+        denied.update({"team", "delegate", "set_job"})
+    if tokens & HINT_JOB_CHARTER:
+        denied.update({"squad_setup", "squad", "team"})
     if tokens & HINT_FORBID_TOOLS:
         denied.update(_PROSE_ONLY_TOOL_DENY)
     return frozenset(denied)

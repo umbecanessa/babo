@@ -121,6 +121,7 @@ export interface ChatMessage {
     | 'delegate_card'
     | 'channel_inbound'
     | 'channel_outbound'
+    | 'channel_ambient'
     | 'channel_skipped'
     | 'connection_request'
     | 'probe_signal'

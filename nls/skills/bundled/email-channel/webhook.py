@@ -76,8 +76,18 @@ async def process_inbound_email(
     if adapter is None:
         return {"ok": False, "error": "email skill not loaded"}
 
+    normalized = adapter.normalize_inbound(
+        sender=sender,
+        subject=subject,
+        body=text,
+        headers=headers,
+        message_id=message_id,
+        agent_id=agent_id,
+    )
+
     if not adapter.should_respond(sender, agent_id=agent_id, headers=headers):
         logger.info("Email [%s]: policy rejected from %s", agent_id, sender)
+        _broadcast_policy_skip(app, agent_id, normalized, reason="Sender not allowed by email policy")
         return {"ok": True, "status": "policy_rejected"}
 
     adapter.register_known_sender(sender, agent_id)
@@ -89,15 +99,6 @@ async def process_inbound_email(
     runtime = agent_manager.get_runtime(agent_id)
     if runtime is None:
         return {"ok": False, "error": f"agent {agent_id} not found"}
-
-    normalized = adapter.normalize_inbound(
-        sender=sender,
-        subject=subject,
-        body=text,
-        headers=headers,
-        message_id=message_id,
-        agent_id=agent_id,
-    )
 
     raw_attachments = []
     if full_email:
@@ -353,6 +354,12 @@ async def _handle_conversation(
     from nls.skills.surface_send import channel_session_metadata
     session_meta = channel_session_metadata(normalized)
 
+    runtime.save_session_history(
+        history + [{"role": "user", "content": display_text}],
+        session_key=session_key,
+        metadata=session_meta,
+    )
+
     _broadcast_channel_event(app, agent_id, normalized, response="", direction="inbound")
 
     try:
@@ -470,6 +477,34 @@ def _broadcast_channel_event(
             "response": clean_response,
             "session_key": normalized["session_key"],
             "message_type": normalized.get("message_type", "chat"),
+        }))
+    except Exception:
+        pass
+
+
+def _broadcast_policy_skip(
+    app: Any,
+    agent_id: str,
+    normalized: dict[str, Any],
+    *,
+    reason: str,
+) -> None:
+    cm = getattr(app.state, "connection_manager", None)
+    if cm is None:
+        return
+    import asyncio
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(cm.broadcast(agent_id, {
+            "type": "channel_event",
+            "channel": "email",
+            "direction": "skipped",
+            "skip_reason": reason,
+            "sender": normalized.get("sender_name") or normalized.get("sender_id") or "?",
+            "subject": normalized.get("metadata", {}).get("subject", ""),
+            "content": normalized.get("content", ""),
+            "content_preview": (normalized.get("content") or "")[:100],
+            "session_key": normalized.get("session_key", ""),
         }))
     except Exception:
         pass

@@ -1194,6 +1194,7 @@ class AgentRuntime:
         "squad", "squad_escalate", "squad_message", "squad_report_done",
     })
     _SQUAD_SETUP_TOOL_NAMES = frozenset({"squad_setup"})
+    _SET_JOB_TOOL_NAMES = frozenset({"set_job"})
 
     def sync_squad_tools(self) -> None:
         """Add/remove squad or bootstrap tools when membership changes."""
@@ -1223,10 +1224,16 @@ class AgentRuntime:
             getattr(t, "name", "") in self._SQUAD_SETUP_TOOL_NAMES
             for t in self._agent_tools
         )
+        has_set_job = any(
+            getattr(t, "name", "") in self._SET_JOB_TOOL_NAMES
+            for t in self._agent_tools
+        )
 
         if in_squad:
             if has_setup:
                 self._remove_tools_by_name(self._SQUAD_SETUP_TOOL_NAMES)
+            if has_set_job:
+                self._remove_tools_by_name(self._SET_JOB_TOOL_NAMES)
             if not has_squad_tools:
                 self._register_squad_tools()
         else:
@@ -1234,6 +1241,8 @@ class AgentRuntime:
                 self._remove_tools_by_name(self._SQUAD_TOOL_NAMES)
             if not has_setup and sm is not None:
                 self._register_squad_setup_tool(sm)
+            if not has_set_job:
+                self._register_set_job_tool()
 
     def _remove_tools_by_name(self, names: frozenset[str]) -> None:
         if self._agent_tools is None:
@@ -1269,6 +1278,24 @@ class AgentRuntime:
             logger.info("Agent %s: squad_setup tool registered", self.agent_id)
         except Exception as exc:
             logger.warning("Agent %s: squad_setup skipped: %s", self.agent_id, exc)
+
+    def _register_set_job_tool(self) -> None:
+        if self._agent_tools is None:
+            return
+        if any(getattr(t, "name", "") == "set_job" for t in self._agent_tools):
+            return
+        try:
+            from nls.tools.agent_tools.set_job import create_set_job_tool
+            from nls.tools.tool_setup import _populate_tools_ring
+
+            self._agent_tools.append(
+                create_set_job_tool(self.agent_dir, self.agent_id),
+            )
+            _populate_tools_ring(self.working_memory, self._agent_tools)
+            self.refresh_tools()
+            logger.info("Agent %s: set_job tool registered", self.agent_id)
+        except Exception as exc:
+            logger.warning("Agent %s: set_job skipped: %s", self.agent_id, exc)
 
     def _register_squad_tools(self) -> None:
         """Attach squad tools when this agent belongs to a squad."""
@@ -4537,6 +4564,10 @@ class AgentRuntime:
                     _fleet_hints = list(getattr(pre_triage, "hints", None) or [])
                 try:
                     from nls.agentic.fleet_triage_policy import fleet_hint_active
+                    from nls.agentic.job_triage_policy import (
+                        job_active_tool_names,
+                        job_hint_active,
+                    )
 
                     if fleet_hint_active(_fleet_hints):
                         self.sync_squad_tools()
@@ -4568,10 +4599,16 @@ class AgentRuntime:
                         fleet_active_tool_names,
                         fleet_hint_active,
                     )
+                    from nls.agentic.job_triage_policy import (
+                        job_active_tool_names,
+                        job_hint_active,
+                    )
 
                     _predicted = _predict_tools(user_input)
                     if fleet_hint_active(_fleet_hints):
                         _predicted |= set(fleet_active_tool_names(self.agent_id))
+                    if job_hint_active(_fleet_hints):
+                        _predicted |= set(job_active_tool_names())
                     _active_tool_names = set(CORE_TOOLS) | _predicted
                     _dt = tool_dict.get("discover_tools")
                     if _dt is not None and hasattr(_dt, "set_registry"):
@@ -5174,6 +5211,22 @@ class AgentRuntime:
         boost_triage_for_work_continuation(
             triage, user_input, history=history,
         )
+        from nls.agentic.job_triage_policy import boost_job_charter_continuation
+
+        boost_job_charter_continuation(
+            triage,
+            user_input,
+            history=history,
+            agent_id=self.agent_id,
+        )
+        from nls.agentic.job_triage_policy import job_hint_active, resolve_job_candidate
+
+        if job_hint_active(triage.hints) and not triage.job_candidate:
+            triage.job_candidate = resolve_job_candidate(
+                None,
+                hints=triage.hints,
+                working_memory=self._ring_working_memory(),
+            )
         from nls.agentic.profile_guard_policy import reconcile_triage_continuation_phase
 
         reconcile_triage_continuation_phase(
@@ -5183,16 +5236,18 @@ class AgentRuntime:
             working_memory=self._ring_working_memory(),
         )
         triage.reconcile_orchestration_depth()
-        triage.reconcile_fleet_vs_skill_hints()
+        triage.reconcile_fleet_vs_skill_hints(agent_id=self.agent_id)
+        triage.reconcile_job_charter_hints(agent_id=self.agent_id)
         self._apply_triage_to_working_memory(triage)
         logger.info(
-            "Agent %s: triage intent=%s profile=%s thinking=%s goals=%s hints=%s",
+            "Agent %s: triage intent=%s profile=%s thinking=%s goals=%s hints=%s job=%s",
             self.agent_id,
             triage.intent,
             triage.profile,
             triage.thinking,
             triage.goals,
             triage.hints,
+            bool(getattr(triage, "job_candidate", None)),
         )
         return triage
 
@@ -5290,6 +5345,17 @@ class AgentRuntime:
                     domain="Task.Hints",
                     content=" | ".join(_clean_hints),
                 )
+        job_candidate = getattr(triage, "job_candidate", None) or {}
+        if job_candidate and wm is not None:
+            try:
+                import json as _json
+
+                wm.upsert_fact(
+                    domain="Task.JobCandidate",
+                    content=_json.dumps(job_candidate, ensure_ascii=False),
+                )
+            except Exception:
+                pass
 
     async def extract_task_goals(
         self, user_input: str,

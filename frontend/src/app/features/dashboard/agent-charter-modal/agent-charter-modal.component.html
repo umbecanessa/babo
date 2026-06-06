@@ -48,6 +48,24 @@
           <label>In scope (one per line) <textarea rows="2" [(ngModel)]="jobInScope"></textarea></label>
           <label>Out of scope (one per line) <textarea rows="2" [(ngModel)]="jobOutOfScope"></textarea></label>
           <label>Refusal template <textarea rows="2" [(ngModel)]="jobRefusalTemplate"></textarea></label>
+          <label>Strategic priorities (one per line)
+            <textarea rows="2" [(ngModel)]="jobStrategicPriorities" placeholder="Monitor Discord mod queue&#10;Weekly owner summary"></textarea>
+          </label>
+          <label class="checkbox-row">
+            <input type="checkbox" [(ngModel)]="jobBackgroundEnabled" />
+            Background work enabled
+          </label>
+          @if (jobBackgroundEnabled) {
+            <label>
+              Background interval (seconds, min 300)
+              <input
+                type="number"
+                min="300"
+                step="60"
+                [(ngModel)]="jobBackgroundIntervalSeconds" />
+            </label>
+            <p class="hint">When enabled, the agent may run idle Job check-backs using this charter.</p>
+          }
         </div>
       } @else {
         <div class="tab-body">

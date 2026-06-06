@@ -220,6 +220,43 @@ class InnerLoop:
             self.stats.total_beats, self.stats.total_breaths,
         )
 
+    def preempt_background(self) -> None:
+        """Cancel daydream/DMN work so the agent can attend to a human.
+
+        Does **not** pause the breath cycle — safe to call when enqueueing
+        a channel event that the inner loop will dispatch on the next breath.
+        Web/chat foreground paths use :meth:`interrupt` instead (pause + this).
+        """
+        if self._pending_sleep_reason is not None:
+            logger.info(
+                "InnerLoop: cancelled pending sleep for agent %s "
+                "(user preempts background, reason was: %s)",
+                self.runtime.agent_id, self._pending_sleep_reason,
+            )
+            self._pending_sleep_reason = None
+            self._pending_sleep_at = None
+
+        ans = getattr(self.runtime, "ans", None)
+        if ans is not None:
+            from datetime import datetime as _dt
+            ans._last_interaction_at = _dt.utcnow()
+
+        self._grace_breaths = max(self._grace_breaths, 5)
+
+        if self._active_dream_task is not None:
+            if not self._active_dream_task.done():
+                self._active_dream_task.cancel()
+                logger.info(
+                    "InnerLoop: active dream cancelled for agent %s "
+                    "(background preempt)",
+                    self.runtime.agent_id,
+                )
+            self._active_dream_task = None
+
+        ss = getattr(self.runtime, "self_state", None)
+        if ss is not None:
+            ss.turns_since_input = 0
+
     def interrupt(self) -> None:
         """User message arrives.  Pause the loop so the main inference
         path can handle the message.  The heartbeat effectively pauses.
@@ -230,41 +267,8 @@ class InnerLoop:
 
         Call ``resume()`` after the user message is processed.
         """
+        self.preempt_background()
         self._paused = True
-
-        # Cancel any pending drowsy negotiation — user is active,
-        # sleep must not proceed.
-        if self._pending_sleep_reason is not None:
-            logger.info(
-                "InnerLoop: cancelled pending sleep for agent %s "
-                "(user message preempts, reason was: %s)",
-                self.runtime.agent_id, self._pending_sleep_reason,
-            )
-            self._pending_sleep_reason = None
-            self._pending_sleep_at = None
-
-        # Reset ANS interaction timestamp immediately so idle-timeout
-        # doesn't fire with a stale value once the loop resumes.
-        ans = getattr(self.runtime, "ans", None)
-        if ans is not None:
-            from datetime import datetime as _dt
-            ans._last_interaction_at = _dt.utcnow()
-
-        # Grant grace breaths so sleep doesn't re-trigger the moment
-        # the loop resumes after the user message is processed.
-        self._grace_breaths = max(self._grace_breaths, 5)
-
-        # Abort any in-progress active dream
-        if self._active_dream_task is not None:
-            if not self._active_dream_task.done():
-                self._active_dream_task.cancel()
-                logger.info(
-                    "InnerLoop: active dream cancelled for agent %s "
-                    "(user message preempts)",
-                    self.runtime.agent_id,
-                )
-            self._active_dream_task = None
-
         logger.debug(
             "InnerLoop paused for agent %s (user message)",
             self.runtime.agent_id,
@@ -1436,6 +1440,36 @@ class InnerLoop:
         if depth == EngagementDepth.DROP:
             return True
 
+        _slot_mgr = getattr(rt, "_slot_manager", None)
+        _deep_locked = (
+            _slot_mgr.deep.is_busy if _slot_mgr is not None else rt.is_busy
+        )
+
+        # ── FOCUS while deep slot is held: lightweight reply on the channel ──
+        if depth == EngagementDepth.FOCUS and _deep_locked:
+            if user_input:
+                try:
+                    from nls.engine.micro_inference import micro_respond
+                    _tm = getattr(rt, "_team_manager", None)
+                    if rt.inference_available():
+                        await micro_respond(
+                            runtime=rt,
+                            user_input=user_input,
+                            team_manager=_tm,
+                            history=history,
+                            reply_channel=_reply,
+                        )
+                except Exception:
+                    logger.warning(
+                        "Agent %s: channel focus/micro dispatch failed",
+                        agent_id, exc_info=True,
+                    )
+            if session_key:
+                from nls.runtime.surface_inbox import mark_session_inbox_handled
+
+                mark_session_inbox_handled(agent_id, session_key)
+            return True
+
         # ── FOCUS / DEEP: full agentic processing ──
         if not user_input:
             return True
@@ -1466,14 +1500,13 @@ class InnerLoop:
         if _tm is not None:
             _tm._copilot_queue = copilot_queue
 
-        # Preempt autonomous tasks
-        _cs = getattr(rt, "_consciousness_scheduler", None)
-        if _cs is not None:
-            await _cs.on_user_message(agent_id)
-            for _ in range(10):
-                if not rt.is_busy:
-                    break
-                await asyncio.sleep(0.3)
+        # Preempt daydream/DMN — channel dispatch runs inside the inner loop,
+        # so cancel background work without pausing the breath cycle.
+        self.preempt_background()
+        for _ in range(10):
+            if not rt.is_busy:
+                break
+            await asyncio.sleep(0.3)
 
         # Register pending queue for ask_user routing
         from nls.skills.channel_processing import _pending_queues
@@ -1582,11 +1615,15 @@ class InnerLoop:
 
         dispatched = False
         _deferred: list = []
+        _slot_mgr = getattr(rt, "_slot_manager", None)
+        _deep_busy = (
+            _slot_mgr.deep.is_busy if _slot_mgr is not None else rt.is_busy
+        )
 
         for event in events:
             depth = _router.route(
                 event,
-                deep_slot_busy=rt.is_busy,
+                deep_slot_busy=_deep_busy,
                 focus_slot_busy=getattr(self, "_autonomous_executing", False),
             )
 
@@ -1723,7 +1760,7 @@ class InnerLoop:
         """
         if getattr(self, "_autonomous_executing", False):
             return False
-        if rt.is_busy:
+        if getattr(rt, "is_user_busy", False):
             return False
         use_v2 = rt.config.get("agency", {}).get(
             "agentic_loop", {},

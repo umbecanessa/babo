@@ -6,6 +6,8 @@ export interface ConversationThread {
   channel: string;
   sender?: string;
   subject?: string;
+  channelName?: string;
+  isGroup?: boolean;
   unread?: boolean;
   guildName?: string;
 }
@@ -109,16 +111,34 @@ export class ConversationService {
   setThreadsFromRestore(restored: ConversationThread[]): void {
     if (restored.length === 0) return;
     this._threads.update((list) => {
-      const keys = new Set(list.map((t) => t.key));
-      const merged = [...list];
+      const byKey = new Map(list.map((t) => [t.key, t]));
       for (const r of restored) {
-        if (!keys.has(r.key)) {
-          merged.push(r);
-          keys.add(r.key);
+        const prev = byKey.get(r.key);
+        if (!prev) {
+          byKey.set(r.key, r);
+          continue;
         }
+        byKey.set(r.key, {
+          ...prev,
+          ...r,
+          label: r.label || prev.label,
+          channelName: r.channelName || prev.channelName,
+          guildName: r.guildName || prev.guildName,
+        });
       }
-      return merged;
+      return Array.from(byKey.values());
     });
+  }
+
+  /** True when sidebar metadata still looks like a raw platform id. */
+  threadLabelLooksLikeId(thread: ConversationThread): boolean {
+    const ident = thread.key.split(':')[2] || '';
+    if (!ident) return false;
+    const ch = (thread.channelName || '').replace(/^#/, '');
+    return ch === ident
+      || thread.label === ident
+      || thread.label === `#${ident}`
+      || thread.label.endsWith(` · ${ident.slice(-6)}`);
   }
 
   markThreadRead(sessionKey: string): void {
@@ -150,27 +170,45 @@ export class ConversationService {
     return thread;
   }
 
-  labelFromSessionKey(key: string, channel: string, meta?: { sender?: string; subject?: string }): string {
+  labelFromSessionKey(key: string, channel: string, meta?: {
+    sender?: string;
+    subject?: string;
+    channel_name?: string;
+    channelName?: string;
+    guild_name?: string;
+    guildName?: string;
+  }): string {
     if (key === 'websocket:main') return 'Home';
     const parts = key.split(':');
+    const threadType = parts[1] || '';
+    const isGroup = threadType === 'group' || threadType === 'channel';
+    const chName = (meta?.channelName || meta?.channel_name || '').replace(/^#/, '');
+    const guild = meta?.guildName || meta?.guild_name || '';
+
     if (meta?.subject) {
       return meta.subject.replace(/^re:\s*/i, '').substring(0, 40);
     }
-    if (meta?.sender) {
-      return channel === 'telegram' ? `@${meta.sender}` : meta.sender;
-    }
     switch (channel) {
       case 'discord':
-        return parts[1] === 'dm' ? (parts[2] || 'DM') : (parts[2] ? `#${parts[2]}` : 'Channel');
+        if (threadType === 'dm') return meta?.sender ? `@${meta.sender}` : (parts[2] || 'DM');
+        if (guild && chName) return `${guild} · #${chName}`;
+        if (chName) return `#${chName}`;
+        return parts[2] ? `#${parts[2]}` : 'Channel';
       case 'telegram':
-        return parts[1] === 'group' ? (parts[2] || 'Group') : (parts[2] ? `@${parts[2]}` : 'DM');
+        if (isGroup) return chName || `Group · ${(parts[2] || '').slice(-6) || 'chat'}`;
+        return meta?.sender ? `@${meta.sender}` : (parts[2] ? `@${parts[2]}` : 'Telegram DM');
       case 'whatsapp':
-        return parts[2] || 'Chat';
+        if (isGroup) return chName || `Group · ${parts[2] || 'chat'}`;
+        return meta?.sender || parts[2] || 'Chat';
       case 'slack':
-        return parts[1] === 'dm' ? (parts[2] || 'DM') : (parts[2] || 'Channel');
+        if (threadType === 'dm') return meta?.sender ? `@${meta.sender}` : (parts[2] || 'DM');
+        if (guild && chName) return `${guild} · #${chName}`;
+        if (chName) return `#${chName}`;
+        return parts[2] || 'Channel';
       case 'email':
         return `Re: ${(parts.slice(2).join(':') || 'Thread').substring(0, 30)}`;
       default:
+        if (meta?.sender && !isGroup) return meta.sender;
         return parts.slice(1).join(':') || 'Thread';
     }
   }
@@ -179,28 +217,26 @@ export class ConversationService {
     sender?: string;
     subject?: string;
     channel_name?: string;
+    guild_name?: string;
+    session_key?: string;
   }): string {
     const sender = event.sender || '';
-    switch (channel) {
-      case 'telegram':
-        return sender ? `@${sender}` : 'DM';
-      case 'whatsapp':
-        return sender || 'Chat';
-      case 'email': {
-        const subj = event.subject || '';
-        return subj ? `Re: ${subj.replace(/^re:\s*/i, '').substring(0, 40)}` : sender || 'Thread';
-      }
-      case 'discord': {
-        const ch = event.channel_name || '';
-        return ch ? `#${ch}` : sender ? `@${sender}` : 'Discord';
-      }
-      case 'slack': {
-        const ch = event.channel_name || '';
-        return ch ? `#${ch}` : sender || 'Slack';
-      }
-      default:
-        return sender || 'Thread';
-    }
+    const sk = event.session_key || '';
+    return this.labelFromSessionKey(sk, channel, {
+      sender,
+      subject: event.subject,
+      channel_name: event.channel_name,
+      guild_name: event.guild_name,
+    });
+  }
+
+  threadFlagsFromKey(key: string): { isGroup: boolean; isDm: boolean } {
+    const parts = key.split(':');
+    const threadType = parts[1] || '';
+    return {
+      isGroup: threadType === 'group' || threadType === 'channel',
+      isDm: threadType === 'dm',
+    };
   }
 
   clearInbox(): void {

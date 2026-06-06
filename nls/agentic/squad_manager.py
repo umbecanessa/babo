@@ -389,29 +389,9 @@ class SquadManager:
             logger.debug("job/trust runtime sync skipped for %s: %s", agent_id, exc)
 
     def _apply_job_patch_fields(self, agent_id: str, fields: dict[str, Any]) -> dict[str, Any]:
-        from nls.runtime.job_trust import load_job, save_job
+        from nls.runtime.job_trust import patch_job_fields
 
-        if not fields:
-            raise ValueError("No job fields to apply")
-        agent_dir = self._agent_dir(agent_id)
-        if not agent_dir.exists():
-            raise ValueError(f"Agent {agent_id} not found")
-        job = load_job(agent_dir)
-        allowed = {
-            "title", "mission", "persona", "playbook", "in_scope", "out_of_scope",
-            "refusal_template", "refusal_examples", "escalation_paths",
-            "default_profile", "strategic_priorities",
-            "background_enabled", "background_interval_seconds",
-        }
-        for key, val in fields.items():
-            if key not in allowed or val is None:
-                continue
-            setattr(job, key, val)
-        from nls.runtime.job_background import is_stock_job
-
-        if not is_stock_job(job):
-            job.background_enabled = True
-        save_job(agent_dir, job)
+        job = patch_job_fields(self._agent_dir(agent_id), fields)
         self._sync_runtime_job_trust(agent_id)
         return job.to_dict()
 
@@ -441,19 +421,9 @@ class SquadManager:
 
     @staticmethod
     def _job_fields_from_kwargs(**kwargs: Any) -> dict[str, Any]:
-        mapping = {
-            "title": kwargs.get("title") or kwargs.get("job_title"),
-            "mission": kwargs.get("description") or kwargs.get("job_mission") or kwargs.get("message"),
-            "persona": kwargs.get("job_persona") or kwargs.get("persona"),
-            "playbook": kwargs.get("job_playbook") or kwargs.get("playbook"),
-            "default_profile": kwargs.get("default_profile"),
-            "in_scope": kwargs.get("in_scope"),
-            "out_of_scope": kwargs.get("out_of_scope"),
-            "refusal_template": kwargs.get("refusal_template"),
-            "escalation_paths": kwargs.get("escalation_paths"),
-            "strategic_priorities": kwargs.get("strategic_priorities"),
-        }
-        return {k: v for k, v in mapping.items() if v is not None and v != ""}
+        from nls.runtime.job_trust import job_fields_from_kwargs
+
+        return job_fields_from_kwargs(**kwargs)
 
     @staticmethod
     def _trust_fields_from_kwargs(**kwargs: Any) -> dict[str, Any]:

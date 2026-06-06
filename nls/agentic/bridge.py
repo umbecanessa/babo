@@ -111,6 +111,7 @@ class LoopHooks:
     outbound_check: Callable[[str, dict], str | None] | None = None
     outbound_record: Callable[[str, dict], None] | None = None
     wm_get_tactical_goals: Callable[[], list[str]] | None = None
+    wm_get_job_candidate: Callable[[], dict[str, Any]] | None = None
     orchestrator_pre_delegate_check: Callable[[str, dict], str | None] | None = None
 
     # --- Mid-wait Cryptex refresh ---
@@ -2563,6 +2564,13 @@ def build_hooks_v4(
         except Exception:
             return []
 
+    def _wm_get_job_candidate() -> dict[str, Any]:
+        from nls.agentic.job_triage_policy import normalize_job_candidate
+        from nls.runtime.job_trust import read_task_job_candidate
+
+        _target = dual_wm if dual_wm is not None else working_memory
+        return normalize_job_candidate(read_task_job_candidate(_target))
+
     def _wm_get_credentials() -> list[tuple[str, str]]:
         """Return (domain_hint, content) pairs from the Cryptex credentials ring."""
         _target = dual_wm if dual_wm is not None else working_memory
@@ -2648,6 +2656,7 @@ def build_hooks_v4(
         wm_prune_stale_tactical_goals=_wm_prune_stale_tactical_goals,
         wm_get_credentials=_wm_get_credentials,
         wm_get_tactical_goals=_wm_get_tactical_goals,
+        wm_get_job_candidate=_wm_get_job_candidate,
         log_event=_log_event_fn,
         mid_wait_hook=_mid_wait_absorb,
         agent_id=agent_id,

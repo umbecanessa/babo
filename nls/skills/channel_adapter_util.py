@@ -137,11 +137,37 @@ def broadcast_channel_event(
             "content": normalized.get("content", ""),
             "content_preview": (normalized.get("content") or "")[:100],
             "session_key": normalized.get("session_key", ""),
+            "channel_name": (normalized.get("metadata") or {}).get("channel_name", ""),
+            "guild_name": (normalized.get("metadata") or {}).get("guild_name", ""),
+            "subject": (normalized.get("metadata") or {}).get("subject") or normalized.get("subject") or "",
             "response": response,
             "response_preview": response[:100] if response else "",
         }))
     except Exception:
         pass
+
+
+def broadcast_group_ambient_inbound(
+    app: Any,
+    agent_id: str,
+    channel: str,
+    normalized: dict[str, Any],
+) -> None:
+    """Push untriggered group traffic to the UI as ambient timeline entries."""
+    if not normalized.get("is_group"):
+        return
+    content = (normalized.get("content") or "").strip()
+    if not content:
+        if normalized.get("attachments"):
+            content = "[media]"
+        else:
+            return
+    if content == "[empty]":
+        return
+    payload = normalized
+    if content == "[media]" and not (normalized.get("content") or "").strip():
+        payload = {**normalized, "content": content}
+    broadcast_channel_event(app, agent_id, channel, payload, direction="ambient")
 
 
 def chunk_message(text: str, max_len: int) -> list[str]:

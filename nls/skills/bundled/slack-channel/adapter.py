@@ -625,6 +625,25 @@ class SlackAdapter:
         except Exception as exc:
             logger.warning("Slack leave %s failed: %s", channel_id, exc)
 
+    def enrich_normalized_labels(
+        self,
+        agent_id: str,
+        normalized: dict[str, Any],
+    ) -> None:
+        """Attach channel/workspace names before WS broadcast or session save."""
+        channel_id = str((normalized.get("metadata") or {}).get("channel_id") or "")
+        if not channel_id:
+            return
+        from nls.skills.channel_scope import lookup_scoped_channel_labels
+        labels = lookup_scoped_channel_labels(self._agent_cfg(agent_id), channel_id)
+        meta = normalized.setdefault("metadata", {})
+        meta["channel_name"] = labels["channel_name"]
+        team = self._team_names.get(agent_id, "")
+        if labels["guild_name"]:
+            meta["guild_name"] = labels["guild_name"]
+        elif team:
+            meta["guild_name"] = team
+
     def normalize_event(self, event: dict[str, Any], agent_id: str | None) -> dict[str, Any] | None:
         ev_type = event.get("type", "")
         if ev_type not in ("app_mention", "message"):

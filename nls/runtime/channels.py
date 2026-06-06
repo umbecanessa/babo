@@ -242,6 +242,7 @@ class SessionRouter:
         if metadata:
             for k in (
                 "channel", "sender", "subject", "reply_target", "channel_name",
+                "guild_name",
             ):
                 if k in metadata:
                     entry[k] = metadata[k]
@@ -764,7 +765,7 @@ class ChannelRelayClient:
 
         try:
             import httpx
-            async with httpx.AsyncClient(timeout=30.0) as client:
+            async with httpx.AsyncClient(timeout=120.0) as client:
                 resp = await client.post(endpoint, json=payload)
                 if resp.status_code >= 400:
                     logger.warning(
@@ -773,8 +774,9 @@ class ChannelRelayClient:
                     )
         except Exception as exc:
             logger.error(
-                "ChannelRelay [%s]: failed to route %s message locally: %s",
+                "ChannelRelay [%s]: failed to route %s message locally: %r",
                 self._agent_id, channel, exc,
+                exc_info=True,
             )
 
     async def _handle_skill_install(self, msg: dict[str, Any]) -> None:

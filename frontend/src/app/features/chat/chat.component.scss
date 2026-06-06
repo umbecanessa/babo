@@ -1633,6 +1633,14 @@
     border-bottom: 1px solid rgba(224, 30, 90, 0.1);
     color: #e01e5a;
   }
+
+  .channel-thread-kind {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.06);
+    color: var(--text-muted);
+  }
 }
 
 .channel-thread-name {

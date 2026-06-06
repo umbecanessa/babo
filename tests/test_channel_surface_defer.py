@@ -53,3 +53,50 @@ def test_process_channel_message_defers_when_home_busy():
     assert pending_count("lead-1") == 1
     runtime.process_message.assert_not_called()
     runtime.process_message_agentic_async.assert_not_called()
+
+
+def test_process_channel_message_cross_surface_skips_inner_loop_push():
+    inner_loop = MagicMock()
+    runtime = SimpleNamespace(
+        agent_id="lead-1",
+        is_busy=lambda: True,
+        _foreground_session_key="websocket:main",
+        _foreground_source="user",
+        _team_manager=SimpleNamespace(_copilot_queue=MagicMock()),
+        is_agentic_enabled=lambda: True,
+        process_message=MagicMock(),
+        process_message_agentic_async=AsyncMock(),
+        agent_dir=None,
+    )
+    cs = SimpleNamespace(
+        get_inner_loop=lambda _aid: inner_loop,
+        preempt_background=MagicMock(),
+    )
+    app = SimpleNamespace(state=SimpleNamespace(
+        model_manager=MagicMock(),
+        consciousness_scheduler=cs,
+    ))
+
+    with patch(
+        "nls.runtime.squad_channel_policy.channel_delivery_allowed",
+        return_value=(True, ""),
+    ), patch(
+        "nls.skills.channel_processing._update_channels_ring",
+    ):
+        result = asyncio.run(process_channel_message(
+            app,
+            runtime,
+            "lead-1",
+            "[User via Telegram]: @bot ping",
+            [],
+            channel_adapter=SimpleNamespace(channel_name="telegram"),
+            reply_target="-100123",
+            session_key="telegram:group:-100123",
+            sender_name="User",
+            raw_content="@bot ping",
+        ))
+
+    assert result == ""
+    assert pending_count("lead-1") == 1
+    inner_loop.push_event.assert_not_called()
+    runtime.process_message_agentic_async.assert_not_called()

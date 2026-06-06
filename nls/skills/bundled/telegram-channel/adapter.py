@@ -544,6 +544,9 @@ class TelegramAdapter:
 
         if not will_respond:
             logger.debug("Telegram [%s] poll: policy rejected from %s", agent_id, normalized["sender_id"])
+            if normalized.get("is_group") and app is not None:
+                from nls.skills.channel_adapter_util import broadcast_group_ambient_inbound
+                broadcast_group_ambient_inbound(app, agent_id, "telegram", normalized)
             return
 
         self.register_known_sender(normalized["metadata"]["chat_id"], agent_id)
@@ -922,6 +925,15 @@ class TelegramAdapter:
             if att:
                 attachments.append(att)
 
+        chat_title = (chat.get("title") or "").strip()
+        metadata: dict[str, Any] = {
+            "chat_id": chat_id,
+            "chat_type": chat_type,
+            "raw_message": message,
+        }
+        if chat_title:
+            metadata["channel_name"] = chat_title
+
         return {
             "channel": "telegram",
             "session_key": session_key,
@@ -941,11 +953,7 @@ class TelegramAdapter:
             ),
             "message_id": str(message.get("message_id", "")),
             "attachments": attachments,
-            "metadata": {
-                "chat_id": chat_id,
-                "chat_type": chat_type,
-                "raw_message": message,
-            },
+            "metadata": metadata,
         }
 
     def _process_telegram_media(

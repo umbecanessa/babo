@@ -58,6 +58,8 @@ async def slack_inbound(agent_id: str, request: Request):
     if normalized is None:
         return {"ok": True, "status": "skip"}
 
+    adapter.enrich_normalized_labels(agent_id, normalized)
+
     agent_manager = getattr(app.state, "agent_manager", None)
     if agent_manager is None:
         raise HTTPException(status_code=503, detail="Agent manager not ready")
@@ -71,6 +73,9 @@ async def slack_inbound(agent_id: str, request: Request):
     record_inbound_ambient(runtime, normalized, triggered=will_respond)
 
     if not will_respond:
+        if normalized.get("is_group"):
+            from nls.skills.channel_adapter_util import broadcast_group_ambient_inbound
+            broadcast_group_ambient_inbound(app, agent_id, "slack", normalized)
         return {"ok": True, "status": "policy_rejected"}
 
     adapter.register_known_sender(normalized["sender_id"], agent_id)

@@ -606,6 +606,16 @@ async def process_channel_message(
             user_input = f"{voice_text}\n{user_input}"
         user_input = _augment_with_attachments(user_input, attachments)
 
+    # Stop daydream/DMN immediately (same priority as web chat) without
+    # pausing the inner loop — channel replies are dispatched on the next breath.
+    _cs = getattr(app.state, "consciousness_scheduler", None)
+    if _cs is not None:
+        preempt = getattr(_cs, "preempt_background", None)
+        if callable(preempt):
+            preempt(agent_id)
+        else:
+            await _cs.on_user_message(agent_id)
+
     if session_key:
         from nls.runtime.channel_ambient import (
             is_shared_channel_session,
@@ -660,17 +670,24 @@ async def process_channel_message(
         cross_surface_deferred = False
 
     model_manager = getattr(app.state, "model_manager", None)
-    registry = getattr(app.state, "adapter_registry", None)
+    _cs_obj = getattr(app.state, "consciousness_scheduler", None)
+    _inner_loop = _cs_obj.get_inner_loop(agent_id) if _cs_obj is not None else None
+    _runtime_agentic = (
+        hasattr(runtime, "process_message_agentic_v2")
+        or hasattr(runtime, "process_message_agentic_async")
+    )
+    _agentic_config_on = True
+    _is_ae = getattr(runtime, "is_agentic_enabled", None)
+    if callable(_is_ae):
+        _agentic_config_on = _is_ae()
     # Channel turns need tools (discord_send, channel_inspect, …). Do not fall
     # back to chat mode when agentic async is available — chat mode leaks pseudo
     # tool calls like ``channel_inspect(...)`` as plain outbound text.
+    # Prefer the inner-loop event queue (async reply) over blocking chat mode.
     agentic_enabled = (
-        model_manager is not None
-        and registry is not None
-        and (
-            hasattr(runtime, "process_message_agentic_v2")
-            or hasattr(runtime, "process_message_agentic_async")
-        )
+        _runtime_agentic
+        and _agentic_config_on
+        and (_inner_loop is not None or model_manager is not None)
     )
 
     # V5 is self-routing: the model's first generation decides whether to call
@@ -714,15 +731,23 @@ async def process_channel_message(
                 "needs_thinking": needs_thinking,
                 "agent_id": agent_id,
                 "history": _trimmed_history,
+                "user_direct": True,
             },
         )
 
         # Push to event queue — the inner loop owns all routing & dispatch
-        _cs_obj = getattr(app.state, "consciousness_scheduler", None)
-        _il = _cs_obj.get_inner_loop(agent_id) if _cs_obj is not None else None
-        if _il is not None:
-            flush_pending_channel_events(agent_id, _il)
-            _il.push_event(_ch_event)
+        if _inner_loop is not None:
+            if cross_surface_deferred:
+                logger.info(
+                    "Channel [%s]: cross-surface defer — inbox only "
+                    "(foreground=%s, inbound=%s)",
+                    agent_id,
+                    getattr(runtime, "_foreground_session_key", ""),
+                    session_key,
+                )
+                return ""
+            flush_pending_channel_events(agent_id, _inner_loop)
+            _inner_loop.push_event(_ch_event)
             logger.info(
                 "Channel [%s]: event pushed to inner loop (channel=%s, target=%s)",
                 agent_id, _channel_source, reply_target or "none",
@@ -754,10 +779,21 @@ async def process_channel_message(
             await _cs.on_user_message(agent_id)
 
         try:
-            result = await asyncio.to_thread(
-                runtime.process_message,
-                user_input,
-                history=history,
+            result = await asyncio.wait_for(
+                asyncio.to_thread(
+                    runtime.process_message,
+                    user_input,
+                    history=history,
+                ),
+                timeout=120.0,
+            )
+        except asyncio.TimeoutError:
+            logger.error(
+                "Channel [%s]: chat mode timed out after 120s", agent_id,
+            )
+            return (
+                "Sorry, I'm taking too long to respond right now. "
+                "Please try again in a moment."
             )
         finally:
             if _cs is not None:

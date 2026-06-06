@@ -1140,16 +1140,23 @@ async def run_loop(
         )
     )
     _fleet_force_tools: set[str] = set()
+    _job_force_tools: set[str] = set()
     try:
         from nls.agentic.fleet_triage_policy import (
             fleet_active_tool_names,
             fleet_hint_active,
+        )
+        from nls.agentic.job_triage_policy import (
+            job_active_tool_names,
+            job_hint_active,
         )
 
         if fleet_hint_active(state.hints):
             _fleet_force_tools = set(
                 fleet_active_tool_names(getattr(hooks, "agent_id", "") or ""),
             )
+        if job_hint_active(state.hints):
+            _job_force_tools = set(job_active_tool_names())
     except Exception:
         pass
     for _tool_name, _tool_obj in tools.items():
@@ -1158,6 +1165,7 @@ async def run_loop(
                 active_tool_names is not None
                 and _tool_name not in active_tool_names
                 and _tool_name not in _fleet_force_tools
+                and _tool_name not in _job_force_tools
             ):
                 continue
             try:
@@ -1417,6 +1425,7 @@ async def run_loop(
                 goals=list(getattr(pre_triage, "goals", None) or []),
                 hints=list(getattr(pre_triage, "hints", None) or []),
                 deferred=list(getattr(pre_triage, "deferred", None) or []),
+                job_candidate=dict(getattr(pre_triage, "job_candidate", None) or {}),
                 intent=getattr(pre_triage, "intent", "CHAT_THINK"),
                 thinking=getattr(pre_triage, "thinking", True),
             )
@@ -1522,6 +1531,62 @@ async def run_loop(
             context.append({
                 "role": "system",
                 "content": _fleet_msg,
+            })
+    except Exception:
+        pass
+
+    _job_candidate: dict = {}
+    try:
+        from nls.agentic.job_triage_policy import (
+            apply_job_triage_policy,
+            job_active_tool_names,
+            job_hint_active,
+            job_loop_context_message,
+            resolve_job_candidate,
+        )
+
+        if pre_triage is not None:
+            _job_candidate = dict(getattr(pre_triage, "job_candidate", None) or {})
+        if not _job_candidate:
+            _wm_jc = getattr(hooks, "wm_get_job_candidate", None)
+            if callable(_wm_jc):
+                try:
+                    _job_candidate = dict(_wm_jc() or {})
+                except Exception:
+                    pass
+        state.goals, state.hints, _job_candidate = apply_job_triage_policy(
+            list(state.hints or []),
+            list(state.goals or []),
+            _job_candidate,
+            agent_id=getattr(hooks, "agent_id", "") or "",
+        )
+        if job_hint_active(state.hints):
+            state.unlocked_tools.update(job_active_tool_names())
+        _wm_jc_fn = getattr(hooks, "wm_get_job_candidate", None)
+        _wm_for_resolve = None
+        if callable(_wm_jc_fn):
+            try:
+                from nls.runtime.job_trust import runtime_working_memory
+
+                _wm_for_resolve = runtime_working_memory(
+                    getattr(hooks, "agent_id", "") or "",
+                )
+            except Exception:
+                pass
+        _display_candidate = resolve_job_candidate(
+            _job_candidate,
+            hints=list(state.hints or []),
+            working_memory=_wm_for_resolve,
+        )
+        _job_msg = job_loop_context_message(
+            getattr(hooks, "agent_id", "") or "",
+            list(state.hints or []),
+            _display_candidate,
+        )
+        if _job_msg:
+            context.append({
+                "role": "system",
+                "content": _job_msg,
             })
     except Exception:
         pass

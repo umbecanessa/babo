@@ -246,6 +246,7 @@ class ThalamicRouter:
     ) -> EngagementDepth:
         """Route a channel message based on content and orchestration state."""
         text = event.payload.get("user_input", "")
+        user_direct = bool(event.payload.get("user_direct", True))
 
         has_orch = (
             self._tm is not None and self._tm.has_active_orchestration()
@@ -263,6 +264,11 @@ class ThalamicRouter:
 
         if _is_greeting(text):
             return EngagementDepth.MICRO
+
+        # Direct @mention / DM / policy-triggered reply — never queue behind
+        # background daydreaming; use the focus slot while deep work runs.
+        if user_direct:
+            return EngagementDepth.FOCUS
 
         # Non-trivial message while orchestration is active
         if has_orch:
