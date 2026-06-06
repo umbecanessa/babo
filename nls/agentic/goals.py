@@ -282,7 +282,12 @@ _TURN_TRIAGE_SYSTEM_BASE = (
     "- End-to-end platform, production app, monorepo, multi-service, repo + deploy.\n"
     "- Any request where available tools like read, write, bash, plan, team, "
     "browser, or web_search would help — including 'do it yourself' builds.\n"
-    "Extract 2-5 coarse goals. NEVER forbid:tools or conversational for these.\n\n"
+    "Extract 2-5 coarse goals. NEVER forbid:tools or conversational for these.\n"
+    "For profile orchestrated on multi-phase builds: goals describe ORCHESTRATION "
+    "work (create master plan with delegatable steps, launch team waves, review "
+    "delegate output) — NOT IC implementation bullets like 'scaffold backend' or "
+    "'deploy to Railway'. The coordinator may still patch small gaps in executing "
+    "mode; goals should steer the delegation process.\n\n"
     "Other rules:\n"
     "- Never emit orchestration:solo or forbid:team unless the user explicitly "
     "forbids sub-agents or teams in their message.\n"
@@ -341,8 +346,9 @@ _TURN_TRIAGE_SYSTEM_BASE = (
     'repo ICF-BenchBabo, build the full platform end-to-end (monorepo, Railway deploy)"\n'
     '(read, write, bash, plan, team available)\n'
     '{"intent":"TASK_THINK","thinking":true,"profile":"orchestrated",'
-    '"goals":["Read PRD and extract requirements","Create GitHub repo and scaffold",'
-    '"Build and deploy platform end-to-end"],'
+    '"goals":["Read PRD and extract requirements",'
+    '"Create master plan with delegatable implementation steps",'
+    '"Launch team waves and integrate delegate output before shipping"],'
     '"hints":[],"deferred":[]}\n\n'
     'User: "Deep relocation research — send report on WhatsApp when done"\n'
     '(web_search/browser available)\n'

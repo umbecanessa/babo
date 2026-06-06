@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -478,3 +479,72 @@ async def test_accept_partial_on_blocked_done_plan(workspace: Path, store: PlanS
     assert not result.is_error
     assert store.load("plan_blocked").get_step("step-1").status == "done"
     assert result.details.get("orchestrator_recovery") is True
+
+
+@pytest.mark.asyncio
+async def test_block_solo_circumvention_plan_create(workspace: Path, store: PlanStore):
+    plan = Plan(
+        id="plan_em",
+        title="ICF Platform",
+        status="in_progress",
+        steps=[
+            PlanStep(id="step-1", label="Scaffold", status="pending", delegatable=False),
+            PlanStep(id="step-2", label="Backend", status="pending", delegatable=True),
+            PlanStep(id="step-3", label="Frontend", status="pending", delegatable=True),
+        ],
+    )
+    store.save(plan)
+    tool = PlanTool(workspace)
+    tool._store = store
+    tool._team_manager = None
+
+    solo_steps = [
+        {"label": "Scaffold root", "delegatable": False},
+        {"label": "Backend API", "delegatable": False},
+        {"label": "Frontend app", "delegatable": False},
+    ]
+    result = await tool.execute(
+        {
+            "action": "create",
+            "title": "ICF Coaching Platform - Solo Build",
+            "steps": solo_steps,
+        },
+    )
+    assert result.is_error
+    assert "solo-only plan" in result.content.lower()
+    assert "plan_em" in result.content
+    assert store.find_active().id == "plan_em"
+
+
+@pytest.mark.asyncio
+async def test_block_solo_circumvention_json_string_steps(
+    workspace: Path, store: PlanStore,
+):
+    plan = Plan(
+        id="plan_em",
+        title="ICF Platform",
+        status="in_progress",
+        steps=[
+            PlanStep(id="step-1", label="Backend", status="pending", delegatable=True),
+            PlanStep(id="step-2", label="Frontend", status="pending", delegatable=True),
+        ],
+    )
+    store.save(plan)
+    tool = PlanTool(workspace)
+    tool._store = store
+    tool._team_manager = None
+
+    solo_steps = json.dumps([
+        {"label": "Scaffold root", "delegatable": False},
+        {"label": "Backend API", "delegatable": False},
+        {"label": "Frontend app", "delegatable": False},
+    ])
+    result = await tool.execute(
+        {
+            "action": "create",
+            "title": "Solo Build",
+            "steps": solo_steps,
+        },
+    )
+    assert result.is_error
+    assert "solo-only plan" in result.content.lower()

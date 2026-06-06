@@ -49,8 +49,21 @@ def test_normalize_goals_merges_for_solo_preserves_language():
 
 
 def test_normalize_goals_unchanged_for_orchestrated():
-    goals = ["a", "b", "c"]
+    goals = ["Create master plan with delegatable steps", "Launch team waves"]
     assert normalize_goals_for_profile(goals, "orchestrated") == goals
+
+
+def test_normalize_goals_rewrites_ic_bullets_for_orchestrated():
+    goals = [
+        "Read PRD and extract requirements",
+        "Scaffold monorepo structure",
+        "Implement backend API",
+        "Build frontend and deploy",
+    ]
+    merged = normalize_goals_for_profile(goals, "orchestrated")
+    assert merged[0] == goals[0]
+    assert "master plan" in merged[1].lower()
+    assert any("team" in g.lower() for g in merged)
 
 
 def test_structured_hint_forbid_team_caps_profile():

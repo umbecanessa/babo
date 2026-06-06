@@ -123,7 +123,7 @@ export class AgentOrchestrationProfileService {
     if (active) {
       this.agenticActiveByAgent.set(id, true);
       if (!this.runtimeModeByAgent.has(id)) {
-        this.runtimeModeByAgent.set(id, 'executing');
+        this.runtimeModeByAgent.set(id, 'planning');
       }
     } else {
       this.agenticActiveByAgent.delete(id);
@@ -164,7 +164,7 @@ export class AgentOrchestrationProfileService {
   /** Runtime mode label when agentic task is active; null when idle. */
   modeLabel(agentId: string | null): string | null {
     if (!this.isAgenticActive(agentId)) return null;
-    const mode = this.runtimeMode(agentId) || 'executing';
+    const mode = this.runtimeMode(agentId) || 'planning';
     return formatAgentMode(mode);
   }
 

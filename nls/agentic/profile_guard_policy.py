@@ -316,6 +316,44 @@ def breadcrumb_rule_matches_profile(
     return normalize_profile(profile) in rule_profiles
 
 
+_EM_TRIAGE_GOAL_RE = re.compile(
+    r"\b(plan|team|delegate|delegat|wave|launch|monitor|orchestrat)\b",
+    re.IGNORECASE,
+)
+_IC_IMPL_TRIAGE_GOAL_RE = re.compile(
+    r"\b(build|implement|scaffold|deploy|platform|monorepo|backend|frontend|"
+    r"end-to-end|ship|create repo|github repo)\b",
+    re.IGNORECASE,
+)
+_READ_EXTRACT_TRIAGE_GOAL_RE = re.compile(
+    r"\b(read|extract|review|parse|understand)\b",
+    re.IGNORECASE,
+)
+
+
+def normalize_orchestrated_triage_goals(goals: list[str]) -> list[str]:
+    """Replace IC implementation bullets with EM orchestration goals when triage drifts solo."""
+    if len(goals) < 2:
+        return goals
+    joined = " ".join(goals)
+    if _EM_TRIAGE_GOAL_RE.search(joined):
+        return goals
+    if (
+        not _IC_IMPL_TRIAGE_GOAL_RE.search(joined)
+        and len(goals) < EM_COLD_START_GOAL_THRESHOLD
+    ):
+        return goals
+    orchestration = [
+        "Create master plan with delegatable implementation steps",
+        "Launch team waves for build steps and monitor progress",
+        "Review delegate output and integrate before shipping",
+    ]
+    first = goals[0].strip()
+    if first and _READ_EXTRACT_TRIAGE_GOAL_RE.search(first):
+        return ([first] + orchestration)[:5]
+    return orchestration[:3]
+
+
 def normalize_goals_for_profile(
     goals: list[str],
     profile: str | None,
@@ -323,11 +361,11 @@ def normalize_goals_for_profile(
     if not goals:
         return goals
     p = normalize_profile(profile)
-    if p == "orchestrated" or len(goals) < EM_COLD_START_GOAL_THRESHOLD:
-        return goals
     if p == "conversational":
         return []
-    if p in ("solo_structured",):
+    if p == "orchestrated":
+        return normalize_orchestrated_triage_goals(goals)
+    if p in ("solo_structured",) and len(goals) >= EM_COLD_START_GOAL_THRESHOLD:
         primary = goals[0].strip()
         return [primary] if primary else goals[:1]
     return goals

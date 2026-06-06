@@ -269,115 +269,81 @@ import {
     }
 
     .profile-menu {
-
       position: absolute;
-
       bottom: calc(100% + 8px);
-
       left: 0;
-
       min-width: 280px;
-
       max-width: min(320px, calc(100vw - 24px));
-
-      padding: 6px;
-
+      padding: 8px;
       border-radius: 12px;
-
       border: 1px solid var(--glass-border-strong);
-
-      background: var(--glass-bg-hover);
-
-      backdrop-filter: blur(16px);
-
-      box-shadow: var(--shadow-glass);
-
-      z-index: 50;
-
+      background: var(--bg-secondary);
+      backdrop-filter: blur(24px) saturate(1.15);
+      -webkit-backdrop-filter: blur(24px) saturate(1.15);
+      box-shadow:
+        0 16px 48px rgba(0, 0, 0, 0.42),
+        0 0 0 1px color-mix(in srgb, var(--glass-border-strong) 65%, transparent);
+      z-index: 1000;
+      isolation: isolate;
     }
 
     .profile-menu-title {
-
       font-size: 11px;
-
       text-transform: uppercase;
-
       letter-spacing: 0.06em;
-
       color: var(--text-muted);
-
-      padding: 6px 8px 4px;
-
+      padding: 4px 8px 6px;
     }
 
     .profile-mode-hint {
-
-      margin: 0 8px 6px;
-
+      margin: 0 4px 8px;
+      padding: 8px 10px;
       font-size: 11px;
+      color: var(--text-secondary);
+      line-height: 1.4;
+      border-radius: 8px;
+      background: var(--surface-inset-strong);
+      border: 1px solid var(--overlay-2);
+    }
 
-      color: var(--text-muted);
-
-      line-height: 1.35;
-
+    .profile-mode-hint strong {
+      color: var(--text-primary);
     }
 
     .profile-option {
-
       display: flex;
-
       flex-direction: column;
-
       align-items: flex-start;
-
       gap: 2px;
-
       width: 100%;
-
       text-align: left;
-
       padding: 8px 10px;
-
       border: none;
-
       border-radius: 8px;
-
       background: transparent;
-
       color: var(--text-primary);
-
       cursor: pointer;
-
     }
 
     .profile-option:hover {
-
-      background: var(--overlay-1);
-
+      background: var(--overlay-2);
     }
 
     .profile-option.active {
-
-      background: var(--accent-primary-glow);
-
+      background: color-mix(in srgb, var(--accent-primary) 18%, var(--bg-secondary));
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-primary) 35%, transparent);
     }
 
     .profile-option-label {
-
       font-size: 13px;
-
       font-weight: 600;
-
+      color: var(--text-primary);
     }
 
     .profile-option-desc {
-
       font-size: 11px;
-
-      color: var(--text-muted);
-
-      line-height: 1.35;
-
+      color: var(--text-secondary);
+      line-height: 1.4;
     }
 
   `],

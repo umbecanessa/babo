@@ -110,9 +110,11 @@ export class ChatWorkbenchService {
   private _streamOutputKey: string | null = null;
   private _streamLane: WorkbenchLane = 'chat';
   private readonly _outputBuffers = new Map<string, string>();
-  private _lastAgentMode = 'executing';
+  private _lastAgentMode = 'planning';
   private readonly _toolStartTitles = new Map<string, string>();
   private readonly _toolMetaByCallId = new Map<string, { title: string; subtitle?: string }>();
+  /** Mode before an in-flight switch_mode attempt (revert chip if blocked). */
+  private readonly _modeSwitchFromByCallId = new Map<string, string>();
   /** Pending step batch: tag tool rows when their call_id completes. */
   private _pendingStepGroup: {
     groupKey: string;
@@ -138,10 +140,11 @@ export class ChatWorkbenchService {
     this._agentId.set(agentId);
     this.entries.set([]);
     this._resetStreamScratch();
-    this._lastAgentMode = 'executing';
+    this._lastAgentMode = 'planning';
     this.orchProfiles.setAgenticActive(agentId, false);
     this._toolStartTitles.clear();
     this._toolMetaByCallId.clear();
+    this._modeSwitchFromByCallId.clear();
     this._pendingStepGroup = null;
     this._runSeq = 0;
   }
@@ -440,8 +443,8 @@ export class ChatWorkbenchService {
         if (isSubAgent) break;
         if (!msg.autonomous) {
           this.orchProfiles.setAgenticActive(this._agentId(), true);
-          this._lastAgentMode = 'executing';
-          this.orchProfiles.setRuntimeMode(this._agentId(), 'executing');
+          this._lastAgentMode = 'planning';
+          this.orchProfiles.setRuntimeMode(this._agentId(), 'planning');
         }
         this._runSeq += 1;
         this._pendingStepGroup = null;
@@ -636,8 +639,10 @@ export class ChatWorkbenchService {
           lastMode: this._lastAgentMode,
         });
         if (toolName === 'switch_mode' && parsed.modeTransition) {
-          this._lastAgentMode = parsed.modeTransition;
-          this.orchProfiles.setRuntimeMode(this._agentId(), parsed.modeTransition);
+          const callId = msg.call_id || '';
+          if (callId) {
+            this._modeSwitchFromByCallId.set(callId, this._lastAgentMode);
+          }
         }
         const callId = msg.call_id || '';
         const corr = `${corrNs}${callId || toolName}`;
@@ -686,7 +691,6 @@ export class ChatWorkbenchService {
           subtitle: parsed.subtitle,
           status: 'running',
           toolLabel: parsed.toolLabel,
-          mode: parsed.modeTransition,
           chips: startChips,
           delegateNumber: dlgNum,
           ...(filePaths.length
@@ -737,9 +741,20 @@ export class ChatWorkbenchService {
         }
         let chips: ActivityChip[] | undefined;
         if (toolName === 'switch_mode') {
-          const toMode = String(endArgs['mode'] || this._lastAgentMode || '');
-          this._lastAgentMode = toMode;
-          this.orchProfiles.setRuntimeMode(this._agentId(), toMode);
+          const toMode = String(endArgs['mode'] || '').trim().toLowerCase();
+          const fromMode =
+            (callId ? this._modeSwitchFromByCallId.get(callId) : undefined)
+            || 'planning';
+          if (callId) {
+            this._modeSwitchFromByCallId.delete(callId);
+          }
+          if (!isError && toMode) {
+            this._lastAgentMode = toMode;
+            this.orchProfiles.setRuntimeMode(this._agentId(), toMode);
+          } else {
+            this._lastAgentMode = fromMode;
+            this.orchProfiles.setRuntimeMode(this._agentId(), fromMode);
+          }
           const metaTitle = callId
             ? this._toolMetaByCallId.get(callId)?.title
             : undefined;

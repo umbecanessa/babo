@@ -49,8 +49,10 @@ _BLOCK_MESSAGES: dict[str, str] = {
     "tactical_goals": (
         "BLOCKED: Multiple build/platform goals are queued but no plan exists "
         "yet. Create a plan first: plan(action='create', ...). For a large "
-        "build use delegatable steps + team waves; for a small fix use a "
-        "simple plan without delegatable steps, then switch_mode(executing)."
+        "build under EM profile use delegatable steps + team(create) → "
+        "team(launch). For a small solo fix use solo_structured profile with "
+        "a simple non-delegatable plan, then switch_mode(executing). Do NOT "
+        "create a second solo-only plan after an EM plan already exists."
     ),
     "build_goals": (
         "BLOCKED: Goals mention building/implementing but no plan is active. "
@@ -76,6 +78,50 @@ def plan_requires_team_delegation(plan: Plan | None) -> bool:
         if s.status in ("pending", "in_progress")
     ]
     return bool(pending)
+
+
+def incoming_plan_steps_are_solo_circumvention(steps: Any) -> bool:
+    """True when plan(create) sets every step delegatable=false to bypass EM."""
+    if steps is None:
+        return False
+    from nls.agentic.plan_store import PlanStore
+
+    normalized = PlanStore._normalize_steps(steps)
+    if not isinstance(normalized, list) or len(normalized) < 2:
+        return False
+    dict_steps = [s for s in normalized if isinstance(s, dict)]
+    if len(dict_steps) < 2:
+        return False
+    return all(s.get("delegatable") is False for s in dict_steps)
+
+
+def solo_circumvention_block_message(plan: Plan) -> str:
+    """Block message when the model tries to replace an EM plan with solo-only steps."""
+    pending = [
+        s for s in plan.steps
+        if s.delegatable and s.status in ("pending", "in_progress")
+    ]
+    step_lines = "\n".join(
+        f"  - {s.id}: {s.label} ({s.status})" for s in pending[:8]
+    )
+    extra = ""
+    if len(pending) > 8:
+        extra = f"\n  … and {len(pending) - 8} more delegatable steps"
+    return (
+        "BLOCKED: Cannot replace this EM plan with a solo-only plan.\n"
+        f"Active plan: {plan.id} — {plan.title}\n"
+        f"{len(pending)} delegatable step(s) still pending:\n"
+        f"{step_lines}{extra}\n\n"
+        "Do NOT create a new plan with delegatable=false on every step to "
+        "work around delegation. Follow the existing plan:\n"
+        f"  team(action='create', plan_id='{plan.id}', wave=0, ...) → "
+        "team(action='launch', ...)\n"
+        "  switch_mode(mode='monitoring') while delegates run\n"
+        "You MAY use switch_mode(executing) for small coordinator patches on "
+        "non-delegatable steps or after accept_partial — not to rebuild the "
+        "whole project solo.\n"
+        f"Use plan(action='read', plan_id='{plan.id}') to review current steps."
+    )
 
 
 def plan_suppresses_raw_delegate(plan: Plan | None) -> bool:

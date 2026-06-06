@@ -833,6 +833,28 @@ class PlanTool:
             )
 
         existing = self._store.find_active()
+        _incoming_steps = params.get("steps")
+        from nls.agentic.coordinator_guard import (
+            incoming_plan_steps_are_solo_circumvention,
+            plan_requires_team_delegation,
+            solo_circumvention_block_message,
+        )
+
+        if (
+            existing
+            and incoming_plan_steps_are_solo_circumvention(_incoming_steps)
+            and plan_requires_team_delegation(existing)
+        ):
+            return ToolResult(
+                content=solo_circumvention_block_message(existing),
+                is_error=True,
+                details={
+                    "plan_id": existing.id,
+                    "action": "create",
+                    "solo_circumvention": True,
+                },
+            )
+
         _force_new = params.get("force_new", False)
         if existing and not _force_new:
             step_lines = "\n".join(
