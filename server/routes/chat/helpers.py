@@ -8,6 +8,32 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+_INFERENCE_GENERIC_FAILURE = (
+    "I'm having trouble generating a response right now. Please try again."
+)
+
+
+def inference_stream_user_message(exc: BaseException) -> str:
+    """User-facing chat text when upstream inference fails mid-stream."""
+    text = str(exc).lower()
+    if "401" in text or "unauthorized" in text:
+        return (
+            "Cloud inference authentication failed — Babo could not authorize "
+            "with the inference relay. Restart the app or open Settings → "
+            "Capabilities to refresh your API key, then try again."
+        )
+    if "403" in text or "forbidden" in text:
+        return (
+            "Cloud inference access denied — check your Babo Cloud "
+            "subscription and try again."
+        )
+    if "503" in text or "service unavailable" in text:
+        return (
+            "The inference server is temporarily unavailable. "
+            "Please try again in a moment."
+        )
+    return _INFERENCE_GENERIC_FAILURE
+
 _FRONT_BRAIN_KEYS = (
     "working_memory", "narrative", "theory_of_mind",
     "predictive_processing", "network_dynamics",

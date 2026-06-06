@@ -46,6 +46,7 @@ export class AuthService {
     localStorage.setItem('refresh_token', tokens.refreshToken);
     localStorage.setItem('user_id', tokens.userId);
     this.tokenSignal.set(tokens.accessToken);
+    this.scheduleCloudInferenceAuthSync();
     if (redirectTo === false) return;
     if (redirectTo) {
       void this.router.navigateByUrl(redirectTo);
@@ -67,6 +68,7 @@ export class AuthService {
     localStorage.removeItem('refresh_token');
     localStorage.removeItem('user_id');
     this.tokenSignal.set(null);
+    this.scheduleCloudInferenceAuthClear();
     this.router.navigate(['/auth/login']);
   }
 
@@ -101,6 +103,7 @@ export class AuthService {
           localStorage.setItem('access_token', tokens.accessToken);
           localStorage.setItem('refresh_token', tokens.refreshToken);
           this.tokenSignal.set(tokens.accessToken);
+          this.scheduleCloudInferenceAuthSync();
         }),
         map((tokens) => tokens.accessToken),
         catchError((err) => {
@@ -112,5 +115,32 @@ export class AuthService {
 
   private getStoredToken(): string | null {
     return localStorage.getItem('access_token');
+  }
+
+  /** Push session JWT to the desktop runtime for Babo Cloud inference relay. */
+  private scheduleCloudInferenceAuthSync(): void {
+    queueMicrotask(() => {
+      try {
+        void import('./babo-cloud-provision.service').then(({ BaboCloudProvisionService }) => {
+          const svc = this.injector.get(BaboCloudProvisionService);
+          svc.invalidateSyncCache();
+          void svc.syncRuntimeAuth();
+        });
+      } catch {
+        /* web / bootstrap */
+      }
+    });
+  }
+
+  private scheduleCloudInferenceAuthClear(): void {
+    queueMicrotask(() => {
+      try {
+        void import('./babo-cloud-provision.service').then(({ BaboCloudProvisionService }) => {
+          this.injector.get(BaboCloudProvisionService).invalidateSyncCache();
+        });
+      } catch {
+        /* web */
+      }
+    });
   }
 }

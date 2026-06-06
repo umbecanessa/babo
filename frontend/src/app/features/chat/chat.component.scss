@@ -721,8 +721,15 @@
 // --- Messages ---
 .chat-messages {
   flex: 1;
-  overflow-y: auto;
   min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+
+  app-message-list {
+    flex: 1;
+    min-height: 0;
+  }
 }
 
 // Plan live monitor — align with message column width

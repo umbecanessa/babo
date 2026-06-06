@@ -49,6 +49,7 @@ import {
   usesHostedBaboCloud,
 } from './setup-cloud.util';
 import { ApiKeyService } from '../../core/services/api-key.service';
+import { BaboCloudProvisionService } from '../../core/services/babo-cloud-provision.service';
 import { BillingService } from '../../core/services/billing.service';
 import { AgentModelService } from '../../core/services/agent-model.service';
 import { isPaidOrComp, CLOUD_BASIC_PRICE_AMOUNT } from '../../core/models/cloud-subscription.model';
@@ -417,6 +418,7 @@ export class SetupComponent implements OnInit, OnDestroy {
     public auth: AuthService,
     private api: ApiService,
     private apiKeys: ApiKeyService,
+    private cloudProvision: BaboCloudProvisionService,
     public billing: BillingService,
     private agentModels: AgentModelService,
     private toast: ToastService,
@@ -2057,17 +2059,7 @@ export class SetupComponent implements OnInit, OnDestroy {
     this.provisioningCloud.set(true);
     try {
       if (p.inference.tier === 'hosted_babo') {
-        if (!this.config.inferenceApiKey?.startsWith('nlsk_')) {
-          const created = await firstValueFrom(
-            this.apiKeys.createKey('Babo Desktop', {
-              rateLimitRpm: 120,
-              scopes: ['inference', 'gpu'],
-            }),
-          );
-          if (created.key) {
-            this.config.inferenceApiKey = created.key;
-          }
-        }
+        await this.cloudProvision.syncRuntimeAuth();
       }
 
       const synced = applyBaboCloudPlacements(p, this.config.nestjsUrl);
@@ -2200,6 +2192,7 @@ export class SetupComponent implements OnInit, OnDestroy {
 
       this.launchMessage.set('Starting agent runtime...');
       await this.nls().runtime.start();
+      await this.cloudProvision.syncRuntimeAuth();
 
       this.launchMessage.set('Creating your agent...');
       const agent = await firstValueFrom(
@@ -2225,6 +2218,8 @@ export class SetupComponent implements OnInit, OnDestroy {
             inference_api_key: scoped.key,
             hf_model: p.inference.model || this.config.inferenceModel,
           });
+        } else {
+          await this.cloudProvision.syncRuntimeAuth();
         }
       }
 

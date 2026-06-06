@@ -552,10 +552,18 @@ class RemoteVLMBackend:
 
     def _post(self, endpoint: str, data: dict[str, str]) -> dict[str, Any]:
         import httpx
+        import os
 
         headers: dict[str, str] = {}
         if self._secret:
             headers["X-GPU-Worker-Secret"] = self._secret
+        # Nest GPU relay (`/api/gpu/*`) uses CloudAuthGuard — same bearer as inference.
+        bearer = os.environ.get("NLS_INFERENCE_API_KEY", "").strip()
+        if bearer and (
+            "api.babo.agency" in self._url
+            or "/api/gpu" in self._url
+        ):
+            headers["Authorization"] = f"Bearer {bearer}"
         resp = httpx.post(
             f"{self._url}{endpoint}",
             data=data,

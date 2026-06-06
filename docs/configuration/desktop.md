@@ -146,6 +146,26 @@ Full list: [Environment (complete)](../reference/environment-complete.md).
 
 ---
 
+## Babo Cloud inference auth
+
+The Angular UI talks to NestJS with **JWT**. The local Python runtime only reads **`NLS_INFERENCE_API_KEY`**, so when inference is relayed through Babo Cloud the desktop must push a bearer into that env var.
+
+**`BaboCloudProvisionService`** (`frontend/src/app/core/services/babo-cloud-provision.service.ts`) resolves auth in this order:
+
+1. **`nlsk_` key** already stored in `nls-config.json` (`inferenceApiKey`)
+2. **BYOK key** when the capability profile tier is `byok_cloud`
+3. **Session JWT** from the signed-in user
+
+It hot-reloads the running runtime via IPC `runtime.hotReloadInference` → Python `POST /admin/hot-reload` (updates `vllm_client` Authorization header without restart).
+
+Sync triggers: app boot (`APP_INITIALIZER`), login, token refresh, runtime ready, chat open, post-setup `runtime.start`, and after saving capability settings.
+
+You only need to create an API key manually for headless automation or when you prefer a long-lived `nlsk_` token over JWT expiry during very long runs.
+
+See also [Inference providers](inference-providers.md#babo-cloud-relay) and [Babo Cloud module](../architecture/nestjs-modules/babo-cloud.md).
+
+---
+
 ## Desktop userData layout
 
 | Path | Purpose |

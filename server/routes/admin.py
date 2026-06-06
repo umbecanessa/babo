@@ -1880,10 +1880,11 @@ async def hot_reload_inference(request: Request):
 
     if inference_api_key is not None:
         key = str(inference_api_key).strip()
-        model_manager.inference_api_key = key
-        os.environ["NLS_INFERENCE_API_KEY"] = key
-        if getattr(model_manager, "vllm_client", None) is not None:
-            model_manager.vllm_client._api_key = key
+        if key:
+            model_manager.inference_api_key = key
+            os.environ["NLS_INFERENCE_API_KEY"] = key
+            if getattr(model_manager, "vllm_client", None) is not None:
+                model_manager.vllm_client.set_api_key(key)
 
     if hf_model:
         model_manager.hf_model = hf_model

@@ -43,4 +43,10 @@ See `backend/.env.example` — `INFERENCE_UPSTREAM_URL`, `GPU_UPSTREAM_URL`, `BA
 `hosted_babo` / `byok_cloud` → `NLS_VLLM_BASE_URL={nestjs}/api/inference/v1`  
 Hosted GPU workloads → `NLS_*_WORKER_URL={nestjs}/api/gpu`
 
-See [Cloud deployment](../../configuration/cloud-deployment.md).
+### Runtime bearer (desktop)
+
+Nest `CloudAuthGuard` accepts **JWT** (signed-in user) or **`nlsk_`** API keys on inference and GPU routes. The Electron app sends JWT to NestJS from Angular; the **Python runtime** uses `NLS_INFERENCE_API_KEY` only.
+
+`BaboCloudProvisionService` pushes the resolved bearer (priority: stored `nlsk_` → BYOK key → session JWT) and hot-reloads `vllm_client` via `POST /admin/hot-reload`. No manual key paste is required for normal signed-in desktop use.
+
+See [Cloud deployment](../../configuration/cloud-deployment.md) and [Desktop configuration](../../configuration/desktop.md#babo-cloud-inference-auth).

@@ -66,7 +66,21 @@ They are different code paths. Fix relay connectivity, not only local WS.
 
 - Verify `NLS_VLLM_BASE_URL` and `NLS_HF_MODEL`
 - Test provider with curl to `/v1/chat/completions`
-- Set `NLS_INFERENCE_API_KEY` if required
+- Set `NLS_INFERENCE_API_KEY` if required (direct OpenRouter/Ollama/etc.)
+
+### Babo Cloud: "I'm having trouble generating a response" (401)
+
+Typical desktop log line: `POST …/api/inference/v1/chat/completions` → **401** with empty or stale bearer.
+
+Checklist:
+
+1. **Signed in** to the same NestJS URL configured as backend (`nestjsUrl` in `nls-config.json`).
+2. Capability profile uses **hosted Babo** / **BYOK cloud** — inference URL should be `{nestjs}/api/inference/v1`, not a bare GPU LAN URL for chat.
+3. **`inferenceApiKey` in config** — may be empty; desktop should still sync **JWT** on boot. Restart the app or re-open chat after login if the runtime started before auth.
+4. Prefer an **`nlsk_` key** (Settings → API keys) for multi-hour agentic runs if JWT expires mid-session.
+5. GPU vision/transcribe on `{nestjs}/api/gpu` needs the same Bearer — remote VLM sends it when the worker URL matches Babo Cloud.
+
+Hot-reload path: Angular `BaboCloudProvisionService` → `runtime.hotReloadInference` → `server/routes/admin.py` → `vllm_client.set_api_key()`.
 
 ### Relay never connects
 

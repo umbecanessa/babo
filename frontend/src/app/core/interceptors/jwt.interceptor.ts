@@ -47,7 +47,22 @@ function handle401(
   }
 
   return refreshInFlight$.pipe(
-    switchMap((newToken) => next(addToken(req, newToken))),
+    switchMap((newToken) => {
+      queueMicrotask(() => {
+        try {
+          void import('../services/babo-cloud-provision.service').then(
+            ({ BaboCloudProvisionService }) => {
+              const svc = inject(BaboCloudProvisionService);
+              svc.invalidateSyncCache();
+              void svc.syncRuntimeAuth();
+            },
+          );
+        } catch {
+          /* web */
+        }
+      });
+      return next(addToken(req, newToken));
+    }),
     catchError((err) => throwError(() => err)),
   );
 }

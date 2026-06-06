@@ -79,6 +79,12 @@ Channel threads (Telegram, Discord, Slack, …) appear in the sidebar with platf
 
 ---
 
+## Scrolling during agentic runs
+
+While the agent streams tool calls and replies, the message list **follows the bottom** by default. Scroll up (or use the mouse wheel) to read earlier messages — follow mode turns off until you scroll back to the bottom. This avoids the view snapping away while you review history mid-run.
+
+---
+
 ## Tips
 
 **Teach explicitly.** Say "Remember that…" for preferences you want in long-term memory.

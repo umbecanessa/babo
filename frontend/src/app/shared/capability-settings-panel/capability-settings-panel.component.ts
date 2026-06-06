@@ -16,6 +16,7 @@ import {
   stripInferenceV1Suffix,
 } from '../../features/setup/setup-inference.util';
 import { AgentModelService } from '../../core/services/agent-model.service';
+import { BaboCloudProvisionService } from '../../core/services/babo-cloud-provision.service';
 import { PlatformIntegrationsService } from '../../core/services/platform-integrations.service';
 import { applyBaboCloudPlacements } from '../../features/setup/setup-cloud.util';
 
@@ -40,6 +41,7 @@ interface SetupConfig {
 })
 export class CapabilitySettingsPanelComponent implements OnInit {
   private readonly agentModels = inject(AgentModelService);
+  private readonly cloudProvision = inject(BaboCloudProvisionService);
   private readonly platformIntegrations = inject(PlatformIntegrationsService);
 
   /** Emitted after profile is saved and applied to the runtime. */
@@ -635,6 +637,9 @@ export class CapabilitySettingsPanelComponent implements OnInit {
     this.saving.set(true);
     this.saveError.set(null);
     try {
+      if (p.inference.tier === 'hosted_babo' || p.inference.tier === 'byok_cloud') {
+        await this.cloudProvision.syncRuntimeAuth();
+      }
       this.syncInferenceLegacy();
       let profileToApply = p;
       if (p.inference.tier === 'hosted_babo' || p.inference.tier === 'byok_cloud') {
@@ -657,8 +662,8 @@ export class CapabilitySettingsPanelComponent implements OnInit {
           hf_model: primaryModel,
           delegate_hf_model: delegateUsePrimary ? null : (del?.model ?? null),
           delegate_use_primary: delegateUsePrimary,
-          inference_api_key: this.config.inferenceApiKey || undefined,
         });
+        await this.cloudProvision.syncRuntimeAuth();
       } catch {
         /* runtime may be stopped */
       }

@@ -39,6 +39,7 @@ import { AgentWorkspaceContextService } from '../../core/services/agent-workspac
 import { enrichWorkspaceRelativePath } from '../projects/workspace/workspace-path.util';
 import { Day1CoachService } from '../../shared/onboarding/day1-coach.service';
 import { AgentModelService } from '../../core/services/agent-model.service';
+import { BaboCloudProvisionService } from '../../core/services/babo-cloud-provision.service';
 import { AgentOrchestrationProfileService } from '../../core/services/agent-orchestration-profile.service';
 import { ChatModelPickerComponent } from './chat-model-picker/chat-model-picker.component';
 import { ChatOrchestrationProfilePickerComponent } from './chat-orchestration-profile-picker/chat-orchestration-profile-picker.component';
@@ -245,6 +246,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     private workspaceCtx: AgentWorkspaceContextService,
     private day1Coach: Day1CoachService,
     private agentModels: AgentModelService,
+    private cloudProvision: BaboCloudProvisionService,
     readonly orchProfiles: AgentOrchestrationProfileService,
     private readonly mainTranscript: ChatMainTranscriptService,
     readonly platformIntegrations: PlatformIntegrationsService,
@@ -283,6 +285,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     this.hydrateRunFromApi();
     void this.agentModels.refreshFromConfig();
     void this.platformIntegrations.refresh();
+    void this.cloudProvision.syncRuntimeAuth();
     this.routerSub = this.router.events
       .pipe(filter((e): e is NavigationEnd => e instanceof NavigationEnd))
       .subscribe(() => {

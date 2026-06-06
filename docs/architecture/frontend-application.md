@@ -59,6 +59,7 @@ Electron may override via IPC `urls:get` after config wizard.
 | `ThemeService` | Light/dark theme tokens |
 | `WorkspaceNavService` | Project workspace routing |
 | `AuthService` | JWT storage |
+| `BaboCloudProvisionService` | Sync JWT/`nlsk_` → runtime `NLS_INFERENCE_API_KEY` (Babo Cloud) |
 | `TerminalService` | User shell via `/terminal` |
 | `FilesystemService` | IDE — IPC in Electron, API in web |
 | `ChatWorkbenchService` | Workbench panels |
@@ -134,6 +135,42 @@ See [Capability profiles](capability-profiles-and-onboarding.md).
 ## Tools page
 
 `features/tools/` — integration cards, MCP list, ClawHub search, schema forms.
+
+---
+
+## UI surface tiers
+
+Floating panels use one of three CSS contracts (tokens in `frontend/src/styles.scss`):
+
+| Tier | Token | Use when |
+|------|-------|----------|
+| **Glass** | `--glass-bg` + blur | Toasts, run panel, plan viewer — overlays that sit over empty chrome or sparse UI |
+| **Context menu** | `--context-menu-bg` (opaque) | Dropdowns, model/orchestration pickers, workspace menus — must stay readable over chat text and the composer |
+| **Modal** | `--modal-bg` | Dialogs and full-screen sheets |
+
+Shared mixins and classes live in `shared/styles/_context-menu.scss` (`.context-menu-panel`, `.context-menu-item`, …). **Do not** use `--glass-bg` for dense pickers floating over the message list.
+
+---
+
+## Chat scroll during generation
+
+The message list is the **single scroll surface** for chat (no nested `.chat-messages` scroll). While the agent streams, the view stays pinned to the bottom until you scroll up or use the wheel — then it stops auto-following so you can read earlier messages. Scrolling back to the bottom re-enables follow mode.
+
+Implementation: `message-list.component.ts` (`scrollPinnedToBottom`, `followScrollIfPinned`).
+
+---
+
+## Babo Cloud runtime auth
+
+When inference routes through NestJS Babo Cloud (`hosted_babo`, `byok_cloud`, or an `…/api/inference` URL), the Python runtime needs a Bearer on `NLS_INFERENCE_API_KEY`. The Angular UI already sends JWT to NestJS; **`BaboCloudProvisionService`** mirrors that bearer into the local runtime:
+
+| Priority | Bearer source |
+|----------|---------------|
+| 1 | Stored `nlsk_` key in `nls-config.json` |
+| 2 | BYOK provider key (`byok_cloud` profile) |
+| 3 | Session JWT from `AuthService` |
+
+Sync runs on app boot, login, token refresh, runtime ready, and after capability profile saves. Hot-reload: `runtime.hotReloadInference` → `POST /admin/hot-reload` updates `vllm_client` without restart.
 
 ---
 

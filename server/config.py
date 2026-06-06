@@ -5,7 +5,7 @@ Values are read from environment variables.
 
 Environment variables:
     NLS_PRODUCT_MODE        OSS product mode ("1"/"0", default 1)
-    NLS_INFERENCE_API_KEY   Optional API key for OpenAI-compatible providers
+    NLS_INFERENCE_API_KEY   Bearer for inference (provider API key, nlsk_ cloud key, or JWT)
     NLS_SERVE_PORT          Server port (default: 8443)
     NLS_SERVE_HOST          Server host (default: 0.0.0.0)
     NLS_HF_MODEL            Model id sent to the OpenAI-compatible inference API

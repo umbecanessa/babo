@@ -45,6 +45,7 @@ from .helpers import (
     _dedup_signal_tags,
     _message_implies_agentic_work,
     _runtime_uses_local_vllm,
+    inference_stream_user_message,
     response_has_pseudo_tool_call,
 )
 from .history import (
@@ -859,10 +860,7 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                     try:
                         await websocket.send_json({
                             "type": "response_end",
-                            "response": (
-                                "I'm having trouble generating a "
-                                "response right now. Please try again."
-                            ),
+                            "response": inference_stream_user_message(gen_exc),
                             "reasoning": "",
                             "latency_ms": round(
                                 (time.perf_counter() - t0) * 1000, 1,
@@ -1929,6 +1927,16 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                         "Agent %s: simple stream failed: %s",
                         agent_id, gen_exc,
                     )
+                    try:
+                        await websocket.send_json({
+                            "type": "response_end",
+                            "response": inference_stream_user_message(gen_exc),
+                            "reasoning": "",
+                            "latency_ms": 0,
+                            "nls": {},
+                        })
+                    except Exception:
+                        pass
                     continue
 
                 _vis_simple = re.sub(

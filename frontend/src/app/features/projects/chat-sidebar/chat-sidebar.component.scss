@@ -90,15 +90,16 @@
 
 .messages {
   flex: 1;
-  overflow-y: auto;
-  padding: 12px;
+  min-height: 0;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  min-height: 0;
 
   app-message-list {
     display: block;
+    flex: 1;
+    min-height: 0;
+    height: 100%;
   }
 
   &::-webkit-scrollbar { width: 4px; }

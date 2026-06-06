@@ -45,10 +45,14 @@ Optional per-key RPM in `ApiKey` model — enforced by `api-keys` service.
 
 | Key type | Works on |
 |----------|----------|
-| JWT (login) | NestJS + Socket.IO + `/api/rt` |
-| `nlsk_` API key | Python runtime HTTP/WS directly |
+| JWT (login) | NestJS + Socket.IO + `/api/rt` + Babo Cloud `/api/inference` and `/api/gpu` |
+| `nlsk_` API key | Python runtime HTTP/WS directly **and** Babo Cloud inference/GPU when used as `NLS_INFERENCE_API_KEY` |
 
 For hosted web UI, use JWT. For local scripts on the same machine as the runtime, use API keys.
+
+### Desktop + Babo Cloud
+
+When inference is relayed through NestJS, the desktop **syncs JWT** (or a stored `nlsk_` key) into `NLS_INFERENCE_API_KEY` for the local Python process. Create an `nlsk_` key here if you want a long-lived bearer instead of session JWT — the provision service prefers an explicit `nlsk_` in `nls-config.json` over JWT when present.
 
 ---
 

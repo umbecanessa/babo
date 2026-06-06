@@ -327,7 +327,7 @@ export class MessageListComponent implements OnChanges, AfterViewChecked, OnDest
   ngAfterViewChecked(): void {
     if (!this.scrollToBottomAfterView) return;
     this.scrollToBottomAfterView = false;
-    this.scrollToBottom();
+    this.followScrollIfPinned();
   }
 
   /** True when the agentic planning indicator should display. */
@@ -766,13 +766,6 @@ export class MessageListComponent implements OnChanges, AfterViewChecked, OnDest
     return (bytes / (1024 * 1024)).toFixed(1) + 'MB';
   }
 
-  @HostListener('scroll', ['$event'])
-  onScrollContainerScroll(event: Event): void {
-    const el = event.target as HTMLElement;
-    if (el !== this.scrollContainer?.nativeElement) return;
-    this.scrollPinnedToBottom = this._isNearBottom(el);
-  }
-
   @HostListener('click', ['$event'])
   onHostClick(event: MouseEvent) {
     const target = event.target as HTMLElement;
@@ -865,11 +858,32 @@ export class MessageListComponent implements OnChanges, AfterViewChecked, OnDest
     }, 300);
   }
 
+  onScrollContainerScroll(event: Event): void {
+    const el = event.currentTarget as HTMLElement;
+    this.scrollPinnedToBottom = this._isNearBottom(el);
+  }
+
+  /** Unpin immediately on upward wheel so streaming updates cannot win the race. */
+  onScrollContainerWheel(event: WheelEvent): void {
+    if (event.deltaY >= 0) return;
+    const el = this.scrollContainer?.nativeElement;
+    if (!el || el.scrollTop <= 0) return;
+    this.scrollPinnedToBottom = false;
+  }
+
+  private followScrollIfPinned(): void {
+    const el = this.scrollContainer?.nativeElement;
+    if (!el || !this.scrollPinnedToBottom) return;
+    if (!this._isNearBottom(el)) {
+      this.scrollPinnedToBottom = false;
+      return;
+    }
+    el.scrollTop = el.scrollHeight;
+  }
+
   private scrollToBottom() {
-    try {
-      const el = this.scrollContainer?.nativeElement;
-      if (el) el.scrollTop = el.scrollHeight;
-    } catch {}
+    this.scrollPinnedToBottom = true;
+    this.followScrollIfPinned();
   }
 
   private _isNearBottom(el: HTMLElement): boolean {

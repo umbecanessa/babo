@@ -12,6 +12,8 @@ NLS_INFERENCE_API_KEY=sk-...
 
 Despite the `VLLM` prefix on env vars, you are **not** required to run vLLM. Any provider that implements `/v1/chat/completions` with streaming works (OpenRouter, Ollama, LiteLLM, etc.).
 
+**Babo Cloud:** when `NLS_VLLM_BASE_URL` is `{nestjs}/api/inference/v1`, the bearer may be a provider key, an `nlsk_` API key, or a **user JWT**. Desktop syncs JWT into `NLS_INFERENCE_API_KEY` automatically; `vllm_client.set_api_key()` can hot-reload without restarting uvicorn.
+
 See [Inference providers](../configuration/inference-providers.md).
 
 ---

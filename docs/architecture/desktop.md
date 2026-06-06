@@ -80,7 +80,7 @@ Desktop writes settings to env when spawning Python:
 |------------|---------------------|
 | Inference URL | `NLS_VLLM_BASE_URL` |
 | Model | `NLS_HF_MODEL` |
-| API key | `NLS_INFERENCE_API_KEY` |
+| API key | `NLS_INFERENCE_API_KEY` (JWT or `nlsk_` when using Babo Cloud relay) |
 | (implicit) | `NLS_PRODUCT_MODE=1` |
 
 ---

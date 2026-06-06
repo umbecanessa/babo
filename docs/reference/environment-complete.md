@@ -17,7 +17,7 @@ From `server/config.py` (`env_prefix = NLS_`):
 | `NLS_SERVE_PORT` | `8443` | HTTP port (desktop often 9222) |
 | `NLS_VLLM_BASE_URL` | `http://localhost:8000` | Inference API base |
 | `NLS_HF_MODEL` | `gpt-4o-mini` | Model id |
-| `NLS_INFERENCE_API_KEY` | — | Bearer token |
+| `NLS_INFERENCE_API_KEY` | — | Bearer token (provider key, `nlsk_`, or user JWT for Babo Cloud relay) |
 | `NLS_DEFAULT_GENESIS` | `standard-v1` | Default template |
 | `NLS_DATA_DIR` | `./data` | Runtime data root |
 | `NLS_SLEEP_ENABLED` | `true` | Sleep scheduler |
@@ -76,7 +76,7 @@ From `server/config.py` (`env_prefix = NLS_`):
 |----------|---------|
 | Inference URL | `NLS_VLLM_BASE_URL` |
 | Model | `NLS_HF_MODEL` |
-| API key | `NLS_INFERENCE_API_KEY` |
+| API key | `NLS_INFERENCE_API_KEY` (desktop may hot-sync JWT for Babo Cloud) |
 | Backend URL | `NESTJS_URL` |
 | Runtime port | `NLS_PORT` |
 | Capability profile | `NLS_GPU_WORKER_*`, bridge URLs (from `capabilityProfile`) |

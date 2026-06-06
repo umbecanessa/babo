@@ -118,6 +118,19 @@ class VLLMInferenceClient:
         # Track loaded adapters
         self._loaded_adapters: dict[str, AdapterInfo] = {}
 
+    def set_api_key(self, api_key: str | None) -> None:
+        """Update bearer auth on the pooled client (hot-reload / JWT sync)."""
+        self._api_key = (api_key or "").strip()
+        headers = dict(self._client_kwargs.get("headers") or {})
+        if self._api_key:
+            headers["Authorization"] = f"Bearer {self._api_key}"
+        else:
+            headers.pop("Authorization", None)
+        self._client_kwargs["headers"] = headers
+        if not self._client.is_closed:
+            self._client = httpx.AsyncClient(**self._client_kwargs)
+
+
     def _openai_path(self, resource: str) -> str:
         """OpenAI-compat path when base_url may already end with ``/v1`` (Babo Cloud relay)."""
         resource = resource.lstrip("/")

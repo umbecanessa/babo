@@ -1,4 +1,4 @@
-<div #scrollContainer class="messages-scroll">
+<div #scrollContainer class="messages-scroll" (scroll)="onScrollContainerScroll($event)" (wheel)="onScrollContainerWheel($event)">
   <div class="messages-inner">
     @if (messages.length === 0 && !streamingText?.trim()) {
       <div class="empty-chat">
