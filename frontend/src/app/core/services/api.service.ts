@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, Injector } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { Observable, map, of, catchError, switchMap } from 'rxjs';
@@ -116,6 +116,7 @@ export class ApiService {
   constructor(
     private http: HttpClient,
     private platform: PlatformService,
+    private injector: Injector,
   ) {
     this.applyBootConfig();
     this.urlsReady = isDesktopShell()
@@ -189,7 +190,7 @@ export class ApiService {
       queueMicrotask(() => {
         void import('./babo-cloud-provision.service').then(({ BaboCloudProvisionService }) => {
           // Runtime may have started before JWT sync — push bearer once health is OK.
-          void inject(BaboCloudProvisionService).syncRuntimeAuth();
+          void this.injector.get(BaboCloudProvisionService).syncRuntimeAuth();
         });
       });
     }

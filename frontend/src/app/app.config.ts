@@ -1,4 +1,4 @@
-import { APP_INITIALIZER, ApplicationConfig, inject, provideZonelessChangeDetection, isDevMode } from '@angular/core';
+import { APP_INITIALIZER, ApplicationConfig, provideZonelessChangeDetection, isDevMode } from '@angular/core';
 import { provideRouter, withHashLocation } from '@angular/router';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
 import { provideServiceWorker } from '@angular/service-worker';
@@ -12,20 +12,14 @@ import { BaboCloudProvisionService } from './core/services/babo-cloud-provision.
 import { isDesktopShell } from './core/desktop-boot';
 import { environment } from '../environments/environment';
 
-function initDesktopUrls(): () => Promise<void> {
-  return () => {
-    if (!isDesktopShell()) {
-      return Promise.resolve();
-    }
-    return inject(ApiService).whenReady();
-  };
-}
-
-function initCloudInferenceKey(): () => Promise<void> {
+function initDesktopBootstrap(
+  api: ApiService,
+  cloudProvision: BaboCloudProvisionService,
+): () => Promise<void> {
   return async () => {
     if (!isDesktopShell()) return;
-    await inject(ApiService).whenReady();
-    await inject(BaboCloudProvisionService).syncRuntimeAuth();
+    await api.whenReady();
+    await cloudProvision.syncRuntimeAuth();
   };
 }
 
@@ -38,8 +32,7 @@ export const appConfig: ApplicationConfig = {
     // file exists, making the entire app go blank with no error.
     provideRouter(routes, ...(environment.electron || isDesktopShell() ? [withHashLocation()] : [])),
     provideHttpClient(withInterceptors([jwtInterceptor, billingPaywallInterceptor])),
-    { provide: APP_INITIALIZER, useFactory: initDesktopUrls, multi: true },
-    { provide: APP_INITIALIZER, useFactory: initCloudInferenceKey, multi: true },
+    { provide: APP_INITIALIZER, useFactory: initDesktopBootstrap, deps: [ApiService, BaboCloudProvisionService], multi: true },
     provideTranslateService({
       fallbackLang: 'en',
       loader: provideTranslateHttpLoader({ prefix: './assets/i18n/' }),

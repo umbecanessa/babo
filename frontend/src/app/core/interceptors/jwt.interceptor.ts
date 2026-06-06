@@ -1,5 +1,5 @@
 import { HttpInterceptorFn, HttpRequest, HttpHandlerFn, HttpErrorResponse } from '@angular/common/http';
-import { inject } from '@angular/core';
+import { inject, Injector } from '@angular/core';
 import { catchError, switchMap, throwError, Observable, finalize, shareReplay } from 'rxjs';
 import { AuthService } from '../services/auth.service';
 
@@ -16,6 +16,7 @@ let refreshInFlight$: Observable<string> | null = null;
 
 export const jwtInterceptor: HttpInterceptorFn = (req, next) => {
   const auth = inject(AuthService);
+  const injector = inject(Injector);
 
   if (isAuthRequest(req)) {
     return next(req);
@@ -27,7 +28,7 @@ export const jwtInterceptor: HttpInterceptorFn = (req, next) => {
   return next(authedReq).pipe(
     catchError((error) => {
       if (error instanceof HttpErrorResponse && error.status === 401) {
-        return handle401(req, next, auth);
+        return handle401(req, next, auth, injector);
       }
       return throwError(() => error);
     }),
@@ -38,6 +39,7 @@ function handle401(
   req: HttpRequest<unknown>,
   next: HttpHandlerFn,
   auth: AuthService,
+  injector: Injector,
 ): Observable<any> {
   if (!refreshInFlight$) {
     refreshInFlight$ = auth.refreshAccessToken().pipe(
@@ -49,17 +51,13 @@ function handle401(
   return refreshInFlight$.pipe(
     switchMap((newToken) => {
       queueMicrotask(() => {
-        try {
-          void import('../services/babo-cloud-provision.service').then(
-            ({ BaboCloudProvisionService }) => {
-              const svc = inject(BaboCloudProvisionService);
-              svc.invalidateSyncCache();
-              void svc.syncRuntimeAuth();
-            },
-          );
-        } catch {
-          /* web */
-        }
+        void import('../services/babo-cloud-provision.service').then(
+          ({ BaboCloudProvisionService }) => {
+            const svc = injector.get(BaboCloudProvisionService);
+            svc.invalidateSyncCache();
+            void svc.syncRuntimeAuth();
+          },
+        );
       });
       return next(addToken(req, newToken));
     }),
