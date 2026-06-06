@@ -21,8 +21,11 @@
   z-index: 30;
   pointer-events: auto;
 
+  &:has(.context-menu-backdrop) {
+    z-index: var(--context-menu-z);
+  }
+
   ::ng-deep .context-menu-panel.model-menu {
-    z-index: 120;
     max-height: min(420px, calc(100vh - 120px));
   }
 

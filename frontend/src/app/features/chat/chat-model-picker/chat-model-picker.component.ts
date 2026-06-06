@@ -62,7 +62,6 @@ type MenuView =
           </svg>
         </button>
         @if (open()) {
-          <div class="context-menu-backdrop" (click)="open.set(false)"></div>
           <div
             class="context-menu-panel model-menu"
             [class.menu-down]="menuPlacement() === 'down'"
@@ -232,6 +231,7 @@ type MenuView =
               }
             </div>
           </div>
+          <div class="context-menu-backdrop" (click)="open.set(false)"></div>
         }
       </div>
     }
@@ -244,6 +244,15 @@ type MenuView =
         display: block;
         width: fit-content;
         max-width: 100%;
+      }
+      .model-picker .context-menu-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: calc(var(--context-menu-z) - 1);
+      }
+      .model-picker .context-menu-panel.model-menu {
+        z-index: var(--context-menu-z);
+        pointer-events: auto;
       }
       .model-picker.wide .model-trigger {
         max-width: 100%;
@@ -361,6 +370,8 @@ type MenuView =
       }
       .model-option {
         font-size: 13px;
+        cursor: pointer;
+        pointer-events: auto;
       }
       .model-option-label {
         overflow: hidden;
