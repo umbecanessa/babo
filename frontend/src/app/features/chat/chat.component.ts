@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, AfterViewInit, signal, computed, ViewChild, ElementRef, AfterViewChecked, inject } from '@angular/core';
+import { Component, OnInit, OnDestroy, AfterViewInit, signal, computed, ViewChild, ElementRef, AfterViewChecked, inject, effect } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { HttpClient } from '@angular/common/http';
@@ -52,6 +52,8 @@ import {
 import { ChatPanelService } from '../../core/services/chat-panel.service';
 import { ConversationService, ConversationThread } from '../../core/services/conversation.service';
 import { composerDestination } from '../../core/services/composer-destination.util';
+import { ChatMainTranscriptService } from '../../core/services/chat-main-transcript.service';
+import { restoreChatMessagesFromTranscript, isChatSystemInjection } from '../../core/services/chat-transcript-restore.util';
 import { ChatLeftDockComponent } from './chat-left-dock/chat-left-dock.component';
 import { ChatRightDockComponent } from './chat-right-dock/chat-right-dock.component';
 import { ConversationNavComponent } from './conversation-nav/conversation-nav.component';
@@ -244,9 +246,20 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     private day1Coach: Day1CoachService,
     private agentModels: AgentModelService,
     readonly orchProfiles: AgentOrchestrationProfileService,
+    private readonly mainTranscript: ChatMainTranscriptService,
     readonly platformIntegrations: PlatformIntegrationsService,
     private chatAttachments: ChatAttachmentService,
-  ) {}
+  ) {
+    effect(() => {
+      this.mainTranscript.revision();
+      this.pullSharedMainTranscript();
+    });
+    effect(() => {
+      this.messages();
+      this.currentThread();
+      this.syncMainTranscript();
+    });
+  }
 
   googleUsesByoCredentials(): boolean {
     return googleUsesByo(this.platformIntegrations.backendChoice());
@@ -266,6 +279,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     this.workbench.bindAgent(this.agentId);
     this.runView.bindAgent(this.agentId);
     this.restoreChatUiSnapshot();
+    this.mergeMainTranscriptOnInit();
     this.hydrateRunFromApi();
     void this.agentModels.refreshFromConfig();
     void this.platformIntegrations.refresh();
@@ -350,6 +364,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     this.workbench.bindAgent(nextId);
     this.runView.bindAgent(nextId);
     this.restoreChatUiSnapshot();
+    this.mergeMainTranscriptOnInit();
     this.hydrateRunFromApi();
     this._restoreBackgroundState();
 
@@ -537,6 +552,40 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     }
   }
 
+  /** Prefer shared main-thread transcript when Projects sidebar was active. */
+  private mergeMainTranscriptOnInit(): void {
+    if (!this.agentId) return;
+    const shared = this.mainTranscript.get(this.agentId);
+    const local = this.messages();
+    if (shared.length > local.length) {
+      this.messages.set(shared);
+    } else if (local.length > 0) {
+      this.syncMainTranscript();
+    }
+  }
+
+  private syncMainTranscript(): void {
+    if (!this.agentId || this.currentThread() !== 'websocket:main') return;
+    const mainMsgs = this.messages().filter(
+      m => !m.sessionKey || m.sessionKey === 'websocket:main',
+    );
+    this.mainTranscript.replace(this.agentId, mainMsgs);
+  }
+
+  /** Adopt newer main-thread transcript from Projects sidebar. */
+  private pullSharedMainTranscript(): void {
+    if (!this.agentId || this.currentThread() !== 'websocket:main' || this.agenticActive()) return;
+    const shared = this.mainTranscript.get(this.agentId);
+    const local = this.messages().filter(
+      m => !m.sessionKey || m.sessionKey === 'websocket:main',
+    );
+    if (shared.length <= local.length) return;
+    const branch = this.messages().filter(
+      m => m.sessionKey && m.sessionKey !== 'websocket:main',
+    );
+    this.messages.set([...branch, ...structuredClone(shared)]);
+  }
+
   /** Merge heartbeat snapshots so partial WS payloads do not wipe BPM or digests. */
   private _mergeHeartbeat(
     prev: Record<string, unknown> | undefined | null,
@@ -550,6 +599,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
   private persistChatUiSnapshot(): void {
     if (!this.agentId) return;
+    this.syncMainTranscript();
     this.chatUiSnapshot.save(this.agentId, {
       messages: this.messages(),
       nlsMetadata: this.nlsMetadata(),
@@ -1473,104 +1523,29 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
           break;
         }
         if (Array.isArray(msg.messages) && msg.messages.length > 0) {
-          const restored: ChatMessage[] = [];
-          for (const m of msg.messages) {
-            const isAssistant = m.role !== 'user';
-            const meta = m.metadata;
-
-            // If this assistant message was part of an agentic task,
-            // restore the agentic start/iteration/complete markers.
-            if (isAssistant && meta?.agentic) {
-              restored.push({
-                type: 'agentic_start' as any,
-                content: `Agent ran autonomous task (${meta.iterations || 0} steps, ${meta.tool_calls || 0} tool calls)`,
-                timestamp: new Date(),
-              });
-              if (Array.isArray(meta.events)) {
-                for (const ev of meta.events) {
-                  const toolNames = (ev.tool_calls || [])
-                    .map((tc: any) => tc.name || tc.tool_name || 'tool')
-                    .join(', ');
-                  const results = ev.tool_results || [];
-                  const successes = results.filter((r: any) => r.success).length;
-                  restored.push({
-                    type: 'agentic_iteration' as any,
-                    content: `Step ${ev.step}: ${toolNames || 'processing'} (${successes}/${results.length} succeeded)`,
-                    timestamp: new Date(),
-                    agentic: {
-                      step: ev.step,
-                      maxSteps: meta.iterations || 0,
-                      toolCalls: ev.tool_calls || [],
-                      toolResults: results,
-                      hormones: ev.hormones || {},
-                      durationMs: ev.duration_ms || 0,
-                    },
-                  });
-                }
+          const restored = restoreChatMessagesFromTranscript(msg.messages, {
+            onPlanHydrate: (meta) => {
+              const planSteps = meta['plan_steps'];
+              if (!Array.isArray(planSteps) || planSteps.length === 0) {
+                return;
               }
-              const restoredEvents = (meta.events || []).map((ev: any) => ({
-                step: ev.step,
-                toolCalls: (ev.tool_calls || []).map((tc: any) => ({ name: tc.name || 'tool' })),
-                toolResults: (ev.tool_results || []).map((tr: any) => ({ success: tr.success !== false })),
-                durationMs: ev.duration_ms || 0,
-              }));
-              restored.push({
-                type: 'agentic_complete' as any,
-                content: meta.aborted
-                  ? agenticAbortLabel(true, meta.abort_reason, !!meta.autonomous)
-                  : 'Task complete',
-                timestamp: new Date(),
-                agenticComplete: {
-                  totalSteps: meta.iterations || 0,
-                  totalToolCalls: meta.tool_calls || 0,
-                  aborted: meta.aborted || false,
-                  abortReason: meta.abort_reason || '',
-                  durationMs: 0,
-                  hormones: {},
-                  events: restoredEvents,
-                },
+              this.runView.hydratePlan({
+                id: String(meta['plan_id'] || ''),
+                title: String(meta['plan_title'] || 'Restored plan'),
+                status: 'in_progress',
+                progress: '',
+                steps: planSteps.map((s: any, idx: number) => ({
+                  id: s.id || `step-${idx + 1}`,
+                  label: typeof s === 'string' ? s : (s.label || ''),
+                  status: typeof s === 'string' ? 'pending' : (s.status || 'pending'),
+                  depends_on: [],
+                  delegatable: true,
+                })),
               });
-              // Restore plan steps if they were saved in metadata
-              if (Array.isArray(meta.plan_steps) && meta.plan_steps.length > 0) {
-                this.runView.hydratePlan({
-                  id: meta.plan_id || '',
-                  title: meta.plan_title || 'Restored plan',
-                  status: 'in_progress',
-                  progress: '',
-                  steps: meta.plan_steps.map((s: any, idx: number) => ({
-                    id: s.id || `step-${idx + 1}`,
-                    label: typeof s === 'string' ? s : (s.label || ''),
-                    status: typeof s === 'string' ? 'pending' : (s.status || 'pending'),
-                    depends_on: [],
-                    delegatable: true,
-                  })),
-                });
-              }
-            }
-
-            if (isAssistant && m.content) {
-              if (meta?.autonomous && meta?.communicated) continue;
-              const text = m.content as string;
-              if (this.isSystemInjection(text)) continue;
-              const thought = parseThinking(text);
-              restored.push({
-                type: 'assistant' as const,
-                content: thought.response || text,
-                reasoning: thought.thinking || undefined,
-                timestamp: new Date(),
-              });
-            } else {
-              const rawContent = m.content || '';
-              if (!rawContent.trim()) continue;
-              if (this.isSystemInjection(rawContent)) continue;
-              restored.push({
-                type: m.role === 'user' ? 'user' as const : 'assistant' as const,
-                content: rawContent,
-                timestamp: new Date(),
-              });
-            }
-          }
+            },
+          });
           this.messages.set(restored);
+          this.syncMainTranscript();
         }
         break;
 
@@ -3665,12 +3640,9 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
             timestamp: new Date(m.timestamp || Date.now()),
           }));
         } else {
-          restored = sessionMsgs.map((m: any) => ({
-            type: m.role === 'user' ? 'user' as const : 'assistant' as const,
-            content: m.content || '',
-            timestamp: new Date(m.timestamp || Date.now()),
+          restored = restoreChatMessagesFromTranscript(sessionMsgs, {
             sessionKey,
-          }));
+          });
         }
 
         this.messages.update(msgs => {
@@ -3894,21 +3866,6 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
   }
 
   private isSystemInjection(text: string): boolean {
-    const t = text.trim();
-    const patterns = [
-      '[REMEMBERED',
-      'Review: did you complete ALL parts',
-      '[SKILL ONBOARDING',
-      'Good plan. Now EXECUTE',
-      'You wrote files to the skills directory but did NOT call',
-      'SELF-CORRECTION CHECKPOINT',
-      'ANS CHECKPOINT',
-      '--- ANS CHECKPOINT',
-      'Do NOT describe what you would do',
-      'MANDATORY — without it the skill will never load',
-      'ERRORS OBSERVED:',
-      'STRESS LEVEL: cortisol=',
-    ];
-    return patterns.some(p => t.includes(p));
+    return isChatSystemInjection(text);
   }
 }

@@ -1,4 +1,5 @@
 import { Injectable, computed, signal } from '@angular/core';
+import { formatAgentMode } from './workbench-labels.util';
 
 /** User-facing orchestration depth for outgoing messages. */
 export type OrchestrationProfileChoice =
@@ -58,7 +59,12 @@ export class AgentOrchestrationProfileService {
   private readonly profileRequestedByAgent = new Map<string, string>();
   private readonly profileEffectiveByAgent = new Map<string, string>();
   private readonly profileFlooredByAgent = new Map<string, boolean>();
-  private readonly epoch = signal(0);
+  /** Live orchestrator mode (planning, executing, …) during agentic runs. */
+  private readonly runtimeModeByAgent = new Map<string, string>();
+  private readonly agenticActiveByAgent = new Map<string, boolean>();
+  /** Bump when profile/mode/triage state changes (for reactive UI). */
+  readonly revision = signal(0);
+  private readonly epoch = this.revision;
 
   readonly activeAgentId = signal<string | null>(null);
 
@@ -99,7 +105,43 @@ export class AgentOrchestrationProfileService {
     return this.profileFlooredByAgent.get(agentId) ?? false;
   }
 
-  triggerLabel(agentId: string | null): string {
+  isAgenticActive(agentId: string | null): boolean {
+    this.epoch();
+    if (!agentId) return false;
+    return this.agenticActiveByAgent.get(agentId) ?? false;
+  }
+
+  runtimeMode(agentId: string | null): string | null {
+    this.epoch();
+    if (!agentId) return null;
+    return this.runtimeModeByAgent.get(agentId) ?? null;
+  }
+
+  setAgenticActive(agentId: string | null | undefined, active: boolean): void {
+    const id = (agentId ?? '').trim();
+    if (!id) return;
+    if (active) {
+      this.agenticActiveByAgent.set(id, true);
+      if (!this.runtimeModeByAgent.has(id)) {
+        this.runtimeModeByAgent.set(id, 'executing');
+      }
+    } else {
+      this.agenticActiveByAgent.delete(id);
+      this.runtimeModeByAgent.delete(id);
+    }
+    this.epoch.update(v => v + 1);
+  }
+
+  setRuntimeMode(agentId: string | null | undefined, mode: string | null | undefined): void {
+    const id = (agentId ?? '').trim();
+    const next = (mode ?? '').trim().toLowerCase();
+    if (!id || !next) return;
+    this.runtimeModeByAgent.set(id, next);
+    this.epoch.update(v => v + 1);
+  }
+
+  /** Depth/profile portion only (Auto, Solo, Auto · EM, Solo → EM). */
+  depthLabel(agentId: string | null): string {
     const choice = this.choiceFor(agentId);
     if (choice !== 'auto') {
       const opt = ORCHESTRATION_PROFILE_OPTIONS.find(o => o.id === choice);
@@ -119,20 +161,38 @@ export class AgentOrchestrationProfileService {
     return 'Auto';
   }
 
+  /** Runtime mode label when agentic task is active; null when idle. */
+  modeLabel(agentId: string | null): string | null {
+    if (!this.isAgenticActive(agentId)) return null;
+    const mode = this.runtimeMode(agentId) || 'executing';
+    return formatAgentMode(mode);
+  }
+
+  triggerLabel(agentId: string | null): string {
+    const depth = this.depthLabel(agentId);
+    const mode = this.modeLabel(agentId);
+    return mode ? `${depth} · ${mode}` : depth;
+  }
+
   triggerTitle(agentId: string | null): string {
     const choice = this.choiceFor(agentId);
     const triaged = this.lastTriageProfile(agentId);
+    const mode = this.modeLabel(agentId);
     if (choice !== 'auto' && this.isProfileFloored(agentId)) {
       const requested = this.profileRequestedByAgent.get(agentId ?? '') ?? choice;
       const effective = this.profileEffectiveByAgent.get(agentId ?? '') ?? triaged;
-      return (
+      const base = (
         `Requested ${requested}; active plan requires ${effective ?? 'orchestrated'}.`
       );
+      return mode ? `${base} Mode: ${mode}.` : base;
+    }
+    if (mode) {
+      return `Orchestration: ${this.depthLabel(agentId)} — ${mode}`;
     }
     if (triaged) {
-      return `Orchestration: ${this.triggerLabel(agentId)} (last triage: ${triaged})`;
+      return `Orchestration: ${this.depthLabel(agentId)} (last triage: ${triaged})`;
     }
-    return `Orchestration depth: ${this.triggerLabel(agentId)}`;
+    return `Orchestration depth: ${this.depthLabel(agentId)}`;
   }
 
   readonly hasManualOverride = computed(() => {

@@ -18,7 +18,7 @@
   <div class="messages">
     @if (loadingHistory()) {
       <div class="empty-chat">Loading conversation...</div>
-    } @else if (messages().length === 0 && !streamingText()) {
+    } @else if (visibleMessages().length === 0 && !streamingText() && !agenticActive()) {
       <div class="empty-chat">
         Private desk chat — project context is injected automatically.
         @if (composerHint().hint) {
@@ -26,19 +26,14 @@
         }
       </div>
     } @else {
-      @for (msg of messages(); track $index) {
-        <div class="msg" [class]="'msg-' + msg.role">
-          <div class="msg-bubble" [innerHTML]="msg.content | markdown"></div>
-          @if (msg.source && msg.source !== 'history') {
-            <span class="msg-source">{{ msg.source }}</span>
-          }
-        </div>
-      }
-      @if (streamingText()) {
-        <div class="msg msg-assistant">
-          <div class="msg-bubble streaming" [innerHTML]="streamingText() | markdown"></div>
-        </div>
-      }
+      <app-message-list
+        [messages]="visibleMessages()"
+        [streamingText]="streamingText()"
+        [streamingReasoning]="streamingReasoning()"
+        [awaitingResponse]="awaitingResponse()"
+        [agenticActive]="agenticActive()"
+        [agentId]="agentId"
+      />
     }
   </div>
 
@@ -54,6 +49,14 @@
     @if (isDragOver()) {
       <div class="drop-overlay">Drop files or folders here</div>
     }
+
+    <div class="composer-toolbar">
+      <app-chat-model-picker variant="chip" />
+      <app-chat-orchestration-profile-picker />
+      @if (!agenticActive() && composerHint().hint) {
+        <span class="composer-destination-inline">{{ composerHint().hint }}</span>
+      }
+    </div>
 
     @if (pendingAttachments().length || fileUploading()) {
       <div class="attachment-row">
@@ -89,8 +92,6 @@
         }
       </div>
     }
-
-    <span class="input-hint">{{ composerHint().hint }}</span>
 
     @if (voice.state() === 'recording') {
       <div class="input-row voice-row">

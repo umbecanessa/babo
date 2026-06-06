@@ -32,7 +32,7 @@ describe('composerDestination', () => {
 describe('conversationBreadcrumbs', () => {
   it('returns Home for main thread', () => {
     expect(conversationBreadcrumbs({ key: 'websocket:main', label: 'Home', channel: 'websocket' }))
-      .toEqual([{ label: 'Home', level: 'home' }]);
+      .toEqual([{ label: 'Private desk', level: 'home' }]);
   });
 
   it('includes surface for Discord channel', () => {

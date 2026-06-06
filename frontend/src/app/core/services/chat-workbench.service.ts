@@ -1,4 +1,5 @@
 import { Injectable, inject, signal, computed } from '@angular/core';
+import { AgentOrchestrationProfileService } from './agent-orchestration-profile.service';
 import {
   delegateNumberFromMessage,
   isSilentAutonomousCompletion,
@@ -93,6 +94,7 @@ function surfaceFromRuntimeMsg(msg: any): string | undefined {
 @Injectable({ providedIn: 'root' })
 export class ChatWorkbenchService {
   private readonly workspaceCtx = inject(AgentWorkspaceContextService);
+  private readonly orchProfiles = inject(AgentOrchestrationProfileService);
   private readonly _agentId = signal<string>('');
 
   readonly panelOpen = signal(false);
@@ -137,6 +139,7 @@ export class ChatWorkbenchService {
     this.entries.set([]);
     this._resetStreamScratch();
     this._lastAgentMode = 'executing';
+    this.orchProfiles.setAgenticActive(agentId, false);
     this._toolStartTitles.clear();
     this._toolMetaByCallId.clear();
     this._pendingStepGroup = null;
@@ -435,6 +438,11 @@ export class ChatWorkbenchService {
     switch (t) {
       case 'agentic_start':
         if (isSubAgent) break;
+        if (!msg.autonomous) {
+          this.orchProfiles.setAgenticActive(this._agentId(), true);
+          this._lastAgentMode = 'executing';
+          this.orchProfiles.setRuntimeMode(this._agentId(), 'executing');
+        }
         this._runSeq += 1;
         this._pendingStepGroup = null;
         this._removeEntry(`${corrNs}activity-status`);
@@ -615,6 +623,9 @@ export class ChatWorkbenchService {
           status: aborted ? 'error' : 'ok',
           toolLabel: 'Task',
         });
+        if (!msg.autonomous) {
+          this.orchProfiles.setAgenticActive(this._agentId(), false);
+        }
         break;
       }
 
@@ -626,6 +637,7 @@ export class ChatWorkbenchService {
         });
         if (toolName === 'switch_mode' && parsed.modeTransition) {
           this._lastAgentMode = parsed.modeTransition;
+          this.orchProfiles.setRuntimeMode(this._agentId(), parsed.modeTransition);
         }
         const callId = msg.call_id || '';
         const corr = `${corrNs}${callId || toolName}`;
@@ -726,6 +738,8 @@ export class ChatWorkbenchService {
         let chips: ActivityChip[] | undefined;
         if (toolName === 'switch_mode') {
           const toMode = String(endArgs['mode'] || this._lastAgentMode || '');
+          this._lastAgentMode = toMode;
+          this.orchProfiles.setRuntimeMode(this._agentId(), toMode);
           const metaTitle = callId
             ? this._toolMetaByCallId.get(callId)?.title
             : undefined;

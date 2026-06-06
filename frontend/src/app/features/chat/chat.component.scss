@@ -221,11 +221,17 @@
   }
 }
 
-.composer-destination-hint {
+.composer-destination-inline {
+  margin-left: auto;
+  flex: 0 1 auto;
+  max-width: min(220px, 42vw);
   font-size: 0.7rem;
   color: var(--text-muted);
-  padding: 0 12px 4px;
   letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 4px;
 }
 
 .panel-header-btn {
@@ -926,7 +932,7 @@
   }
 
   app-chat-orchestration-profile-picker {
-    max-width: min(160px, 36vw);
+    max-width: min(180px, 40vw);
   }
 }
 

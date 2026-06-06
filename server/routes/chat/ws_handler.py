@@ -51,6 +51,7 @@ from .history import (
     _salvage_agentic_context,
     _save_agentic_history_v2,
     _strip_internal_blocks,
+    persist_partial_agentic_transcript,
     record_visible_chat_turn,
 )
 
@@ -1261,6 +1262,12 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                     })
 
                     _eager_events: list[dict] = []
+                    websocket.state._pending_agentic_transcript = {
+                        "user_input": user_input,
+                        "initial_thinking": _initial_thinking,
+                        "eager_events": _eager_events,
+                        "saved": False,
+                    }
 
                     async def _on_event(event):
                         """Stream agentic events to the frontend."""
@@ -1505,6 +1512,11 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                             reasoning=_initial_thinking or None,
                             metadata=_transcript_meta,
                         )
+                        _pending = getattr(
+                            websocket.state, "_pending_agentic_transcript", None,
+                        )
+                        if isinstance(_pending, dict):
+                            _pending["saved"] = True
 
                         try:
                             _agentic_final = agentic_result.final_response or ""
@@ -2006,9 +2018,35 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
         if runtime is not None:
             runtime._active_sessions = max(0, runtime._active_sessions - 1)
 
-        connection_manager.unregister(agent_id, websocket)
+            _pending = getattr(
+                websocket.state, "_pending_agentic_transcript", None,
+            )
+            if (
+                isinstance(_pending, dict)
+                and not _pending.get("saved")
+                and (_pending.get("eager_events") or _pending.get("user_input"))
+            ):
+                try:
+                    persist_partial_agentic_transcript(
+                        runtime,
+                        user_input=str(_pending.get("user_input") or ""),
+                        eager_events=list(_pending.get("eager_events") or []),
+                        initial_thinking=_pending.get("initial_thinking") or None,
+                    )
+                    logger.info(
+                        "Agent %s: persisted partial agentic transcript "
+                        "on disconnect (events=%d)",
+                        agent_id,
+                        len(_pending.get("eager_events") or []),
+                    )
+                    _pending["saved"] = True
+                except Exception:
+                    logger.debug(
+                        "Agent %s: partial agentic transcript save failed",
+                        agent_id,
+                        exc_info=True,
+                    )
 
-        if runtime is not None:
             try:
                 logger.info(
                     "Agent %s: finally-block save (history_len=%d)",
@@ -2024,6 +2062,8 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                     "Agent %s: data directory gone (agent deleted?), "
                     "skipping state save", agent_id,
                 )
+
+        connection_manager.unregister(agent_id, websocket)
 
 
 # ─── Agentic event dispatcher ───────────────────────────────────

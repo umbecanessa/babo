@@ -409,10 +409,10 @@
                     <span class="attachment-name">Uploading...</span>
                   </div>
                 }
+                @if (!agenticActive() && composerDest().hint) {
+                  <span class="composer-destination-inline">{{ composerDest().hint }}</span>
+                }
               </div>
-              @if (!agenticActive() && composerDest().hint) {
-                <div class="composer-destination-hint">{{ composerDest().hint }}</div>
-              }
               @if (agenticActive()) {
                 @if (budgetPromptPending()) {
                   <div class="ask-user-composer-banner budget-composer-banner">

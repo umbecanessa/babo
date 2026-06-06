@@ -18,7 +18,7 @@ export function composerDestination(meta: ThreadMeta | null | undefined): Compos
   if (!meta || meta.key === 'websocket:main') {
     return {
       placeholder: 'Message Babo (private — not sent externally)',
-      hint: 'Private desk',
+      hint: '',
       mode: 'private',
     };
   }
@@ -26,7 +26,7 @@ export function composerDestination(meta: ThreadMeta | null | undefined): Compos
   if (meta.channel === 'websocket') {
     return {
       placeholder: 'Message Babo (private branch)',
-      hint: 'Private branch',
+      hint: '',
       mode: 'private',
     };
   }
@@ -124,7 +124,7 @@ export function composerDestination(meta: ThreadMeta | null | undefined): Compos
 /** Breadcrumb segments for the active conversation. */
 export function conversationBreadcrumbs(meta: ThreadMeta | null | undefined): { label: string; level: string }[] {
   if (!meta || meta.key === 'websocket:main') {
-    return [{ label: 'Home', level: 'home' }];
+    return [{ label: 'Private desk', level: 'home' }];
   }
 
   if (meta.channel === 'websocket') {

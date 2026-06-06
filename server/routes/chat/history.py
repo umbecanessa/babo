@@ -69,6 +69,42 @@ def record_visible_chat_turn(
         logger.debug("record_visible_chat_turn failed", exc_info=True)
 
 
+def persist_partial_agentic_transcript(
+    runtime,
+    *,
+    user_input: str,
+    eager_events: list[dict],
+    initial_thinking: str | None = None,
+    aborted: bool = True,
+    abort_reason: str = "Connection closed during task",
+) -> None:
+    """Save in-progress agentic trace when the client disconnects mid-loop."""
+    user_text = _strip_internal_blocks(user_input)
+    if not eager_events and not user_text.strip():
+        return
+    metadata: dict | None = None
+    if eager_events:
+        total_tool_calls = sum(
+            len(ev.get("tool_calls") or []) for ev in eager_events
+        )
+        iterations = max((ev.get("step") or 0) for ev in eager_events)
+        metadata = {
+            "agentic": True,
+            "iterations": iterations,
+            "tool_calls": total_tool_calls,
+            "aborted": aborted,
+            "abort_reason": abort_reason,
+            "events": list(eager_events),
+        }
+    record_visible_chat_turn(
+        runtime,
+        user=user_text or None,
+        assistant=None,
+        reasoning=initial_thinking or None,
+        metadata=metadata,
+    )
+
+
 def _save_agentic_history(
     history: list[dict],
     result,
