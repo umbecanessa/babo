@@ -273,6 +273,7 @@ class SleepScheduler:
                     signals_processed=combined.get("signals_processed", 0),
                     training_time=combined.get("consolidation_time", 0.0),
                     sleep_type=sleep_type,
+                    consolidation_summary=combined.get("summary", "") or "",
                 )
             except Exception as exc:
                 logger.warning(

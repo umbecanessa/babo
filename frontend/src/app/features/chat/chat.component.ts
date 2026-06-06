@@ -183,10 +183,11 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     if (!this.runView.visible()) {
       return threadFiltered;
     }
+    // Run workbench owns delegate cards and bash stream detail; keep tool chips
+    // and assistant prose in chat so the thread stays readable.
     return threadFiltered.filter(m => {
       const t = (m as { type?: string }).type;
       if (t === 'delegate_card') return false;
-      if (t === 'tool_progress' && this._isOrchestratorToolNoise(m)) return false;
       return true;
     });
   });
@@ -1322,19 +1323,11 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     }
   }
 
-  private _isOrchestratorToolNoise(msg: ChatMessage): boolean {
-    const tp = (msg as { toolProgress?: { toolName?: string } }).toolProgress;
-    const name = tp?.toolName || '';
-    const noisy = new Set([
-      'read', 'write', 'edit', 'grep', 'glob', 'list_dir', 'bash',
-      'plan', 'team', 'todo', 'delegate', 'delegate_ring', 'semantic_search',
-    ]);
-    return noisy.has(name);
-  }
-
   private _suppressOrchestratorToolInChat(msg: Record<string, unknown>): boolean {
+    // Bash stream chunks only — tool chips stay in chat alongside the workbench.
     if (msg['sub_agent'] === true) return false;
     if (msg['autonomous'] === true) return false;
+    if (msg['type'] !== 'tool_output_chunk') return false;
     return this.runView.visible();
   }
 
@@ -1426,6 +1419,22 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       }
       return [...msgs, assistantMsg];
     });
+  }
+
+  /** Commit pre-tool prose before the tool chip appears (avoids hold_prose loss). */
+  private _flushPendingIterProse(iteration: number): void {
+    const raw = this._pendingIterText.trim();
+    if (!raw) return;
+    const thought = parseThinking(raw);
+    const content = (thought.response || raw).trim();
+    if (!content) {
+      this._pendingIterText = '';
+      return;
+    }
+    const reasoning = this._preToolReasoning || thought.thinking || undefined;
+    this._insertAssistantBeforeToolStep(iteration, content, reasoning);
+    this._pendingIterText = '';
+    this._iterTextCommitted = true;
   }
 
   stopGeneration(): void {
@@ -2679,9 +2688,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
           break;
         }
 
-        if (this._suppressOrchestratorToolInChat(msg)) {
-          break;
-        }
+        this._flushPendingIterProse(msg.iteration || 0);
 
         const normArgs = normalizeToolArguments(args);
         let filePaths: string[] = [];
@@ -2806,10 +2813,6 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         const dlgNum: number = msg.delegate_number ?? -1;
 
         if (subAgent && dlgNum >= 0) {
-          break;
-        }
-
-        if (this._suppressOrchestratorToolInChat(msg)) {
           break;
         }
 

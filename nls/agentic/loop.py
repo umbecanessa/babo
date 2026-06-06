@@ -1081,6 +1081,14 @@ async def run_loop(
         and delegate_manager is not None
     ):
         _cached_team_manager.enqueue_unlaunched_for_auto_launch()
+        if hasattr(_cached_team_manager, "refresh_active_plan_wm"):
+            try:
+                _cached_team_manager.refresh_active_plan_wm()
+            except Exception:
+                logger.debug(
+                    "active plan WM sync at loop start failed",
+                    exc_info=True,
+                )
         if not dispatch_source.startswith("team_wave_complete:"):
             try:
                 from nls.agentic.executor import try_auto_launch_pending_wave
@@ -4561,9 +4569,9 @@ async def run_loop(
                                         ))
                                 _plan_statuses = _new_statuses
 
-                            # Update WM plan position
+                            # plan/team tools run full WM sync in tool_setup — avoid duplicate writes.
                             _pos = _refreshed.to_position_string()
-                            if _pos and hooks.wm_set_plan_position:
+                            if _pos and hooks.wm_set_plan_position and not _any_plan_call:
                                 hooks.wm_set_plan_position(_pos)
                     except Exception:
                         logger.debug("Plan event bridge failed", exc_info=True)

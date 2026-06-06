@@ -3945,6 +3945,15 @@ class AgentRuntime:
         """Outbound ledger gate + inner-loop check-back drain for teams."""
         if self._team_manager is None:
             return
+        if self._team_manager._connection_manager is None:
+            try:
+                from server.main import app as _app
+
+                cm = getattr(_app.state, "connection_manager", None)
+                if cm is not None:
+                    self._team_manager._connection_manager = cm
+            except Exception:
+                pass
         _plan_store = None
         for _t in self._agent_tools or []:
             if getattr(_t, "name", "") == "plan":

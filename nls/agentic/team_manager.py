@@ -472,11 +472,44 @@ class TeamManager:
         self._pending_completion_reviews: dict[int, dict[str, Any]] = {}
         self._pending_auto_launch: PendingAutoLaunch | None = None
         self._file_ledger: Any | None = None
+        self._plan_wm_sync_fn: Callable[[str], None] | None = None
+        self._plan_wm_sync_mode_fn: Callable[..., None] | None = None
         self._load_all()
 
     def set_file_ledger(self, ledger: Any | None) -> None:
         """Shared file ledger for wave ownership enforcement."""
         self._file_ledger = ledger
+
+    def set_plan_wm_sync_fn(
+        self,
+        fn: Callable[[str], None] | None,
+        *,
+        mode_fn: Callable[..., None] | None = None,
+    ) -> None:
+        """Refresh Cryptex after plan/team lifecycle events (plan_id)."""
+        self._plan_wm_sync_fn = fn
+        self._plan_wm_sync_mode_fn = mode_fn
+
+    def _refresh_plan_wm(
+        self, plan_id: str, *, mode: str = "full",
+    ) -> None:
+        if not plan_id:
+            return
+        try:
+            if self._plan_wm_sync_mode_fn is not None:
+                self._plan_wm_sync_mode_fn(plan_id, mode=mode)
+            elif self._plan_wm_sync_fn is not None:
+                self._plan_wm_sync_fn(plan_id)
+        except Exception:
+            logger.debug("Plan WM sync failed for %s", plan_id, exc_info=True)
+
+    def refresh_active_plan_wm(self, *, mode: str = "refresh") -> None:
+        """Sync WM for the current active plan (loop-start recovery)."""
+        if self._plan_store is None:
+            return
+        active = self._plan_store.find_active()
+        if active is not None:
+            self._refresh_plan_wm(active.id, mode=mode)
 
     def _clear_wave_ownership(self, team: "Team") -> None:
         if self._file_ledger is None:
@@ -517,6 +550,7 @@ class TeamManager:
             "TeamManager: pending auto-launch for %s (reason=%s)",
             team.id, reason,
         )
+        self._refresh_plan_wm(team.plan_id)
 
     def pop_pending_auto_launch(self) -> PendingAutoLaunch | None:
         pending = self._pending_auto_launch
@@ -639,13 +673,22 @@ class TeamManager:
         if plan is None:
             return
         failed_step_ids: list[str] = []
+        status_changes: list[tuple[int, Any]] = []
         for member in team.members:
             step = plan.get_step(member.step_id)
             if step is None:
                 continue
+            prev_status = step.status
             step.status = _plan_step_status_for_member(member.status)
             if member.result_summary:
                 step.notes = member.result_summary[:500]
+            if prev_status != step.status:
+                step_idx = next(
+                    (i for i, st in enumerate(plan.steps) if st.id == step.id),
+                    -1,
+                )
+                if step_idx >= 0:
+                    status_changes.append((step_idx, step))
             if member.status in ("failed", "cancelled"):
                 failed_step_ids.append(member.step_id)
         if team.is_terminal and team.status in ("partial", "failed"):
@@ -657,6 +700,11 @@ class TeamManager:
                 failed_step_ids=failed_step_ids,
             )
         self._plan_store.save(plan)
+        for step_idx, step in status_changes:
+            self._broadcast_plan_step_update_sync(plan, step_idx, step)
+        if team.is_terminal and status_changes:
+            self._broadcast_agentic_plan_sync(plan)
+        self._refresh_plan_wm(team.plan_id)
 
     def _finalize_unreported_wave_sync(
         self, team_id: str, *, reason: str,
@@ -1275,6 +1323,7 @@ class TeamManager:
 
         self.save(team)
         self._broadcast_sync("team_created", team)
+        self._refresh_plan_wm(plan_id)
         logger.info(
             "TeamManager: created team %s (%s) with %d members from plan %s wave %d",
             team.id, team.name, len(team.members), plan_id, wave_index,
@@ -1709,6 +1758,7 @@ class TeamManager:
         self.save(team)
         if team.wave_index > 0:
             self._drain_stale_wave_complete_dispatches_for_plan(team.plan_id)
+        self._refresh_plan_wm(team.plan_id)
         queued_count = len(team.members) - len(specs)
         await self._broadcast_async("team_launched", team)
         await self._broadcast_stakeholder_milestone(
@@ -1915,7 +1965,9 @@ class TeamManager:
         team.status = "cancelled" if _never_launched else "failed"
         team.completed_at = time.time()
         team.completion_reported = True
+        self.clear_pending_auto_launch(team_id)
         self.save(team)
+        self._refresh_plan_wm(team.plan_id)
         await self._broadcast_async("team_disbanded", team)
         return True
 
@@ -2622,7 +2674,6 @@ class TeamManager:
                                     _step.notes = member.result_summary[:500]
                                 if (
                                     _prev_step_status != _step.status
-                                    and self._connection_manager is not None
                                 ):
                                     _step_idx = next(
                                         (
@@ -2632,24 +2683,9 @@ class TeamManager:
                                         ),
                                         -1,
                                     )
-                                    try:
-                                        await self._connection_manager.broadcast(
-                                            self._agent_id,
-                                            {
-                                                "type": "plan_step_update",
-                                                "step_index": _step_idx,
-                                                "step_id": _step.id,
-                                                "status": _step.status,
-                                                "label": _step.label,
-                                                "plan_id": _plan.id,
-                                                "todo_id": _plan.todo_id or "",
-                                            },
-                                        )
-                                    except Exception:
-                                        logger.debug(
-                                            "plan_step_update broadcast failed",
-                                            exc_info=True,
-                                        )
+                                    self._broadcast_plan_step_update_sync(
+                                        _plan, _step_idx, _step,
+                                    )
                             self._plan_store.save(_plan)
                             logger.info(
                                 "TeamManager: synced plan step %s → %s "
@@ -3232,19 +3268,62 @@ class TeamManager:
             )
         return result
 
-    def _broadcast_sync(
-        self, event_type: str, team: Team, *, member: TeamMember | None = None,
+    def _resolve_connection_manager(self) -> None:
+        if self._connection_manager is not None:
+            return
+        try:
+            from server.main import app as _app
+
+            cm = getattr(_app.state, "connection_manager", None)
+            if cm is not None:
+                self._connection_manager = cm
+        except Exception:
+            pass
+
+    def _plan_step_update_payload(
+        self, plan: Plan, step_idx: int, step: Any,
+    ) -> dict[str, Any]:
+        return {
+            "type": "plan_step_update",
+            "step_index": step_idx,
+            "step_id": step.id,
+            "status": step.status,
+            "label": step.label,
+            "plan_id": plan.id,
+            "todo_id": plan.todo_id or "",
+        }
+
+    def _agentic_plan_payload(self, plan: Plan) -> dict[str, Any]:
+        return {
+            "type": "agentic_plan",
+            "steps": [
+                {"id": s.id, "label": s.label, "status": s.status}
+                for s in plan.steps
+            ],
+            "plan_id": plan.id,
+            "title": plan.title,
+            "todo_id": plan.todo_id or "",
+            "project_dir": plan.project_dir or "",
+            "iteration": 0,
+        }
+
+    def _broadcast_plan_step_update_sync(
+        self, plan: Plan, step_idx: int, step: Any,
     ) -> None:
+        if step_idx < 0:
+            return
+        self._broadcast_payload_sync(
+            self._plan_step_update_payload(plan, step_idx, step),
+        )
+
+    def _broadcast_agentic_plan_sync(self, plan: Plan) -> None:
+        self._broadcast_payload_sync(self._agentic_plan_payload(plan))
+
+    def _broadcast_payload_sync(self, payload: dict[str, Any]) -> None:
+        self._resolve_connection_manager()
         if self._connection_manager is None:
             return
-        payload: dict[str, Any] = {
-            "type": event_type,
-            "team": team.to_dict(),
-        }
-        if member is not None:
-            payload["member"] = member.to_dict()
         try:
-            import asyncio
             loop = asyncio.get_event_loop()
             if loop.is_running():
                 loop.create_task(
@@ -3256,6 +3335,17 @@ class TeamManager:
                 )
         except Exception as exc:
             logger.debug("TeamManager broadcast failed: %s", exc)
+
+    def _broadcast_sync(
+        self, event_type: str, team: Team, *, member: TeamMember | None = None,
+    ) -> None:
+        payload: dict[str, Any] = {
+            "type": event_type,
+            "team": team.to_dict(),
+        }
+        if member is not None:
+            payload["member"] = member.to_dict()
+        self._broadcast_payload_sync(payload)
 
     async def _broadcast_async(
         self, event_type: str, team: Team, *, member: TeamMember | None = None,

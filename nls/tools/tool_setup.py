@@ -389,10 +389,21 @@ def setup_tools(
         )
         _todo_store = getattr(_todo_tool_ref, "_store", None) if _todo_tool_ref else None
 
+        _connection_manager = None
+        try:
+            from server.main import app as _app
+
+            _connection_manager = getattr(
+                _app.state, "connection_manager", None,
+            )
+        except Exception:
+            pass
+
         _team_manager = TeamManager(
             agent_dir=agent_dir,
             plan_store=_plan_store,
             todo_store=_todo_store,
+            connection_manager=_connection_manager,
             agent_id=agent_id,
         )
         tools.append(create_team_tool(_team_manager))
@@ -416,6 +427,46 @@ def setup_tools(
     _plan_tool = next((t for t in tools if getattr(t, "name", "") == "plan"), None)
     if _plan_tool is not None and _team_manager is not None:
         _plan_tool._team_manager = _team_manager
+
+    _ring_wm_ref = dual_wm if dual_wm is not None else working_memory
+    if (
+        _plan_tool is not None
+        and _team_manager is not None
+        and _ring_wm_ref is not None
+    ):
+        try:
+            from nls.agentic.plan_wm_sync import apply_plan_wm_sync, sync_plan_wm_by_id
+
+            def _sync_plan_wm_from_plan(plan, *, mode="full") -> None:
+                apply_plan_wm_sync(
+                    plan,
+                    wm=_ring_wm_ref,
+                    team_manager=_team_manager,
+                    plan_store=_plan_tool.get_store(),
+                    agent_dir=agent_dir,
+                    mode=mode,
+                )
+
+            def _sync_plan_wm_from_id(plan_id: str, *, mode="full") -> None:
+                sync_plan_wm_by_id(
+                    plan_id,
+                    wm=_ring_wm_ref,
+                    team_manager=_team_manager,
+                    plan_store=_plan_tool.get_store(),
+                    agent_dir=agent_dir,
+                    mode=mode,
+                )
+
+            _plan_tool.set_wm_sync_fn(_sync_plan_wm_from_plan)
+            _team_manager.set_plan_wm_sync_fn(
+                lambda pid: _sync_plan_wm_from_id(pid),
+                mode_fn=_sync_plan_wm_from_id,
+            )
+            _team_manager.refresh_active_plan_wm(mode="refresh")
+        except Exception as exc:
+            logger.warning(
+                "Agent %s: plan WM sync wiring failed: %s", agent_id, exc,
+            )
 
     if _team_manager is not None and _file_ledger is not None:
         _team_manager.set_file_ledger(_file_ledger)

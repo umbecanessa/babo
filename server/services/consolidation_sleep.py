@@ -139,16 +139,6 @@ async def run_consolidation_cycle(
                 pass
 
     ans.wake(hypothalamus)
-    notify = getattr(runtime, "notify_sleep_complete", None)
-    if notify is not None:
-        try:
-            notify(
-                sleep_type="sleep",
-                consolidation_summary=summary or "",
-                signals_processed=len(signals_to_process),
-            )
-        except Exception as exc:
-            logger.debug("Agent %s: notify_sleep_complete: %s", agent_id, exc)
 
     elapsed = time.perf_counter() - t0
     logger.info(

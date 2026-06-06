@@ -83,6 +83,27 @@ class InnerLoopStats:
 # ===================================================================
 
 
+def dispatch_priority(source: str, prompt: str = "") -> int:
+    """Lower number = higher priority when draining ``_pending_dispatches``."""
+    if source.startswith("team_wave_complete:"):
+        if "PLAN RECOVERY" in (prompt or ""):
+            return 0
+        return 5
+    if source.startswith("pending_wave_launch:"):
+        return 10
+    if source == "delegate_batch_complete":
+        return 15
+    if source.startswith("team_completion_review:"):
+        return 20
+    if source.startswith("team_member_escalation:"):
+        return 25
+    if source.startswith("team_checkback:"):
+        return 80
+    if source.startswith("scheduler:"):
+        return 90
+    return 50
+
+
 class InnerLoop:
     """Continuous consciousness loop for one agent on one dream worker.
 
@@ -564,7 +585,7 @@ class InnerLoop:
 
             prompt, source = "", ""
             while self._pending_dispatches:
-                prompt, source = self._pending_dispatches.pop(0)
+                prompt, source = self._pop_highest_priority_dispatch()
                 _tm = getattr(rt, "_team_manager", None)
                 if _tm is not None and should_skip_stale_orchestration_wake(
                     _tm,
@@ -3425,13 +3446,27 @@ class InnerLoop:
         self._pending_dispatches.append((prompt, source))
         logger.info(
             "Agent %s: autonomous dispatch enqueued (source=%s, "
-            "prompt=%.100s, queue_depth=%d)",
+            "prompt=%.100s, queue_depth=%d, priority=%d)",
             self.runtime.agent_id, source,
             prompt, len(self._pending_dispatches),
+            dispatch_priority(source, prompt),
         )
 
         # Phase 0: mirror into the typed event queue for future use
         self._mirror_dispatch_to_event_queue(prompt, source)
+
+    def _pop_highest_priority_dispatch(self) -> tuple[str, str]:
+        """Pop the highest-priority pending dispatch (not strict FIFO)."""
+        if not self._pending_dispatches:
+            return "", ""
+        best_i = min(
+            range(len(self._pending_dispatches)),
+            key=lambda i: dispatch_priority(
+                self._pending_dispatches[i][1],
+                self._pending_dispatches[i][0],
+            ),
+        )
+        return self._pending_dispatches.pop(best_i)
 
     def drain_pending_dispatches(
         self,

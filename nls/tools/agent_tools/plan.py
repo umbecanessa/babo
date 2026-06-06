@@ -48,6 +48,18 @@ from nls.agentic.plan_store import Plan, PlanStep, PlanStore
 
 logger = logging.getLogger(__name__)
 
+_WM_MUTATION_ACTIONS = frozenset({
+    "accept_partial",
+    "verify",
+    "update",
+    "complete",
+    "continue_work",
+    "delegate",
+    "add_step",
+    "sub_plan",
+    "delete",
+})
+
 
 class PlanTool:
     """Manage structured execution plans in the agent's workspace.
@@ -88,6 +100,7 @@ class PlanTool:
         # Signature: fn(requirements: str, tech_stack_block: str, tech_stack: dict) -> None
         self._context_sync_fn: Any | None = None
         self._context_clear_fn: Any | None = None
+        self._wm_sync_fn: Any | None = None
         self._orchestration_profile_fn: Any | None = None
 
     def set_orchestration_profile_fn(self, fn: Any | None) -> None:
@@ -107,6 +120,24 @@ class PlanTool:
 
     def set_context_clear_fn(self, fn: Any | None) -> None:
         self._context_clear_fn = fn
+
+    def set_wm_sync_fn(self, fn: Any | None) -> None:
+        """Refresh Cryptex plan position + pending-wave breadcrumbs after mutations."""
+        self._wm_sync_fn = fn
+
+    def _after_plan_mutation(self, plan: Plan, *, mode: str = "full") -> None:
+        fn = self._wm_sync_fn
+        if fn is None or plan is None:
+            return
+        try:
+            fn(plan, mode=mode)
+        except TypeError:
+            try:
+                fn(plan)
+            except Exception:
+                logger.debug("Plan WM sync failed", exc_info=True)
+        except Exception:
+            logger.debug("Plan WM sync failed", exc_info=True)
 
     def sync_context_from_plan(self, plan: Plan) -> None:
         """Push plan requirements and tech stack into orchestrator context rings."""
@@ -708,7 +739,15 @@ class PlanTool:
                 f"Use one of: {', '.join(dispatch.keys())}",
                 is_error=True,
             )
-        return await handler(params)
+        result = await handler(params)
+        if not result.is_error:
+            plan = self._resolve_plan(params)
+            if plan is not None:
+                if action == "read":
+                    self._after_plan_mutation(plan, mode="refresh")
+                elif action in _WM_MUTATION_ACTIONS:
+                    self._after_plan_mutation(plan, mode="full")
+        return result
 
     def _blocked_delegatable_done_without_delegate(
         self, plan: Plan, step: PlanStep, *, notes: str = "",
