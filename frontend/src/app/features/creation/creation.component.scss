@@ -21,7 +21,7 @@
   z-index: 30;
   pointer-events: auto;
 
-  &:has(.context-menu-backdrop) {
+  &:has(.context-menu-panel.model-menu) {
     z-index: var(--context-menu-z);
   }
 
