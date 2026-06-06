@@ -383,13 +383,22 @@ export class WebSocketService {
     this.sendPayload(payload);
   }
 
-  sendMessage(content: string, sessionKey?: string, model?: string, orchestrationProfile?: string): void {
+  sendMessage(
+    content: string,
+    sessionKey?: string,
+    model?: string,
+    orchestrationProfile?: string,
+    modelRoute?: 'local' | 'cloud',
+  ): void {
     const payload: any = { type: 'message', content };
     if (sessionKey && sessionKey !== 'websocket:main') {
       payload.session_key = sessionKey;
     }
     if (model) {
       payload.model = model;
+    }
+    if (modelRoute) {
+      payload.model_route = modelRoute;
     }
     if (orchestrationProfile) {
       payload.orchestration_profile = orchestrationProfile;

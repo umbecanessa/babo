@@ -611,8 +611,13 @@ export class CapabilitySettingsPanelComponent implements OnInit {
   }
 
   async save(): Promise<void> {
-    const p = this.profile();
+    let p = this.profile();
     if (!p) return;
+    if (this.scan()) {
+      p = { ...p, scan: this.scan() ?? p.scan };
+    }
+    this.profile.set(p);
+    this.applyProfileToUi(p);
     if (p.inference.url) {
       p.inference.url = stripInferenceV1Suffix(p.inference.url);
     }

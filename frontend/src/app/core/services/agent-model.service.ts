@@ -38,15 +38,20 @@ export interface InferenceHotReloadPayload {
 
 export interface AgentSessionInference {
   orchestratorModelId: string | null;
+  orchestratorModelRoute: 'local' | 'cloud' | null;
   delegateModelId: string | null;
+  delegateModelRoute: 'local' | 'cloud' | null;
   delegateLockToOrchestrator: boolean;
   /** One-shot override for the next message (Cursor-style). */
   requestOverrideId: string | null;
+  requestOverrideRoute: 'local' | 'cloud' | null;
 }
 
 export interface AgentInferenceSettingsResponse {
   orchestrator_model: string | null;
+  orchestrator_route?: 'local' | 'cloud' | null;
   delegate_model: string | null;
+  delegate_route?: 'local' | 'cloud' | null;
   delegate_lock_orchestrator: boolean;
 }
 
@@ -225,7 +230,7 @@ export class AgentModelService {
     void this.loadAgentSessionModels(agentId);
   }
 
-  setChatModel(modelId: string | null): void {
+  setChatModel(modelId: string | null, route?: 'local' | 'cloud' | null): void {
     const agentId = this.activeAgentId();
     if (!agentId) return;
     const session = this.sessionFor(agentId);
@@ -233,8 +238,10 @@ export class AgentModelService {
     const sessionDefault = session.orchestratorModelId ?? def;
     if (!modelId || modelId === sessionDefault) {
       session.requestOverrideId = null;
+      session.requestOverrideRoute = null;
     } else {
       session.requestOverrideId = modelId;
+      session.requestOverrideRoute = route ?? this.routeForCatalogId(modelId);
     }
     this.sessionByAgent.set(agentId, { ...session });
     this.bumpSession();
@@ -245,26 +252,38 @@ export class AgentModelService {
     if (!agentId) return;
     const session = this.sessionFor(agentId);
     session.requestOverrideId = null;
+    session.requestOverrideRoute = null;
     this.sessionByAgent.set(agentId, { ...session });
     this.bumpSession();
   }
 
-  async setSessionOrchestratorModel(modelId: string | null): Promise<void> {
+  async setSessionOrchestratorModel(
+    modelId: string | null,
+    route?: 'local' | 'cloud' | null,
+  ): Promise<void> {
     const agentId = this.activeAgentId();
     if (!agentId) return;
     const session = this.sessionFor(agentId);
     session.orchestratorModelId = modelId;
+    session.orchestratorModelRoute =
+      modelId ? (route ?? this.routeForCatalogId(modelId)) : null;
     session.requestOverrideId = null;
+    session.requestOverrideRoute = null;
     this.sessionByAgent.set(agentId, { ...session });
     this.bumpSession();
     await this.persistAgentSessionModels(agentId);
   }
 
-  async setSessionDelegateModel(modelId: string | null): Promise<void> {
+  async setSessionDelegateModel(
+    modelId: string | null,
+    route?: 'local' | 'cloud' | null,
+  ): Promise<void> {
     const agentId = this.activeAgentId();
     if (!agentId) return;
     const session = this.sessionFor(agentId);
     session.delegateModelId = modelId;
+    session.delegateModelRoute =
+      modelId ? (route ?? this.routeForCatalogId(modelId)) : null;
     this.sessionByAgent.set(agentId, { ...session });
     this.bumpSession();
     await this.persistAgentSessionModels(agentId);
@@ -302,19 +321,33 @@ export class AgentModelService {
     this.bumpCreation();
   }
 
-  setCreationOrchestratorModel(modelId: string | null): void {
+  setCreationOrchestratorModel(
+    modelId: string | null,
+    route?: 'local' | 'cloud' | null,
+  ): void {
     if (!this.creationDraft) return;
     const def = this.defaultModelId();
     this.creationDraft.orchestratorModelId =
       !modelId || modelId === def ? null : modelId;
+    this.creationDraft.orchestratorModelRoute =
+      this.creationDraft.orchestratorModelId
+        ? (route ?? this.routeForCatalogId(modelId))
+        : null;
     this.bumpCreation();
   }
 
-  setCreationDelegateModel(modelId: string | null): void {
+  setCreationDelegateModel(
+    modelId: string | null,
+    route?: 'local' | 'cloud' | null,
+  ): void {
     if (!this.creationDraft) return;
     const orch = this.creationOrchestratorId();
     this.creationDraft.delegateModelId =
       !modelId || modelId === orch ? null : modelId;
+    this.creationDraft.delegateModelRoute =
+      this.creationDraft.delegateModelId
+        ? (route ?? this.routeForCatalogId(modelId))
+        : null;
     this.bumpCreation();
   }
 
@@ -334,9 +367,12 @@ export class AgentModelService {
     const orch = draft.orchestratorModelId;
     const snapshot: AgentSessionInference = {
       orchestratorModelId: orch || null,
+      orchestratorModelRoute: draft.orchestratorModelRoute,
       delegateModelId: draft.delegateModelId,
+      delegateModelRoute: draft.delegateModelRoute,
       delegateLockToOrchestrator: draft.delegateLockToOrchestrator,
       requestOverrideId: null,
+      requestOverrideRoute: null,
     };
     this.endCreationMode();
 
@@ -350,8 +386,8 @@ export class AgentModelService {
       } catch {
         /* runtime may still be starting */
       }
-      await this.persistAgentSessionModels(runtimeAgentId);
     }
+    await this.persistAgentSessionModels(runtimeAgentId);
   }
 
   /** Model id to send on the wire (only when it differs from resolved backend default). */
@@ -364,6 +400,32 @@ export class AgentModelService {
       session.orchestratorModelId ?? this.defaultModelId();
     if (effective === backendDefault) return undefined;
     return effective;
+  }
+
+  /** Route hint for the next outgoing message (local LAN vs cloud relay). */
+  modelRouteForOutgoingMessage(): 'local' | 'cloud' | undefined {
+    const agentId = this.activeAgentId();
+    if (!agentId) return undefined;
+    const session = this.sessionFor(agentId);
+    if (session.requestOverrideId) {
+      return (
+        session.requestOverrideRoute ??
+        this.routeForCatalogId(session.requestOverrideId) ??
+        undefined
+      );
+    }
+    const id = this.effectiveModelId();
+    return (
+      session.orchestratorModelRoute ??
+      this.routeForCatalogId(id) ??
+      undefined
+    );
+  }
+
+  routeForCatalogId(modelId: string | null | undefined): 'local' | 'cloud' | null {
+    const id = (modelId ?? '').trim();
+    if (!id) return null;
+    return this.catalog().find((o) => o.id === id)?.source ?? null;
   }
 
   apiBase(): string {
@@ -422,9 +484,12 @@ export class AgentModelService {
   private emptySession(): AgentSessionInference {
     return {
       orchestratorModelId: null,
+      orchestratorModelRoute: null,
       delegateModelId: null,
+      delegateModelRoute: null,
       delegateLockToOrchestrator: true,
       requestOverrideId: null,
+      requestOverrideRoute: null,
     };
   }
 
@@ -442,7 +507,15 @@ export class AgentModelService {
       );
       const session = this.sessionFor(agentId);
       session.orchestratorModelId = data.orchestrator_model || null;
+      session.orchestratorModelRoute =
+        data.orchestrator_route === 'local' || data.orchestrator_route === 'cloud'
+          ? data.orchestrator_route
+          : this.routeForCatalogId(data.orchestrator_model);
       session.delegateModelId = data.delegate_model || null;
+      session.delegateModelRoute =
+        data.delegate_route === 'local' || data.delegate_route === 'cloud'
+          ? data.delegate_route
+          : this.routeForCatalogId(data.delegate_model);
       session.delegateLockToOrchestrator =
         data.delegate_lock_orchestrator !== false;
       this.sessionByAgent.set(agentId, { ...session });
@@ -457,7 +530,9 @@ export class AgentModelService {
     const base = this.runtimeBase();
     const body: Record<string, unknown> = {
       orchestrator_model: session.orchestratorModelId,
+      orchestrator_route: session.orchestratorModelRoute,
       delegate_model: session.delegateModelId,
+      delegate_route: session.delegateModelRoute,
       delegate_lock_orchestrator: session.delegateLockToOrchestrator,
     };
     if (!session.orchestratorModelId) {

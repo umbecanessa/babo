@@ -132,6 +132,7 @@ async def _run_sub_agent(
 
     scoped_config = _build_scoped_config(config)
     context = _build_sub_agent_context(request, system_prompt)
+    sub_vllm = getattr(config, "delegate_vllm_client", None) or vllm_client
 
     sub_hooks = LoopHooks(
         transform_context=hooks.transform_context,
@@ -156,7 +157,7 @@ async def _run_sub_agent(
             tools=tools,
             config=scoped_config,
             hooks=sub_hooks,
-            vllm_client=vllm_client,
+            vllm_client=sub_vllm,
             abort_signal=abort_signal,
             user_input=request.task,
         )

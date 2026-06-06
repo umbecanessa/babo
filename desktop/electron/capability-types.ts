@@ -164,6 +164,13 @@ function normalizeBaseUrl(url: string): string {
   return url.replace(/\/v1\/?$/, '').replace(/\/$/, '');
 }
 
+/** Healthy LAN vLLM/Ollama probe from the last capability scan. */
+export function healthyLanInferenceProbe(profile: CapabilityProfile | null | undefined) {
+  return profile?.scan?.lan?.find(
+    (x) => x.kind === 'inference' && x.healthy && x.url?.trim(),
+  );
+}
+
 const BABO_CLOUD_MODEL_IDS = new Set([
   'google/gemini-2.5-flash',
   'google/gemini-2.5-flash-lite',
@@ -251,9 +258,33 @@ export function capabilityProfileToRuntimeEnv(
     env.NLS_INFERENCE_API_KEY = legacy.inferenceApiKey;
   }
 
+  const lanProbe = profile.scan?.lan?.find(
+    (x) => x.kind === 'inference' && x.healthy && x.url?.trim(),
+  );
+  if (lanProbe?.url) {
+    let lanBase = normalizeBaseUrl(lanProbe.url);
+    if (!lanBase.endsWith('/v1')) {
+      lanBase = `${lanBase}/v1`;
+    }
+    env.NLS_LAN_INFERENCE_URL = lanBase;
+  } else if (
+    inf.tier !== 'hosted_babo' &&
+    inf.tier !== 'byok_cloud' &&
+    inf.tier !== 'off' &&
+    inf.url
+  ) {
+    let lanBase = normalizeBaseUrl(inf.url);
+    if (!lanBase.endsWith('/v1')) {
+      lanBase = `${lanBase}/v1`;
+    }
+    env.NLS_LAN_INFERENCE_URL = lanBase;
+  }
+
   if (
     legacy.nestjsApiBase &&
-    (inf.tier === 'self_local' || inf.tier === 'self_lan')
+    (inf.tier === 'self_local' ||
+      inf.tier === 'self_lan' ||
+      !!env.NLS_LAN_INFERENCE_URL)
   ) {
     const apiBase = legacy.nestjsApiBase.replace(/\/+$/, '');
     env.NLS_BABO_CLOUD_INFERENCE_URL = `${apiBase}/inference/v1`;

@@ -46,6 +46,7 @@ from .helpers import (
     _message_implies_agentic_work,
     _runtime_uses_local_vllm,
     inference_stream_user_message,
+    normalize_model_route,
     response_has_pseudo_tool_call,
 )
 from .history import (
@@ -565,6 +566,7 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
             _request_model = runtime.resolve_orchestrator_model(
                 (msg.get("model") or "").strip() or None
             )
+            runtime.set_active_inference_route(normalize_model_route(msg.get("model_route")))
             _profile_override = (
                 (msg.get("orchestration_profile") or "").strip() or None
             )

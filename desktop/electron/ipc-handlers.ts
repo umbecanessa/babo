@@ -215,6 +215,8 @@ export function registerIpcHandlers(
   ipcMain.handle('capabilities:apply-profile', async (_event, raw: CapabilityProfile) => {
     const profile = JSON.parse(JSON.stringify(raw)) as CapabilityProfile;
     const cfg = config.get();
+    const prevInferenceUrl = cfg.inferenceUrl;
+    const prevTier = cfg.capabilityProfile?.inference?.tier;
     const apiBase = ConfigManager.nestjsApiBase(cfg.nestjsUrl);
     const partial: Record<string, unknown> = { capabilityProfile: profile };
     const inf = profile.inference;
@@ -269,7 +271,17 @@ export function registerIpcHandlers(
       partial.inferenceModel = inf.model;
     }
 
-    return config.set(partial as any);
+    const next = config.set(partial as any);
+    const tierChanged = next.capabilityProfile?.inference?.tier !== prevTier;
+    const urlChanged = next.inferenceUrl !== prevInferenceUrl;
+    if (tierChanged || urlChanged) {
+      try {
+        await runtime.restart();
+      } catch (err) {
+        console.warn('Runtime restart after profile apply failed:', (err as Error)?.message || err);
+      }
+    }
+    return next;
   });
 
   ipcMain.handle('setup:reset', async () => {

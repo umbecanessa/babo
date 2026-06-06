@@ -551,31 +551,33 @@ export class ChatModelPickerComponent {
   }
 
   select(modelId: string): void {
+    const route = this.models.routeForCatalogId(modelId) ?? undefined;
     const delegatePick =
       this.showTargetTabs() && this.pickTarget() === 'delegate';
 
     if (delegatePick) {
       if (this.mode() === 'creation') {
-        this.models.setCreationDelegateModel(modelId);
+        this.models.setCreationDelegateModel(modelId, route);
       } else {
-        void this.models.setSessionDelegateModel(modelId);
+        void this.models.setSessionDelegateModel(modelId, route);
       }
       this.closeMenu();
       return;
     }
 
     if (this.mode() === 'creation') {
-      this.models.setCreationOrchestratorModel(modelId);
+      this.models.setCreationOrchestratorModel(modelId, route);
       this.closeMenu();
       return;
     }
-    this.models.setChatModel(modelId);
+    this.models.setChatModel(modelId, route);
     this.closeMenu();
   }
 
   async setAsAgentDefault(): Promise<void> {
     const id = this.models.effectiveModelId();
-    await this.models.setSessionOrchestratorModel(id);
+    const route = this.models.routeForCatalogId(id) ?? undefined;
+    await this.models.setSessionOrchestratorModel(id, route);
     this.models.resetChatModel();
     this.closeMenu();
   }

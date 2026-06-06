@@ -299,9 +299,13 @@ class AgentRuntime:
         )
         self.delegate_model: str | None = _del or None
         self.session_orchestrator_model: str | None = None
+        self.session_orchestrator_route: str | None = None
         self.session_delegate_model: str | None = None
+        self.session_delegate_route: str | None = None
         self.session_delegate_lock_orchestrator: bool = True
         self._babo_cloud_vllm_client: Any | None = None
+        self._lan_vllm_client: Any | None = None
+        self._active_inference_route: str | None = None
         self._channel_type: str | None = None
 
         self._fact_store: Any | None = None
@@ -2250,14 +2254,64 @@ class AgentRuntime:
         )
         return self._babo_cloud_vllm_client
 
+    def _get_lan_vllm_client(self) -> Any | None:
+        """Direct LAN/vLLM/Ollama client (may differ from install-default when tier is cloud)."""
+        if self._lan_vllm_client is not None:
+            return self._lan_vllm_client
+        url = os.environ.get("NLS_LAN_INFERENCE_URL", "").strip()
+        if not url:
+            base = getattr(self.vllm_client, "base_url", "") if self.vllm_client else ""
+            if base and _inference_host_is_local(base):
+                return self.vllm_client
+            return None
+        from server.services.vllm_client import VLLMInferenceClient
+
+        hf = os.environ.get("NLS_HF_MODEL", "gpt-4o-mini")
+        self._lan_vllm_client = VLLMInferenceClient(
+            base_url=url,
+            default_model=hf,
+            api_key=None,
+        )
+        logger.info(
+            "[Agent] agent=%s LAN inference client at %s",
+            self.agent_id,
+            url,
+        )
+        return self._lan_vllm_client
+
+    def set_active_inference_route(self, route: str | None) -> None:
+        """Per-turn routing hint from chat UI (local vs cloud)."""
+        r = (route or "").strip().lower()
+        self._active_inference_route = r if r in ("local", "cloud") else None
+
+    def _resolve_inference_route(self, model_id: str | None) -> str | None:
+        explicit = self._active_inference_route
+        if explicit in ("local", "cloud"):
+            return explicit
+        mid = (model_id or "").strip()
+        if mid and self.session_orchestrator_model and mid == self.session_orchestrator_model.strip():
+            route = (self.session_orchestrator_route or "").strip().lower()
+            if route in ("local", "cloud"):
+                return route
+        return None
+
+    def _local_inference_client(self) -> Any | None:
+        """LAN sidecar client, or primary client when install default is local."""
+        lan = self._get_lan_vllm_client()
+        if lan is not None:
+            return lan
+        if self.vllm_client is None:
+            return None
+        base = getattr(self.vllm_client, "base_url", "") or ""
+        if _inference_host_is_local(base):
+            return self.vllm_client
+        return None
+
     def _model_served_by_local_vllm(self, model_id: str) -> bool:
-        """True when the install-default LAN client serves this model id."""
-        if not self.vllm_client or not model_id:
+        """True when a LAN/local inference client serves this model id."""
+        if not model_id:
             return False
         mid = model_id.strip()
-        local_default = (
-            getattr(self.vllm_client, "default_model", "") or ""
-        ).strip()
         install_default = os.environ.get("NLS_HF_MODEL", "").strip()
 
         def _matches(a: str, b: str) -> bool:
@@ -2269,18 +2323,102 @@ class AgentRuntime:
             b_tail = b.rsplit("/", 1)[-1]
             return a_tail == b_tail or a_tail.lower() == b_tail.lower()
 
-        if _matches(mid, local_default) or _matches(mid, install_default):
-            return True
+        clients: list[Any] = []
+        lan = self._get_lan_vllm_client()
+        if lan is not None:
+            clients.append(lan)
+        if self.vllm_client is not None and self.vllm_client not in clients:
+            clients.append(self.vllm_client)
+
+        for client in clients:
+            local_default = (
+                getattr(client, "default_model", "") or ""
+            ).strip()
+            if _matches(mid, local_default) or _matches(mid, install_default):
+                return True
         return False
 
-    def _vllm_for_message(
-        self, model_override: str | None
+    def _resolve_delegate_route(
+        self,
+        delegate_model: str | None,
+        orchestrator_adapter: str | None,
+    ) -> str | None:
+        if self.session_delegate_lock_orchestrator:
+            return self._resolve_inference_route(orchestrator_adapter)
+        dm = (delegate_model or "").strip()
+        if not dm:
+            return self._resolve_inference_route(orchestrator_adapter)
+        if self.session_delegate_model and dm == self.session_delegate_model.strip():
+            route = (self.session_delegate_route or "").strip().lower()
+            if route in ("local", "cloud"):
+                return route
+        return None
+
+    def delegate_inference_pipeline(
+        self, orchestrator_adapter: str | None,
     ) -> tuple[Any, str | None]:
-        """Pick LAN install-default vs Babo Cloud relay for this agent's model."""
+        """Resolve vLLM client + adapter for delegate/sub-agent loops."""
+        del_adapter = self.resolve_delegate_adapter(orchestrator_adapter)
+        route = self._resolve_delegate_route(del_adapter, orchestrator_adapter)
+        return self._vllm_for_message(del_adapter, route)
+
+    def _vllm_for_message(
+        self, model_override: str | None, route_override: str | None = None
+    ) -> tuple[Any, str | None]:
+        """Pick LAN vs Babo Cloud relay for this agent's model."""
+        from nls.runtime.inference_compat import model_is_babo_hosted_vllm
+
         adapter = (model_override or "").strip() or None
+        if adapter and model_is_babo_hosted_vllm(adapter):
+            cloud = self._get_babo_cloud_vllm_client()
+            if cloud is not None:
+                return cloud, adapter
+            if self.vllm_client is not None:
+                return self.vllm_client, adapter
+            return None, adapter
+
+        route = (route_override or "").strip().lower() or None
+        if route not in ("local", "cloud"):
+            route = self._resolve_inference_route(adapter)
+
+        if route == "local":
+            lan = self._get_lan_vllm_client()
+            if lan is not None:
+                return lan, adapter
+            logger.warning(
+                "[Agent] agent=%s local route requested but LAN client unavailable",
+                self.agent_id,
+            )
+            return None, adapter
+
+        if route == "cloud":
+            cloud = self._get_babo_cloud_vllm_client()
+            if cloud is not None:
+                return cloud, adapter
+            logger.warning(
+                "[Agent] agent=%s cloud route requested but relay unavailable",
+                self.agent_id,
+            )
+            return None, adapter
+
+        local_base = os.environ.get("NLS_VLLM_BASE_URL", "")
+        lan_url = os.environ.get("NLS_LAN_INFERENCE_URL", "").strip()
+        cloud_sidecar = os.environ.get("NLS_BABO_CLOUD_INFERENCE_URL", "").strip()
+        hybrid = bool(cloud_sidecar) and (
+            bool(lan_url) or _inference_host_is_local(local_base)
+        )
+
+        if adapter and hybrid:
+            if self._model_served_by_local_vllm(adapter):
+                local = self._local_inference_client()
+                if local is not None:
+                    return local, adapter
+
         if adapter and _is_openai_api_model_id(adapter):
             if self._model_served_by_local_vllm(adapter):
-                return self.vllm_client, adapter
+                local = self._local_inference_client()
+                if local is not None:
+                    return local, adapter
             cloud = self._get_babo_cloud_vllm_client()
             if cloud is not None:
                 return cloud, adapter
@@ -2300,7 +2438,8 @@ class AgentRuntime:
     ) -> tuple[Any, str | None]:
         """Resolve vLLM client + adapter for any turn on this agent."""
         model = self.resolve_orchestrator_model(model_override)
-        return self._vllm_for_message(model)
+        route = self._resolve_inference_route(model)
+        return self._vllm_for_message(model, route)
 
     def inference_available(
         self, model_override: str | None = None,
@@ -2334,7 +2473,9 @@ class AgentRuntime:
         self,
         *,
         orchestrator_model: str | None = None,
+        orchestrator_route: str | None = None,
         delegate_model: str | None = None,
+        delegate_route: str | None = None,
         delegate_lock_orchestrator: bool | None = None,
         clear_orchestrator: bool = False,
         clear_delegate: bool = False,
@@ -2342,15 +2483,23 @@ class AgentRuntime:
         """Persist per-agent inference defaults in session_meta.json."""
         if clear_orchestrator:
             self.session_orchestrator_model = None
+            self.session_orchestrator_route = None
         elif orchestrator_model is not None:
             val = orchestrator_model.strip()
             self.session_orchestrator_model = val or None
+            if orchestrator_route is not None:
+                r = orchestrator_route.strip().lower()
+                self.session_orchestrator_route = r if r in ("local", "cloud") else None
 
         if clear_delegate:
             self.session_delegate_model = None
+            self.session_delegate_route = None
         elif delegate_model is not None:
             val = delegate_model.strip()
             self.session_delegate_model = val or None
+            if delegate_route is not None:
+                r = delegate_route.strip().lower()
+                self.session_delegate_route = r if r in ("local", "cloud") else None
 
         if delegate_lock_orchestrator is not None:
             self.session_delegate_lock_orchestrator = delegate_lock_orchestrator
@@ -2361,7 +2510,9 @@ class AgentRuntime:
     def session_inference_snapshot(self) -> dict[str, Any]:
         return {
             "orchestrator_model": self.session_orchestrator_model,
+            "orchestrator_route": self.session_orchestrator_route,
             "delegate_model": self.session_delegate_model,
+            "delegate_route": self.session_delegate_route,
             "delegate_lock_orchestrator": self.session_delegate_lock_orchestrator,
         }
 
@@ -3566,8 +3717,16 @@ class AgentRuntime:
                 self._last_interaction = float(saved)
             _orch = (meta.get("orchestrator_model") or "").strip()
             self.session_orchestrator_model = _orch or None
+            _orch_route = (meta.get("orchestrator_route") or "").strip().lower()
+            self.session_orchestrator_route = (
+                _orch_route if _orch_route in ("local", "cloud") else None
+            )
             _del = (meta.get("delegate_model") or "").strip()
             self.session_delegate_model = _del or None
+            _del_route = (meta.get("delegate_route") or "").strip().lower()
+            self.session_delegate_route = (
+                _del_route if _del_route in ("local", "cloud") else None
+            )
             if "delegate_lock_orchestrator" in meta:
                 self.session_delegate_lock_orchestrator = bool(
                     meta.get("delegate_lock_orchestrator")
@@ -3640,8 +3799,12 @@ class AgentRuntime:
         }
         if self.session_orchestrator_model:
             meta["orchestrator_model"] = self.session_orchestrator_model
+        if self.session_orchestrator_route:
+            meta["orchestrator_route"] = self.session_orchestrator_route
         if self.session_delegate_model:
             meta["delegate_model"] = self.session_delegate_model
+        if self.session_delegate_route:
+            meta["delegate_route"] = self.session_delegate_route
         meta["delegate_lock_orchestrator"] = self.session_delegate_lock_orchestrator
         meta_path = self.agent_dir / "session_meta.json"
         try:
@@ -4857,6 +5020,8 @@ class AgentRuntime:
                 v4_config.delegate_adapter_name = self.resolve_delegate_adapter(
                     _adapter
                 )
+                _del_vllm, _ = self.delegate_inference_pipeline(_adapter)
+                v4_config.delegate_vllm_client = _del_vllm
                 result = await run_loop(
                     context=context,
                     tools=tool_dict,

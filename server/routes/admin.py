@@ -1921,8 +1921,11 @@ async def hot_reload_inference(request: Request):
     for runtime in agent_manager.get_loaded_runtimes().values():
         if inference_api_key is not None:
             runtime._babo_cloud_vllm_client = None
-        if hf_model and getattr(runtime, "vllm_client", None) is not None:
-            runtime.vllm_client.default_model = hf_model
+            runtime._lan_vllm_client = None
+        if hf_model:
+            runtime._lan_vllm_client = None
+            if getattr(runtime, "vllm_client", None) is not None:
+                runtime.vllm_client.default_model = hf_model
         if delegate_use_primary:
             runtime.delegate_model = None
         elif delegate_hf_model is not None:

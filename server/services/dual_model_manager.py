@@ -149,7 +149,11 @@ class DualModelManager:
             return True
         if "/" not in model_id:
             return model_id.startswith(("gpt-", "claude-", "o1", "o3", "gemini-"))
-        provider = model_id.split("/", 1)[0].lower()
+        org, _rest = model_id.split("/", 1)
+        # HuggingFace hub ids on local vLLM (e.g. Qwen/Qwen3.6-35B-A3B-FP8)
+        if org != org.lower():
+            return False
+        provider = org.lower()
         return provider in {
             "openai",
             "anthropic",

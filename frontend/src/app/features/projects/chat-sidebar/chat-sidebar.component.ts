@@ -190,6 +190,7 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
     this.streamingReasoning.set('');
 
     const model = this.agentModels.modelForOutgoingMessage();
+    const modelRoute = this.agentModels.modelRouteForOutgoingMessage();
     const orchProfile = this.orchProfiles.profileForOutgoingMessage(this.agentId);
 
     if (attachments.length > 0) {
@@ -199,10 +200,11 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
         attachments,
         session_key: threadKey,
         ...(model ? { model } : {}),
+        ...(modelRoute ? { model_route: modelRoute } : {}),
         ...(orchProfile ? { orchestration_profile: orchProfile } : {}),
       });
     } else {
-      this.ws.sendMessage(msg, threadKey, model, orchProfile);
+      this.ws.sendMessage(msg, threadKey, model, orchProfile, modelRoute);
     }
   }
 

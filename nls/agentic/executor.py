@@ -432,6 +432,12 @@ async def _handle_communicate(
 _MAX_DELEGATES = 5
 
 
+def _delegate_vllm_client(config: "LoopConfig", fallback: Any) -> Any:
+    """Prefer per-agent delegate routing client when configured."""
+    client = getattr(config, "delegate_vllm_client", None)
+    return client if client is not None else fallback
+
+
 async def _handle_delegate(
     args: dict,
     tools: dict[str, Any],
@@ -455,6 +461,8 @@ async def _handle_delegate(
     task = args.get("task", "").strip()
     if not task:
         return ToolResult(content="Error: 'task' parameter is required.", is_error=True)
+
+    vllm_client = _delegate_vllm_client(config, vllm_client)
 
     from .orchestration_policy import (
         build_tool_policy_inputs,
@@ -1766,6 +1774,7 @@ async def run_delegate_detached(
     delegate_number = spec.delegate_number
     task = spec.task
     max_steps = spec.max_steps
+    vllm_client = _delegate_vllm_client(config, vllm_client)
 
     _sub_timeout = min(45 * (max_steps + max(10, max_steps // 3)), 1200)
     if on_escalation is not None:

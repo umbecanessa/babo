@@ -243,8 +243,12 @@ export class ConfigManager {
           merged.capabilityProfile = sanitizeCapabilityProfile(
             merged.capabilityProfile,
           );
-          if (merged.capabilityProfile.inference.model) {
-            merged.inferenceModel = merged.capabilityProfile.inference.model;
+          const inf = merged.capabilityProfile.inference;
+          if (inf.url && inf.tier !== 'hosted_babo' && inf.tier !== 'byok_cloud') {
+            merged.inferenceUrl = ConfigManager.normalizeInferenceUrl(inf.url);
+          }
+          if (inf.model) {
+            merged.inferenceModel = inf.model;
           }
         }
         if (!merged.runtimeSharedSecret?.trim()) {
@@ -252,9 +256,16 @@ export class ConfigManager {
         }
         this.config = merged;
         this.reconcileGpuWorkerFields();
-        const prevModel = (data as { capabilityProfile?: CapabilityProfile })
-          .capabilityProfile?.inference?.model;
-        if (merged.capabilityProfile.inference.model !== prevModel) {
+        const prevProfile = (data as { capabilityProfile?: CapabilityProfile })
+          .capabilityProfile;
+        const prevTier = prevProfile?.inference?.tier;
+        const prevModel = prevProfile?.inference?.model;
+        const prevUrl = (data as { inferenceUrl?: string }).inferenceUrl;
+        if (
+          merged.capabilityProfile.inference.tier !== prevTier ||
+          merged.capabilityProfile.inference.model !== prevModel ||
+          merged.inferenceUrl !== prevUrl
+        ) {
           this.save();
         }
       }

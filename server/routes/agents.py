@@ -328,9 +328,17 @@ class AgentInferenceSettings(BaseModel):
         default=None,
         description="Default orchestrator model for this agent (OpenRouter-style id).",
     )
+    orchestrator_route: str | None = Field(
+        default=None,
+        description="Route orchestrator model via local LAN or cloud relay (local|cloud).",
+    )
     delegate_model: str | None = Field(
         default=None,
         description="Default sub-agent/delegate model when not locked to orchestrator.",
+    )
+    delegate_route: str | None = Field(
+        default=None,
+        description="Route delegate model via local LAN or cloud relay (local|cloud).",
     )
     delegate_lock_orchestrator: bool | None = Field(
         default=None,
@@ -362,7 +370,9 @@ async def get_agent_inference(agent_id: str, request: Request):
     if not meta_path.exists():
         return {
             "orchestrator_model": None,
+            "orchestrator_route": None,
             "delegate_model": None,
+            "delegate_route": None,
             "delegate_lock_orchestrator": True,
         }
     try:
@@ -371,7 +381,9 @@ async def get_agent_inference(agent_id: str, request: Request):
         meta = {}
     return {
         "orchestrator_model": meta.get("orchestrator_model"),
+        "orchestrator_route": meta.get("orchestrator_route"),
         "delegate_model": meta.get("delegate_model"),
+        "delegate_route": meta.get("delegate_route"),
         "delegate_lock_orchestrator": meta.get(
             "delegate_lock_orchestrator", True,
         ),
@@ -408,11 +420,15 @@ async def update_agent_inference(
             kwargs["clear_orchestrator"] = True
         else:
             kwargs["orchestrator_model"] = fields["orchestrator_model"]
+    if "orchestrator_route" in fields:
+        kwargs["orchestrator_route"] = fields["orchestrator_route"]
     if "delegate_model" in fields:
         if fields["delegate_model"] is None:
             kwargs["clear_delegate"] = True
         else:
             kwargs["delegate_model"] = fields["delegate_model"]
+    if "delegate_route" in fields:
+        kwargs["delegate_route"] = fields["delegate_route"]
     if "delegate_lock_orchestrator" in fields:
         kwargs["delegate_lock_orchestrator"] = fields[
             "delegate_lock_orchestrator"

@@ -13,12 +13,27 @@ _INFERENCE_GENERIC_FAILURE = (
 )
 
 
+def normalize_model_route(raw: Any) -> str | None:
+    """Chat UI route hint: local LAN box vs Babo Cloud relay."""
+    r = str(raw or "").strip().lower()
+    return r if r in ("local", "cloud") else None
+
+
 def inference_stream_user_message(exc: BaseException) -> str:
     """User-facing chat text when upstream inference fails mid-stream."""
     text = str(exc).lower()
     if "401" in text or "unauthorized" in text:
+        if any(
+            hint in text
+            for hint in ("192.168.", "127.0.0.1", "localhost", ":8000", ":11434")
+        ):
+            return (
+                "Local inference authentication failed — your LAN model server "
+                "rejected the request. Check that the model is loaded and "
+                "the server URL in Settings is correct."
+            )
         return (
-            "Cloud inference authentication failed — Babo could not authorize "
+            "Inference authentication failed — Babo could not authorize "
             "with the inference relay. Restart the app or open Settings → "
             "Capabilities to refresh your API key, then try again."
         )

@@ -2074,6 +2074,7 @@ class LoopConfig:
 
     # --- Model selection (OpenRouter-style ids) ---
     delegate_adapter_name: str | None = None
+    delegate_vllm_client: Any | None = None
 
     # --- Team member escalation ---
     # When True, the loop will call on_escalation and wait for an
