@@ -50,6 +50,9 @@ def agent_inference_available(
 
 def inference_host_is_local(base_url: str) -> bool:
     """True when the client points at local or private-LAN inference (not cloud relay)."""
+    lower = (base_url or "").strip().lower()
+    if "/api/inference" in lower:
+        return False
     try:
         host = (urlparse((base_url or "").strip()).hostname or "").lower()
     except Exception:
@@ -60,6 +63,22 @@ def inference_host_is_local(base_url: str) -> bool:
         return ipaddress.ip_address(host).is_private
     except ValueError:
         return False
+
+
+def is_likely_session_jwt(token: str) -> bool:
+    """True for Nest session JWT (not ``nlsk_`` or provider API keys)."""
+    t = (token or "").strip()
+    return t.startswith("eyJ") and t.count(".") >= 2
+
+
+def should_apply_api_key_to_primary_client(base_url: str, api_key: str) -> bool:
+    """Session JWT is for Babo Cloud relay only — never attach to direct LAN/Ollama."""
+    key = (api_key or "").strip()
+    if not key:
+        return False
+    if is_likely_session_jwt(key) and inference_host_is_local(base_url):
+        return False
+    return True
 
 
 def model_is_babo_hosted_vllm(model: str | None) -> bool:

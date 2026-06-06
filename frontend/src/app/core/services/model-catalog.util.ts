@@ -5,6 +5,8 @@ import {
   CLOUD_PROVIDERS,
   baboCloudModelsForUser,
   resolveBaboCloudModelId,
+  stripInferenceV1Suffix,
+  isBaboCloudInferenceRelayUrl,
 } from '../../features/setup/setup-inference.util';
 import type { ModelPickerOption } from './agent-model.service';
 
@@ -21,7 +23,7 @@ export function isHybridLocalInferenceTier(tier: CapabilityTier): boolean {
   return tier === 'self_local' || tier === 'self_lan';
 }
 
-/** Model ids from LAN scan + configured self_lan/self_local brain model. */
+/** Model ids from configured brain + LAN probe snapshot (not model-fit suggestions). */
 export function collectLanInferenceModelIds(
   profile: CapabilityProfile | null | undefined,
 ): string[] {
@@ -45,11 +47,31 @@ export function collectLanInferenceModelIds(
     for (const id of probe.modelIds ?? []) add(id);
   }
 
-  for (const row of profile.scan?.modelFit?.lan?.recommendations ?? []) {
-    add(row.modelId);
-  }
-
   return out;
+}
+
+/** Direct LAN/vLLM/Ollama base URL to probe for live /v1/models (not Babo Cloud relay). */
+export function resolveLanInferenceProbeUrl(
+  profile: CapabilityProfile | null | undefined,
+  cfgInferenceUrl: string,
+  tier: CapabilityTier,
+): string {
+  const cfgUrl = stripInferenceV1Suffix(cfgInferenceUrl);
+  if (
+    (isHybridLocalInferenceTier(tier) || tier === 'byok_cloud') &&
+    cfgUrl &&
+    !isBaboCloudInferenceRelayUrl(cfgUrl)
+  ) {
+    return cfgUrl;
+  }
+  const probe = profile?.scan?.lan?.find(
+    (p) => p.kind === 'inference' && p.healthy && p.url?.trim(),
+  );
+  if (probe?.url) {
+    const u = stripInferenceV1Suffix(probe.url);
+    if (!isBaboCloudInferenceRelayUrl(u)) return u;
+  }
+  return '';
 }
 
 /** Provider default ids when probing BYOK endpoints fails. */

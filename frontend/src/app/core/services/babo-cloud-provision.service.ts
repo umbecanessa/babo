@@ -5,6 +5,8 @@ import { PlatformService } from './platform.service';
 import { AuthService } from './auth.service';
 import { ApiService } from './api.service';
 import { usesBaboCloudRelay } from '../../features/setup/setup-cloud.util';
+import { isLikelySessionJwt } from '../../features/setup/setup-inference.util';
+import { isHybridLocalInferenceTier } from './model-catalog.util';
 import type { CapabilityProfile } from '../../features/setup/capability-profile.model';
 
 /**
@@ -110,11 +112,16 @@ export class BaboCloudProvisionService {
     const cfg = await nls.config.get();
     const profile = cfg.capabilityProfile as CapabilityProfile | undefined;
     const stored = (cfg.inferenceApiKey || '').trim();
+    const tier = profile?.inference?.tier ?? 'hosted_babo';
+    const hybridLocal = isHybridLocalInferenceTier(tier);
     const relay =
       usesBaboCloudRelay(profile ?? null) ||
-      /\/api\/inference/i.test(String(cfg.inferenceUrl || ''));
+      (hybridLocal && !!String(cfg.nestjsUrl || '').trim()) ||
+      (!hybridLocal &&
+        /\/api\/inference/i.test(String(cfg.inferenceUrl || '')));
 
     if (!relay) {
+      if (stored && isLikelySessionJwt(stored)) return null;
       return stored || null;
     }
 
@@ -126,12 +133,12 @@ export class BaboCloudProvisionService {
       return stored;
     }
 
-    const jwt = this.auth.getAccessToken();
+    const jwt = await this.auth.ensureFreshAccessToken();
     if (jwt) {
       return jwt;
     }
 
-    return stored || null;
+    return stored && !isLikelySessionJwt(stored) ? stored : null;
   }
 
   private async hotReloadRuntime(bearer: string): Promise<void> {

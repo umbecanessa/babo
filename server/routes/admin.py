@@ -1883,8 +1883,21 @@ async def hot_reload_inference(request: Request):
         if key:
             model_manager.inference_api_key = key
             os.environ["NLS_INFERENCE_API_KEY"] = key
-            if getattr(model_manager, "vllm_client", None) is not None:
-                model_manager.vllm_client.set_api_key(key)
+            vllm = getattr(model_manager, "vllm_client", None)
+            if vllm is not None:
+                from nls.runtime.inference_compat import (
+                    is_likely_session_jwt,
+                    should_apply_api_key_to_primary_client,
+                )
+
+                base = getattr(vllm, "base_url", "") or os.environ.get(
+                    "NLS_VLLM_BASE_URL", "",
+                )
+                if should_apply_api_key_to_primary_client(base, key):
+                    vllm.set_api_key(key)
+                elif is_likely_session_jwt(key):
+                    # Drop stale bearer on LAN client after switching from cloud.
+                    vllm.set_api_key(None)
 
     if hf_model:
         model_manager.hf_model = hf_model

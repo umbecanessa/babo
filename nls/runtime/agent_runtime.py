@@ -2259,9 +2259,19 @@ class AgentRuntime:
             getattr(self.vllm_client, "default_model", "") or ""
         ).strip()
         install_default = os.environ.get("NLS_HF_MODEL", "").strip()
-        return mid == local_default or (
-            bool(install_default) and mid == install_default
-        )
+
+        def _matches(a: str, b: str) -> bool:
+            if not a or not b:
+                return False
+            if a == b or a.lower() == b.lower():
+                return True
+            a_tail = a.rsplit("/", 1)[-1]
+            b_tail = b.rsplit("/", 1)[-1]
+            return a_tail == b_tail or a_tail.lower() == b_tail.lower()
+
+        if _matches(mid, local_default) or _matches(mid, install_default):
+            return True
+        return False
 
     def _vllm_for_message(
         self, model_override: str | None

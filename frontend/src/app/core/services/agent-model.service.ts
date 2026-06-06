@@ -8,7 +8,6 @@ import {
   resolveBaboCloudModelId,
   stripInferenceV1Suffix,
   bearerForDirectInferenceProbe,
-  isBaboCloudInferenceRelayUrl,
 } from '../../features/setup/setup-inference.util';
 import { readBaboBoot } from '../desktop-boot';
 import { environment } from '../../../environments/environment';
@@ -18,6 +17,7 @@ import {
   parseOpenAiModelList,
   shouldOfferBaboCloudModels,
   collectLanInferenceModelIds,
+  resolveLanInferenceProbeUrl,
 } from './model-catalog.util';
 import { ApiService } from './api.service';
 import { PlatformService } from './platform.service';
@@ -484,22 +484,19 @@ export class AgentModelService {
     }
 
     const hasCloudApi = !!this.apiBase();
-    const lanModelIds = collectLanInferenceModelIds(profile);
+    const lanFallback = collectLanInferenceModelIds(profile);
     let discovered: string[] = [];
 
     const inferenceUrl = stripInferenceV1Suffix(
       profile?.inference?.url || cfg.inferenceUrl || '',
     );
-    const shouldProbeDirect =
-      (tier === 'byok_cloud' || tier === 'self_lan' || tier === 'self_local') &&
-      inferenceUrl &&
-      !isBaboCloudInferenceRelayUrl(inferenceUrl);
+    const probeUrl = resolveLanInferenceProbeUrl(profile, inferenceUrl, tier);
 
-    if (shouldProbeDirect && (window as any).nls?.capabilities?.testInference) {
+    if (probeUrl && (window as any).nls?.capabilities?.testInference) {
       const probeKey = bearerForDirectInferenceProbe(cfg.inferenceApiKey || '');
       try {
         const result = await (window as any).nls.capabilities.testInference(
-          inferenceUrl,
+          probeUrl,
           probeKey,
         );
         if (result.ok && result.models?.length) {
@@ -509,6 +506,11 @@ export class AgentModelService {
         /* use catalog merge without live discovery */
       }
     }
+
+    const lanModelIds =
+      discovered.length > 0
+        ? lanFallback.filter((id) => id === model.trim())
+        : lanFallback;
 
     let cloudModelIds: string[] = [];
     const gx10Caps = await this.fetchGx10Capabilities();

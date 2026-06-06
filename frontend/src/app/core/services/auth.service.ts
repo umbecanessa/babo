@@ -1,7 +1,7 @@
 import { Injectable, Injector, signal, computed } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { Observable, tap, catchError, throwError, map } from 'rxjs';
+import { Observable, tap, catchError, throwError, map, firstValueFrom } from 'rxjs';
 import { AuthTokens } from '../models/user.model';
 import { ApiService } from './api.service';
 import { WebSocketService } from './websocket.service';
@@ -78,6 +78,35 @@ export class AuthService {
 
   getRefreshToken(): string | null {
     return localStorage.getItem('refresh_token');
+  }
+
+  /** True when access token is missing or past ``exp`` (30s skew). */
+  isAccessTokenExpired(): boolean {
+    const token = this.getAccessToken();
+    if (!token) return true;
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      const exp = payload?.exp;
+      if (typeof exp !== 'number') return false;
+      return Date.now() / 1000 >= exp - 30;
+    } catch {
+      return false;
+    }
+  }
+
+  /** Refresh when expired; returns current access token or null after logout. */
+  async ensureFreshAccessToken(): Promise<string | null> {
+    if (!this.getAccessToken()) return null;
+    if (!this.isAccessTokenExpired()) return this.getAccessToken();
+    if (!this.getRefreshToken()) {
+      this.logout();
+      return null;
+    }
+    try {
+      return await firstValueFrom(this.refreshAccessToken());
+    } catch {
+      return null;
+    }
   }
 
   getUserId(): string | null {
