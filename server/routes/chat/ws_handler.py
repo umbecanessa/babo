@@ -535,6 +535,9 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
             _request_model = runtime.resolve_orchestrator_model(
                 (msg.get("model") or "").strip() or None
             )
+            _profile_override = (
+                (msg.get("orchestration_profile") or "").strip() or None
+            )
             t0 = time.perf_counter()
 
             if consciousness_scheduler is not None:
@@ -659,7 +662,17 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                         user_input,
                         history=history,
                         model_override=_request_model,
+                        profile_override=_profile_override,
                     )
+                    try:
+                        await websocket.send_json({
+                            "type": "turn_triage",
+                            "profile": _turn_triage.profile,
+                            "intent": _turn_triage.intent,
+                            "profile_override": _profile_override or "auto",
+                        })
+                    except Exception:
+                        pass
                     _pre_goals = list(_turn_triage.goals)
                     _pre_hints = list(_turn_triage.hints)
                     try:
@@ -1213,6 +1226,11 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                         "type": "agentic_start",
                         "max_steps": agentic_config_v2.max_iterations,
                         "version": 2,
+                        "orchestration_profile": (
+                            getattr(_turn_triage, "profile", None)
+                            if _turn_triage is not None
+                            else None
+                        ),
                     })
 
                     _eager_events: list[dict] = []

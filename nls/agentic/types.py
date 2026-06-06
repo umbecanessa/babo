@@ -972,9 +972,10 @@ _ADOPT_ORCHESTRATION_PROFILE_TOOL_SCHEMA = {
     "function": {
         "name": "adopt_orchestration_profile",
         "description": (
-            "Commit a mid-loop orchestration depth change. Use when advisory "
-            "nudges recommend solo_structured (plan/todo/bash work) or "
-            "orchestrated (team waves). Refreshes tool policy immediately."
+            "Change orchestration depth mid-loop (solo vs EM waves). "
+            "Use profile='orchestrated' when a plan + team waves already exist; "
+            "profile='solo_structured' for direct plan/bash work without delegates. "
+            "Refreshes tool policy immediately."
         ),
         "parameters": {
             "type": "object",

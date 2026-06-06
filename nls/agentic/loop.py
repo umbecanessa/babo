@@ -1422,6 +1422,7 @@ async def run_loop(
             pass
 
     # --- Pre-loop: goal extraction / turn triage ---
+    _plan_tool_goals = tools.get("plan")
     if pre_triage is not None:
         from .goals import TurnTriage, cap_triage_profile_for_tools
 
@@ -1445,6 +1446,24 @@ async def run_loop(
             _pt, frozenset(state.unlocked_tools or ()),
         )
         state.orchestration_profile = _pt.profile or "solo_structured"
+        if _cached_team_manager is not None and _plan_tool_goals is not None:
+            try:
+                from nls.agentic.plan_triage_policy import (
+                    enforce_loop_profile_for_active_plan,
+                )
+
+                enforce_loop_profile_for_active_plan(
+                    state,
+                    _plan_tool_goals._store,
+                    _cached_team_manager,
+                )
+                state.orchestration_profile = (
+                    state.orchestration_profile or _pt.profile or "solo_structured"
+                )
+            except Exception:
+                logger.debug(
+                    "Active-plan profile enforcement failed", exc_info=True,
+                )
         if pre_extracted_goals is None:
             pre_extracted_goals = list(getattr(pre_triage, "goals", None) or [])
         if pre_extracted_hints is None:
@@ -1453,7 +1472,6 @@ async def run_loop(
     if pre_extracted_hints:
         state.hints = list(pre_extracted_hints)
     _active_plan_for_goals = None
-    _plan_tool_goals = tools.get("plan")
     if _plan_tool_goals is not None and hasattr(_plan_tool_goals, "_store"):
         try:
             _active_plan_for_goals = _plan_tool_goals._store.find_active()

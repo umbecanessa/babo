@@ -39,7 +39,9 @@ import { AgentWorkspaceContextService } from '../../core/services/agent-workspac
 import { enrichWorkspaceRelativePath } from '../projects/workspace/workspace-path.util';
 import { Day1CoachService } from '../../shared/onboarding/day1-coach.service';
 import { AgentModelService } from '../../core/services/agent-model.service';
+import { AgentOrchestrationProfileService } from '../../core/services/agent-orchestration-profile.service';
 import { ChatModelPickerComponent } from './chat-model-picker/chat-model-picker.component';
+import { ChatOrchestrationProfilePickerComponent } from './chat-orchestration-profile-picker/chat-orchestration-profile-picker.component';
 import {
   agenticAbortLabel,
   isOrchestrationDispatchSource,
@@ -70,6 +72,7 @@ export { agenticAbortLabel } from './orchestration-ui.util';
     GoogleConnectModalComponent,
     RunPanelComponent,
     ChatModelPickerComponent,
+    ChatOrchestrationProfilePickerComponent,
     ChatLeftDockComponent,
     ChatRightDockComponent,
     ConversationNavComponent,
@@ -240,6 +243,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     private workspaceCtx: AgentWorkspaceContextService,
     private day1Coach: Day1CoachService,
     private agentModels: AgentModelService,
+    readonly orchProfiles: AgentOrchestrationProfileService,
     readonly platformIntegrations: PlatformIntegrationsService,
     private chatAttachments: ChatAttachmentService,
   ) {}
@@ -258,6 +262,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     this.agentId = this.route.snapshot.params['agentId'];
     this._seenLearningKeys.clear();
     this.agentModels.bindAgent(this.agentId);
+    this.orchProfiles.setActiveAgent(this.agentId);
     this.workbench.bindAgent(this.agentId);
     this.runView.bindAgent(this.agentId);
     this.restoreChatUiSnapshot();
@@ -341,6 +346,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     this.projectProcesses.set([]);
     this.projectProcessesOpen.set(false);
     this.agentModels.bindAgent(nextId);
+    this.orchProfiles.setActiveAgent(nextId);
     this.workbench.bindAgent(nextId);
     this.runView.bindAgent(nextId);
     this.restoreChatUiSnapshot();
@@ -632,6 +638,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       this.askUserPending.set(false);
     } else {
       const model = this.agentModels.modelForOutgoingMessage();
+      const orchProfile = this.orchProfiles.profileForOutgoingMessage(this.agentId);
       if (attachments.length > 0) {
         this.ws.send({
           type: 'message',
@@ -639,9 +646,10 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
           attachments,
           session_key: threadKey,
           ...(model ? { model } : {}),
+          ...(orchProfile ? { orchestration_profile: orchProfile } : {}),
         });
       } else {
-        this.ws.sendMessage(text, threadKey, model);
+        this.ws.sendMessage(text, threadKey, model, orchProfile);
       }
     }
 
@@ -1875,7 +1883,15 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
       // ─── Agentic loop events ──────────────────────────────────
 
+      case 'turn_triage': {
+        this.orchProfiles.noteTriageProfile(msg.profile as string | undefined);
+        break;
+      }
+
       case 'agentic_start': {
+        if (msg.orchestration_profile) {
+          this.orchProfiles.noteTriageProfile(msg.orchestration_profile as string);
+        }
         if (msg.sub_agent === true) break;
         this.clearAwaitingResponse();
 

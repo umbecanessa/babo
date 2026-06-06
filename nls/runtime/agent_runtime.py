@@ -1599,13 +1599,32 @@ class AgentRuntime:
         *,
         history: list[dict] | None = None,
     ) -> str:
+        from nls.agentic.plan_triage_policy import build_plan_triage_continuation_block
         from nls.agentic.profile_guard_policy import build_triage_continuation_context
 
-        return build_triage_continuation_context(
+        plan_block = build_plan_triage_continuation_block(
+            self._plan_store(),
+            self._team_manager,
+        )
+        base = build_triage_continuation_context(
             user_input,
             history=history,
             working_memory=self._ring_working_memory(),
         )
+        if plan_block and base:
+            return f"{plan_block}\n\n{base}"
+        return plan_block or base
+
+    def _plan_store(self) -> Any | None:
+        for _t in self._agent_tools or []:
+            if getattr(_t, "name", "") == "plan":
+                if hasattr(_t, "get_store"):
+                    try:
+                        return _t.get_store()
+                    except Exception:
+                        pass
+                return getattr(_t, "_store", None)
+        return None
 
     def _upsert_fleet_topology_ring(self, ring: Any) -> None:
         try:
@@ -5178,6 +5197,7 @@ class AgentRuntime:
         *,
         history: list[dict] | None = None,
         model_override: str | None = None,
+        profile_override: str | None = None,
     ) -> Any:
         """Unified turn triage: intent, thinking, profile, goals, hints, deferred."""
         from nls.agentic.goals import TurnTriage, triage_turn, _heuristic_triage
@@ -5244,9 +5264,26 @@ class AgentRuntime:
             history=history,
             working_memory=self._ring_working_memory(),
         )
+        from nls.agentic.plan_triage_policy import (
+            apply_user_profile_override,
+            boost_triage_for_active_plan,
+        )
+
+        boost_triage_for_active_plan(
+            triage,
+            user_input,
+            plan_store=self._plan_store(),
+            team_manager=self._team_manager,
+        )
         triage.reconcile_orchestration_depth()
         triage.reconcile_fleet_vs_skill_hints(agent_id=self.agent_id)
         triage.reconcile_job_charter_hints(agent_id=self.agent_id)
+        apply_user_profile_override(
+            triage,
+            profile_override,
+            plan_store=self._plan_store(),
+            team_manager=self._team_manager,
+        )
         self._apply_triage_to_working_memory(triage)
         logger.info(
             "Agent %s: triage intent=%s profile=%s thinking=%s goals=%s hints=%s job=%s",
