@@ -57,6 +57,34 @@ from .history import (
 logger = logging.getLogger(__name__)
 
 
+async def _send_turn_triage(
+    websocket: WebSocket,
+    triage: Any,
+    *,
+    profile_override: str | None = None,
+) -> None:
+    """Notify frontend of resolved triage profile (chip + workbench)."""
+    payload: dict[str, Any] = {
+        "type": "turn_triage",
+        "profile": getattr(triage, "profile", None),
+        "intent": getattr(triage, "intent", None),
+        "profile_override": profile_override or "auto",
+    }
+    requested = getattr(triage, "profile_override_requested", None)
+    effective = getattr(triage, "profile_override_effective", None)
+    if requested is not None:
+        payload["profile_requested"] = requested
+    if effective is not None:
+        payload["profile_effective"] = effective
+    if (
+        requested
+        and effective
+        and requested not in ("auto", effective)
+    ):
+        payload["profile_floored"] = True
+    await websocket.send_json(payload)
+
+
 async def websocket_chat(websocket: WebSocket, agent_id: str):
     """WebSocket chat endpoint for real-time conversation."""
     await websocket.accept()
@@ -665,12 +693,11 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                         profile_override=_profile_override,
                     )
                     try:
-                        await websocket.send_json({
-                            "type": "turn_triage",
-                            "profile": _turn_triage.profile,
-                            "intent": _turn_triage.intent,
-                            "profile_override": _profile_override or "auto",
-                        })
+                        await _send_turn_triage(
+                            websocket,
+                            _turn_triage,
+                            profile_override=_profile_override,
+                        )
                     except Exception:
                         pass
                     _pre_goals = list(_turn_triage.goals)
@@ -1839,7 +1866,27 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                     })
 
             else:
-                # Agentic disabled: use async streaming + process
+                # Agentic disabled: triage for profile chip, then stream
+                try:
+                    _turn_triage = await runtime.triage_user_turn(
+                        user_input,
+                        history=history,
+                        model_override=_request_model,
+                        profile_override=_profile_override,
+                    )
+                    try:
+                        await _send_turn_triage(
+                            websocket,
+                            _turn_triage,
+                            profile_override=_profile_override,
+                        )
+                    except Exception:
+                        pass
+                except Exception:
+                    logger.debug(
+                        "Agent %s: turn triage failed (non-agentic path)",
+                        agent_id, exc_info=True,
+                    )
                 full_response = ""
                 try:
                     async for token in runtime.process_message_stream_async(

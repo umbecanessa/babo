@@ -1423,6 +1423,13 @@ async def run_loop(
 
     # --- Pre-loop: goal extraction / turn triage ---
     _plan_tool_goals = tools.get("plan")
+    from nls.agentic.plan_triage_policy import (
+        apply_active_plan_goals_and_hints,
+        enforce_loop_profile_for_active_plan,
+        get_plan_store_from_tool,
+    )
+
+    _plan_store = get_plan_store_from_tool(_plan_tool_goals)
     if pre_triage is not None:
         from .goals import TurnTriage, cap_triage_profile_for_tools
 
@@ -1446,24 +1453,6 @@ async def run_loop(
             _pt, frozenset(state.unlocked_tools or ()),
         )
         state.orchestration_profile = _pt.profile or "solo_structured"
-        if _cached_team_manager is not None and _plan_tool_goals is not None:
-            try:
-                from nls.agentic.plan_triage_policy import (
-                    enforce_loop_profile_for_active_plan,
-                )
-
-                enforce_loop_profile_for_active_plan(
-                    state,
-                    _plan_tool_goals._store,
-                    _cached_team_manager,
-                )
-                state.orchestration_profile = (
-                    state.orchestration_profile or _pt.profile or "solo_structured"
-                )
-            except Exception:
-                logger.debug(
-                    "Active-plan profile enforcement failed", exc_info=True,
-                )
         if pre_extracted_goals is None:
             pre_extracted_goals = list(getattr(pre_triage, "goals", None) or [])
         if pre_extracted_hints is None:
@@ -1472,9 +1461,9 @@ async def run_loop(
     if pre_extracted_hints:
         state.hints = list(pre_extracted_hints)
     _active_plan_for_goals = None
-    if _plan_tool_goals is not None and hasattr(_plan_tool_goals, "_store"):
+    if _plan_store is not None:
         try:
-            _active_plan_for_goals = _plan_tool_goals._store.find_active()
+            _active_plan_for_goals = _plan_store.find_active()
         except Exception:
             pass
     if pre_extracted_goals:
@@ -1484,10 +1473,24 @@ async def run_loop(
     elif pre_triage is None and not (hooks.has_active_plan and hooks.has_active_plan()):
         try:
             from .goals import triage_turn
+            from nls.agentic.plan_triage_policy import (
+                boost_triage_for_active_plan,
+                build_plan_triage_continuation_block,
+            )
 
             triage = await triage_turn(
                 vllm_client, user_input, adapter_name=adapter_name,
+                continuation_context=build_plan_triage_continuation_block(
+                    _plan_store, _cached_team_manager,
+                ),
             )
+            boost_triage_for_active_plan(
+                triage,
+                user_input,
+                plan_store=_plan_store,
+                team_manager=_cached_team_manager,
+            )
+            triage.reconcile_orchestration_depth()
             from .goals import cap_triage_profile_for_tools
 
             cap_triage_profile_for_tools(
@@ -1517,6 +1520,19 @@ async def run_loop(
                 )
         except Exception:
             logger.debug("Pre-loop goal extraction failed", exc_info=True)
+
+    if pre_triage is None:
+        try:
+            apply_active_plan_goals_and_hints(
+                state,
+                user_input,
+                plan_store=_plan_store,
+                team_manager=_cached_team_manager,
+            )
+        except Exception:
+            logger.debug(
+                "Active-plan bootstrap without pre_triage failed", exc_info=True,
+            )
 
     from nls.agentic.profile_guard_policy import inject_prompt_structured_hints
     inject_prompt_structured_hints(user_input, state.hints)
@@ -1684,6 +1700,17 @@ async def run_loop(
             state.orchestration_profile = "conversational"
             _profile = "conversational"
             invalidate_tool_policy_cache(state)
+
+    if _profile != "conversational":
+        try:
+            enforce_loop_profile_for_active_plan(
+                state, _plan_store, _cached_team_manager,
+            )
+            _profile = state.orchestration_profile or _profile
+        except Exception:
+            logger.debug(
+                "Active-plan profile enforcement failed", exc_info=True,
+            )
 
     if _profile == "conversational" and not state.coordinator_mode:
         from nls.agentic.profile_guard_policy import conversational_tool_surface

@@ -1616,15 +1616,82 @@ class AgentRuntime:
         return plan_block or base
 
     def _plan_store(self) -> Any | None:
+        from nls.agentic.plan_triage_policy import get_plan_store_from_tool
+
+        if not self._agent_tools:
+            try:
+                self._initialize_tools()
+            except Exception:
+                pass
         for _t in self._agent_tools or []:
             if getattr(_t, "name", "") == "plan":
-                if hasattr(_t, "get_store"):
-                    try:
-                        return _t.get_store()
-                    except Exception:
-                        pass
-                return getattr(_t, "_store", None)
+                return get_plan_store_from_tool(_t)
         return None
+
+    def _finalize_turn_triage(
+        self,
+        triage: Any,
+        user_input: str,
+        *,
+        history: list[dict] | None = None,
+        profile_override: str | None = None,
+    ) -> None:
+        """Shared post-classifier triage boosts (plan, job, profile override)."""
+        from nls.agentic.profile_guard_policy import (
+            boost_triage_for_work_continuation,
+            reconcile_triage_continuation_phase,
+        )
+        from nls.agentic.job_triage_policy import (
+            boost_job_charter_continuation,
+            job_hint_active,
+            resolve_job_candidate,
+        )
+        from nls.agentic.plan_triage_policy import (
+            apply_user_profile_override,
+            boost_triage_for_active_plan,
+        )
+
+        boost_triage_for_work_continuation(
+            triage, user_input, history=history,
+        )
+        boost_job_charter_continuation(
+            triage,
+            user_input,
+            history=history,
+            agent_id=self.agent_id,
+        )
+        if job_hint_active(triage.hints) and not triage.job_candidate:
+            triage.job_candidate = resolve_job_candidate(
+                None,
+                hints=triage.hints,
+                working_memory=self._ring_working_memory(),
+            )
+        reconcile_triage_continuation_phase(
+            triage,
+            user_input,
+            history=history,
+            working_memory=self._ring_working_memory(),
+        )
+        boost_triage_for_active_plan(
+            triage,
+            user_input,
+            plan_store=self._plan_store(),
+            team_manager=self._team_manager,
+        )
+        triage.reconcile_orchestration_depth()
+        triage.reconcile_fleet_vs_skill_hints(agent_id=self.agent_id)
+        triage.reconcile_job_charter_hints(agent_id=self.agent_id)
+        requested, effective = apply_user_profile_override(
+            triage,
+            profile_override,
+            plan_store=self._plan_store(),
+            team_manager=self._team_manager,
+        )
+        if requested is not None:
+            triage.profile_override_requested = requested
+        if effective is not None:
+            triage.profile_override_effective = effective
+        self._apply_triage_to_working_memory(triage)
 
     def _upsert_fleet_topology_ring(self, ring: Any) -> None:
         try:
@@ -5210,11 +5277,22 @@ class AgentRuntime:
             )
         _vllm, _adapter = self.inference_pipeline(model_override)
         if _vllm is None:
-            return TurnTriage(
+            triage = TurnTriage(
                 intent="CHAT_THINK",
                 thinking=True,
                 profile="solo_structured",
             )
+            self._finalize_turn_triage(
+                triage,
+                user_input,
+                history=history,
+                profile_override=profile_override,
+            )
+            logger.info(
+                "Agent %s: triage (no vLLM) intent=%s profile=%s",
+                self.agent_id, triage.intent, triage.profile,
+            )
+            return triage
         try:
             self._refresh_channel_awareness()
         except Exception:
@@ -5235,56 +5313,12 @@ class AgentRuntime:
             triage = _heuristic_triage(user_input)
             triage.classifier_inferred = False
 
-        from nls.agentic.profile_guard_policy import boost_triage_for_work_continuation
-
-        boost_triage_for_work_continuation(
-            triage, user_input, history=history,
-        )
-        from nls.agentic.job_triage_policy import boost_job_charter_continuation
-
-        boost_job_charter_continuation(
+        self._finalize_turn_triage(
             triage,
             user_input,
             history=history,
-            agent_id=self.agent_id,
+            profile_override=profile_override,
         )
-        from nls.agentic.job_triage_policy import job_hint_active, resolve_job_candidate
-
-        if job_hint_active(triage.hints) and not triage.job_candidate:
-            triage.job_candidate = resolve_job_candidate(
-                None,
-                hints=triage.hints,
-                working_memory=self._ring_working_memory(),
-            )
-        from nls.agentic.profile_guard_policy import reconcile_triage_continuation_phase
-
-        reconcile_triage_continuation_phase(
-            triage,
-            user_input,
-            history=history,
-            working_memory=self._ring_working_memory(),
-        )
-        from nls.agentic.plan_triage_policy import (
-            apply_user_profile_override,
-            boost_triage_for_active_plan,
-        )
-
-        boost_triage_for_active_plan(
-            triage,
-            user_input,
-            plan_store=self._plan_store(),
-            team_manager=self._team_manager,
-        )
-        triage.reconcile_orchestration_depth()
-        triage.reconcile_fleet_vs_skill_hints(agent_id=self.agent_id)
-        triage.reconcile_job_charter_hints(agent_id=self.agent_id)
-        apply_user_profile_override(
-            triage,
-            profile_override,
-            plan_store=self._plan_store(),
-            team_manager=self._team_manager,
-        )
-        self._apply_triage_to_working_memory(triage)
         logger.info(
             "Agent %s: triage intent=%s profile=%s thinking=%s goals=%s hints=%s job=%s",
             self.agent_id,

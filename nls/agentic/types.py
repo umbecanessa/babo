@@ -982,7 +982,12 @@ _ADOPT_ORCHESTRATION_PROFILE_TOOL_SCHEMA = {
             "properties": {
                 "profile": {
                     "type": "string",
-                    "enum": ["solo_structured", "orchestrated"],
+                    "enum": [
+                        "conversational",
+                        "solo_structured",
+                        "orchestrated",
+                        "squad_lead",
+                    ],
                     "description": "Target orchestration depth.",
                 },
                 "reason": {

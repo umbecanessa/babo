@@ -158,11 +158,7 @@ export class ChatOrchestrationProfilePickerComponent {
   }
 
   triggerTitle(): string {
-    const triaged = this.profiles.lastTriageProfile();
-    if (triaged) {
-      return `Orchestration: ${this.triggerLabel()} (last triage: ${triaged})`;
-    }
-    return `Orchestration depth: ${this.triggerLabel()}`;
+    return this.profiles.triggerTitle(this.profiles.activeAgentId());
   }
 
   selected(): OrchestrationProfileChoice {

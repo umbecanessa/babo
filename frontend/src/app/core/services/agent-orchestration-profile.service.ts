@@ -1,6 +1,6 @@
 import { Injectable, computed, signal } from '@angular/core';
 
-/** User-facing orchestration depth for the next message. */
+/** User-facing orchestration depth for outgoing messages. */
 export type OrchestrationProfileChoice =
   | 'auto'
   | 'conversational'
@@ -43,14 +43,22 @@ const PROFILE_SHORT: Record<string, string> = {
   squad_lead: 'Squad',
 };
 
+export interface TriageProfileNote {
+  profile?: string | null;
+  requested?: string | null;
+  effective?: string | null;
+  floored?: boolean;
+}
+
 @Injectable({ providedIn: 'root' })
 export class AgentOrchestrationProfileService {
-  /** Per-agent one-shot override for the next outgoing message. */
+  /** Per-agent sticky override until user picks Auto again. */
   private readonly overrideByAgent = new Map<string, OrchestrationProfileChoice>();
+  private readonly triageProfileByAgent = new Map<string, string>();
+  private readonly profileRequestedByAgent = new Map<string, string>();
+  private readonly profileEffectiveByAgent = new Map<string, string>();
+  private readonly profileFlooredByAgent = new Map<string, boolean>();
   private readonly epoch = signal(0);
-
-  /** Last profile chosen by triage (server). */
-  readonly lastTriageProfile = signal<string | null>(null);
 
   readonly activeAgentId = signal<string | null>(null);
 
@@ -58,6 +66,7 @@ export class AgentOrchestrationProfileService {
 
   setActiveAgent(agentId: string | null): void {
     this.activeAgentId.set(agentId);
+    this.epoch.update(v => v + 1);
   }
 
   choiceFor(agentId: string | null): OrchestrationProfileChoice {
@@ -68,6 +77,7 @@ export class AgentOrchestrationProfileService {
 
   setChoice(agentId: string, choice: OrchestrationProfileChoice): void {
     this.overrideByAgent.set(agentId, choice);
+    this.profileFlooredByAgent.delete(agentId);
     this.epoch.update(v => v + 1);
   }
 
@@ -77,18 +87,52 @@ export class AgentOrchestrationProfileService {
     return choice;
   }
 
+  lastTriageProfile(agentId: string | null): string | null {
+    this.epoch();
+    if (!agentId) return null;
+    return this.triageProfileByAgent.get(agentId) ?? null;
+  }
+
+  isProfileFloored(agentId: string | null): boolean {
+    this.epoch();
+    if (!agentId) return false;
+    return this.profileFlooredByAgent.get(agentId) ?? false;
+  }
+
   triggerLabel(agentId: string | null): string {
     const choice = this.choiceFor(agentId);
     if (choice !== 'auto') {
       const opt = ORCHESTRATION_PROFILE_OPTIONS.find(o => o.id === choice);
-      return opt?.label ?? choice;
+      const base = opt?.label ?? choice;
+      if (this.isProfileFloored(agentId)) {
+        const effective = this.profileEffectiveByAgent.get(agentId ?? '');
+        const short = PROFILE_SHORT[effective ?? ''] ?? effective ?? 'EM';
+        return `${base} → ${short}`;
+      }
+      return base;
     }
-    const triaged = this.lastTriageProfile();
+    const triaged = this.lastTriageProfile(agentId);
     if (triaged) {
       const short = PROFILE_SHORT[triaged] ?? triaged;
       return `Auto · ${short}`;
     }
     return 'Auto';
+  }
+
+  triggerTitle(agentId: string | null): string {
+    const choice = this.choiceFor(agentId);
+    const triaged = this.lastTriageProfile(agentId);
+    if (choice !== 'auto' && this.isProfileFloored(agentId)) {
+      const requested = this.profileRequestedByAgent.get(agentId ?? '') ?? choice;
+      const effective = this.profileEffectiveByAgent.get(agentId ?? '') ?? triaged;
+      return (
+        `Requested ${requested}; active plan requires ${effective ?? 'orchestrated'}.`
+      );
+    }
+    if (triaged) {
+      return `Orchestration: ${this.triggerLabel(agentId)} (last triage: ${triaged})`;
+    }
+    return `Orchestration depth: ${this.triggerLabel(agentId)}`;
   }
 
   readonly hasManualOverride = computed(() => {
@@ -98,9 +142,46 @@ export class AgentOrchestrationProfileService {
     return (this.overrideByAgent.get(id) ?? 'auto') !== 'auto';
   });
 
-  noteTriageProfile(profile: string | null | undefined): void {
-    const p = (profile || '').trim();
-    this.lastTriageProfile.set(p || null);
+  noteTriageProfile(
+    agentId: string | null | undefined,
+    note: TriageProfileNote | string | null | undefined,
+  ): void {
+    const id = (agentId ?? '').trim();
+    if (!id) return;
+
+    const payload: TriageProfileNote =
+      typeof note === 'string' || note == null
+        ? { profile: note }
+        : note;
+
+    const p = (payload.profile ?? '').trim();
+    if (p) {
+      this.triageProfileByAgent.set(id, p);
+    }
+
+    const requested = (payload.requested ?? '').trim();
+    const effective = (payload.effective ?? p).trim();
+    if (requested) {
+      this.profileRequestedByAgent.set(id, requested);
+    }
+    if (effective) {
+      this.profileEffectiveByAgent.set(id, effective);
+    }
+
+    if (payload.floored) {
+      this.profileFlooredByAgent.set(id, true);
+    } else if (
+      requested &&
+      effective &&
+      requested !== 'auto' &&
+      requested !== effective
+    ) {
+      this.profileFlooredByAgent.set(id, true);
+    } else if (!payload.floored && !requested) {
+      this.profileFlooredByAgent.delete(id);
+    }
+
+    this.epoch.update(v => v + 1);
   }
 
   shortLabel(profile: string | null | undefined): string {

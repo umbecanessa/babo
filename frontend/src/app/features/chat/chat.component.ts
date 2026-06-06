@@ -1884,13 +1884,20 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       // ─── Agentic loop events ──────────────────────────────────
 
       case 'turn_triage': {
-        this.orchProfiles.noteTriageProfile(msg.profile as string | undefined);
+        this.orchProfiles.noteTriageProfile(this.agentId, {
+          profile: msg.profile as string | undefined,
+          requested: msg.profile_requested as string | undefined,
+          effective: msg.profile_effective as string | undefined,
+          floored: msg.profile_floored === true,
+        });
         break;
       }
 
       case 'agentic_start': {
         if (msg.orchestration_profile) {
-          this.orchProfiles.noteTriageProfile(msg.orchestration_profile as string);
+          this.orchProfiles.noteTriageProfile(this.agentId, {
+            profile: msg.orchestration_profile as string,
+          });
         }
         if (msg.sub_agent === true) break;
         this.clearAwaitingResponse();

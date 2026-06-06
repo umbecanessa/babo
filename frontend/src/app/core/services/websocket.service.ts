@@ -96,6 +96,7 @@ export interface ChatMessage {
     | 'loop_budget_prompt'
     | 'budget_decision'
     | 'agentic_start'
+    | 'turn_triage'
     | 'agentic_iteration'
     | 'agentic_complete'
     | 'activity_status'

@@ -31,6 +31,18 @@ _CONTINUATION_RE = re.compile(
 HINT_PLAN_ORCHESTRATION = "continuation:plan_orchestration"
 
 
+def get_plan_store_from_tool(plan_tool: Any | None) -> Any | None:
+    """Resolve plan store from the plan tool (prefer get_store over _store)."""
+    if plan_tool is None:
+        return None
+    if hasattr(plan_tool, "get_store"):
+        try:
+            return plan_tool.get_store()
+        except Exception:
+            pass
+    return getattr(plan_tool, "_store", None)
+
+
 def _teams_for_plan(team_manager: Any | None, plan_id: str) -> list[Any]:
     if team_manager is None or not plan_id:
         return []
@@ -57,11 +69,6 @@ def plan_requires_orchestrated_profile(
         for t in teams
     ):
         return True
-    if any(
-        getattr(t, "status", None) == "created" and not getattr(t, "batch_id", "")
-        for t in teams
-    ):
-        return True
 
     pending_delegatable = any(
         s.delegatable and s.status not in ("done", "skipped")
@@ -77,6 +84,35 @@ def plan_requires_orchestrated_profile(
         if open_steps and any(s.delegatable for s in open_steps):
             return True
     return False
+
+
+def active_plan_orchestration_floor(
+    plan_store: Any | None,
+    team_manager: Any | None,
+) -> str | None:
+    """Minimum profile when an active plan requires EM depth, else None."""
+    if plan_store is None:
+        return None
+    try:
+        plan = plan_store.find_active()
+    except Exception:
+        return None
+    if plan_requires_orchestrated_profile(plan, team_manager):
+        return "orchestrated"
+    return None
+
+
+def apply_orchestration_floor(
+    profile: str,
+    plan_store: Any | None,
+    team_manager: Any | None,
+) -> str:
+    """Never return a profile below the active-plan orchestration floor."""
+    normalized = normalize_profile(profile or "solo_structured")
+    floor = active_plan_orchestration_floor(plan_store, team_manager)
+    if floor:
+        return _max_profile(normalized, floor)
+    return normalized
 
 
 def build_plan_triage_continuation_block(
@@ -206,35 +242,74 @@ def apply_user_profile_override(
     *,
     plan_store: Any | None = None,
     team_manager: Any | None = None,
-) -> None:
-    """Apply explicit user profile pick; never below active-plan orchestration floor."""
+) -> tuple[str | None, str | None]:
+    """Apply explicit user profile pick; never below active-plan orchestration floor.
+
+    Returns (requested_profile, effective_profile) when override was applied or
+    floored; (None, None) when override is auto/absent and no floor applied.
+    """
     raw = (override or "").strip().lower()
-    floor = None
-    if plan_store is not None:
-        try:
-            plan = plan_store.find_active()
-        except Exception:
-            plan = None
-        if plan_requires_orchestrated_profile(plan, team_manager):
-            floor = "orchestrated"
+    floor = active_plan_orchestration_floor(plan_store, team_manager)
+    base = normalize_profile(getattr(triage, "profile", "") or "solo_structured")
 
     if not raw or raw == "auto":
         if floor:
-            triage.profile = _max_profile(
-                normalize_profile(getattr(triage, "profile", "") or "solo_structured"),
-                floor,
-            )
-        return
+            triage.profile = _max_profile(base, floor)
+            return ("auto", triage.profile)
+        return (None, None)
 
     if raw not in (
         "conversational", "solo_structured", "orchestrated", "squad_lead",
     ):
+        return (None, None)
+
+    requested = normalize_profile(raw)
+    effective = _max_profile(requested, floor) if floor else requested
+    triage.profile = effective
+    return (requested, effective)
+
+
+def apply_active_plan_goals_and_hints(
+    state: Any,
+    user_input: str,
+    *,
+    plan_store: Any | None = None,
+    team_manager: Any | None = None,
+) -> None:
+    """Seed goals/hints when triage was skipped but a plan + teams exist."""
+    if plan_store is None:
+        return
+    try:
+        plan = plan_store.find_active()
+    except Exception:
+        return
+    if plan is None or plan.status in ("done", "archived"):
         return
 
-    target = normalize_profile(raw)
-    if floor:
-        target = _max_profile(target, floor)
-    triage.profile = target
+    requires_orch = plan_requires_orchestrated_profile(plan, team_manager)
+    continuation = bool(_CONTINUATION_RE.search(user_input or ""))
+    if not requires_orch and not continuation:
+        return
+
+    hints = list(getattr(state, "hints", None) or [])
+    hint_tokens = {h.strip().lower() for h in hints if h and h.strip()}
+    if requires_orch and hint_tokens & HINT_FORBID_TEAM:
+        hints = [
+            h for h in hints
+            if h.strip().lower() not in HINT_FORBID_TEAM
+        ]
+    if requires_orch and HINT_PLAN_ORCHESTRATION not in hint_tokens:
+        hints.append(HINT_PLAN_ORCHESTRATION)
+    state.hints = hints
+
+    if not getattr(state, "goals", None) and continuation:
+        pending = next(
+            (s.label for s in plan.steps if s.status not in ("done", "skipped")),
+            "",
+        )
+        state.goals = [
+            pending or f"Continue plan {plan.title}",
+        ]
 
 
 def enforce_loop_profile_for_active_plan(
@@ -249,14 +324,14 @@ def enforce_loop_profile_for_active_plan(
         plan = plan_store.find_active()
     except Exception:
         return
-    if not plan_requires_orchestrated_profile(plan, team_manager):
+    prev = normalize_profile(
+        getattr(state, "orchestration_profile", "") or "solo_structured",
+    )
+    target = apply_orchestration_floor(prev, plan_store, team_manager)
+    if target == prev:
         return
 
-    prev = normalize_profile(getattr(state, "orchestration_profile", "") or "solo_structured")
-    if _max_profile(prev, "orchestrated") == prev:
-        return
-
-    state.orchestration_profile = "orchestrated"
+    state.orchestration_profile = target
     try:
         from nls.agentic.profile_depth_policy import (
             invalidate_tool_policy_cache,
@@ -264,12 +339,13 @@ def enforce_loop_profile_for_active_plan(
         )
 
         invalidate_tool_policy_cache(state)
-        anchor = profile_anchor_message("orchestrated")
+        anchor = profile_anchor_message(target)
         if anchor:
             state.pending_profile_anchor = anchor
     except Exception:
         pass
+    _plan_id = getattr(plan, "id", "") if plan is not None else "?"
     logger.info(
-        "Loop profile enforced orchestrated for active plan %s (was %s)",
-        plan.id, prev,
+        "Loop profile enforced %s for active plan %s (was %s)",
+        target, _plan_id, prev,
     )
