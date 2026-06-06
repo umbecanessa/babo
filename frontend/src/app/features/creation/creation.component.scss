@@ -23,6 +23,11 @@
 
   ::ng-deep .context-menu-panel.model-menu {
     z-index: 120;
+    max-height: min(420px, calc(100vh - 120px));
+  }
+
+  ::ng-deep .model-list {
+    max-height: min(240px, calc(100vh - 280px));
   }
 
   @media (max-width: 768px) {

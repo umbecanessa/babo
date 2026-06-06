@@ -21,6 +21,8 @@ import { PlatformService } from './platform.service';
 export interface ModelPickerOption {
   id: string;
   label: string;
+  /** Local/LAN vs Babo Cloud catalog entry — used for picker grouping. */
+  source?: 'local' | 'cloud';
 }
 
 export interface InferenceHotReloadPayload {

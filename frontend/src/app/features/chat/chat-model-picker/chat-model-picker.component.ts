@@ -22,6 +22,7 @@ type MenuView =
   | {
       mode: 'grouped';
       empty: false;
+      local: ModelPickerOption[];
       featured: ModelPickerOption[];
       more: ModelPickerOption[];
     };
@@ -112,7 +113,7 @@ type MenuView =
               />
             </div>
 
-            <div class="model-list">
+            <div class="model-list" (wheel)="onListWheel($event)">
               @if (menuView(); as view) {
                 @switch (view.mode) {
                   @case ('empty') {
@@ -134,7 +135,26 @@ type MenuView =
                     }
                   }
                   @case ('grouped') {
+                    @if (view.local.length) {
+                      <p class="context-menu-title">{{ localSectionTitle() }}</p>
+                      @for (opt of view.local; track opt.id) {
+                        <button
+                          type="button"
+                          class="context-menu-item context-menu-row model-option"
+                          [class.active]="activeListModelId() === opt.id"
+                          (click)="select(opt.id)"
+                        >
+                          <span class="model-option-label">{{ opt.label }}</span>
+                          @if (opt.id === models.defaultModelId()) {
+                            <span class="default-tag">default</span>
+                          }
+                        </button>
+                      }
+                    }
                     @if (view.featured.length) {
+                      @if (view.local.length) {
+                        <div class="context-menu-sep" role="separator"></div>
+                      }
                       <p class="context-menu-title">Popular</p>
                       @for (opt of view.featured; track opt.id) {
                         <button
@@ -151,7 +171,7 @@ type MenuView =
                       }
                     }
                     @if (view.more.length) {
-                      @if (view.featured.length) {
+                      @if (view.local.length || view.featured.length) {
                         <div class="context-menu-sep" role="separator"></div>
                       }
                       <p class="context-menu-title">More models</p>
@@ -312,16 +332,25 @@ type MenuView =
         overflow: hidden;
         padding: 6px;
       }
+      .model-menu .context-menu-tabs,
+      .model-menu .context-menu-hint,
+      .model-menu .context-menu-search-wrap,
+      .model-footer {
+        flex-shrink: 0;
+      }
       .model-menu.menu-down {
         bottom: auto;
         top: calc(100% + 8px);
       }
       .model-list {
         overflow-y: auto;
-        flex: 1;
+        overflow-x: hidden;
+        flex: 1 1 0;
         min-height: 0;
         margin: 0 -2px;
         padding: 0 2px;
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
       }
       .model-empty {
         margin: 8px;
@@ -438,9 +467,25 @@ export class ChatModelPickerComponent {
       return { mode: 'flat', empty: false, options: sorted };
     }
 
-    const { featured, more } = partitionModelPickerOptions(filtered, def);
-    return { mode: 'grouped', empty: false, featured, more };
+    const { local, featured, more } = partitionModelPickerOptions(filtered, def, {
+      tier: this.models.inferenceTier(),
+    });
+    return { mode: 'grouped', empty: false, local, featured, more };
   });
+
+  localSectionTitle(): string {
+    const tier = this.models.inferenceTier();
+    if (tier === 'self_lan') return 'LAN inference';
+    if (tier === 'self_local') return 'Local inference';
+    return 'Your setup';
+  }
+
+  onListWheel(ev: WheelEvent): void {
+    const el = ev.currentTarget as HTMLElement;
+    if (el.scrollHeight > el.clientHeight + 1) {
+      ev.stopPropagation();
+    }
+  }
 
   toggleOpen(): void {
     const next = !this.open();

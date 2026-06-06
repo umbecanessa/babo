@@ -57,11 +57,11 @@ export function mergeModelCatalog(opts: {
   const seen = new Set<string>();
   const out: ModelPickerOption[] = [];
 
-  const add = (id: string, label?: string) => {
+  const add = (id: string, label?: string, source?: 'local' | 'cloud') => {
     const m = id.trim();
     if (!m || seen.has(m)) return;
     seen.add(m);
-    out.push({ id: m, label: label ?? labelForModelId(m) });
+    out.push({ id: m, label: label ?? labelForModelId(m), source });
   };
 
   const def = opts.defaultModelId.trim();
@@ -71,21 +71,21 @@ export function mergeModelCatalog(opts: {
   const offerCloud = shouldOfferBaboCloudModels(opts);
 
   if (hybridLocal) {
-    if (resolvedDef) add(resolvedDef);
     for (const id of opts.discoveredIds ?? []) {
-      add(id);
+      add(id, undefined, 'local');
     }
+    if (resolvedDef) add(resolvedDef, undefined, 'local');
     if (opts.includeProviderDefaults && opts.providerId) {
       for (const o of providerDefaultModelOptions(opts.providerId)) {
-        add(o.id, o.label);
+        add(o.id, o.label, 'local');
       }
     }
     if (offerCloud) {
       for (const m of baboCloudModelsForUser(opts)) {
-        add(m.id, m.label);
+        add(m.id, m.label, 'cloud');
       }
       for (const id of opts.cloudModelIds ?? []) {
-        add(id);
+        add(id, undefined, 'cloud');
       }
     }
     return out;
@@ -93,25 +93,25 @@ export function mergeModelCatalog(opts: {
 
   if (offerCloud) {
     for (const m of baboCloudModelsForUser(opts)) {
-      add(m.id, m.label);
+      add(m.id, m.label, 'cloud');
     }
     for (const id of opts.cloudModelIds ?? []) {
-      add(id);
+      add(id, undefined, 'cloud');
     }
   }
 
   if (opts.includeProviderDefaults && opts.providerId) {
     for (const o of providerDefaultModelOptions(opts.providerId)) {
-      add(o.id, o.label);
+      add(o.id, o.label, 'local');
     }
   }
 
   for (const id of opts.discoveredIds ?? []) {
-    add(id);
+    add(id, undefined, 'local');
   }
 
   if (resolvedDef) {
-    add(resolvedDef);
+    add(resolvedDef, undefined, isHybridLocalInferenceTier(opts.tier) ? 'local' : undefined);
   }
 
   return out;
@@ -132,14 +132,39 @@ export function filterModelPickerOptions(
   );
 }
 
-/** Split catalog into popular (default + curated) and the rest, alphabetized. */
+/** Split catalog into local setup, popular (default + curated), and the rest. */
 export function partitionModelPickerOptions(
   options: ModelPickerOption[],
   defaultModelId: string,
-): { featured: ModelPickerOption[]; more: ModelPickerOption[] } {
+  opts?: { tier?: CapabilityTier },
+): {
+  local: ModelPickerOption[];
+  featured: ModelPickerOption[];
+  more: ModelPickerOption[];
+} {
   const byId = new Map(options.map((o) => [o.id, o]));
+  const local: ModelPickerOption[] = [];
+  const localIds = new Set<string>();
+
+  const pushLocal = (id: string) => {
+    if (localIds.has(id)) return;
+    const o = byId.get(id);
+    if (!o) return;
+    localIds.add(id);
+    local.push(o);
+  };
+
+  const hybridLocal = opts?.tier ? isHybridLocalInferenceTier(opts.tier) : false;
+  if (hybridLocal) {
+    for (const o of options) {
+      if (o.source === 'local') {
+        pushLocal(o.id);
+      }
+    }
+  }
+
   const featured: ModelPickerOption[] = [];
-  const featuredIds = new Set<string>();
+  const featuredIds = new Set<string>(localIds);
 
   const pushFeatured = (id: string) => {
     if (featuredIds.has(id)) return;
@@ -150,7 +175,7 @@ export function partitionModelPickerOptions(
   };
 
   const def = defaultModelId.trim();
-  if (def) pushFeatured(def);
+  if (def && !hybridLocal) pushFeatured(def);
   pushFeatured(BABO_HOSTED_MODEL_ID);
   for (const id of POPULAR_MODEL_IDS) {
     pushFeatured(id);
@@ -160,7 +185,7 @@ export function partitionModelPickerOptions(
     .filter((o) => !featuredIds.has(o.id))
     .sort((a, b) => a.label.localeCompare(b.label, undefined, { sensitivity: 'base' }));
 
-  return { featured, more };
+  return { local, featured, more };
 }
 
 /** Parse OpenAI GET /v1/models JSON. */
