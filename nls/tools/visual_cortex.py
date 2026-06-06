@@ -28,6 +28,7 @@ import asyncio
 import hashlib
 import json
 import logging
+import os
 import subprocess
 import sys
 import time
@@ -37,6 +38,21 @@ from pathlib import Path
 from typing import Any, Callable
 
 logger = logging.getLogger(__name__)
+
+
+def _visual_cortex_strategy() -> str:
+    return os.environ.get("NLS_VISUAL_CORTEX_STRATEGY", "").strip()
+
+
+def _use_local_vlm_worker(strategy: str | None = None) -> bool:
+    """True when ambient vision should load Moondream/SmolVLM on this machine."""
+    strat = strategy if strategy is not None else _visual_cortex_strategy()
+    if strat == "dedicated_vlm_lan":
+        return False
+    if strat == "dedicated_vlm_local":
+        return True
+    # Legacy/auto: local subprocess unless a LAN worker is the only backend.
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -837,10 +853,9 @@ class VisualCortex:
     async def start(self) -> None:
         """Start the background capture loops.
 
-        The local VLM is loaded inside a dedicated subprocess
-        (``SubprocessVLMBackend``) so PyTorch never initialises in the
-        main server process.  This provides crash isolation on every
-        platform and prevents macOS MPS fork-safety issues.
+        Local VLM (``SubprocessVLMBackend``) loads only for ``dedicated_vlm_local``
+        or legacy/auto without a LAN worker. ``dedicated_vlm_lan`` uses
+        ``RemoteVLMBackend`` only so PyTorch never touches the desktop GPU.
         """
         if self._running:
             return
@@ -852,6 +867,8 @@ class VisualCortex:
 
         loop = asyncio.get_running_loop()
 
+        strategy = _visual_cortex_strategy()
+
         # 1. Wire remote backend if a vision URL is configured
         if self._gpu_worker_url:
             self._remote_vlm = RemoteVLMBackend(
@@ -859,31 +876,47 @@ class VisualCortex:
             )
             logger.info("Visual cortex: remote VLM wired (%s)", self._gpu_worker_url)
 
-        # 2. Acquire the process-wide shared local VLM subprocess.
-        #    One worker serves all agents; each VisualCortex only owns
-        #    its own capture loop + buffer.
+        if strategy == "dedicated_vlm_lan" and self._remote_vlm is None:
+            logger.error(
+                "Visual cortex: dedicated_vlm_lan requires NLS_VISION_WORKER_URL "
+                "— not starting",
+            )
+            return
+
+        # 2. Acquire the shared local VLM subprocess when this machine owns vision.
+        #    dedicated_vlm_lan uses RemoteVLMBackend only (no local PyTorch).
         preference = self.config.model_preference  # "auto", "moondream", etc.
         self._vlm_pref = preference
         self._vlm_shared = False
-        logger.info("Visual cortex: acquiring shared VLM worker...")
 
-        try:
-            self._vlm = SharedVLMRegistry.acquire(preference)
-            self._vlm_shared = True
-            if not self._vlm.is_loaded:
-                await loop.run_in_executor(None, self._vlm.warmup)
+        if _use_local_vlm_worker(strategy):
+            logger.info("Visual cortex: acquiring shared local VLM worker...")
+            try:
+                self._vlm = SharedVLMRegistry.acquire(preference)
+                self._vlm_shared = True
+                if not self._vlm.is_loaded:
+                    await loop.run_in_executor(None, self._vlm.warmup)
+                logger.info(
+                    "Visual cortex: local VLM ready (%s, %s)",
+                    type(self._vlm).__name__,
+                    self._vlm.info,
+                )
+            except Exception:
+                logger.error("Visual cortex: local VLM load/warmup failed", exc_info=True)
+                if self._vlm_shared:
+                    SharedVLMRegistry.release(preference)
+                    self._vlm_shared = False
+                self._vlm = None
+                self._vlm_pref = None
+                if self._remote_vlm is None:
+                    return
+        elif self._remote_vlm is not None:
             logger.info(
-                "Visual cortex: VLM ready (%s, %s)",
-                type(self._vlm).__name__,
-                self._vlm.info,
+                "Visual cortex: LAN-only mode (%s) — skipping local VLM worker",
+                strategy or "dedicated_vlm_lan",
             )
-        except Exception:
-            logger.error("Visual cortex: VLM load/warmup failed", exc_info=True)
-            if self._vlm_shared:
-                SharedVLMRegistry.release(preference)
-                self._vlm_shared = False
-            self._vlm = None
-            self._vlm_pref = None
+        else:
+            logger.error("Visual cortex: no VLM backend configured — not starting")
             return
 
         self._running = True
@@ -1315,25 +1348,23 @@ class VisualCortex:
         _local_model_id = ""
         if self._vlm is not None and self._vlm.info is not None:
             _local_model_id = self._vlm.info.model_id
-        import os as _os
 
-        _local_only = (
-            _os.environ.get("NLS_VISUAL_CORTEX_STRATEGY", "").strip()
-            == "dedicated_vlm_local"
-        )
+        strategy = _visual_cortex_strategy()
+        _local_only = strategy == "dedicated_vlm_local"
+        _remote_only = strategy == "dedicated_vlm_lan"
         _remote_healthy = (
             not _local_only
             and self._remote_vlm is not None
             and self._remote_fail_count < 3
             and time.time() >= self._remote_backoff_until
         )
-        _skip_local = (
+        _skip_local = _remote_only or (
             _remote_healthy
             and self._vlm is not None
             and "SmolVLM" in _local_model_id
         )
 
-        # Try local VLM first (unless skipped in favour of healthy remote)
+        # Try local VLM first (unless LAN-only or weak local + healthy remote)
         if self._vlm is not None and not _skip_local:
             try:
                 coro = loop.run_in_executor(None, self._vlm.describe, image)
