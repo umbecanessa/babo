@@ -1,4 +1,4 @@
-import type { CapabilityTier } from '../../features/setup/capability-profile.model';
+import type { CapabilityTier, CapabilityProfile } from '../../features/setup/capability-profile.model';
 import {
   BABO_CLOUD_MODELS,
   BABO_HOSTED_MODEL_ID,
@@ -19,6 +19,37 @@ export function shouldOfferBaboCloudModels(opts: {
 
 export function isHybridLocalInferenceTier(tier: CapabilityTier): boolean {
   return tier === 'self_local' || tier === 'self_lan';
+}
+
+/** Model ids from LAN scan + configured self_lan/self_local brain model. */
+export function collectLanInferenceModelIds(
+  profile: CapabilityProfile | null | undefined,
+): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const add = (raw?: string | null) => {
+    const id = (raw ?? '').trim();
+    if (!id || seen.has(id)) return;
+    seen.add(id);
+    out.push(id);
+  };
+  if (!profile) return out;
+
+  if (isHybridLocalInferenceTier(profile.inference.tier)) {
+    add(profile.inference.model);
+  }
+
+  for (const probe of profile.scan?.lan ?? []) {
+    if (probe.kind !== 'inference' || !probe.healthy) continue;
+    add(probe.primaryModel);
+    for (const id of probe.modelIds ?? []) add(id);
+  }
+
+  for (const row of profile.scan?.modelFit?.lan?.recommendations ?? []) {
+    add(row.modelId);
+  }
+
+  return out;
 }
 
 /** Provider default ids when probing BYOK endpoints fails. */
@@ -49,6 +80,8 @@ export function mergeModelCatalog(opts: {
   discoveredIds?: string[];
   /** Extra ids from GET {api}/inference/v1/models (Babo Cloud relay). */
   cloudModelIds?: string[];
+  /** LAN scan / configured self server models (always tagged local). */
+  lanModelIds?: string[];
   includeProviderDefaults?: boolean;
   providerId?: string;
   hostedGx10Available?: boolean;
@@ -69,6 +102,10 @@ export function mergeModelCatalog(opts: {
     opts.tier === 'hosted_babo' ? resolveBaboCloudModelId(def) : def;
   const hybridLocal = isHybridLocalInferenceTier(opts.tier);
   const offerCloud = shouldOfferBaboCloudModels(opts);
+
+  for (const id of opts.lanModelIds ?? []) {
+    add(id, undefined, 'local');
+  }
 
   if (hybridLocal) {
     for (const id of opts.discoveredIds ?? []) {
@@ -155,13 +192,14 @@ export function partitionModelPickerOptions(
   };
 
   const hybridLocal = opts?.tier ? isHybridLocalInferenceTier(opts.tier) : false;
-  if (hybridLocal) {
-    for (const o of options) {
-      if (o.source === 'local' || o.source === undefined) {
-        pushLocal(o.id);
-      }
+
+  for (const o of options) {
+    if (o.source === 'local') {
+      pushLocal(o.id);
     }
   }
+
+  const hasLocalSection = local.length > 0;
 
   const featured: ModelPickerOption[] = [];
   const featuredIds = new Set<string>(localIds);
@@ -176,16 +214,17 @@ export function partitionModelPickerOptions(
 
   const def = defaultModelId.trim();
   if (def) pushFeatured(def);
-  if (!hybridLocal) {
-    pushFeatured(BABO_HOSTED_MODEL_ID);
-    for (const id of POPULAR_MODEL_IDS) {
-      pushFeatured(id);
-    }
-  } else {
+
+  if (hybridLocal || hasLocalSection) {
     for (const o of options) {
       if (o.source === 'cloud') {
         pushFeatured(o.id);
       }
+    }
+  } else {
+    pushFeatured(BABO_HOSTED_MODEL_ID);
+    for (const id of POPULAR_MODEL_IDS) {
+      pushFeatured(id);
     }
   }
 

@@ -112,6 +112,25 @@ export function stripInferenceV1Suffix(url: string): string {
   return url.trim().replace(/\/+$/, '').replace(/\/v1$/i, '');
 }
 
+/** Nest-hosted OpenAI relay (`…/api/inference`) — not a direct LAN/vLLM box. */
+export function isBaboCloudInferenceRelayUrl(url: string): boolean {
+  const lower = stripInferenceV1Suffix(url).toLowerCase();
+  return lower.includes('api.babo.agency') && lower.includes('/inference');
+}
+
+/** Session JWT must not be sent to LAN/Ollama probes (only Babo Cloud relay). */
+export function isLikelySessionJwt(token: string): boolean {
+  const t = token.trim();
+  return t.startsWith('eyJ') && t.split('.').length >= 3;
+}
+
+/** Bearer for probing a direct inference server (skip JWT synced for cloud relay). */
+export function bearerForDirectInferenceProbe(storedKey: string): string | undefined {
+  const key = storedKey.trim();
+  if (!key || isLikelySessionJwt(key)) return undefined;
+  return key;
+}
+
 export function inferenceUrlForTest(storedUrl: string): string {
   const base = stripInferenceV1Suffix(storedUrl);
   return `${base}/v1/models`;

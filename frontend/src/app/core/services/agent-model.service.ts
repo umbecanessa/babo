@@ -6,6 +6,9 @@ import {
   isBaboHostedModelId,
   matchCloudProvider,
   resolveBaboCloudModelId,
+  stripInferenceV1Suffix,
+  bearerForDirectInferenceProbe,
+  isBaboCloudInferenceRelayUrl,
 } from '../../features/setup/setup-inference.util';
 import { readBaboBoot } from '../desktop-boot';
 import { environment } from '../../../environments/environment';
@@ -14,6 +17,7 @@ import {
   mergeModelCatalog,
   parseOpenAiModelList,
   shouldOfferBaboCloudModels,
+  collectLanInferenceModelIds,
 } from './model-catalog.util';
 import { ApiService } from './api.service';
 import { PlatformService } from './platform.service';
@@ -480,23 +484,29 @@ export class AgentModelService {
     }
 
     const hasCloudApi = !!this.apiBase();
+    const lanModelIds = collectLanInferenceModelIds(profile);
     let discovered: string[] = [];
 
-    if (tier === 'byok_cloud' || tier === 'self_lan' || tier === 'self_local') {
-      const url = profile?.inference?.url || cfg.inferenceUrl || '';
-      const key = cfg.inferenceApiKey || '';
-      if (url && (window as any).nls?.capabilities?.testInference) {
-        try {
-          const result = await (window as any).nls.capabilities.testInference(
-            url,
-            key || undefined,
-          );
-          if (result.ok && result.models?.length) {
-            discovered = result.models;
-          }
-        } catch {
-          /* use catalog merge without discovery */
+    const inferenceUrl = stripInferenceV1Suffix(
+      profile?.inference?.url || cfg.inferenceUrl || '',
+    );
+    const shouldProbeDirect =
+      (tier === 'byok_cloud' || tier === 'self_lan' || tier === 'self_local') &&
+      inferenceUrl &&
+      !isBaboCloudInferenceRelayUrl(inferenceUrl);
+
+    if (shouldProbeDirect && (window as any).nls?.capabilities?.testInference) {
+      const probeKey = bearerForDirectInferenceProbe(cfg.inferenceApiKey || '');
+      try {
+        const result = await (window as any).nls.capabilities.testInference(
+          inferenceUrl,
+          probeKey,
+        );
+        if (result.ok && result.models?.length) {
+          discovered = result.models;
         }
+      } catch {
+        /* use catalog merge without live discovery */
       }
     }
 
@@ -514,9 +524,10 @@ export class AgentModelService {
         hasCloudApi,
         defaultModelId: model,
         discoveredIds: discovered,
+        lanModelIds,
         cloudModelIds,
         includeProviderDefaults: tier === 'byok_cloud',
-        providerId: matchCloudProvider(profile?.inference?.url ?? cfg.inferenceUrl ?? ''),
+        providerId: matchCloudProvider(inferenceUrl),
         hostedGx10Available: gx10Caps.available,
         hostedGx10Label: gx10Caps.label,
       }),

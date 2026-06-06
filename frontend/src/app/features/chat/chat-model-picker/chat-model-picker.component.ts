@@ -486,7 +486,7 @@ export class ChatModelPickerComponent {
     const tier = this.models.inferenceTier();
     if (tier === 'self_lan') return 'LAN inference';
     if (tier === 'self_local') return 'Local inference';
-    return 'Your setup';
+    return 'Your server';
   }
 
   onListWheel(ev: WheelEvent): void {
@@ -500,6 +500,7 @@ export class ChatModelPickerComponent {
     const next = !this.open();
     this.open.set(next);
     if (next) {
+      void this.models.refreshFromConfig();
       this.searchQuery.set('');
       if (this.showTargetTabs()) {
         this.pickTarget.set('delegate');
