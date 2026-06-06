@@ -157,7 +157,7 @@ export function partitionModelPickerOptions(
   const hybridLocal = opts?.tier ? isHybridLocalInferenceTier(opts.tier) : false;
   if (hybridLocal) {
     for (const o of options) {
-      if (o.source === 'local') {
+      if (o.source === 'local' || o.source === undefined) {
         pushLocal(o.id);
       }
     }
@@ -175,10 +175,18 @@ export function partitionModelPickerOptions(
   };
 
   const def = defaultModelId.trim();
-  if (def && !hybridLocal) pushFeatured(def);
-  pushFeatured(BABO_HOSTED_MODEL_ID);
-  for (const id of POPULAR_MODEL_IDS) {
-    pushFeatured(id);
+  if (def) pushFeatured(def);
+  if (!hybridLocal) {
+    pushFeatured(BABO_HOSTED_MODEL_ID);
+    for (const id of POPULAR_MODEL_IDS) {
+      pushFeatured(id);
+    }
+  } else {
+    for (const o of options) {
+      if (o.source === 'cloud') {
+        pushFeatured(o.id);
+      }
+    }
   }
 
   const more = options

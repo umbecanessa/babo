@@ -345,8 +345,9 @@ type MenuView =
       .model-list {
         overflow-y: auto;
         overflow-x: hidden;
-        flex: 1 1 0;
+        flex: 0 1 auto;
         min-height: 0;
+        max-height: min(260px, calc(50vh - 120px));
         margin: 0 -2px;
         padding: 0 2px;
         overscroll-behavior: contain;
@@ -470,6 +471,9 @@ export class ChatModelPickerComponent {
     const { local, featured, more } = partitionModelPickerOptions(filtered, def, {
       tier: this.models.inferenceTier(),
     });
+    if (!local.length && !featured.length && !more.length) {
+      return { mode: 'flat', empty: false, options: filtered };
+    }
     return { mode: 'grouped', empty: false, local, featured, more };
   });
 
