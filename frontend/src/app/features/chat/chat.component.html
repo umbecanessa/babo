@@ -44,9 +44,9 @@
             {{ projectProcesses().length === 1 ? projectProcesses()[0].label : (projectProcesses().length + ' servers') }}
           </button>
           @if (projectProcessesOpen()) {
-            <div class="project-processes-backdrop" (click)="projectProcessesOpen.set(false)"></div>
-            <div class="project-processes-menu" role="menu">
-              <div class="project-processes-menu-title">Running locally</div>
+            <div class="context-menu-backdrop project-processes-backdrop" (click)="projectProcessesOpen.set(false)"></div>
+            <div class="context-menu-panel project-processes-menu" role="menu">
+              <div class="context-menu-title">Running locally</div>
               @for (proc of projectProcesses(); track proc.pid) {
                 <div class="project-process-row">
                   <div class="project-process-info">

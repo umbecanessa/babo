@@ -61,18 +61,19 @@ type MenuView =
           </svg>
         </button>
         @if (open()) {
+          <div class="context-menu-backdrop" (click)="open.set(false)"></div>
           <div
-            class="model-menu"
+            class="context-menu-panel model-menu"
             [class.menu-down]="menuPlacement() === 'down'"
             [class.menu-up]="menuPlacement() === 'up'"
             role="listbox"
             (click)="$event.stopPropagation()"
           >
             @if (showTargetTabs()) {
-              <div class="model-target-tabs" role="tablist">
+              <div class="context-menu-tabs" role="tablist">
                 <button
                   type="button"
-                  class="model-target-tab"
+                  class="context-menu-tab"
                   [class.active]="pickTarget() === 'orchestrator'"
                   (click)="setPickTarget('orchestrator')"
                 >
@@ -80,20 +81,20 @@ type MenuView =
                 </button>
                 <button
                   type="button"
-                  class="model-target-tab"
+                  class="context-menu-tab"
                   [class.active]="pickTarget() === 'delegate'"
                   (click)="setPickTarget('delegate')"
                 >
                   Sub-agents
                 </button>
               </div>
-              <p class="model-target-hint">
+              <p class="context-menu-hint">
                 Choosing model for
                 <strong>{{ pickTarget() === 'delegate' ? 'sub-agents' : 'orchestrator' }}</strong>
               </p>
             }
 
-            <div class="model-search-wrap">
+            <div class="context-menu-search-wrap">
               <svg class="search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
                 <circle cx="11" cy="11" r="8"></circle>
                 <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
@@ -101,7 +102,7 @@ type MenuView =
               <input
                 #searchInput
                 type="search"
-                class="model-search"
+                class="model-search context-menu-search"
                 placeholder="Search models…"
                 [value]="searchQuery()"
                 (input)="onSearchInput($event)"
@@ -121,7 +122,7 @@ type MenuView =
                     @for (opt of view.options; track opt.id) {
                       <button
                         type="button"
-                        class="model-option"
+                        class="context-menu-item context-menu-row model-option"
                         [class.active]="activeListModelId() === opt.id"
                         (click)="select(opt.id)"
                       >
@@ -134,11 +135,11 @@ type MenuView =
                   }
                   @case ('grouped') {
                     @if (view.featured.length) {
-                      <p class="model-section-label">Popular</p>
+                      <p class="context-menu-title">Popular</p>
                       @for (opt of view.featured; track opt.id) {
                         <button
                           type="button"
-                          class="model-option"
+                          class="context-menu-item context-menu-row model-option"
                           [class.active]="activeListModelId() === opt.id"
                           (click)="select(opt.id)"
                         >
@@ -151,13 +152,13 @@ type MenuView =
                     }
                     @if (view.more.length) {
                       @if (view.featured.length) {
-                        <div class="model-section-divider" role="separator"></div>
+                        <div class="context-menu-sep" role="separator"></div>
                       }
-                      <p class="model-section-label">More models</p>
+                      <p class="context-menu-title">More models</p>
                       @for (opt of view.more; track opt.id) {
                         <button
                           type="button"
-                          class="model-option"
+                          class="context-menu-item context-menu-row model-option"
                           [class.active]="activeListModelId() === opt.id"
                           (click)="select(opt.id)"
                         >
@@ -310,77 +311,10 @@ type MenuView =
         flex-direction: column;
         overflow: hidden;
         padding: 6px;
-        border-radius: 12px;
-        border: 1px solid var(--glass-border-strong);
-        background: var(--glass-bg-hover);
-        backdrop-filter: blur(16px);
-        box-shadow: var(--shadow-glass);
-        z-index: 50;
       }
       .model-menu.menu-down {
         bottom: auto;
         top: calc(100% + 8px);
-      }
-      .model-target-tabs {
-        display: flex;
-        gap: 4px;
-        padding: 4px;
-        margin-bottom: 4px;
-        background: var(--overlay-1);
-        border-radius: 8px;
-        flex-shrink: 0;
-      }
-      .model-target-tab {
-        flex: 1;
-        border: none;
-        border-radius: 6px;
-        padding: 6px 8px;
-        font-size: 11px;
-        color: var(--text-secondary);
-        background: transparent;
-        cursor: pointer;
-      }
-      .model-target-tab.active {
-        color: var(--text-primary);
-        background: var(--glass-bg-hover);
-        box-shadow: var(--shadow-glass);
-      }
-      .model-target-hint {
-        margin: 0 8px 6px;
-        font-size: 11px;
-        color: var(--text-muted);
-      }
-      .model-search-wrap {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        margin-bottom: 4px;
-        padding: 6px 8px;
-        border-radius: 8px;
-        background: var(--overlay-1);
-        border: 1px solid var(--glass-border);
-        flex-shrink: 0;
-      }
-      .search-icon {
-        flex-shrink: 0;
-        opacity: 0.45;
-        color: var(--text-secondary);
-      }
-      .model-search {
-        flex: 1;
-        min-width: 0;
-        border: none;
-        outline: none;
-        background: transparent;
-        color: var(--text-primary);
-        font-size: 13px;
-        font-family: inherit;
-      }
-      .model-search::placeholder {
-        color: var(--text-muted);
-      }
-      .model-search::-webkit-search-cancel-button {
-        cursor: pointer;
       }
       .model-list {
         overflow-y: auto;
@@ -389,19 +323,6 @@ type MenuView =
         margin: 0 -2px;
         padding: 0 2px;
       }
-      .model-section-label {
-        margin: 6px 8px 2px;
-        font-size: 10px;
-        font-weight: 600;
-        letter-spacing: 0.06em;
-        text-transform: uppercase;
-        color: var(--text-muted);
-      }
-      .model-section-divider {
-        height: 1px;
-        margin: 6px 4px;
-        background: var(--overlay-2);
-      }
       .model-empty {
         margin: 8px;
         font-size: 12px;
@@ -409,28 +330,12 @@ type MenuView =
         text-align: center;
       }
       .model-option {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 8px;
-        width: 100%;
-        padding: 8px 10px;
-        border: none;
-        border-radius: 8px;
-        background: transparent;
-        color: var(--text-primary);
         font-size: 13px;
-        text-align: left;
-        cursor: pointer;
       }
       .model-option-label {
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-      }
-      .model-option:hover,
-      .model-option.active {
-        background: var(--accent-tint-bg);
       }
       .default-tag {
         flex-shrink: 0;

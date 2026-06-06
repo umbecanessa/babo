@@ -190,55 +190,8 @@ $glass-border: var(--glass-border);
   min-width: 0;
 }
 
-.context-menu-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 40;
-}
-
 .context-menu {
   position: fixed;
-  z-index: 41;
-  min-width: 160px;
-  padding: 4px;
-  border-radius: 8px;
-  border: 1px solid var(--glass-border);
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  box-shadow: var(--shadow-glass);
-}
-
-.context-menu-item {
-  display: block;
-  width: 100%;
-  padding: 7px 10px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 12px;
-  text-align: left;
-  cursor: pointer;
-
-  &:hover {
-    background: var(--overlay-2);
-    color: var(--text-primary);
-  }
-
-  &.danger {
-    color: var(--accent-danger, #f87171);
-
-    &:hover {
-      background: rgba(248, 113, 113, 0.12);
-    }
-  }
-}
-
-.context-menu-sep {
-  height: 1px;
-  margin: 4px 6px;
-  background: var(--overlay-2);
 }
 
 .node-loading {

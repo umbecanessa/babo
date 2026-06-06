@@ -1,0 +1,195 @@
+// Context menu / dropdown design contract — opaque panels over the glass shell.
+// Same readability rules as modals (--modal-bg): menus must not use translucent
+// --glass-bg when floating over chat, composer, or dense UI text.
+//
+// Usage:
+//   <div class="context-menu-panel my-menu">…</div>
+//   <div class="context-menu-title">Section</div>
+//   <button class="context-menu-item">Action</button>
+
+@mixin context-menu-panel-shell {
+  background: var(--context-menu-bg);
+  border: 1px solid var(--glass-border-strong);
+  border-radius: 12px;
+  box-shadow: var(--context-menu-shadow);
+  backdrop-filter: blur(24px) saturate(1.15);
+  -webkit-backdrop-filter: blur(24px) saturate(1.15);
+  isolation: isolate;
+}
+
+@mixin context-menu-panel-positioned {
+  @include context-menu-panel-shell;
+  z-index: var(--context-menu-z);
+}
+
+.context-menu-panel {
+  @include context-menu-panel-positioned;
+}
+
+.context-menu-title {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  padding: 4px 8px 6px;
+}
+
+.context-menu-hint {
+  margin: 0 4px 8px;
+  padding: 8px 10px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  border-radius: 8px;
+  background: var(--surface-inset-strong);
+  border: 1px solid var(--overlay-2);
+
+  strong {
+    color: var(--text-primary);
+  }
+}
+
+.context-menu-item {
+  display: block;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--overlay-2);
+    color: var(--text-primary);
+  }
+
+  &.active,
+  &[aria-selected='true'] {
+    background: color-mix(in srgb, var(--accent-primary) 18%, var(--context-menu-bg));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-primary) 35%, transparent);
+    color: var(--text-primary);
+  }
+
+  &.danger {
+    color: var(--accent-danger, #f87171);
+
+    &:hover {
+      background: rgba(248, 113, 113, 0.12);
+    }
+  }
+}
+
+.context-menu-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: var(--overlay-2);
+}
+
+.context-menu-search-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: var(--overlay-1);
+  border: 1px solid var(--glass-border);
+  flex-shrink: 0;
+
+  .search-icon {
+    flex-shrink: 0;
+    opacity: 0.45;
+    color: var(--text-secondary);
+  }
+
+  input[type='search'],
+  .context-menu-search {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    outline: none;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-family: inherit;
+
+    &::placeholder {
+      color: var(--text-muted);
+    }
+
+    &::-webkit-search-cancel-button {
+      cursor: pointer;
+    }
+  }
+}
+
+.context-menu-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 4px;
+  background: var(--overlay-1);
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.context-menu-tab {
+  flex: 1;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: transparent;
+  cursor: pointer;
+
+  &.active,
+  &[aria-selected='true'] {
+    color: var(--text-primary);
+    background: color-mix(in srgb, var(--accent-primary) 14%, var(--context-menu-bg));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-primary) 28%, transparent);
+  }
+}
+
+.context-menu-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+}
+
+.context-menu-option-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.context-menu-option-desc {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.context-menu-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.context-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--context-menu-z) - 1);
+}
+
+// Right-click / explorer alias — same shell contract
+.context-menu {
+  @include context-menu-panel-positioned;
+  min-width: 160px;
+  padding: 4px;
+}

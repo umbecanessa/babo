@@ -94,13 +94,15 @@ import {
 
       @if (open()) {
 
-        <div class="profile-menu" role="listbox" (click)="$event.stopPropagation()">
+        <div class="context-menu-backdrop" (click)="open.set(false)"></div>
 
-          <div class="profile-menu-title">Orchestration depth</div>
+        <div class="context-menu-panel profile-menu" role="listbox" (click)="$event.stopPropagation()">
+
+          <div class="context-menu-title">Orchestration depth</div>
 
           @if (modeLabel()) {
 
-            <p class="profile-mode-hint">Current mode: <strong>{{ modeLabel() }}</strong> (set by agent during task)</p>
+            <p class="context-menu-hint">Current mode: <strong>{{ modeLabel() }}</strong> (set by agent during task)</p>
 
           }
 
@@ -110,7 +112,7 @@ import {
 
               type="button"
 
-              class="profile-option"
+              class="context-menu-item context-menu-option profile-option"
 
               [class.active]="selected() === opt.id"
 
@@ -118,9 +120,9 @@ import {
 
             >
 
-              <span class="profile-option-label">{{ opt.label }}</span>
+              <span class="context-menu-option-label">{{ opt.label }}</span>
 
-              <span class="profile-option-desc">{{ opt.description }}</span>
+              <span class="context-menu-option-desc">{{ opt.description }}</span>
 
             </button>
 
@@ -275,75 +277,6 @@ import {
       min-width: 280px;
       max-width: min(320px, calc(100vw - 24px));
       padding: 8px;
-      border-radius: 12px;
-      border: 1px solid var(--glass-border-strong);
-      background: var(--bg-secondary);
-      backdrop-filter: blur(24px) saturate(1.15);
-      -webkit-backdrop-filter: blur(24px) saturate(1.15);
-      box-shadow:
-        0 16px 48px rgba(0, 0, 0, 0.42),
-        0 0 0 1px color-mix(in srgb, var(--glass-border-strong) 65%, transparent);
-      z-index: 1000;
-      isolation: isolate;
-    }
-
-    .profile-menu-title {
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--text-muted);
-      padding: 4px 8px 6px;
-    }
-
-    .profile-mode-hint {
-      margin: 0 4px 8px;
-      padding: 8px 10px;
-      font-size: 11px;
-      color: var(--text-secondary);
-      line-height: 1.4;
-      border-radius: 8px;
-      background: var(--surface-inset-strong);
-      border: 1px solid var(--overlay-2);
-    }
-
-    .profile-mode-hint strong {
-      color: var(--text-primary);
-    }
-
-    .profile-option {
-      display: flex;
-      flex-direction: column;
-      align-items: flex-start;
-      gap: 2px;
-      width: 100%;
-      text-align: left;
-      padding: 8px 10px;
-      border: none;
-      border-radius: 8px;
-      background: transparent;
-      color: var(--text-primary);
-      cursor: pointer;
-    }
-
-    .profile-option:hover {
-      background: var(--overlay-2);
-    }
-
-    .profile-option.active {
-      background: color-mix(in srgb, var(--accent-primary) 18%, var(--bg-secondary));
-      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-primary) 35%, transparent);
-    }
-
-    .profile-option-label {
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--text-primary);
-    }
-
-    .profile-option-desc {
-      font-size: 11px;
-      color: var(--text-secondary);
-      line-height: 1.4;
     }
 
   `],

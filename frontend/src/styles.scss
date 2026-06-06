@@ -1,6 +1,7 @@
 @use "tailwindcss";
 @use "@xterm/xterm/css/xterm.css";
 @use "./app/shared/styles/modal";
+@use "./app/shared/styles/context-menu";
 
 // ─── LIGHT THEME (default) ───────────────────────────────────────────
 :root {
@@ -75,6 +76,14 @@
   --modal-z-confirm: 1200;
   --modal-z-system: 10000;
   --modal-z-coach: 12000;
+
+  /* Surface tiers: glass-bg = structural chrome; context-menu-bg = floating menus/toasts;
+     modal-bg = modals, sheets, drawers */
+  --context-menu-bg: var(--bg-secondary);
+  --context-menu-z: 1000;
+  --context-menu-shadow:
+    0 16px 48px rgba(0, 0, 0, 0.42),
+    0 0 0 1px color-mix(in srgb, var(--glass-border-strong) 65%, transparent);
 
   --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', monospace;

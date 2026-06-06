@@ -205,8 +205,9 @@ $amber: var(--accent-warn);
 .entry-detail-card {
   margin-top: 8px;
   padding: 10px 12px;
-  background: $glass-bg;
-  backdrop-filter: blur(20px);
+  background: var(--context-menu-bg);
+  backdrop-filter: blur(24px) saturate(1.15);
+  -webkit-backdrop-filter: blur(24px) saturate(1.15);
   border: 1px solid $glass-border;
   border-radius: 10px;
   animation: detail-in 0.2s ease-out;
