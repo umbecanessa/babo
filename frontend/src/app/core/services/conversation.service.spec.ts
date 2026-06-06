@@ -39,4 +39,32 @@ describe('ConversationService', () => {
   it('builds Discord labels from channel_name', () => {
     expect(service.buildThreadLabel('discord', { channel_name: 'general' })).toBe('#general');
   });
+
+  it('resetThreadsForAgent replaces threads when switching agents', () => {
+    service.resetThreadsForAgent('agent-a', [{
+      key: 'telegram:group:-1001',
+      label: 'Old Telegram',
+      channel: 'telegram',
+    }]);
+    expect(service.threads().some(t => t.key === 'telegram:group:-1001')).toBeTrue();
+
+    service.resetThreadsForAgent('agent-b', []);
+    const keys = service.threads().map(t => t.key);
+    expect(keys).toEqual(['websocket:main']);
+    expect(keys).not.toContain('telegram:group:-1001');
+  });
+
+  it('resetThreadsForAgent keeps websocket branches on same-agent reload', () => {
+    service.resetThreadsForAgent('agent-a', []);
+    service.addBranch('Branch 1', 'websocket:thread:abc');
+    service.resetThreadsForAgent('agent-a', [{
+      key: 'discord:channel:1',
+      label: '#general',
+      channel: 'discord',
+    }]);
+    const keys = service.threads().map(t => t.key);
+    expect(keys).toContain('websocket:main');
+    expect(keys).toContain('websocket:thread:abc');
+    expect(keys).toContain('discord:channel:1');
+  });
 });

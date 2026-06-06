@@ -43,6 +43,7 @@ const SURFACE_LABELS: Record<string, string> = {
  */
 @Injectable({ providedIn: 'root' })
 export class ConversationService {
+  private _activeAgentId: string | null = null;
   private readonly _threads = signal<ConversationThread[]>([
     { key: 'websocket:main', label: 'Home', channel: 'websocket' },
   ]);
@@ -108,6 +109,41 @@ export class ConversationService {
     });
   }
 
+  /**
+   * Replace sidebar threads for an agent (Home + persisted sessions).
+   * Clears cross-agent leakage from the root singleton service.
+   * Preserves websocket branches when reloading the same agent.
+   */
+  resetThreadsForAgent(agentId: string, restored: ConversationThread[] = []): void {
+    const home: ConversationThread = {
+      key: 'websocket:main',
+      label: 'Home',
+      channel: 'websocket',
+    };
+    const sameAgent = agentId === this._activeAgentId;
+    const branches = sameAgent
+      ? this._threads().filter(
+          (t) => t.channel === 'websocket' && t.key !== 'websocket:main',
+        )
+      : [];
+    this._activeAgentId = agentId;
+
+    const byKey = new Map<string, ConversationThread>();
+    byKey.set(home.key, home);
+    for (const b of branches) {
+      byKey.set(b.key, b);
+    }
+    for (const r of restored) {
+      if (r.key === 'websocket:main') continue;
+      byKey.set(r.key, r);
+    }
+    this._threads.set(Array.from(byKey.values()));
+    if (!sameAgent) {
+      this._inbox.set([]);
+    }
+  }
+
+  /** @deprecated Prefer resetThreadsForAgent — merge-only restore leaks across agents. */
   setThreadsFromRestore(restored: ConversationThread[]): void {
     if (restored.length === 0) return;
     this._threads.update((list) => {

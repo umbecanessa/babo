@@ -344,7 +344,7 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
           const label = meta?.label || this.conversations.labelFromSessionKey(key, channel, { sender, subject });
           restored.push({ key, label, channel, sender, subject });
         }
-        this.conversations.setThreadsFromRestore(restored);
+        this.conversations.resetThreadsForAgent(this.agentId, restored);
 
         if (!this.websocketThreads().find((t) => t.key === this.activeThread())) {
           this.activeThread.set('websocket:main');

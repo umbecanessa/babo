@@ -352,6 +352,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
     this.ws.connect();
     this.ws.joinAgent(nextId);
+    this.currentThread.set('websocket:main');
     this.loadPersistedThreads();
 
     this.sub = this.ws.onMessage(nextId).subscribe((msg) => {
@@ -3577,7 +3578,11 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
             isGroup: flags.isGroup,
           });
         }
-        this.conversations.setThreadsFromRestore(restored);
+        this.conversations.resetThreadsForAgent(this.agentId, restored);
+        const current = this.currentThread();
+        if (!this.conversations.threads().some((t) => t.key === current)) {
+          this.currentThread.set('websocket:main');
+        }
       },
       error: () => {},
     });
