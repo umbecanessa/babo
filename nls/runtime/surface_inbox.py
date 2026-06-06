@@ -194,11 +194,19 @@ def resolve_foreground_session_key(runtime: Any) -> str:
     return sk or "websocket:main"
 
 
+def _runtime_is_busy(runtime: Any) -> bool:
+    """``AgentRuntime.is_busy`` is a bool property; tests may use a callable."""
+    busy = getattr(runtime, "is_busy", False)
+    if callable(busy):
+        return bool(busy())
+    return bool(busy)
+
+
 def should_defer_cross_surface(runtime: Any, session_key: str) -> bool:
     """True when another surface is mid-turn — queue background channel processing."""
     if not session_key:
         return False
-    if not getattr(runtime, "is_busy", lambda: False)():
+    if not _runtime_is_busy(runtime):
         return False
     fg = resolve_foreground_session_key(runtime)
     if not fg or fg == session_key:

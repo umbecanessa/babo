@@ -355,6 +355,12 @@ def setup_tools(
     except Exception as exc:
         logger.warning("Agent %s: chat_history tool init failed: %s", agent_id, exc)
 
+    try:
+        from .agent_tools.channel_history import create_channel_history_tool
+        tools.append(create_channel_history_tool(agent_dir))
+    except Exception as exc:
+        logger.warning("Agent %s: channel_history tool init failed: %s", agent_id, exc)
+
     # MCP proxy wiring
     for t in tools:
         if getattr(t, "name", "") == "mcp_manage" and hasattr(t, "_tools_ref"):
@@ -590,6 +596,7 @@ _TOOL_GROUP_MAP: dict[str, str] = {
     "telegram": "communication", "contacts": "communication",
     "email_history": "communication",
     "chat_history": "memory",
+    "channel_history": "memory",
     "web_search": "research", "web_fetch": "research",
     "browser": "research", "browser_navigate": "research",
     "wm": "memory",

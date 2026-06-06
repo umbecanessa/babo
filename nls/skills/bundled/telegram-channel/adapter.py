@@ -521,19 +521,37 @@ class TelegramAdapter:
         if normalized is None:
             return
 
-        if not self.should_respond(message, agent_id):
+        try:
+            from server.main import app
+            agent_manager = getattr(app.state, "agent_manager", None)
+            runtime = (
+                agent_manager.get_runtime(agent_id)
+                if agent_manager is not None
+                else None
+            )
+        except ImportError:
+            app = None
+            agent_manager = None
+            runtime = None
+
+        will_respond = self.should_respond(message, agent_id)
+        if runtime is not None or app is not None:
+            from nls.skills.channel_ambient import record_inbound_ambient
+            record_inbound_ambient(
+                runtime, normalized, triggered=will_respond,
+                app=app, agent_id=agent_id,
+            )
+
+        if not will_respond:
             logger.debug("Telegram [%s] poll: policy rejected from %s", agent_id, normalized["sender_id"])
             return
 
         self.register_known_sender(normalized["metadata"]["chat_id"], agent_id)
 
         try:
-            from server.main import app
-            agent_manager = getattr(app.state, "agent_manager", None)
             if agent_manager is None:
                 return
 
-            runtime = agent_manager.get_runtime(agent_id)
             if runtime is None:
                 logger.warning("Telegram [%s] poll: runtime not found", agent_id)
                 return
@@ -549,21 +567,37 @@ class TelegramAdapter:
             from nls.skills.surface_send import channel_session_metadata
             session_meta = channel_session_metadata(normalized)
 
+            from nls.skills.channel_adapter_util import channel_history_content
+
             runtime.save_session_history(
-                history + [{"role": "user", "content": text or "[media]"}],
+                history + [{"role": "user", "content": channel_history_content(text, attachments)}],
                 session_key=session_key,
                 metadata=session_meta,
             )
 
             from nls.skills.channel_processing import (
                 process_channel_message,
-                try_feed_pending_answer,
+                try_feed_pending_answer_async,
             )
 
-            if try_feed_pending_answer(agent_id, session_key, text):
+            if await try_feed_pending_answer_async(
+                agent_id, session_key, text, attachments=attachments, app=app,
+            ):
                 return
 
+            from nls.skills.channel_attachments import (
+                deliver_channel_reply,
+                note_attachment_download_gaps,
+                telegram_inbound_media_count,
+            )
+
             user_input = f"[{sender_name} via Telegram]: {text}" if text else f"[{sender_name} via Telegram]:"
+            user_input = note_attachment_download_gaps(
+                user_input,
+                expected=telegram_inbound_media_count(message),
+                saved=len(attachments),
+                labels=[a.get("name", "file") for a in attachments],
+            )
             response_text = await process_channel_message(
                 app, runtime, agent_id, user_input, history,
                 channel_adapter=self,
@@ -583,13 +617,19 @@ class TelegramAdapter:
                 clean_response = response_text.strip()
 
             if clean_response:
-                history.append({"role": "user", "content": text or "[media]"})
+                user_content = channel_history_content(text, attachments)
+                history.append({"role": "user", "content": user_content})
                 history.append({"role": "assistant", "content": clean_response})
                 runtime.save_session_history(
                     history, session_key=session_key,
                     metadata=session_meta,
                 )
-                await self.send(chat_id, clean_response, agent_id=agent_id)
+                await deliver_channel_reply(
+                    self, chat_id, clean_response, response_text or "",
+                    agent_id=agent_id,
+                )
+                from nls.skills.channel_ambient import record_outbound_ambient
+                record_outbound_ambient(runtime, normalized, clean_response)
 
             _broadcast_channel_event(app, runtime, normalized, clean_response)
 
@@ -816,10 +856,21 @@ class TelegramAdapter:
         bot_username = self._bot_usernames.get(agent_id or "", "")
         entities = message.get("entities", [])
         for ent in entities:
-            if ent.get("type") == "mention":
+            ent_type = ent.get("type")
+            if ent_type == "mention":
                 mention_text = text[ent["offset"]:ent["offset"] + ent["length"]]
                 if bot_username and mention_text.lstrip("@").lower() == bot_username.lower():
                     return True
+            elif ent_type == "text_mention":
+                user = ent.get("user") or {}
+                if user.get("is_bot") and bot_username:
+                    if user.get("username", "").lower() == bot_username.lower():
+                        return True
+
+        if bot_username and text:
+            needle = f"@{bot_username}".lower()
+            if needle in text.lower():
+                return True
 
         reply_to = message.get("reply_to_message", {})
         reply_from = reply_to.get("from", {})

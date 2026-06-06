@@ -1511,7 +1511,19 @@ class InnerLoop:
             final_text = sanitize_channel_outbound(_raw_final)
             if final_text:
                 try:
-                    await _reply(final_text)
+                    if registry is not None and channel_name and reply_target:
+                        adapter = registry.get(channel_name)
+                        if adapter is not None:
+                            from nls.skills.channel_attachments import deliver_channel_reply
+
+                            await deliver_channel_reply(
+                                adapter, reply_target, final_text, _raw_final,
+                                agent_id=agent_id,
+                            )
+                        else:
+                            await _reply(final_text)
+                    else:
+                        await _reply(final_text)
                 except Exception:
                     logger.debug("Channel final reply failed", exc_info=True)
                 if session_key:

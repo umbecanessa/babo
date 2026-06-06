@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 LOOKUP_TOOLS = frozenset({
     "read", "web_search", "web_fetch", "clawhub",
     "vision", "memory_search", "memory_get",
-    "chat_history", "email_history",
+    "chat_history", "channel_history", "email_history",
     "drive_search", "drive_list", "drive_read",
     "calendar_list",
     "plan",
@@ -42,7 +42,7 @@ LOOKUP_TOOLS = frozenset({
 # Discovery / identity tools — do not count as task delivery for implicit exit.
 NON_SUBSTANTIVE_TOOLS = LOOKUP_TOOLS | frozenset({
     "contacts", "list_dir", "glob", "grep", "semantic_search",
-    "discover_tools", "file_history", "chat_history",
+    "discover_tools", "file_history", "chat_history", "channel_history",
 })
 
 

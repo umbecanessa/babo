@@ -24,6 +24,18 @@ def prepare_channel_outbound(text: str) -> str:
     return sanitize_channel_outbound(strip_signal_tags(text or ""))
 
 
+def channel_history_content(
+    text: str,
+    attachments: list[Any] | None = None,
+) -> str:
+    """Stable session-history label for inbound channel messages."""
+    if (text or "").strip():
+        return text
+    if attachments:
+        return "[media]"
+    return "[empty]"
+
+
 def get_relay_base_url(cfg: dict[str, Any]) -> str:
     if cfg.get("webhook_relay_base_url"):
         return str(cfg["webhook_relay_base_url"]).rstrip("/")

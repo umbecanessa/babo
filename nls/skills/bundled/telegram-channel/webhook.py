@@ -60,6 +60,18 @@ async def telegram_inbound(agent_id: str, request: Request):
         )
         return {"ok": True, "status": "no_message"}
 
+    chat = message.get("chat", {})
+    preview = (message.get("text") or message.get("caption") or "")[:120]
+    entity_types = [e.get("type") for e in message.get("entities", [])]
+    logger.info(
+        "Telegram inbound [%s]: chat=%s type=%s text=%r entities=%s",
+        agent_id,
+        chat.get("id"),
+        chat.get("type"),
+        preview or "[no text]",
+        entity_types or "none",
+    )
+
     adapter = _get_adapter(app)
     if adapter is None:
         raise HTTPException(status_code=503, detail="Telegram skill not loaded")
@@ -74,16 +86,38 @@ async def telegram_inbound(agent_id: str, request: Request):
 
     normalized = adapter.normalize(body, agent_id=agent_id)
     if normalized is None:
+        chat = message.get("chat", {})
+        logger.info(
+            "Telegram [%s]: skipped non-text update (chat=%s type=%s keys=%s)",
+            agent_id,
+            chat.get("id"),
+            chat.get("type"),
+            [k for k in message.keys() if k not in ("chat", "from", "date")][:8],
+        )
         return {"ok": True, "status": "skip"}
 
-    if not adapter.should_respond(message, agent_id=agent_id):
+    from nls.skills.channel_ambient import record_inbound_ambient, record_outbound_ambient
+
+    will_respond = adapter.should_respond(message, agent_id=agent_id)
+    record_inbound_ambient(runtime, normalized, triggered=will_respond)
+
+    if not will_respond:
         sender = message.get("from", {})
+        chat = message.get("chat", {})
+        preview = (message.get("text") or message.get("caption") or "")[:120]
+        is_mention = adapter._is_mention(
+            message, message.get("text", "") or message.get("caption", ""), agent_id,
+        )
         logger.info(
-            "Telegram [%s]: policy REJECTED message from %s (@%s) in %s",
+            "Telegram [%s]: policy REJECTED message from %s (@%s) in chat=%s (%s) "
+            "mention=%s text=%r",
             agent_id,
             normalized["sender_id"],
             sender.get("username", "?"),
-            normalized.get("group_id", "DM"),
+            chat.get("id"),
+            chat.get("type", "?"),
+            is_mention,
+            preview,
         )
         return {"ok": True, "status": "policy_rejected"}
 
@@ -105,8 +139,10 @@ async def telegram_inbound(agent_id: str, request: Request):
     from nls.skills.surface_send import channel_session_metadata
     session_meta = channel_session_metadata(normalized)
 
+    from nls.skills.channel_adapter_util import channel_history_content, prepare_channel_outbound
+
     runtime.save_session_history(
-        history + [{"role": "user", "content": text or "[media]"}],
+        history + [{"role": "user", "content": channel_history_content(text, attachments)}],
         session_key=session_key,
         metadata=session_meta,
     )
@@ -116,13 +152,27 @@ async def telegram_inbound(agent_id: str, request: Request):
     try:
         from nls.skills.channel_processing import (
             process_channel_message,
-            try_feed_pending_answer,
+            try_feed_pending_answer_async,
         )
 
-        if try_feed_pending_answer(agent_id, session_key, text):
+        if await try_feed_pending_answer_async(
+            agent_id, session_key, text, attachments=attachments, app=app,
+        ):
             return {"ok": True, "status": "answer_routed"}
 
+        from nls.skills.channel_attachments import (
+            deliver_channel_reply,
+            note_attachment_download_gaps,
+            telegram_inbound_media_count,
+        )
+
         user_input = f"[{sender_name} via Telegram]: {text}" if text else f"[{sender_name} via Telegram]:"
+        user_input = note_attachment_download_gaps(
+            user_input,
+            expected=telegram_inbound_media_count(message),
+            saved=len(attachments),
+            labels=[a.get("name", "file") for a in attachments],
+        )
         response_text = await process_channel_message(
             app, runtime, agent_id, user_input, history,
             channel_adapter=adapter,
@@ -133,10 +183,9 @@ async def telegram_inbound(agent_id: str, request: Request):
             raw_content=text or "[media]",
         )
         if response_text:
-            history.append({"role": "user", "content": text})
+            user_content = channel_history_content(text, attachments)
+            history.append({"role": "user", "content": user_content})
             history.append({"role": "assistant", "content": response_text})
-
-        from nls.skills.channel_adapter_util import prepare_channel_outbound
 
         clean_response = prepare_channel_outbound(response_text or "")
 
@@ -158,7 +207,11 @@ async def telegram_inbound(agent_id: str, request: Request):
                 history, session_key=session_key,
                 metadata=session_meta,
             )
-            await adapter.send(chat_id, clean_response, agent_id=agent_id)
+            await deliver_channel_reply(
+                adapter, chat_id, clean_response, response_text or "",
+                agent_id=agent_id,
+            )
+            record_outbound_ambient(runtime, normalized, clean_response)
 
         _broadcast_channel_event(app, agent_id, normalized, clean_response, direction="response")
 

@@ -53,7 +53,8 @@ class SlackSendTool:
         team = self._adapter._team_names.get(self._agent_id or "", "")
         base = (
             "Send a Slack message. Use contacts for slack_id. "
-            "Provide channel_id (C…) or user id (U…) for DMs."
+            "Provide channel_id (C…) or user id (U…) for DMs. "
+            "Use file_path or file_paths to upload workspace files."
         )
         if team:
             base += f" Workspace: {team}."
@@ -68,8 +69,13 @@ class SlackSendTool:
                 "text": {"type": "string", "description": "Message text (mrkdwn supported)"},
                 "thread_ts": {"type": "string", "description": "Thread timestamp to reply in"},
                 "file_path": {"type": "string", "description": "Workspace file to upload"},
+                "file_paths": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Multiple workspace files to upload separately",
+                },
             },
-            "required": ["channel_id", "text"],
+            "required": ["channel_id"],
         }
 
     async def execute(
@@ -81,10 +87,11 @@ class SlackSendTool:
         text = str(params.get("text") or "")
         thread_ts = str(params.get("thread_ts") or "").strip()
         file_path = str(params.get("file_path") or "").strip()
+        file_paths = params.get("file_paths", []) or []
         if not channel_id:
             return ToolResult(content="Error: channel_id required", is_error=True)
-        if not text and not file_path:
-            return ToolResult(content="Error: text or file_path required", is_error=True)
+        if not text and not file_path and not file_paths:
+            return ToolResult(content="Error: text, file_path, or file_paths required", is_error=True)
 
         allowed = self._adapter.get_allowed_target_ids(self._agent_id)
         if self._adapter._outbound_restricted(self._agent_id):
@@ -102,6 +109,25 @@ class SlackSendTool:
                 content=f"Cannot send to {channel_id} — not allowed.",
                 is_error=True,
             )
+        if file_paths:
+            paths = list(file_paths)
+            if file_path and file_path not in paths:
+                paths.insert(0, file_path)
+            for fp in paths:
+                result = await self._adapter.upload_file(
+                    channel_id, fp, initial_comment="", agent_id=self._agent_id,
+                )
+                if result.is_error:
+                    return result
+            if text:
+                ok = await self._adapter.send(
+                    channel_id, text, agent_id=self._agent_id,
+                    thread_ts=thread_ts or None,
+                )
+                if not ok:
+                    return ToolResult(content="Failed to send message after files", is_error=True)
+            return ToolResult(content=f"Sent {len(paths)} file(s) to {channel_id}")
+
         if file_path:
             return await self._adapter.upload_file(
                 channel_id, file_path, initial_comment=text, agent_id=self._agent_id,
@@ -608,6 +634,9 @@ class SlackAdapter:
         if event.get("bot_id"):
             return None
         text = (event.get("text") or "").strip()
+        files = event.get("files") or []
+        if not text and not files:
+            return None
         channel_id = str(event.get("channel") or "")
         user_id = str(event.get("user") or "")
         if not channel_id or not user_id:
@@ -629,12 +658,88 @@ class SlackAdapter:
             "group_id": channel_id if not is_dm else None,
             "is_mention": is_mention or is_dm,
             "is_dm": is_dm,
+            "message_id": str(event.get("ts") or ""),
             "metadata": {
                 "channel_id": channel_id,
                 "thread_ts": event.get("thread_ts") or event.get("ts", ""),
                 "ts": event.get("ts", ""),
             },
+            "attachments": [],
         }
+
+    async def download_inbound_attachments(
+        self,
+        event: dict[str, Any],
+        agent_id: str | None,
+    ) -> list[dict[str, Any]]:
+        """Download Slack message files into workspace/uploads."""
+        if not agent_id:
+            return []
+        cfg = self._agent_cfg(agent_id)
+        token = cfg.get("bot_token", "")
+        if not token:
+            return []
+
+        from nls.skills.channel_attachments import (
+            MAX_INBOUND_ATTACHMENTS,
+            download_url_to_uploads,
+        )
+
+        headers = {"Authorization": f"Bearer {token}"}
+        saved: list[dict[str, Any]] = []
+        files = list(event.get("files") or [])
+        if len(files) > MAX_INBOUND_ATTACHMENTS:
+            logger.warning(
+                "Slack [%s]: truncating inbound files %d -> %d",
+                agent_id, len(files), MAX_INBOUND_ATTACHMENTS,
+            )
+            files = files[:MAX_INBOUND_ATTACHMENTS]
+
+        for f in files:
+            url, meta = await self._resolve_slack_file(token, f)
+            if not url:
+                continue
+            filename = meta.get("name") or f"slack_{meta.get('id', 'file')}"
+            mime = meta.get("mimetype") or "application/octet-stream"
+            filetype = str(meta.get("filetype") or "")
+            is_voice = filetype in ("mp3", "m4a", "wav", "ogg") or mime.startswith("audio/")
+            record = await download_url_to_uploads(
+                agent_id,
+                url,
+                filename=filename,
+                mime_type=mime,
+                headers=headers,
+                is_voice=is_voice,
+            )
+            if record:
+                saved.append(record)
+        if files and len(saved) < len(files):
+            logger.warning(
+                "Slack [%s]: saved %d/%d inbound file(s)",
+                agent_id, len(saved), len(files),
+            )
+        return saved
+
+    async def _resolve_slack_file(
+        self,
+        token: str,
+        file_obj: dict[str, Any],
+    ) -> tuple[str | None, dict[str, Any]]:
+        merged = dict(file_obj)
+        url = merged.get("url_private_download") or merged.get("url_private")
+        if url:
+            return url, merged
+        file_id = merged.get("id")
+        if not file_id:
+            return None, merged
+        try:
+            data = await self._api_post(token, "files.info", {"file": file_id})
+            merged.update(data.get("file") or {})
+            url = merged.get("url_private_download") or merged.get("url_private")
+            return url, merged
+        except Exception:
+            logger.warning("Slack files.info failed for %s", file_id, exc_info=True)
+            return None, merged
 
     def normalize(self, payload: dict[str, Any], agent_id: str | None = None) -> dict[str, Any] | None:
         if payload.get("type") == "url_verification":

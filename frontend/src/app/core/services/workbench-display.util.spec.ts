@@ -35,8 +35,8 @@ describe('workbench-display.util', () => {
 
   it('groups parallel tools by groupKey', () => {
     const entries = [
-      tool({ id: 'a', groupKey: 'step-2', ts: 10 }),
-      tool({ id: 'b', groupKey: 'step-2', ts: 11 }),
+      tool({ id: 'a', groupKey: 'run-1-step-2', ts: 10 }),
+      tool({ id: 'b', groupKey: 'run-1-step-2', ts: 11 }),
       tool({ id: 'c', ts: 5, title: 'Plan: read' }),
     ];
     const items = groupWorkbenchEntries(entries);
@@ -46,6 +46,16 @@ describe('workbench-display.util', () => {
       expect(items[0].entries.length).toBe(2);
       expect(parallelGroupTitle(items[0].entries)).toBe('2× Write');
     }
+  });
+
+  it('does not merge parallel groups from different runs sharing step number', () => {
+    const entries = [
+      tool({ id: 'old-read', groupKey: 'run-1-step-1', toolLabel: 'Read', ts: 10 }),
+      tool({ id: 'new-inspect', groupKey: 'run-2-step-1', toolLabel: 'Inspect', ts: 11 }),
+    ];
+    const items = groupWorkbenchEntries(entries);
+    expect(items.length).toBe(2);
+    expect(items.every((i) => i.type === 'single')).toBe(true);
   });
 
   it('buckets parallel tools by tool label', () => {

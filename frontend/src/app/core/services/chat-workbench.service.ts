@@ -117,6 +117,8 @@ export class ChatWorkbenchService {
     callIds: Set<string>;
     delegateNumber?: number;
   } | null = null;
+  /** Monotonic run id so parallel groups do not merge across agentic_start cycles. */
+  private _runSeq = 0;
 
   private _enrichPaths(paths: string[]): string[] {
     const pd = this.workspaceCtx.getProjectDir(this._agentId());
@@ -138,6 +140,7 @@ export class ChatWorkbenchService {
     this._toolStartTitles.clear();
     this._toolMetaByCallId.clear();
     this._pendingStepGroup = null;
+    this._runSeq = 0;
   }
 
   openPanel(): void {
@@ -176,6 +179,7 @@ export class ChatWorkbenchService {
     this._toolStartTitles.clear();
     this._toolMetaByCallId.clear();
     this._pendingStepGroup = null;
+    this._runSeq = 0;
   }
 
   restoreState(open: boolean, list: WorkbenchEntry[], density?: WorkbenchDensity): void {
@@ -222,6 +226,10 @@ export class ChatWorkbenchService {
   private _corrMatchesCallId(correlationKey: string | undefined, callId: string): boolean {
     if (!correlationKey || !callId) return false;
     return correlationKey === callId || correlationKey.endsWith(callId);
+  }
+
+  private _stepGroupKey(corrNs: string, step: number): string {
+    return `${corrNs}run-${this._runSeq}-step-${step}`;
   }
 
   private _applyGroupKeyToEntry(
@@ -427,6 +435,9 @@ export class ChatWorkbenchService {
     switch (t) {
       case 'agentic_start':
         if (isSubAgent) break;
+        this._runSeq += 1;
+        this._pendingStepGroup = null;
+        this._removeEntry(`${corrNs}activity-status`);
         this._upsert(`${corrNs}agentic`, {
           lane,
           kind: 'agentic',
@@ -462,7 +473,7 @@ export class ChatWorkbenchService {
         const step = msg.step || 0;
         const maxSteps = msg.max_steps || 15;
         const toolCalls = msg.tool_calls || [];
-        const groupKey = `${corrNs}step-${step}`;
+        const groupKey = this._stepGroupKey(corrNs, step);
         if (toolCalls.length > 0) {
           this._tagToolsForIteration(groupKey, toolCalls, dlgNum);
         } else {
@@ -595,7 +606,8 @@ export class ChatWorkbenchService {
             ? 'Check-in cancelled'
             : (exitReason === 'user_abort' ? 'Stopped by user' : 'Task stopped');
         }
-        this._upsert(`${corrNs}agentic-done`, {
+        this._removeEntry(`${corrNs}activity-status`);
+        this._upsert(`${corrNs}agentic`, {
           lane: 'chat',
           kind: 'agentic',
           title: abortTitle,
@@ -958,7 +970,24 @@ export class ChatWorkbenchService {
           break;
         }
 
+        if (
+          statusType === 'generating'
+          && /^thinking/i.test(text)
+          && !msg.autonomous
+        ) {
+          this._removeEntry(`${corrNs}activity-status`);
+          this._upsert(`${corrNs}agentic`, {
+            lane,
+            kind: 'agentic',
+            subtitle: 'Thinking…',
+            status: 'running',
+            toolLabel: 'Task',
+          });
+          break;
+        }
+
         if (isCrunching) {
+          this._removeEntry(`${corrNs}activity-status`);
           this._upsert(`${corrNs}agentic`, {
             lane,
             kind: 'agentic',

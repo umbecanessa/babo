@@ -7,7 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 
-from nls.skills.channel_adapter_util import broadcast_channel_event, strip_signal_tags
+from nls.skills.channel_adapter_util import broadcast_channel_event, channel_history_content, strip_signal_tags
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["slack-channel"])
@@ -58,9 +58,6 @@ async def slack_inbound(agent_id: str, request: Request):
     if normalized is None:
         return {"ok": True, "status": "skip"}
 
-    if not adapter.should_respond(event, agent_id=agent_id):
-        return {"ok": True, "status": "policy_rejected"}
-
     agent_manager = getattr(app.state, "agent_manager", None)
     if agent_manager is None:
         raise HTTPException(status_code=503, detail="Agent manager not ready")
@@ -68,9 +65,23 @@ async def slack_inbound(agent_id: str, request: Request):
     if runtime is None:
         raise HTTPException(status_code=404, detail=f"Agent {agent_id} not found")
 
+    from nls.skills.channel_ambient import record_inbound_ambient, record_outbound_ambient
+
+    will_respond = adapter.should_respond(event, agent_id=agent_id)
+    record_inbound_ambient(runtime, normalized, triggered=will_respond)
+
+    if not will_respond:
+        return {"ok": True, "status": "policy_rejected"}
+
     adapter.register_known_sender(normalized["sender_id"], agent_id)
+
+    downloaded = await adapter.download_inbound_attachments(event, agent_id)
+    if downloaded:
+        normalized["attachments"] = downloaded
+
     session_key = normalized["session_key"]
     text = normalized.get("content", "")
+    attachments = normalized.get("attachments") or []
     channel_id = normalized["metadata"]["channel_id"]
     thread_ts = normalized["metadata"].get("thread_ts") or normalized["metadata"].get("ts")
     sender_name = normalized["sender_name"]
@@ -79,7 +90,7 @@ async def slack_inbound(agent_id: str, request: Request):
     from nls.skills.surface_send import channel_session_metadata
     session_meta = channel_session_metadata(normalized)
     runtime.save_session_history(
-        history + [{"role": "user", "content": text or "[empty]"}],
+        history + [{"role": "user", "content": channel_history_content(text, attachments)}],
         session_key=session_key,
         metadata=session_meta,
     )
@@ -88,20 +99,35 @@ async def slack_inbound(agent_id: str, request: Request):
     try:
         from nls.skills.channel_processing import (
             process_channel_message,
-            try_feed_pending_answer,
+            try_feed_pending_answer_async,
         )
 
-        if try_feed_pending_answer(agent_id, session_key, text):
+        if await try_feed_pending_answer_async(
+            agent_id, session_key, text, attachments=attachments, app=app,
+        ):
             return {"ok": True, "status": "answer_routed"}
 
+        from nls.skills.channel_attachments import (
+            deliver_channel_reply,
+            note_attachment_download_gaps,
+            slack_inbound_media_count,
+        )
+
         user_input = f"[{sender_name} via Slack]: {text}" if text else f"[{sender_name} via Slack]:"
+        user_input = note_attachment_download_gaps(
+            user_input,
+            expected=slack_inbound_media_count(event),
+            saved=len(attachments),
+            labels=[a.get("name", "file") for a in attachments],
+        )
         response_text = await process_channel_message(
             app, runtime, agent_id, user_input, history,
             channel_adapter=adapter,
             reply_target=channel_id,
             session_key=session_key,
+            attachments=attachments,
             sender_name=sender_name,
-            raw_content=text,
+            raw_content=text or ("[media]" if attachments else ""),
         )
         from nls.skills.channel_adapter_util import prepare_channel_outbound
 
@@ -113,15 +139,19 @@ async def slack_inbound(agent_id: str, request: Request):
                 response_text[:120],
             )
         if clean:
-            history.append({"role": "user", "content": text})
+            user_content = channel_history_content(text, attachments)
+            history.append({"role": "user", "content": user_content})
             history.append({"role": "assistant", "content": clean})
             runtime.save_session_history(
                 history, session_key=session_key,
                 metadata=session_meta,
             )
-            await adapter.send(
-                channel_id, clean, agent_id=agent_id, thread_ts=thread_ts or None,
+            await deliver_channel_reply(
+                adapter, channel_id, clean, response_text or "",
+                agent_id=agent_id,
+                send_kwargs={"thread_ts": thread_ts or None},
             )
+            record_outbound_ambient(runtime, normalized, clean)
             broadcast_channel_event(
                 app, agent_id, "slack", normalized, clean, direction="response",
             )

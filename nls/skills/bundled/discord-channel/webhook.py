@@ -8,7 +8,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 
 from .adapter import _channel_display_name
-from nls.skills.channel_adapter_util import broadcast_channel_event, prepare_channel_outbound, strip_signal_tags
+from nls.skills.channel_adapter_util import broadcast_channel_event, prepare_channel_outbound, strip_signal_tags, channel_history_content
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["discord-channel"])
@@ -62,6 +62,11 @@ async def discord_inbound(agent_id: str, request: Request):
 
     raw_for_policy = message if message.get("author") else (body.get("d") or {})
     skip_reason = adapter.explain_policy_block(raw_for_policy, agent_id=agent_id)
+
+    from nls.skills.channel_ambient import record_inbound_ambient, record_outbound_ambient
+
+    record_inbound_ambient(runtime, normalized, triggered=not skip_reason)
+
     if skip_reason:
         from .adapter import broadcast_channel_policy_skip
 
@@ -70,8 +75,15 @@ async def discord_inbound(agent_id: str, request: Request):
         return {"ok": True, "status": "policy_rejected", "reason": skip_reason}
 
     adapter.register_known_sender(normalized["sender_id"], agent_id)
+
+    raw_message = message if message.get("author") else (body.get("d") or {})
+    downloaded = await adapter.download_inbound_attachments(raw_message, agent_id)
+    if downloaded:
+        normalized["attachments"] = downloaded
+
     session_key = normalized["session_key"]
     text = normalized.get("content", "")
+    attachments = normalized.get("attachments") or []
     channel_id = normalized["metadata"]["channel_id"]
     sender_name = normalized["sender_name"]
 
@@ -80,7 +92,7 @@ async def discord_inbound(agent_id: str, request: Request):
     session_meta = channel_session_metadata(normalized)
     history = runtime.load_session_history(session_key)
     runtime.save_session_history(
-        history + [{"role": "user", "content": text or "[empty]"}],
+        history + [{"role": "user", "content": channel_history_content(text, attachments)}],
         session_key=session_key,
         metadata=session_meta,
     )
@@ -89,23 +101,39 @@ async def discord_inbound(agent_id: str, request: Request):
     try:
         from nls.skills.channel_processing import (
             process_channel_message,
-            try_feed_pending_answer,
+            try_feed_pending_answer_async,
         )
 
-        if try_feed_pending_answer(agent_id, session_key, text):
+        if await try_feed_pending_answer_async(
+            agent_id, session_key, text, attachments=attachments, app=app,
+        ):
             return {"ok": True, "status": "answer_routed"}
 
+        from nls.skills.channel_attachments import (
+            deliver_channel_reply,
+            discord_inbound_media_count,
+            note_attachment_download_gaps,
+        )
+
         user_input = (
-            f"[{sender_name} via Discord]: {text}" if text else f"[{sender_name} via Discord]:"
+            f"[{sender_name} via Discord]: {text}" if text
+            else f"[{sender_name} via Discord]:"
+        )
+        user_input = note_attachment_download_gaps(
+            user_input,
+            expected=discord_inbound_media_count(raw_message),
+            saved=len(attachments),
+            labels=[a.get("name", "file") for a in attachments],
         )
         response_text = await process_channel_message(
             app, runtime, agent_id, user_input, history,
             channel_adapter=adapter,
             reply_target=channel_id,
             session_key=session_key,
+            attachments=attachments,
             sender_name=sender_name,
             channel_label=normalized["metadata"].get("channel_name", ""),
-            raw_content=text,
+            raw_content=text or ("[media]" if attachments else ""),
         )
         clean = prepare_channel_outbound(response_text or "")
         if response_text and response_text.strip() and not clean:
@@ -115,13 +143,18 @@ async def discord_inbound(agent_id: str, request: Request):
                 (response_text or "")[:120],
             )
         if clean:
-            history.append({"role": "user", "content": text})
+            user_content = channel_history_content(text, attachments)
+            history.append({"role": "user", "content": user_content})
             history.append({"role": "assistant", "content": clean})
             runtime.save_session_history(
                 history, session_key=session_key,
                 metadata=session_meta,
             )
-            await adapter.send(channel_id, clean, agent_id=agent_id)
+            await deliver_channel_reply(
+                adapter, channel_id, clean, response_text or "",
+                agent_id=agent_id,
+            )
+            record_outbound_ambient(runtime, normalized, clean)
             broadcast_channel_event(
                 app, agent_id, "discord", normalized, clean, direction="response",
             )

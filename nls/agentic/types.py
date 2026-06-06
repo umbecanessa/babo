@@ -72,7 +72,7 @@ _RESEARCH_TOOLS = frozenset({
     "read", "list_dir", "web_search", "web_fetch",
     "screenshot", "offer_download",
     "grep", "glob", "semantic_search",
-    "file_history", "chat_history",
+    "file_history", "chat_history", "channel_history",
 })
 _FILE_TOOLS = frozenset({
     "write", "edit", "delete_file", "move_file",

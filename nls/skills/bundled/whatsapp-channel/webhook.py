@@ -210,7 +210,13 @@ async def whatsapp_inbound(agent_id: str, request: Request):
     phone = normalized["sender_id"]
     reply_jid = normalized.get("sender_jid", phone)
     is_group = normalized["is_group"]
-    if not adapter.should_respond(phone, is_group=is_group, agent_id=agent_id):
+
+    from nls.skills.channel_ambient import record_inbound_ambient, record_outbound_ambient
+
+    will_respond = adapter.should_respond(phone, is_group=is_group, agent_id=agent_id)
+    record_inbound_ambient(runtime, normalized, triggered=will_respond)
+
+    if not will_respond:
         logger.debug("WhatsApp: policy rejected message from %s", phone)
         return {"ok": True, "status": "policy_rejected"}
 
@@ -226,8 +232,10 @@ async def whatsapp_inbound(agent_id: str, request: Request):
     from nls.skills.surface_send import channel_session_metadata
     session_meta = channel_session_metadata(normalized)
 
+    from nls.skills.channel_adapter_util import channel_history_content, prepare_channel_outbound
+
     runtime.save_session_history(
-        history + [{"role": "user", "content": text or "[media]"}],
+        history + [{"role": "user", "content": channel_history_content(text, attachments)}],
         session_key=session_key,
         metadata=session_meta,
     )
@@ -240,13 +248,27 @@ async def whatsapp_inbound(agent_id: str, request: Request):
     try:
         from nls.skills.channel_processing import (
             process_channel_message,
-            try_feed_pending_answer,
+            try_feed_pending_answer_async,
         )
 
-        if try_feed_pending_answer(agent_id, session_key, text):
+        if await try_feed_pending_answer_async(
+            agent_id, session_key, text, attachments=attachments, app=app,
+        ):
             return {"ok": True, "status": "answer_routed"}
 
+        from nls.skills.channel_attachments import (
+            deliver_channel_reply,
+            note_attachment_download_gaps,
+            whatsapp_inbound_media_count,
+        )
+
         user_input = f"[{sender_name} via WhatsApp]: {text}" if text else f"[{sender_name} via WhatsApp]:"
+        user_input = note_attachment_download_gaps(
+            user_input,
+            expected=whatsapp_inbound_media_count(body),
+            saved=len(attachments),
+            labels=[a.get("name", "file") for a in attachments],
+        )
         response_text = await process_channel_message(
             app, runtime, agent_id, user_input, history,
             channel_adapter=adapter,
@@ -257,7 +279,8 @@ async def whatsapp_inbound(agent_id: str, request: Request):
             raw_content=text or "[media]",
         )
         if response_text:
-            history.append({"role": "user", "content": text})
+            user_content = channel_history_content(text, attachments)
+            history.append({"role": "user", "content": user_content})
             history.append({"role": "assistant", "content": response_text})
 
         from nls.skills.channel_adapter_util import prepare_channel_outbound
@@ -282,7 +305,11 @@ async def whatsapp_inbound(agent_id: str, request: Request):
                 history, session_key=session_key,
                 metadata=session_meta,
             )
-            await adapter.send(reply_jid, clean_response, agent_id=agent_id)
+            await deliver_channel_reply(
+                adapter, reply_jid, clean_response, response_text or "",
+                agent_id=agent_id,
+            )
+            record_outbound_ambient(runtime, normalized, clean_response)
 
         _broadcast_channel_event(app, agent_id, normalized, clean_response, direction="response")
 

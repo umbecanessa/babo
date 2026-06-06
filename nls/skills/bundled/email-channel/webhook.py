@@ -63,7 +63,13 @@ async def process_inbound_email(
         text = data.get("text", "") or data.get("body", "")
         headers = data.get("headers", {})
 
-    if not sender or not text:
+    raw_attachments_preview: list[Any] = []
+    if full_email:
+        raw_attachments_preview = list(full_email.get("attachments") or [])
+    if not raw_attachments_preview:
+        raw_attachments_preview = list(data.get("attachments") or [])
+
+    if not sender or (not text and not raw_attachments_preview):
         return {"ok": True, "status": "no_content"}
 
     adapter = _get_email_adapter(app)
@@ -100,12 +106,14 @@ async def process_inbound_email(
         raw_attachments = data.get("attachments", [])
 
     saved_attachments: list[dict[str, Any]] = []
+    email_id = str(data.get("email_id") or (full_email or {}).get("id") or "")
     if raw_attachments:
-        saved_attachments = _save_email_attachments(
-            raw_attachments, agent_id, app,
+        saved_attachments = await _save_email_attachments(
+            raw_attachments, agent_id, app, email_id=email_id,
         )
     if saved_attachments:
         normalized["attachments"] = saved_attachments
+    normalized.setdefault("metadata", {})["_raw_attachment_count"] = len(raw_attachments)
 
     # Record to email ledger
     try:
@@ -138,46 +146,95 @@ async def process_inbound_email(
     )
 
 
-def _save_email_attachments(
+def _resend_api_key(app: Any) -> str:
+    import os
+
+    key = os.environ.get("RESEND_API_KEY", "").strip()
+    if key:
+        return key
+    cfg = getattr(app.state, "config", None) or {}
+    return str(cfg.get("resend_api_key") or cfg.get("RESEND_API_KEY") or "").strip()
+
+
+async def _fetch_resend_attachment_url(
+    email_id: str,
+    attachment_id: str,
+    api_key: str,
+) -> dict[str, Any] | None:
+    if not email_id or not attachment_id or not api_key:
+        return None
+    try:
+        import httpx
+
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.get(
+                f"https://api.resend.com/emails/receiving/{email_id}/attachments/{attachment_id}",
+                headers={"Authorization": f"Bearer {api_key}"},
+            )
+            resp.raise_for_status()
+            return resp.json()
+    except Exception:
+        logger.warning(
+            "Resend attachment metadata fetch failed (%s/%s)",
+            email_id, attachment_id, exc_info=True,
+        )
+        return None
+
+
+async def _save_email_attachments(
     raw_attachments: list[dict[str, Any]],
     agent_id: str,
     app: Any,
+    *,
+    email_id: str = "",
 ) -> list[dict[str, Any]]:
-    """Decode and save email attachments to the agent workspace."""
-    try:
-        am = getattr(app.state, "agent_manager", None)
-        if am is None:
-            return []
-    except Exception:
-        return []
+    """Decode, download, or fetch email attachments into workspace/uploads."""
+    from nls.skills.channel_attachments import download_url_to_uploads, save_bytes_to_uploads
 
-    uploads = am.agents_dir / agent_id / "workspace" / "uploads"
-    uploads.mkdir(parents=True, exist_ok=True)
-
+    api_key = _resend_api_key(app)
     saved: list[dict[str, Any]] = []
+
     for att in raw_attachments:
-        content_b64 = att.get("content", "")
-        if not content_b64:
-            continue
         filename = att.get("filename") or att.get("name") or f"attachment_{int(time.time())}"
         mime = att.get("content_type") or att.get("mime_type") or "application/octet-stream"
+        record: dict[str, Any] | None = None
 
-        try:
-            raw = base64.b64decode(content_b64)
-        except Exception:
-            continue
+        content_b64 = att.get("content", "")
+        if content_b64:
+            try:
+                raw = base64.b64decode(content_b64)
+                record = save_bytes_to_uploads(
+                    agent_id, filename=filename, data=raw, mime_type=mime,
+                )
+            except Exception:
+                logger.warning("Email attachment base64 decode failed: %s", filename, exc_info=True)
 
-        dest = uploads / filename
-        dest.write_bytes(raw)
+        download_url = att.get("download_url") or att.get("url")
+        if record is None and download_url:
+            record = await download_url_to_uploads(
+                agent_id, download_url, filename=filename, mime_type=mime,
+            )
 
-        saved.append({
-            "name": filename,
-            "path": f"uploads/{filename}",
-            "mime_type": mime,
-            "size": len(raw),
-            "is_voice": False,
-        })
+        attachment_id = att.get("id")
+        if record is None and email_id and attachment_id and api_key:
+            meta = await _fetch_resend_attachment_url(email_id, str(attachment_id), api_key)
+            signed_url = (meta or {}).get("download_url")
+            if signed_url:
+                record = await download_url_to_uploads(
+                    agent_id,
+                    signed_url,
+                    filename=(meta or {}).get("filename") or filename,
+                    mime_type=(meta or {}).get("content_type") or mime,
+                )
 
+        if record:
+            saved.append(record)
+
+    if raw_attachments and len(saved) < len(raw_attachments):
+        logger.warning(
+            "Email [%s]: saved %d/%d attachment(s)",
+            agent_id, len(saved), len(raw_attachments),
+        )
     return saved
 
 
@@ -280,9 +337,18 @@ async def _handle_conversation(
 
     session_key = normalized["session_key"]
     text = normalized["content"]
+    attachments = normalized.get("attachments") or []
     agent_id = getattr(runtime, "agent_id", "")
 
+    from nls.skills.channel_adapter_util import channel_history_content
+
+    display_text = channel_history_content(text, attachments)
     history = runtime.load_session_history(session_key)
+
+    from nls.skills.channel_attachments import note_attachment_download_gaps
+
+    raw_count = int(normalized.get("metadata", {}).get("_raw_attachment_count") or 0)
+    attachment_labels = [a.get("name", "file") for a in attachments]
 
     from nls.skills.surface_send import channel_session_metadata
     session_meta = channel_session_metadata(normalized)
@@ -291,17 +357,23 @@ async def _handle_conversation(
 
     try:
         from nls.skills.channel_processing import process_channel_message
-        user_input = f"[Email from {sender}] Subject: {subject}\n\n{text}"
-        attachments = normalized.get("attachments") or []
+        user_input = f"[Email from {sender}] Subject: {subject}\n\n{display_text}"
+        user_input = note_attachment_download_gaps(
+            user_input,
+            expected=raw_count,
+            saved=len(attachments),
+            labels=attachment_labels,
+        )
         response_text = await process_channel_message(
             app, runtime, agent_id, user_input, history,
             channel_adapter=adapter,
             reply_target=sender,
             session_key=session_key,
             attachments=attachments,
+            raw_content=display_text,
         )
         if response_text:
-            history.append({"role": "user", "content": text})
+            history.append({"role": "user", "content": display_text})
             history.append({"role": "assistant", "content": response_text})
 
         if response_text:

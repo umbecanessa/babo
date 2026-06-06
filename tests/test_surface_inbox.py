@@ -16,7 +16,20 @@ from nls.runtime.surface_inbox import (
 )
 
 
-def _runtime(*, busy: bool, session_key: str = "websocket:main") -> SimpleNamespace:
+def _runtime(
+    *,
+    busy: bool,
+    session_key: str = "websocket:main",
+    is_busy_as_property: bool = False,
+) -> SimpleNamespace:
+    if is_busy_as_property:
+        return SimpleNamespace(
+            agent_id="lead-1",
+            is_busy=busy,
+            _foreground_session_key=session_key,
+            _foreground_source="user",
+            _team_manager=None,
+        )
     return SimpleNamespace(
         agent_id="lead-1",
         is_busy=lambda: busy,
@@ -70,6 +83,13 @@ def test_should_defer_when_busy_on_different_surface():
 def test_should_not_defer_when_idle():
     rt = _runtime(busy=False, session_key="websocket:main")
     assert should_defer_cross_surface(rt, "discord:channel:123") is False
+
+
+def test_should_defer_with_is_busy_property_like_agent_runtime():
+    """Production AgentRuntime exposes is_busy as a bool @property, not a method."""
+    rt = _runtime(busy=True, session_key="websocket:main", is_busy_as_property=True)
+    assert should_defer_cross_surface(rt, "telegram:dm:977454767") is True
+    assert should_defer_cross_surface(rt, "websocket:main") is False
 
 
 def test_mark_session_handled_prevents_later_drain():

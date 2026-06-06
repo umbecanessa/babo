@@ -14,6 +14,7 @@ import httpx
 from nls.skills.channel_adapter_util import prepare_channel_outbound
 from nls.skills.channel_adapter_util import (
     broadcast_channel_event,
+    channel_history_content,
     chunk_message,
     ensure_relay,
     get_relay_base_url,
@@ -127,7 +128,8 @@ class DiscordSendTool:
         base = (
             "Send a Discord message. Use contacts to look up discord_id first. "
             "Provide channel_id (text channel snowflake) or user id for DMs. "
-            "To @mention users/bots use <@snowflake_id> in text (renders as a ping)."
+            "To @mention users/bots use <@snowflake_id> in text (renders as a ping). "
+            "Use file_path or file_paths to attach workspace files."
         )
         if bot:
             base += f" Bot username: {bot}."
@@ -147,12 +149,17 @@ class DiscordSendTool:
                     "type": "string",
                     "description": "Workspace-relative file to attach",
                 },
+                "file_paths": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Multiple workspace files to attach as separate messages",
+                },
                 "reply_to_message_id": {
                     "type": "string",
                     "description": "Message ID to reply to (threading)",
                 },
             },
-            "required": ["channel_id", "text"],
+            "required": ["channel_id"],
         }
 
     async def execute(
@@ -163,11 +170,12 @@ class DiscordSendTool:
         channel_id = str(params.get("channel_id") or "").strip()
         text = str(params.get("text") or "")
         file_path = str(params.get("file_path") or "").strip()
+        file_paths = params.get("file_paths", []) or []
         reply_to = str(params.get("reply_to_message_id") or "").strip()
         if not channel_id:
             return ToolResult(content="Error: channel_id is required", is_error=True)
-        if not text and not file_path:
-            return ToolResult(content="Error: text or file_path required", is_error=True)
+        if not text and not file_path and not file_paths:
+            return ToolResult(content="Error: text, file_path, or file_paths required", is_error=True)
 
         allowed = self._adapter.get_allowed_target_ids(self._agent_id)
         if self._adapter._outbound_restricted(self._agent_id):
@@ -188,6 +196,25 @@ class DiscordSendTool:
                 ),
                 is_error=True,
             )
+
+        if file_paths:
+            paths = list(file_paths)
+            if file_path and file_path not in paths:
+                paths.insert(0, file_path)
+            for fp in paths:
+                result = await self._adapter.send_file(
+                    channel_id, fp, caption="", agent_id=self._agent_id,
+                    reply_to=reply_to or None,
+                )
+                if result.is_error:
+                    return result
+            if text:
+                ok = await self._adapter.send(
+                    channel_id, text, agent_id=self._agent_id, reply_to=reply_to or None,
+                )
+                if not ok:
+                    return ToolResult(content="Failed to send message after files", is_error=True)
+            return ToolResult(content=f"Sent {len(paths)} file(s) to {channel_id}")
 
         if file_path:
             return await self._adapter.send_file(
@@ -810,7 +837,28 @@ class DiscordAdapter:
         normalized = self.normalize_gateway_message(message, agent_id)
         if normalized is None:
             return
-        if not self.should_respond(message, agent_id=agent_id):
+
+        runtime = None
+        app = None
+        agent_manager = None
+        try:
+            from server.main import app as _app
+            app = _app
+            agent_manager = getattr(app.state, "agent_manager", None)
+            if agent_manager is not None:
+                runtime = agent_manager.get_runtime(agent_id)
+        except ImportError:
+            pass
+
+        will_respond = self.should_respond(message, agent_id=agent_id)
+        if runtime is not None or app is not None:
+            from nls.skills.channel_ambient import record_inbound_ambient
+            record_inbound_ambient(
+                runtime, normalized, triggered=will_respond,
+                app=app, agent_id=agent_id,
+            )
+
+        if not will_respond:
             reason = self.explain_policy_block(message, agent_id=agent_id) or "policy blocked"
             logger.info("Discord [%s]: policy skip — %s", agent_id, reason)
             try:
@@ -819,6 +867,15 @@ class DiscordAdapter:
             except Exception:
                 pass
             return
+
+        downloaded = await self.download_inbound_attachments(message, agent_id)
+        if downloaded:
+            normalized["attachments"] = downloaded
+
+        cfg = self._agent_cfg(agent_id)
+        channel_id = normalized["metadata"]["channel_id"]
+        normalized["metadata"]["channel_name"] = _channel_display_name(cfg, channel_id)
+
         await self._process_inbound(agent_id, normalized, message)
 
     async def ensure_bot_identity(self, agent_id: str) -> str | None:
@@ -1126,6 +1183,13 @@ class DiscordAdapter:
         agent_id: str | None,
     ) -> dict[str, Any] | None:
         content = (message.get("content") or "").strip()
+        raw_attachments = message.get("attachments") or []
+        stickers = message.get("stickers") or []
+        if not content and not raw_attachments:
+            if stickers:
+                content = "[sticker]"
+            else:
+                return None
         channel_id = str(message.get("channel_id") or "")
         guild_id = message.get("guild_id")
         author = message.get("author") or {}
@@ -1151,6 +1215,7 @@ class DiscordAdapter:
             "content": content,
             "is_group": not is_dm,
             "group_id": str(guild_id) if guild_id else None,
+            "message_id": str(message.get("id", "")),
             "is_mention": is_mention,
             "is_dm": is_dm,
             "metadata": {
@@ -1158,7 +1223,78 @@ class DiscordAdapter:
                 "message_id": str(message.get("id", "")),
                 "guild_id": guild_id,
             },
+            "attachments": [],
         }
+
+    async def download_inbound_attachments(
+        self,
+        message: dict[str, Any],
+        agent_id: str | None,
+    ) -> list[dict[str, Any]]:
+        """Download Discord message attachments into workspace/uploads."""
+        if not agent_id:
+            return []
+        cfg = self._agent_cfg(agent_id)
+        token = cfg.get("bot_token", "")
+        if not token:
+            return []
+
+        from nls.skills.channel_attachments import (
+            MAX_INBOUND_ATTACHMENTS,
+            download_url_to_uploads,
+        )
+
+        headers = {"Authorization": f"Bot {token}"}
+        saved: list[dict[str, Any]] = []
+        pending: list[tuple[str, dict[str, Any]]] = []
+        for att in message.get("attachments") or []:
+            pending.append(("attachment", att))
+        for sticker in message.get("stickers") or []:
+            if sticker.get("format_type") == 3:
+                continue
+            pending.append(("sticker", sticker))
+
+        if len(pending) > MAX_INBOUND_ATTACHMENTS:
+            logger.warning(
+                "Discord [%s]: truncating inbound media %d -> %d",
+                agent_id, len(pending), MAX_INBOUND_ATTACHMENTS,
+            )
+            pending = pending[:MAX_INBOUND_ATTACHMENTS]
+
+        for kind, obj in pending:
+            if kind == "attachment":
+                url = obj.get("url") or obj.get("proxy_url")
+                if not url:
+                    continue
+                filename = obj.get("filename") or f"discord_{obj.get('id', 'file')}"
+                mime = obj.get("content_type") or "application/octet-stream"
+                is_voice = mime.startswith("audio/") and filename.lower().endswith((".ogg", ".opus"))
+            else:
+                url = obj.get("url")
+                if not url:
+                    continue
+                fmt = obj.get("format_type", 1)
+                ext = {4: ".gif"}.get(fmt, ".png")
+                filename = f"sticker_{obj.get('id', 'sticker')}{ext}"
+                mime = "image/gif" if ext == ".gif" else "image/png"
+                is_voice = False
+
+            record = await download_url_to_uploads(
+                agent_id,
+                url,
+                filename=filename,
+                mime_type=mime,
+                headers=headers,
+                is_voice=is_voice,
+            )
+            if record:
+                saved.append(record)
+        if pending and len(saved) < len(pending):
+            logger.warning(
+                "Discord [%s]: saved %d/%d inbound media item(s)",
+                agent_id, len(saved), len(pending),
+            )
+        return saved
 
     def normalize(self, payload: dict[str, Any], agent_id: str | None = None) -> dict[str, Any] | None:
         if payload.get("t") == "MESSAGE_CREATE":
@@ -1302,6 +1438,7 @@ class DiscordAdapter:
         self.register_known_sender(normalized["sender_id"], agent_id)
         session_key = normalized["session_key"]
         text = normalized.get("content", "")
+        attachments = normalized.get("attachments") or []
         channel_id = normalized["metadata"]["channel_id"]
         sender_name = normalized["sender_name"]
 
@@ -1310,7 +1447,7 @@ class DiscordAdapter:
         session_meta = channel_session_metadata(normalized)
         history = runtime.load_session_history(session_key)
         runtime.save_session_history(
-            history + [{"role": "user", "content": text or "[empty]"}],
+            history + [{"role": "user", "content": channel_history_content(text, attachments)}],
             session_key=session_key,
             metadata=session_meta,
         )
@@ -1318,31 +1455,55 @@ class DiscordAdapter:
 
         from nls.skills.channel_processing import (
             process_channel_message,
-            try_feed_pending_answer,
+            try_feed_pending_answer_async,
         )
 
-        if try_feed_pending_answer(agent_id, session_key, text):
+        if await try_feed_pending_answer_async(
+            agent_id, session_key, text, attachments=attachments, app=app,
+        ):
             return
 
-        user_input = f"[{sender_name} via Discord]: {text}" if text else f"[{sender_name} via Discord]:"
+        from nls.skills.channel_attachments import (
+            deliver_channel_reply,
+            discord_inbound_media_count,
+            note_attachment_download_gaps,
+        )
+
+        user_input = (
+            f"[{sender_name} via Discord]: {text}" if text
+            else f"[{sender_name} via Discord]:"
+        )
+        user_input = note_attachment_download_gaps(
+            user_input,
+            expected=discord_inbound_media_count(raw_message),
+            saved=len(attachments),
+            labels=[a.get("name", "file") for a in attachments],
+        )
         response_text = await process_channel_message(
             app, runtime, agent_id, user_input, history,
             channel_adapter=self,
             reply_target=channel_id,
             session_key=session_key,
+            attachments=attachments,
             sender_name=sender_name,
             channel_label=normalized["metadata"].get("channel_name", ""),
-            raw_content=text,
+            raw_content=text or ("[media]" if attachments else ""),
         )
         clean = prepare_channel_outbound(response_text or "")
         if clean:
-            history.append({"role": "user", "content": text})
+            user_content = channel_history_content(text, attachments)
+            history.append({"role": "user", "content": user_content})
             history.append({"role": "assistant", "content": clean})
             runtime.save_session_history(
                 history, session_key=session_key,
                 metadata=session_meta,
             )
-            await self.send(channel_id, clean, agent_id=agent_id)
+            await deliver_channel_reply(
+                self, channel_id, clean, response_text or "",
+                agent_id=agent_id,
+            )
+            from nls.skills.channel_ambient import record_outbound_ambient
+            record_outbound_ambient(runtime, normalized, clean)
             broadcast_channel_event(
                 app, agent_id, "discord", normalized, clean, direction="response",
             )

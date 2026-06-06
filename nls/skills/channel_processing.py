@@ -312,22 +312,15 @@ def try_feed_autonomous_answer(agent_id: str, text: str) -> bool:
         return False
 
 
-def try_feed_pending_answer(
-    agent_id: str, session_key: str, text: str,
-) -> bool:
-    """If an agentic loop is waiting for an ask_user answer, feed it.
-
-    Returns True if the message was consumed as an answer (caller should
-    NOT start a new processing pipeline).
-    """
-    if try_feed_autonomous_answer(agent_id, text):
+def _feed_pending_answer_raw(agent_id: str, session_key: str, answer: str) -> bool:
+    if try_feed_autonomous_answer(agent_id, answer):
         return True
 
     key = (agent_id, session_key)
     q = _pending_queues.get(key)
     if q is not None:
         try:
-            q.put_nowait(text)
+            q.put_nowait(answer)
             logger.info(
                 "Channel [%s]: routed message as ask_user answer (session=%s)",
                 agent_id, session_key,
@@ -336,6 +329,62 @@ def try_feed_pending_answer(
         except Exception:
             pass
     return False
+
+
+async def build_pending_answer(
+    text: str,
+    attachments: list[dict[str, Any]] | None,
+    agent_id: str,
+    app: Any,
+) -> str:
+    """Build an ask_user answer payload including media context."""
+    from nls.skills.channel_adapter_util import channel_history_content
+
+    base = channel_history_content(text, attachments)
+    if base == "[empty]":
+        base = ""
+
+    if attachments:
+        voice_text, remaining = await _handle_voice_attachments(
+            attachments, agent_id, app,
+        )
+        parts: list[str] = []
+        if voice_text:
+            parts.append(voice_text)
+        if base:
+            parts.append(base)
+        answer = _augment_with_attachments("\n".join(parts), remaining)
+    else:
+        answer = base
+
+    return answer.strip() or "(media message)"
+
+
+def try_feed_pending_answer(
+    agent_id: str, session_key: str, text: str,
+) -> bool:
+    """If an agentic loop is waiting for an ask_user answer, feed it.
+
+    Returns True if the message was consumed as an answer (caller should
+    NOT start a new processing pipeline).
+    """
+    return _feed_pending_answer_raw(agent_id, session_key, text)
+
+
+async def try_feed_pending_answer_async(
+    agent_id: str,
+    session_key: str,
+    text: str,
+    *,
+    attachments: list[dict[str, Any]] | None = None,
+    app: Any = None,
+) -> bool:
+    """Like ``try_feed_pending_answer`` but includes attachment/voice context."""
+    if attachments and app:
+        answer = await build_pending_answer(text, attachments, agent_id, app)
+    else:
+        answer = text or ""
+    return _feed_pending_answer_raw(agent_id, session_key, answer)
 
 
 _HIST_MSG_CAP = 800
@@ -556,6 +605,25 @@ async def process_channel_message(
         if voice_text:
             user_input = f"{voice_text}\n{user_input}"
         user_input = _augment_with_attachments(user_input, attachments)
+
+    if session_key:
+        from nls.runtime.channel_ambient import (
+            is_shared_channel_session,
+            recent_ambient_snippet,
+        )
+        if is_shared_channel_session(session_key):
+            agent_dir = getattr(runtime, "agent_dir", None)
+            if agent_dir is not None:
+                try:
+                    prefix = recent_ambient_snippet(
+                        agent_dir, session_key, limit=8, exclude_last=1,
+                    )
+                    if prefix:
+                        user_input = prefix + user_input
+                except Exception as exc:
+                    logger.debug(
+                        "Channel [%s]: ambient snippet skipped: %s", agent_id, exc,
+                    )
 
     _channel_source = "channel"
     if channel_adapter is not None:
