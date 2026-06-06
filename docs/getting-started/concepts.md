@@ -60,7 +60,7 @@ Think of it as a project manager (main agent) coordinating specialists (sub-agen
 
 ## Job, Trust, and Squads
 
-**Job** is the owner-written charter for an agent — title, mission, scope, and how to refuse out-of-role requests. It lives in `job.json` and is synced into long-term memory so channel chat cannot rewrite it.
+**Job** is the owner-written charter for an agent — title, mission, scope, and how to refuse out-of-role requests. It lives in `job.json` and is synced into long-term memory so channel chat cannot rewrite it. On **Home chat**, solo agents can propose a new charter via triage → `ask_user()` → `set_job(owner_confirmed=true)`.
 
 **Trust** is the owner-written permission layer — which tools are allowed or denied, and per-channel caps (for example, keeping a public Discord channel on a conversational profile).
 
@@ -179,6 +179,8 @@ Once integrated, external channels route into the same agent brain:
 **Contacts** unify address book across channels (`discord_id`, `slack_id`, etc.).
 
 **Channel scope** (Discord/Slack): enable which workspace channels the agent listens to in **Tools → Integrations**.
+
+**Direct messages and @mentions** preempt daydreaming and get a reply. **Ambient group chatter** (no mention) is logged for context but does not interrupt background work or trigger replies. See [Channels & webhooks](../architecture/channels-and-webhooks.md).
 
 ---
 

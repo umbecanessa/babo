@@ -68,11 +68,26 @@ Priority score weights:
 
 ### User message preempt
 
-`on_user_message()`:
+Two APIs — same priority, different pause semantics:
 
-- Interrupts inner loop breath
-- Wakes FROZEN agent to handle chat
-- User chat always wins over autonomous work
+| API | Used by | Effect |
+|-----|---------|--------|
+| **`on_user_message()`** | Web chat (`ws_handler`) | Pause inner loop + cancel dream; `resume()` after turn |
+| **`preempt_background()`** | Channel webhooks | Cancel dream / pending sleep only; inner loop keeps running |
+
+Both wake **FROZEN** agents (channel preempt queues a wake request). **SLEEPING** agents dequeue from the sleep queue when possible.
+
+User and direct channel traffic always win over DMN daydreaming and idle drives.
+
+### Execution slots (channel)
+
+Channel `CHANNEL_MESSAGE` events are routed by `ThalamicRouter`:
+
+- **DEEP** when idle — full agentic loop with tools
+- **FOCUS / MICRO** when deep slot busy — lightweight channel reply without blocking orchestration
+- **DEFER** only for non-direct ambient-class traffic (not @mention / DM)
+
+See [Channels & webhooks — execution slots](channels-and-webhooks.md#execution-slots-micro--focus--deep).
 
 ### Inner loop ticks
 

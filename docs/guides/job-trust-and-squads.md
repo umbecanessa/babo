@@ -45,6 +45,33 @@ flowchart TB
 - **In scope / out of scope** — boundary lists for reasoning and public-channel evaluation.
 - **Refusal template** — short reply pattern for out-of-scope or policy-blocked requests.
 - **Default orchestration profile** — e.g. `conversational`, `solo_structured`, `orchestrated`, `squad_lead`.
+- **Strategic priorities** — long-lived themes for idle Job background check-backs.
+- **Background enabled / interval** — optional periodic Job-driven autonomous wakes (minimum interval 300s; non-stock charter required).
+
+### Job charter triage (solo agents, Home chat)
+
+When a **solo** agent (not in a squad) describes an **ongoing role** on Home chat — e.g. “be my Discord mod”, “you are my research assistant” — triage may emit `job:charter_candidate` instead of a one-shot task plan.
+
+```mermaid
+flowchart LR
+  T[Triage micro-inference] --> C[job:charter_candidate]
+  C --> P[Agent proposes charter]
+  P --> A[ask_user]
+  A --> S[set_job owner_confirmed=true]
+  S --> J[job.json + Cryptex sync]
+```
+
+| Step | Behavior |
+|------|----------|
+| **Detect** | `TurnTriage.job_candidate` from triage LLM (solo agents only; mutually exclusive with `fleet:squad_candidate`) |
+| **Propose** | Agent summarizes title, mission, scope; calls `ask_user()` |
+| **Confirm** | Owner “yes” → `set_job(..., owner_confirmed=true)` persists `job.json` |
+| **WM draft** | Candidate fields live in working memory until confirm; merged on `set_job` |
+| **Cleanup** | WM job candidate cleared after successful save |
+
+**Guards:** `set_job` is **Home-only** (`websocket:main`), executor-only (not a free-form tool call from channels), and disabled for squad lead/member agents (use `squad_setup` / `set_member_job` instead).
+
+Policy: `nls/agentic/job_triage_policy.py` · tool: `nls/tools/agent_tools/set_job.py`.
 
 ### Persistence
 
@@ -60,6 +87,8 @@ On the **Dashboard** → **Squads** panel (or agent cards in squads):
 - **Trust** — opens the **Trust** tab.
 
 Each tab has its own **Save** button (job and trust are patched independently).
+
+**Job tab fields** include strategic priorities and optional background Job ticks (`background_enabled`, interval in seconds) in addition to title, mission, persona, playbook, and scope lists.
 
 ### Cryptex domains (summary)
 
@@ -314,6 +343,8 @@ NestJS continues to handle auth, agent metadata, and channel relay. Job, trust, 
 | Area | Path |
 |------|------|
 | Job / Trust models & Cryptex sync | `nls/runtime/job_trust.py` |
+| Job charter triage (solo Home) | `nls/agentic/job_triage_policy.py` |
+| `set_job` tool | `nls/tools/agent_tools/set_job.py` |
 | Profile resolution (squad lead) | `nls/runtime/agent_profile.py` |
 | Public channel guard | `nls/runtime/public_channel_guard.py` |
 | Squad registry / manager | `nls/agentic/squad_registry.py`, `squad_manager.py` |

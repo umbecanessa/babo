@@ -36,9 +36,13 @@ Policy: `nls/skills_setup_policy.py`.
 
 ### Agent tools
 
-Built-in tools the loop can call (read, bash, browser, plan, team, squad, **channel_manage**, etc.). Expand cards for parameter schemas.
+Built-in tools the loop can call (read, bash, browser, plan, team, squad, **set_job** (solo Home), **channel_manage**, **channel_history**, etc.). Expand cards for parameter schemas.
 
-**`channel_manage`** — channel-agnostic admin (sync scope, inspect config, grant access). Preferred over legacy per-channel manage tools when the bundled skill is enabled.
+| Tool | Notes |
+|------|-------|
+| **`set_job`** | Solo agents on Home only — persist owner-confirmed Job charter after `ask_user()` |
+| **`channel_manage`** | Channel-agnostic admin (sync scope, inspect config, grant access) |
+| **`channel_history`** | Read session + ambient history for a channel thread |
 
 ### Connected extensions
 

@@ -48,12 +48,15 @@ data/
 | `workspace/` | Agent-accessible files (tools read/write here) |
 | `memory/` | Cryptex, DomainDB, chain persistence |
 | `sessions/` | Chat session logs |
+| `channel_ambient.jsonl` | Append-only group ambient traffic (inbound + outbound); see [Channels](../architecture/channels-and-webhooks.md#group-ambient-logging) |
+| `surface_inbox.json` | Cross-surface pending messages when Home is mid-turn |
+| `background_queue.jsonl` | Deferred inner-loop events (DEFER depth) |
 | `skills/` | Per-agent skill config overrides |
 | `plans/` | Active/historical plans |
 | `teams/` | Orchestration state |
 | `soul/` | Soul packages and snapshots |
 | `guardrails_registry.jsonl` | Shared orchestrator/delegate contract hints |
-| `job.json` | Owner Job charter (title, mission, scope, default profile) |
+| `job.json` | Owner Job charter (title, mission, scope, default profile, background ticks) |
 | `trust.json` | Owner Trust rails (tools, channel overlays) |
 
 Exact filenames evolve — treat `agent_meta.json` + `config/` as required after genesis copy.

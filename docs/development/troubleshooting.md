@@ -76,6 +76,23 @@ They are different code paths. Fix relay connectivity, not only local WS.
 
 ---
 
+## Channels (Telegram, Discord, Slack, …)
+
+### Message appears in chat UI but bot does not reply
+
+1. **Groups:** most policies require **@mention** — messages without mention are ambient-only (`channel_ambient.jsonl`).
+2. Check `%APPDATA%/babo-desktop/runtime.log` (desktop) for `agentic entry` vs `policy REJECTED`.
+3. **`ChannelRelay ... failed to route`** — local webhook exceeded 120s (vLLM hung); restart runtime or retry after GPU load drops.
+4. **Join/leave events** (`new_chat_member`) are not chat turns — send a new @mention after re-adding the bot.
+
+### Desktop offline — no inbound
+
+NestJS queues **PendingChannelMessage** when relay is down. Bring desktop online; webhook delivery requires active relay for real-time Telegram/Slack/email.
+
+See [Telegram integration](../guides/integrations/telegram.md#troubleshooting) and [Channels & webhooks](../architecture/channels-and-webhooks.md).
+
+---
+
 ## Desktop build
 
 ### `npx ng build` fails in `build-local.ps1`

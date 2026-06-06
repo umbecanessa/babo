@@ -40,7 +40,9 @@ Multi-turn **agentic loop** (v4/v5): LLM generation, parallel tool execution, co
 | `resume_guidance.py` | Post-crash resume |
 | `breadcrumbs.py` | Post-tool navigation hints |
 | `hooks.py` | Pre/post tool hooks (CLI redirect, ClawHub nudge) |
-| `goals.py` | Goal extraction and scoring |
+| `goals.py` | Goal extraction, triage (`TurnTriage`, `job_candidate`) |
+| `job_triage_policy.py` | Solo Home Job charter hints, WM draft, `set_job` guards |
+| `fleet_triage_policy.py` | Squad fleet candidate hints (mutually exclusive with job charter) |
 
 ---
 

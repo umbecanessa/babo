@@ -70,10 +70,14 @@ Prefix: `/agents/{agent_id}/job`
 | `refusal_examples` | string[] | Optional few-shot examples |
 | `escalation_paths` | string[] | Who to escalate to |
 | `default_profile` | string | `conversational` \| `solo_structured` \| `orchestrated` \| `squad_lead` |
-| `strategic_priorities` | string[] | Long-lived priorities |
+| `strategic_priorities` | string[] | Long-lived priorities for Job background check-backs |
+| `background_enabled` | boolean | Enable periodic Job-driven autonomous wakes |
+| `background_interval_seconds` | integer | Min seconds between Job background wakes (≥ 300 when enabled) |
 | `updated_at` | number | Unix timestamp |
 
 File: `data/agents/{agent_id}/job.json`
+
+**Agent tool:** solo agents on Home chat may persist owner-confirmed charters via `set_job(..., owner_confirmed=true)` after `ask_user()` — see [Job charter triage](../guides/job-trust-and-squads.md#job-charter-triage-solo-agents-home-chat).
 
 ---
 

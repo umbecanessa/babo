@@ -23,15 +23,31 @@ Breath interval scales with engagement — busy agents breathe more often.
 
 ## User interrupt
 
-When the user sends chat:
+When the user sends **web chat**:
 
-1. Consciousness scheduler preempts inner loop
-2. `AgentRuntime.process_message_agentic_async` runs
-3. Inner loop resumes when agent returns to CONSCIOUS idle
+1. `ConsciousnessScheduler.on_user_message()` pauses the inner loop and cancels any active dream
+2. `AgentRuntime.process_message_agentic_async` runs on the foreground path
+3. `on_user_message_complete()` resumes the inner loop when the turn finishes
 
-User traffic always wins over autonomous work.
+When a **direct channel message** arrives (@mention, DM, policy-triggered reply):
+
+1. `preempt_background()` cancels dream/sleep negotiation without pausing the breath cycle
+2. A `CHANNEL_MESSAGE` event is queued on the inner loop
+3. `_dispatch_channel_event` runs on the next breath — **FOCUS** uses `micro_respond` if the deep slot is busy
+
+User and direct channel traffic always win over autonomous DMN work. Ambient-only group messages do not interrupt.
 
 When the user sends a **non-orchestration** message, `AgentRuntime` clears `_last_agentic_stall_ts` on both runtime and inner loop so background drives resume immediately after a follow-up.
+
+---
+
+## Channel event dispatch
+
+**Source:** `_dispatch_from_event_queue()` in `inner_loop.py`
+
+Drains `AgentEventQueue` each breath when `is_user_busy` is false (background jobs do not block the queue). Channel events carry serializable reply metadata (`channel_name`, `reply_target`, `session_key`) so deferred events from `background_queue.jsonl` can reconstruct outbound sends.
+
+Thalamic routing: see [Channels & webhooks](../channels-and-webhooks.md#execution-slots-micro--focus--deep).
 
 ---
 

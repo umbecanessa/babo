@@ -13,8 +13,8 @@ Active product code lives in the modules below — prefer importing canonical pa
 | `inner_loop.py` | `InnerLoop` — autonomous heartbeat, dreams |
 | `events.py` | `AgentEventQueue`, `EventType`, chat WS events |
 | `brain_events.py` | `BrainEventBus`, `BrainSignal` |
-| `thalamic_router.py` | `ThalamicRouter`, `predict_tools` (idle/channel event depth) |
-| `execution_slots.py` | `ExecutionSlotManager` — micro/focus/deep slots |
+| `execution_slots.py` | `ExecutionSlotManager` — micro/focus/deep slots + `BackgroundQueue` |
+| `thalamic_router.py` | `ThalamicRouter`, engagement depth (MICRO/FOCUS/DEEP/DEFER) |
 | `tools.py` | `ToolRegistry`, `ToolExperienceStore` |
 | `tool_loader.py` | JSON manifest loader |
 | `tools_builtin.py` | `FileReadTool`, `FileWriteTool`, `FileEditTool`, `RequestSleepTool` |

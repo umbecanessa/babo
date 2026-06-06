@@ -28,9 +28,18 @@ stateDiagram-v2
 
 ## User preemption
 
-**User messages always win.**
+**User messages always win** over background daydreaming.
 
-If you message an agent that is frozen or sleeping (per policy), the scheduler wakes it for your conversation. You never wait behind background daydreams for chat.
+| Surface | Mechanism |
+|---------|-----------|
+| **Web chat** | `on_user_message()` — pauses inner loop until the turn completes |
+| **Channels** (DM, @mention, policy-triggered reply) | `preempt_background()` — cancels active dream; dispatches reply via inner-loop event queue |
+
+If you message an agent that is **frozen**, the scheduler wakes it. You should not wait behind DMN dreams for a direct @mention on Telegram or a Home chat message.
+
+**Cross-surface:** when Home is mid-turn, inbound Telegram/Discord traffic goes to the [surface inbox](channels-and-webhooks.md#cross-surface-defer) instead of starting a second deep loop.
+
+Ambient group chatter (no reply) does **not** preempt background work.
 
 ---
 

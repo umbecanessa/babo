@@ -75,6 +75,8 @@ When the agent uses the **browser tool**, the **Agent browser** panel shows its 
 
 Conversations are grouped into **sessions** with titles. History persists across restarts. Resume prior sessions from the chat history controls.
 
+Channel threads (Telegram, Discord, Slack, …) appear in the sidebar with platform labels when metadata is available. When another surface messages the agent while you are chatting on Home, pending items may appear in the **surface inbox** — the agent can steer on them without starting a parallel deep loop.
+
 ---
 
 ## Tips

@@ -14,12 +14,97 @@ External provider (Telegram, Slack Events, Resend, Discord Gateway, …)
     → ChannelsService.pushToRelayByAgentId (if desktop online)
     → ChannelRelayClient receives channel_message
     → HTTP POST http://127.0.0.1:9222/skills/{channel}-channel/webhook/{runtimeAgentId}
-    → Channel adapter: normalize → PolicyEnforcer → channel scope
-    → Agentic response
+    → Channel adapter: normalize → ambient log → PolicyEnforcer
+    → process_channel_message (agentic inner-loop queue or direct dispatch)
+    → ThalamicRouter: MICRO / FOCUS / DEEP engagement depth
+    → Agentic response (or micro reply while deep work runs)
     → Outbound send via skill adapter (REST / Web API)
 ```
 
 If desktop offline: payload stored in **PendingChannelMessage** (when agent exists in Postgres), drained on relay reconnect.
+
+**Relay timeout:** local webhook POST uses a **120s** read timeout — agentic channel replies can exceed the old 30s limit.
+
+---
+
+## Inbound processing pipeline
+
+Shared entry: `nls/skills/channel_processing.py` → `process_channel_message()`.
+
+| Step | What happens |
+|------|----------------|
+| **Normalize** | Adapter maps provider payload → `session_key`, `content`, attachments, metadata |
+| **Ambient log** | Group traffic recorded to `channel_ambient.jsonl` **before** policy (see below) |
+| **Policy** | `should_respond()` — DM allowlist, group @mention, scoped channel enablement |
+| **Preempt background** | `ConsciousnessScheduler.preempt_background()` cancels DMN/active dream (does **not** pause inner loop) |
+| **Surface inbox** | Cross-surface messages recorded when Home chat is mid-turn |
+| **Route** | Agentic path pushes `CHANNEL_MESSAGE` to inner loop; fallback uses direct foreground dispatch |
+
+### Agentic vs chat fallback
+
+When `agency.agentic_loop` is enabled and the inner loop (or model manager) is available, channels use the **inner-loop event queue** — the webhook returns immediately and the reply is sent asynchronously from `_dispatch_channel_event`.
+
+Legacy **chat mode** (sync `process_message`) is only used when agentic is unavailable. It has a **120s** timeout and full `on_user_message()` pause semantics.
+
+### Cross-surface defer
+
+When the agent is busy on **Home** (`websocket:main`) and a message arrives on another surface (Telegram, Discord, …):
+
+1. Message is recorded in **`surface_inbox.json`**
+2. Text may be fed into the active Home copilot queue (`try_feed_active_copilot`)
+3. **No parallel inner-loop dispatch** — avoids racing the foreground lock
+
+The owner sees pending channel traffic in the UI inbox; the active Home turn can steer on it.
+
+### Group ambient logging
+
+Even when policy **rejects** a reply (no @mention in a scoped group), inbound group text is appended to:
+
+```text
+data/agents/{runtimeAgentId}/channel_ambient.jsonl
+```
+
+Each row includes `triggered: true|false` (whether a reply was attempted). Shared-group sessions inject a recent ambient snippet into the next **triggered** turn so the agent has context from side conversations.
+
+Hooks: `nls/skills/channel_ambient.py` · persistence: `nls/runtime/channel_ambient.py`.
+
+### Media attachments
+
+Inbound photos, documents, voice, and video are downloaded to `workspace/uploads/` via `nls/skills/channel_attachments.py`. Voice notes are transcribed and prepended to the user turn. Outbound replies strip tool-call leaks before send (`sanitize_channel_outbound`).
+
+Supported on Telegram, Discord, Slack, WhatsApp, and email (see bundled webhook handlers).
+
+---
+
+## Reply routing & preemption
+
+One brain, layered concurrency — see [Execution slots](#execution-slots-micro--focus--deep).
+
+| Trigger | Preempt behavior |
+|---------|------------------|
+| **Web chat** | `on_user_message()` — pause inner loop + cancel dream; resume after turn |
+| **Channel @mention / DM / policy reply** | `preempt_background()` — cancel dream only; inner loop keeps breathing |
+| **Ambient group (no reply)** | No preempt — background daydream / job ticks continue |
+
+Direct channel messages (`user_direct: true` in event payload) are never **DEFER**'d behind daydreaming. When the deep slot is busy, the thalamic router assigns **FOCUS** → lightweight `micro_respond` on the channel while orchestration continues.
+
+Frozen agents: channel preempt queues a consciousness **wake request** so the inner loop can dispatch on the next breath.
+
+---
+
+## Execution slots (micro / focus / deep)
+
+**Source:** `nls/engine/execution_slots.py` · routing: `nls/engine/thalamic_router.py`
+
+| Slot | Typical use | While deep busy |
+|------|-------------|-----------------|
+| **Micro** | Status query, greeting, proceed signal on channel | Runs concurrently |
+| **Focus** | Direct @mention / DM needing a real reply | `micro_respond` or short agentic path |
+| **Deep** | Full tool loop when idle | One at a time per agent |
+
+The event queue drains when `is_user_busy` is false — background orchestration (`job_background`, drives) does **not** block channel dispatch.
+
+Deferred events persist to `background_queue.jsonl` until the deep slot frees.
 
 ---
 
@@ -161,7 +246,9 @@ Owner identity fields link channels to the logged-in user.
 
 ## Shared memory
 
-All channels feed the **same AgentRuntime** — WhatsApp and web chat share Cryptex and WM. Chat UI groups threads by channel (including Discord and Slack).
+All channels feed the **same AgentRuntime** — WhatsApp and web chat share Cryptex and WM. Chat UI groups threads by channel (including Discord and Slack) with human-readable labels when platform metadata is available (`channel_name`, guild title).
+
+Agent tool **`channel_history`** reads persisted session + ambient logs for a channel thread (lead/squad scenarios).
 
 ---
 

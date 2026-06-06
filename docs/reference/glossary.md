@@ -10,6 +10,8 @@
 | **BYO inference** | User supplies OpenAI-compatible API URL + model |
 | **Channel** | External messaging surface (web, WhatsApp, Telegram, Discord, Slack, email) |
 | **Channel scope** | Per-channel enable/mention policy for Discord/Slack (`scoped_channels` in skill config) |
+| **Channel ambient** | Group messages logged without reply for shared context (`channel_ambient.jsonl`) |
+| **Surface inbox** | Cross-channel pending items while Home chat is active (`surface_inbox.json`) |
 | **Effective enabled** | Channel is both desired in Babo and accessible on the platform |
 | **ChannelRelayClient** | Outbound WS from desktop Python → NestJS (`nls/runtime/channels.py`) |
 | **ClawHub** | Community skill marketplace proxied by NestJS |
@@ -18,6 +20,7 @@
 | **Consolidation sleep** | LLM summarization into durable memory (not weight training) |
 | **Drowsy negotiation** | Pre-sleep confirm window when signal buffer is full — UI card + `sleep_confirm` / natural-language yes/no |
 | **Job** | Owner-defined employment charter (`data/agents/{id}/job.json`) — title, mission, scope, refusal voice |
+| **`set_job`** | Home-only tool to persist owner-confirmed Job charter (solo agents) |
 | **Trust** | Owner-defined action rails (`trust.json`) — tool allow/deny, per-channel profile caps |
 | **Squad** | Persistent multi-agent group on the dashboard with a lead, shared inbox, and squad tools |
 | **`channel_manage`** | Unified agent tool for channel admin (sync, scope, permissions) — dispatches to skill adapters |
@@ -40,5 +43,8 @@
 | **Skill** | Bundled or installed capability (tools + routers + bridges) |
 | **Soul** | Identity package — values, axioms (`nls/identity/soul.py`) |
 | **Thalamus** | Routing / domain classification (`nls/engine/` + calibrator) |
+| **Thalamic router** | Event engagement depth — MICRO / FOCUS / DEEP / DEFER for channel and idle events |
+| **Execution slots** | Per-agent micro / focus / deep concurrency (`nls/engine/execution_slots.py`) |
+| **`preempt_background()`** | Cancel DMN dream without pausing inner loop (channel ingress) |
 | **WM** | Working memory — salience-weighted short-term slots |
 | **Workspace** | Agent files under `data/agents/{id}/workspace/` |

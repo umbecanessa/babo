@@ -51,7 +51,7 @@ Technical documentation for how Babo is built and how data flows.
 |----------|-------|
 | [NestJS backend](nestjs-backend.md) | Auth, relay, ClawHub |
 | [Frontend application](frontend-application.md) | Angular, remote vs Electron |
-| [Channels & webhooks](channels-and-webhooks.md) | Telegram, WhatsApp, email |
+| [Channels & webhooks](channels-and-webhooks.md) | Telegram, WhatsApp, ambient, preemption, execution slots |
 | [Auth & access](auth-and-access.md) | JWT, relay secret, API keys |
 | [Inner loop](inner-loop.md) | Autonomous DMN / drives |
 | [Device lease](device-lease.md) | Exclusive desktop access |
