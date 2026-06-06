@@ -132,6 +132,26 @@ Rule: **one user request → one master plan → one project folder**.
 - Orchestrator implementing delegatable steps after `team(launch)`
 - Raw `delegate()` when plan requires team delegation
 - Plan completion while steps still pending
+- **`plan(create)` solo circumvention** — blocking new plans where every step has `delegatable=false` while an active team plan still has pending delegatable steps (`incoming_plan_steps_are_solo_circumvention`)
+
+When circumvention is detected, the plan tool returns a block message listing pending delegatable steps and instructs the orchestrator to use `team(create/launch)` instead of rebuilding a solo plan.
+
+---
+
+## Plan triage & orchestration floor
+
+`plan_triage_policy.py` ties turn triage to active plan state:
+
+| Mechanism | Behavior |
+|-----------|----------|
+| `plan_requires_orchestrated_profile()` | True when a plan has multiple delegatable steps or active team waves |
+| `active_plan_orchestration_floor()` | Returns `orchestrated` when EM infrastructure is required |
+| `apply_orchestration_floor()` | Never let triage/profile drop below the floor |
+| `enforce_loop_profile_for_active_plan()` | Re-applies floor on **every loop entry** after job/trust resolve |
+| `boost_triage_for_active_plan()` | Lifts triage toward `orchestrated` when teams already exist |
+| `build_plan_triage_continuation_block()` | Injects profile hint when triage is skipped but plan needs EM |
+
+User profile picks in the chat chip (`apply_user_profile_override`) respect the floor — UI shows when an override was raised. Triage goals for orchestrated plans are shaped toward delegation (`goals.py`, v1.1.14).
 
 ---
 

@@ -26,7 +26,8 @@ Multi-turn **agentic loop** (v4/v5): LLM generation, parallel tool execution, co
 | `delegate_manager.py` | Active delegate registry |
 | `orchestration_policy.py` | Tool policy, wakes, coordinator phases |
 | `tool_mode_policy.py` | Post-tool mode transitions |
-| `coordinator_guard.py` | Orchestrator IC guards |
+| `coordinator_guard.py` | Orchestrator IC guards, solo plan circumvention |
+| `plan_triage_policy.py` | Active-plan orchestration floor, triage boost, profile override |
 | `wave_coordination.py` | Delegate briefing blocks |
 | `skill_discovery_boost.py` | Cryptex ring promotion on stall |
 | `recipe_hints.py` | Composition recipe preflight |

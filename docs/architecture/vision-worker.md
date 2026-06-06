@@ -61,8 +61,13 @@ Implemented today for tier 2 client: `nls/tools/visual_model.py` → `RemoteVLMB
 Auth (LAN + hosted):
 
 ```http
-X-GPU-Worker-Secret: <shared secret>
+Authorization: Bearer <JWT or nlsk_ key>   # Babo Cloud /api/gpu
+X-GPU-Worker-Secret: <shared secret>       # LAN homelab workers
 ```
+
+When `NLS_GPU_WORKER_URL` points at Babo Cloud (`api.babo.agency`, `/api/gpu`), `RemoteVLMBackend` sends the same Bearer as chat inference. Desktop syncs JWT into `NLS_INFERENCE_API_KEY` automatically.
+
+**LAN tier (`dedicated_vlm_lan`):** Visual Cortex does **not** spawn a local Moondream subprocess — only the remote worker is used, so weak laptops do not reserve desktop GPU VRAM for ambient vision.
 
 Env on desktop runtime when tier 2/3:
 

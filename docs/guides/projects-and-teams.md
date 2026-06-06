@@ -77,6 +77,10 @@ Commands route through the same agentic loop with project-scoped Cryptex rings a
 
 Toggle the **chat sidebar** to talk to the agent while viewing the board or timeline. Useful for steering orchestration without leaving Projects.
 
+**Same transcript as Chat:** the sidebar shows the shared **Home** thread (`ChatMainTranscriptService`) — messages, tool traces, and streaming state match `/chat/:agentId`. Reload restores agentic cards; partial progress survives a disconnect.
+
+Channel threads in the sidebar are **per-agent** only (no cross-agent leakage when switching fleet members on the dashboard).
+
 ---
 
 ## Typical workflow

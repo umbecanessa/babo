@@ -77,8 +77,8 @@
   --modal-z-system: 10000;
   --modal-z-coach: 12000;
 
-  /* Surface tiers: glass-bg = structural chrome; context-menu-bg = floating menus/toasts;
-     modal-bg = modals, sheets, drawers */
+  /* Surface tiers: glass-bg = structural chrome; context-menu-bg = opaque floating menus;
+     modal-bg = modals, sheets, drawers. Toasts/run panel stay on glass-bg. */
   --context-menu-bg: var(--bg-secondary);
   --context-menu-z: 1000;
   --context-menu-shadow:

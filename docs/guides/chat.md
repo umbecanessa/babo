@@ -12,13 +12,23 @@ The chat view is your primary interface to a Babo agent.
 |------|---------|
 | **Message list** | Conversation history with streaming replies |
 | **Composer** | Text input, attachments, voice |
-| **Model picker** | Session model and delegate override (`chat-model-picker/`) |
-| **Run panel** | Live tool calls and orchestration timeline (`run-panel/`) |
+| **Model picker** | Session model and delegate override (`chat-model-picker/`) — opaque context-menu panel |
+| **Orchestration chip** | Profile depth + live mode (`chat-orchestration-profile-picker/`) |
+| **Run panel** | Live tool calls and orchestration timeline (`run-panel/`) — glass side dock |
 | **Signal sidebar** | Live learning signals (`LEARN`, `EVALUATE`, etc.) |
 | **Cryptex viz** | Snapshot of active memory rings |
 | **Hormone panel** | Current affective state (optional) |
 | **Agent browser** | Embedded view of the agent's browser workspace |
 | **Workbench** | File proposals and tool output cards |
+
+### Orchestration chip
+
+Next to the composer, one chip shows:
+
+- **Profile** — conversational, solo_structured, orchestrated, or squad_lead (picker uses opaque context-menu panels — see [UI surfaces](../development/ui-surfaces.md))
+- **Mode** — live runtime mode (planning, delegating, executing, …)
+
+When a **team plan** is active, triage enforces an **orchestration floor** — the chip shows when your pick was raised to `orchestrated` and cannot go below that until the plan completes. The mode label updates only after a successful mode switch, not on rejected attempts.
 
 ---
 
@@ -75,7 +85,11 @@ When the agent uses the **browser tool**, the **Agent browser** panel shows its 
 
 Conversations are grouped into **sessions** with titles. History persists across restarts. Resume prior sessions from the chat history controls.
 
-Channel threads (Telegram, Discord, Slack, …) appear in the sidebar with platform labels when metadata is available. When another surface messages the agent while you are chatting on Home, pending items may appear in the **surface inbox** — the agent can steer on them without starting a parallel deep loop.
+**Shared with Projects:** Home chat transcript and agentic tool traces sync with the Projects chat sidebar — open either surface and see the same main-thread history. Reload restores completed tool cards; disconnect mid-run preserves partial agentic progress server-side.
+
+**Per-agent threads:** Channel threads (Telegram, Discord, Slack, …) are scoped to the current agent — switching agents resets the sidebar thread list so squad members do not see each other's channel sessions.
+
+When another surface messages the agent while you are chatting on Home, pending items may appear in the **surface inbox** — the agent can steer on them without starting a parallel deep loop.
 
 ---
 

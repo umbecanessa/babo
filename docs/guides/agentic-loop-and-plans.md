@@ -54,6 +54,16 @@ The **plan** tool manages structured runbooks:
 
 Steps can be marked **delegatable** — eligible for sub-agent teams.
 
+### Orchestration floor
+
+When an active plan has **multiple delegatable steps** or running team waves, triage enforces a minimum profile of **`orchestrated`**. You cannot drop to `solo_structured` or `conversational` from the chat chip until that plan completes. The runtime re-checks the floor on every loop entry — not only on the first triage call.
+
+### Solo circumvention guard
+
+If a team plan is in progress, `plan(create)` with **every step `delegatable=false`** is blocked — the orchestrator must use `team(create/launch)` for remaining delegatable work, not replace the plan with a solo rebuild.
+
+---
+
 ### Plan ↔ Todo link
 
 Plans sync with the **Kanban board**:

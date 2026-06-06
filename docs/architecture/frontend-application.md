@@ -63,6 +63,8 @@ Electron may override via IPC `urls:get` after config wizard.
 | `TerminalService` | User shell via `/terminal` |
 | `FilesystemService` | IDE — IPC in Electron, API in web |
 | `ChatWorkbenchService` | Workbench panels |
+| `ChatMainTranscriptService` | Shared Home-thread transcript between Chat and Projects |
+| `AgentOrchestrationProfileService` | Per-agent orchestration profile + active-plan floor |
 | `UpdateService` | Desktop auto-update |
 
 ### ApiService routing logic
@@ -118,6 +120,28 @@ Uses `ProjectService` + runtime APIs for plan/team state. Legacy IDE/files/timel
 
 **Multi-agent:** opening several agents keeps separate WebSocket sessions so parallel benchmark runs do not cross-stream events.
 
+**Transcript sync (v1.1.12+):** Home chat history is shared between `/chat/:agentId` and the Projects chat sidebar via `ChatMainTranscriptService`. Agentic tool traces restore on reload (`chat-transcript-restore.util.ts`); partial in-progress agentic turns persist on disconnect (`server/routes/chat/history.py`, `ws_handler.py`).
+
+**Orchestration composer chip:** one control in the composer shows orchestration **depth** (profile) and live **mode** (planning / delegating / executing). Profile picker reflects **per-agent floored overrides** when an active team plan requires `orchestrated`. Mode label updates only after a successful `switch_mode` (not on failed attempts).
+
+**Thread isolation:** switching agents resets channel thread lists per agent — squad members do not see another agent's Telegram/Discord sessions (`conversation.service.ts`).
+
+---
+
+## UI surface tiers
+
+Floating panels use three CSS contracts. Menus and pickers over chat text use **opaque context-menu** panels; toasts and the run panel stay **glass**.
+
+Full contract, migrated components, and developer rules: **[UI surfaces](../development/ui-surfaces.md)**.
+
+---
+
+## Chat scroll during generation
+
+The message list is the **single scroll surface** for chat (no nested `.chat-messages` scroll). While the agent streams, the view stays pinned to the bottom until you scroll up or use the wheel — then it stops auto-following so you can read earlier messages. Scrolling back to the bottom re-enables follow mode.
+
+Implementation: `message-list.component.ts` (`scrollPinnedToBottom`, `followScrollIfPinned`).
+
 ---
 
 ## Capability onboarding UI
@@ -135,28 +159,6 @@ See [Capability profiles](capability-profiles-and-onboarding.md).
 ## Tools page
 
 `features/tools/` — integration cards, MCP list, ClawHub search, schema forms.
-
----
-
-## UI surface tiers
-
-Floating panels use one of three CSS contracts (tokens in `frontend/src/styles.scss`):
-
-| Tier | Token | Use when |
-|------|-------|----------|
-| **Glass** | `--glass-bg` + blur | Toasts, run panel, plan viewer — overlays that sit over empty chrome or sparse UI |
-| **Context menu** | `--context-menu-bg` (opaque) | Dropdowns, model/orchestration pickers, workspace menus — must stay readable over chat text and the composer |
-| **Modal** | `--modal-bg` | Dialogs and full-screen sheets |
-
-Shared mixins and classes live in `shared/styles/_context-menu.scss` (`.context-menu-panel`, `.context-menu-item`, …). **Do not** use `--glass-bg` for dense pickers floating over the message list.
-
----
-
-## Chat scroll during generation
-
-The message list is the **single scroll surface** for chat (no nested `.chat-messages` scroll). While the agent streams, the view stays pinned to the bottom until you scroll up or use the wheel — then it stops auto-following so you can read earlier messages. Scrolling back to the bottom re-enables follow mode.
-
-Implementation: `message-list.component.ts` (`scrollPinnedToBottom`, `followScrollIfPinned`).
 
 ---
 
@@ -188,4 +190,5 @@ Sync runs on app boot, login, token refresh, runtime ready, and after capability
 
 - [Deployment topologies](deployment-topologies.md)
 - [Desktop architecture](desktop.md)
+- [UI surfaces](../development/ui-surfaces.md)
 - [WebSocket events](../reference/websocket-events.md)

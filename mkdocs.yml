@@ -204,6 +204,7 @@ nav:
       - Local development: development/local-development.md
       - Agent scenario harness: development/agent-scenario-harness.md
       - Troubleshooting: development/troubleshooting.md
+      - UI surfaces: development/ui-surfaces.md
       - Product scope: development/product-scope.md
   - Legal:
       - Overview: legal/index.md
