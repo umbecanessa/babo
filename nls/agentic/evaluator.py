@@ -1250,6 +1250,22 @@ def detect_stall(state: "LoopState", config: "LoopConfig") -> str | None:
 
     Returns a system-message string to inject, or None if no stall.
     """
+    _pending_launch = (getattr(state, "pending_launch_team_id", "") or "").strip()
+    if _pending_launch:
+        return _stall_nudge_for_state(
+            state,
+            (
+                f"STOP — team '{_pending_launch}' is prepared but NOT launched. "
+                f"Call team(action='launch', team_id='{_pending_launch}') NOW, "
+                "then await_delegates(summary='Wave executing'). "
+                "Do NOT re-read files, todo(list), or team(create) again."
+            ),
+            (
+                f"Team '{_pending_launch}' needs team(action='launch') before "
+                "background work can start."
+            ),
+        )
+
     _assessment = _detect_assessment_loop(state)
     if _assessment:
         return _assessment

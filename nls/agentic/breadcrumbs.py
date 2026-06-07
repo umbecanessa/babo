@@ -198,6 +198,14 @@ def _render_team_launch(ctx: BreadcrumbContext) -> str:
     )
 
 
+def _render_team_launch_duplicate(ctx: BreadcrumbContext) -> str:
+    tid = ctx.result_details.get("team_id", "???")
+    return (
+        f"[BREADCRUMB] Team already exists — do NOT team(create) again. "
+        f"NEXT: team(action='launch', team_id='{tid}')."
+    )
+
+
 def _render_plan_notify(ctx: BreadcrumbContext) -> str:
     channels = _deferred_channels(ctx)
     if not channels:
@@ -452,6 +460,17 @@ DEFAULT_RULES: list[BreadcrumbRule] = [
         requires_tools=frozenset({"team"}),
         condition=lambda ctx: not ctx.is_error,
         render=_render_team_launch,
+    ),
+    # team(create) duplicate — launch the existing team
+    BreadcrumbRule(
+        trigger=("team", "create"),
+        profiles=_EM_PROFILES,
+        requires_tools=frozenset({"team"}),
+        condition=lambda ctx: (
+            ctx.is_error
+            and bool(ctx.result_details.get("duplicate_team"))
+        ),
+        render=_render_team_launch_duplicate,
     ),
     # team(create) blocked — prior wave not advanced
     BreadcrumbRule(

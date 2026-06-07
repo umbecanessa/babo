@@ -272,6 +272,12 @@ class TeamTool:
                         f"attempt number increments and prior attempts stay visible."
                     ),
                     is_error=True,
+                    details={
+                        "action": "create",
+                        "duplicate_team": True,
+                        "team_id": t.id,
+                        "plan_id": plan_id,
+                    },
                 )
 
         # Guard: prevent skipping waves — cannot create wave N if a

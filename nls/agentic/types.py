@@ -2177,6 +2177,8 @@ class LoopState:
     # Last error preview for contextual stall nudges
     last_error_preview: str = ""
     stall_nudges_given: int = 0
+    # Unlaunched wave team waiting for team(launch) — set after team(create).
+    pending_launch_team_id: str = ""
 
     # Per-path truncated write/edit attempts (output budget stalls)
     truncated_write_attempts: dict[str, int] = field(default_factory=dict)

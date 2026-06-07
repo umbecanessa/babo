@@ -70,10 +70,14 @@ def plan_requires_orchestrated_profile(
     ):
         return True
 
-    pending_delegatable = any(
-        s.delegatable and s.status not in ("done", "skipped")
-        for s in plan.steps
-    )
+    pending_delegatable = [
+        s for s in plan.steps
+        if s.delegatable and s.status not in ("done", "skipped")
+    ]
+    if len(pending_delegatable) >= 2:
+        return True
+    if pending_delegatable and len(plan.steps) >= 3:
+        return True
     if pending_delegatable and teams:
         return True
 

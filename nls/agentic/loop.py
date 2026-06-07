@@ -3505,7 +3505,10 @@ async def run_loop(
                 )
                 if not result.is_error or (
                     _tool_name == "team"
-                    and _bc_ctx.result_details.get("wave_needs_advance")
+                    and (
+                        _bc_ctx.result_details.get("wave_needs_advance")
+                        or _bc_ctx.result_details.get("duplicate_team")
+                    )
                 ) or bool(result.details.get("rewrite_blocked")):
                     _bc_hint = _breadcrumb_engine.evaluate(_bc_ctx)
                 else:
@@ -3519,6 +3522,43 @@ async def run_loop(
                         "trigger_tool": _tool_name,
                         "hint_preview": _bc_hint[:200],
                     })
+
+                if _tool_name == "team":
+                    _team_act = str((result.details or {}).get("action", "")).strip()
+                    _team_tid = str((result.details or {}).get("team_id", "")).strip()
+                    if _team_act == "create" and _team_tid and (
+                        not result.is_error
+                        or (result.details or {}).get("duplicate_team")
+                    ):
+                        state.pending_launch_team_id = _team_tid
+                    elif _team_act == "launch" and not result.is_error:
+                        state.pending_launch_team_id = ""
+
+                if (
+                    not _is_delegate_loop
+                    and _tool_name in ("plan", "team")
+                    and _plan_store is not None
+                ):
+                    try:
+                        from nls.agentic.plan_triage_policy import (
+                            enforce_loop_profile_for_active_plan,
+                        )
+
+                        enforce_loop_profile_for_active_plan(
+                            state, _plan_store, _cached_team_manager,
+                        )
+                        if state.pending_profile_anchor:
+                            context.append({
+                                "role": "system",
+                                "content": state.pending_profile_anchor,
+                            })
+                            state.pending_profile_anchor = ""
+                    except Exception:
+                        logger.debug(
+                            "Mid-loop profile enforce after %s failed",
+                            _tool_name,
+                            exc_info=True,
+                        )
 
                 if _tool_name == "read" and not result.is_error:
                     _read_path = str(_iter_args.get("path", "") or "")

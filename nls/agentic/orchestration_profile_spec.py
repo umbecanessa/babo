@@ -28,6 +28,11 @@ _VALID_PROFILES = frozenset({
 
 _DEFAULT_PROFILE: OrchestrationProfile = "solo_structured"
 
+# Behavioral slot domains for solo execution only — hide on orchestrated EM turns.
+_SOLO_ONLY_BEHAVIORAL_DOMAINS = frozenset({
+    "solo_plan_workflow",
+})
+
 # Behavioral slot domains owned by engineering-manager orchestration only.
 _EM_ONLY_BEHAVIORAL_DOMAINS = frozenset({
     "coordinator_mode",
@@ -341,6 +346,8 @@ def behavioral_domain_visible_for_profile(domain: str, profile: str | None) -> b
         return domain not in _EM_ONLY_BEHAVIORAL_DOMAINS
     if p == "orchestrated":
         if domain in _SQUAD_LEAD_ONLY_BEHAVIORAL_DOMAINS:
+            return False
+        if domain in _SOLO_ONLY_BEHAVIORAL_DOMAINS:
             return False
         return domain not in _CONVERSATIONAL_ONLY_BEHAVIORAL_DOMAINS
     if p == "squad_lead":

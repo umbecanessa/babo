@@ -54,6 +54,19 @@ def test_plan_requires_orchestrated_when_unlaunched_wave():
     assert plan_requires_orchestrated_profile(plan, _FakeTeamManager([team]))
 
 
+def test_plan_requires_orchestrated_multi_delegatable_before_team():
+    plan = Plan(
+        id="plan_x",
+        title="ICF Platform",
+        status="in_progress",
+        steps=[
+            PlanStep(id=f"step-{i}", label=f"Step {i}", status="pending", delegatable=True)
+            for i in range(9)
+        ],
+    )
+    assert plan_requires_orchestrated_profile(plan, _FakeTeamManager([]))
+
+
 def test_boost_triage_lifts_solo_to_orchestrated():
     plan = Plan(
         id="plan_x",
