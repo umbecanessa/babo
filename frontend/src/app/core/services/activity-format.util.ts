@@ -14,6 +14,33 @@ export interface ToolWorkbenchPresentation {
   subtitle?: string;
 }
 
+/** Resolved team(hint|intervene) target — delegate #, not wave member index. */
+export interface TeamMemberTarget {
+  delegateNumber: number;
+  memberIdx: number;
+  stepId?: string;
+  stepLabel?: string;
+  taskShort?: string;
+}
+
+export function formatTeamMemberTargetLabel(
+  memberIdx: unknown,
+  resolved?: TeamMemberTarget | null,
+): string | undefined {
+  if (memberIdx == null || memberIdx === '') return undefined;
+  if (resolved != null && resolved.delegateNumber >= 0) {
+    const headline = resolved.stepLabel?.trim() || resolved.taskShort?.trim();
+    return headline
+      ? `Sub #${resolved.delegateNumber} · ${headline}`
+      : `Sub #${resolved.delegateNumber}`;
+  }
+  const idx = Number(memberIdx);
+  if (Number.isFinite(idx) && idx >= 0) {
+    return `Wave member ${idx + 1}`;
+  }
+  return undefined;
+}
+
 function shortTeamId(teamId: string): string {
   const t = teamId.trim();
   if (!t) return '';
@@ -482,15 +509,16 @@ export function previewToChips(toolName: string, preview: string): ActivityChip[
 export function teamWorkbenchPresentation(
   args: Record<string, unknown>,
   preview: string,
-  opts?: { delegateNumber?: number },
+  opts?: { delegateNumber?: number; memberTarget?: TeamMemberTarget | null },
 ): ToolWorkbenchPresentation {
   const action = String(args['action'] || 'inspect').toLowerCase();
   const teamId = String(args['team_id'] || '').trim();
   const message = String(args['message'] || '').trim();
   const decision = String(args['decision'] || '').trim();
-  const member = args['member'];
-  const memberLabel =
-    member != null && member !== '' ? `Sub #${member}` : undefined;
+  const memberLabel = formatTeamMemberTargetLabel(
+    args['member'],
+    opts?.memberTarget,
+  );
 
   const chips: ActivityChip[] = [];
   if (teamId) {

@@ -347,10 +347,46 @@ def _render_fix_deps_team(ctx: BreadcrumbContext) -> str:
             f"plan(action='update', step_id='...', depends_on=[...]) "
             f"then retry fix_dependencies."
         )
+    rw = ctx.result_details.get("recommended_wave")
+    wave_hint = f"wave={rw}" if rw is not None else "wave='auto'"
     return (
         f"[BREADCRUMB] Graph repaired on {pid}. "
-        f"NEXT: team(action='create', plan_id='{pid}', wave=N) → "
-        f"team(action='launch')."
+        f"NEXT: team(action='create', plan_id='{pid}', {wave_hint}) → "
+        f"team(action='launch'). Do NOT skip to deploy-only waves while "
+        f"earlier pending steps remain."
+    )
+
+
+def _render_create_skipped_wave(ctx: BreadcrumbContext) -> str:
+    pid = ctx.result_details.get("plan_id", "???")
+    rw = ctx.result_details.get("recommended_wave", "?")
+    return (
+        f"[BREADCRUMB] Wrong wave index — earlier steps still pending. "
+        f"Do NOT team(create) on deploy/final wave yet. "
+        f"NEXT: team(action='create', plan_id='{pid}', wave={rw}, name='...') "
+        f"→ team(action='launch')."
+    )
+
+
+def _render_create_duplicate_recreate(ctx: BreadcrumbContext) -> str:
+    pid = ctx.result_details.get("plan_id", "???")
+    rw = ctx.result_details.get("recommended_wave", "?")
+    return (
+        f"[BREADCRUMB] Stop recreating the same wave — prior attempts never "
+        f"launched. Do NOT disband+create again. "
+        f"NEXT: team(action='create', plan_id='{pid}', wave={rw}, name='...') "
+        f"for the actual pending work, then team(action='launch')."
+    )
+
+
+def _render_create_deploy_blocked(ctx: BreadcrumbContext) -> str:
+    pid = ctx.result_details.get("plan_id", "???")
+    rw = ctx.result_details.get("recommended_wave", "?")
+    return (
+        f"[BREADCRUMB] Deploy wave blocked — prerequisite steps still pending. "
+        f"Do NOT team(create) on deploy-only wave yet. "
+        f"NEXT: team(action='create', plan_id='{pid}', wave={rw}, name='...') "
+        f"→ team(action='launch')."
     )
 
 
@@ -614,6 +650,40 @@ DEFAULT_RULES: list[BreadcrumbRule] = [
             and bool(ctx.result_details.get("wave_needs_advance"))
         ),
         render=_render_create_needs_advance,
+    ),
+    # team(create) blocked — skipped earlier pending wave
+    BreadcrumbRule(
+        trigger=("team", "create"),
+        profiles=_EM_PROFILES,
+        requires_tools=frozenset({"team"}),
+        condition=lambda ctx: (
+            ctx.is_error
+            and bool(ctx.result_details.get("skipped_pending_wave"))
+        ),
+        render=_render_create_skipped_wave,
+    ),
+    # team(create) blocked — deploy prerequisites pending
+    BreadcrumbRule(
+        trigger=("team", "create"),
+        profiles=_EM_PROFILES,
+        requires_tools=frozenset({"team"}),
+        condition=lambda ctx: (
+            ctx.is_error
+            and bool(ctx.result_details.get("deploy_blocked"))
+            and not bool(ctx.result_details.get("skipped_pending_wave"))
+        ),
+        render=_render_create_deploy_blocked,
+    ),
+    # team(create) blocked — duplicate recreate loop
+    BreadcrumbRule(
+        trigger=("team", "create"),
+        profiles=_EM_PROFILES,
+        requires_tools=frozenset({"team"}),
+        condition=lambda ctx: (
+            ctx.is_error
+            and bool(ctx.result_details.get("duplicate_wave_recreate"))
+        ),
+        render=_render_create_duplicate_recreate,
     ),
     # team(inspect) terminal wave not yet advanced
     BreadcrumbRule(

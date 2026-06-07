@@ -104,10 +104,26 @@ class TeamTool:
                     "description": "Plan ID (required for 'create').",
                 },
                 "wave": {
-                    "type": "integer",
+                    "oneOf": [
+                        {
+                            "type": "integer",
+                            "description": (
+                                "Wave index (0-based) from the plan's "
+                                "delegation waves."
+                            ),
+                        },
+                        {
+                            "type": "string",
+                            "enum": ["auto"],
+                            "description": (
+                                "Pick the next wave with pending delegatable "
+                                "steps automatically."
+                            ),
+                        },
+                    ],
                     "description": (
-                        "Wave index (0-based) from the plan's delegation "
-                        "waves (required for 'create')."
+                        "Delegation wave for 'create': 0-based index or "
+                        "'auto' for the next pending wave."
                     ),
                 },
                 "name": {
@@ -254,66 +270,6 @@ class TeamTool:
         if not name:
             return ToolResult(content="Team name is required.", is_error=True)
 
-        wave_int = int(wave)
-
-        # Guard: only one non-terminal team per plan+wave (retries append attempts)
-        existing = self._tm.list_teams(include_terminal=False)
-        all_teams = self._tm.list_teams(include_terminal=True)
-        for t in existing:
-            if t.plan_id == plan_id and t.wave_index == wave_int:
-                return ToolResult(
-                    content=(
-                        f"A team already exists for plan {plan_id} wave {wave_int}: "
-                        f"{t.name} [{t.id}] (status: {t.status}).\n"
-                        f"Use team(action='launch', team_id='{t.id}') to launch it, "
-                        f"or team(action='inspect', team_id='{t.id}') to check status.\n"
-                        f"If that wave failed and you need a retry, wait until it is "
-                        f"terminal (failed/completed) then team(create) again — "
-                        f"attempt number increments and prior attempts stay visible."
-                    ),
-                    is_error=True,
-                    details={
-                        "action": "create",
-                        "duplicate_team": True,
-                        "team_id": t.id,
-                        "plan_id": plan_id,
-                    },
-                )
-
-        # Guard: prevent skipping waves — cannot create wave N if a
-        # previous wave for the same plan exists but hasn't completed.
-        for t in all_teams:
-            if t.plan_id == plan_id and t.wave_index < wave_int:
-                if t.status not in ("completed", "partial", "failed", "cancelled"):
-                    return ToolResult(
-                        content=(
-                            f"Cannot create wave {wave_int} — wave {t.wave_index} "
-                            f"({t.name} [{t.id}]) is still '{t.status}'.\n"
-                            f"You must launch and complete earlier waves first.\n"
-                            f"Use team(action='launch', team_id='{t.id}') to "
-                            f"start it."
-                        ),
-                        is_error=True,
-                    )
-                if not t.completion_reported:
-                    return ToolResult(
-                        content=(
-                            f"Cannot create wave {wave_int} — wave {t.wave_index} "
-                            f"({t.name} [{t.id}]) finished but was never advanced.\n"
-                            f"Call team(action='advance', team_id='{t.id}') first, "
-                            f"then team(action='launch') on the next wave team "
-                            f"(or inspect the auto-created team)."
-                        ),
-                        is_error=True,
-                        details={
-                            "action": "create",
-                            "wave_needs_advance": True,
-                            "prior_team_id": t.id,
-                            "plan_id": plan_id,
-                        },
-                    )
-
-        # Pre-flight: validate plan exists and has steps before calling create_team
         _plan = self._tm._plan_store.load(plan_id)
         if _plan is None:
             return ToolResult(
@@ -352,17 +308,153 @@ class TeamTool:
                 is_error=True,
             )
 
-        from nls.agentic.plan_store import get_delegation_waves
+        from nls.agentic.plan_store import (
+            get_delegation_waves,
+            is_deploy_step,
+            next_pending_wave_index,
+            pending_steps_in_wave,
+        )
+
         _waves = get_delegation_waves(_plan)
+        if str(wave).strip().lower() == "auto":
+            _auto = next_pending_wave_index(_plan, _waves)
+            if _auto is None:
+                return ToolResult(
+                    content=(
+                        f"Plan '{plan_id}' has no pending steps — "
+                        f"all waves are complete."
+                    ),
+                    is_error=True,
+                    details={"action": "create", "plan_id": plan_id},
+                )
+            wave_int = _auto
+        else:
+            try:
+                wave_int = int(wave)
+            except (TypeError, ValueError):
+                return ToolResult(
+                    content=(
+                        f"Invalid wave {wave!r} — use a 0-based integer or "
+                        f"'auto' for the next pending wave."
+                    ),
+                    is_error=True,
+                    details={"action": "create", "plan_id": plan_id},
+                )
+
         if wave_int >= len(_waves):
             return ToolResult(
                 content=(
                     f"Wave {wave_int} out of range — plan '{plan_id}' has "
                     f"{len(_waves)} wave(s) (0-indexed: 0..{len(_waves)-1}).\n"
-                    f"Use wave=0 for the first parallel batch."
+                    f"Use wave=0 for the first parallel batch, or wave='auto' "
+                    f"for the next pending wave."
                 ),
                 is_error=True,
             )
+
+        _planned_ids = frozenset(
+            s.id for s in pending_steps_in_wave(_plan, wave_int, _waves)
+        )
+
+        # Guard: only one non-terminal team per plan+wave (retries append attempts)
+        existing = self._tm.list_teams(include_terminal=False)
+        all_teams = self._tm.list_teams(include_terminal=True)
+        for t in existing:
+            if t.plan_id == plan_id and t.wave_index == wave_int:
+                return ToolResult(
+                    content=(
+                        f"A team already exists for plan {plan_id} wave {wave_int}: "
+                        f"{t.name} [{t.id}] (status: {t.status}).\n"
+                        f"Use team(action='launch', team_id='{t.id}') to launch it, "
+                        f"or team(action='inspect', team_id='{t.id}') to check status.\n"
+                        f"If that wave failed and you need a retry, wait until it is "
+                        f"terminal (failed/completed) then team(create) again — "
+                        f"attempt number increments and prior attempts stay visible."
+                    ),
+                    is_error=True,
+                    details={
+                        "action": "create",
+                        "duplicate_team": True,
+                        "team_id": t.id,
+                        "plan_id": plan_id,
+                    },
+                )
+
+        # Guard: block rapid recreate of the same wrong/deploy wave+steps
+        # without ever launching (allows legitimate retries on the correct wave).
+        if _planned_ids and not params.get("force_retry"):
+            _same_shape = [
+                t for t in all_teams
+                if t.plan_id == plan_id
+                and t.wave_index == wave_int
+                and frozenset(m.step_id for m in t.members if m.step_id) == _planned_ids
+                and not t.batch_id
+                and t.status in ("cancelled", "created", "failed")
+            ]
+            _nw = next_pending_wave_index(_plan, _waves)
+            _wrong_wave = _nw is not None and wave_int != _nw
+            _wave_pending = pending_steps_in_wave(_plan, wave_int, _waves)
+            _deploy_only = bool(_wave_pending) and all(
+                is_deploy_step(s) for s in _wave_pending
+            )
+            if len(_same_shape) >= 2 and (_wrong_wave or _deploy_only):
+                _hint = (
+                    f"Use team(action='create', plan_id='{plan_id}', "
+                    f"wave={_nw}, name='...') for the next pending work."
+                    if _nw is not None else ""
+                )
+                return ToolResult(
+                    content=(
+                        f"Blocked duplicate team(create) for plan {plan_id} wave "
+                        f"{wave_int} — {len(_same_shape)} prior attempt(s) with the "
+                        f"same step(s) never launched.\n"
+                        f"Do NOT disband and recreate the same deploy-only wave. "
+                        f"{_hint}\n"
+                        f"Inspect plan(read) and pending earlier waves first."
+                    ),
+                    is_error=True,
+                    details={
+                        "action": "create",
+                        "duplicate_wave_recreate": True,
+                        "plan_id": plan_id,
+                        "wave_index": wave_int,
+                        "recommended_wave": _nw,
+                        "prior_attempts": len(_same_shape),
+                    },
+                )
+
+        # Guard: prevent skipping waves — cannot create wave N if a
+        # previous wave for the same plan exists but hasn't completed.
+        for t in all_teams:
+            if t.plan_id == plan_id and t.wave_index < wave_int:
+                if t.status not in ("completed", "partial", "failed", "cancelled"):
+                    return ToolResult(
+                        content=(
+                            f"Cannot create wave {wave_int} — wave {t.wave_index} "
+                            f"({t.name} [{t.id}]) is still '{t.status}'.\n"
+                            f"You must launch and complete earlier waves first.\n"
+                            f"Use team(action='launch', team_id='{t.id}') to "
+                            f"start it."
+                        ),
+                        is_error=True,
+                    )
+                if not t.completion_reported:
+                    return ToolResult(
+                        content=(
+                            f"Cannot create wave {wave_int} — wave {t.wave_index} "
+                            f"({t.name} [{t.id}]) finished but was never advanced.\n"
+                            f"Call team(action='advance', team_id='{t.id}') first, "
+                            f"then team(action='launch') on the next wave team "
+                            f"(or inspect the auto-created team)."
+                        ),
+                        is_error=True,
+                        details={
+                            "action": "create",
+                            "wave_needs_advance": True,
+                            "prior_team_id": t.id,
+                            "plan_id": plan_id,
+                        },
+                    )
 
         team = self._tm.create_team(
             plan_id=plan_id,
@@ -373,13 +465,31 @@ class TeamTool:
         )
         if team is None:
             detail = getattr(self._tm, "_last_create_error", "") or "Unknown error"
+            _err_code = getattr(self._tm, "_last_create_error_code", "") or ""
+            _err_details: dict[str, Any] = {
+                "action": "create",
+                "plan_id": plan_id,
+                "wave_index": wave_int,
+            }
+            _nw = next_pending_wave_index(_plan, _waves)
+            if _nw is not None:
+                _err_details["recommended_wave"] = _nw
+            if _err_code == "skipped_pending_wave":
+                _err_details["skipped_pending_wave"] = True
+            elif _err_code == "deploy_blocked":
+                _err_details["deploy_blocked"] = True
+            elif "earlier pending step" in detail:
+                _err_details["skipped_pending_wave"] = True
+            elif "deploy-only wave" in detail:
+                _err_details["deploy_blocked"] = True
             return ToolResult(
                 content=(
                     f"Failed to create team — {detail}\n\n"
-                    f"If the wave's steps are already done, try the next wave "
-                    f"(increment the wave number)."
+                    f"If the wave's steps are already done, use wave='auto' or "
+                    f"the recommended wave from plan(fix_dependencies)."
                 ),
                 is_error=True,
+                details=_err_details,
             )
 
         _max_concurrent = 5

@@ -9,6 +9,7 @@ import {
 } from '../../features/chat/orchestration-ui.util';
 import { enrichWorkspaceRelativePath } from '../../features/projects/workspace/workspace-path.util';
 import { AgentWorkspaceContextService } from './agent-workspace-context.service';
+import { RunViewService } from './run-view.service';
 import {
   cleanToolResultPreview,
   collectFilePaths,
@@ -96,6 +97,7 @@ function surfaceFromRuntimeMsg(msg: any): string | undefined {
 export class ChatWorkbenchService {
   private readonly workspaceCtx = inject(AgentWorkspaceContextService);
   private readonly orchProfiles = inject(AgentOrchestrationProfileService);
+  private readonly runView = inject(RunViewService);
   private readonly _agentId = signal<string>('');
 
   readonly panelOpen = signal(false);
@@ -794,8 +796,15 @@ export class ChatWorkbenchService {
             },
           ];
         } else if (toolName === 'team') {
+          const teamId = String(endArgs['team_id'] || '').trim();
+          const rawMember = endArgs['member'];
+          const memberTarget =
+            teamId && rawMember != null && rawMember !== ''
+              ? this.runView.resolveMemberTarget(teamId, Number(rawMember))
+              : null;
           const pres = teamWorkbenchPresentation(endArgs, preview, {
             delegateNumber: dlgNum,
+            memberTarget,
           });
           chips = pres.chips;
           if (isError && preview) {

@@ -396,6 +396,35 @@ export class RunViewService {
     );
   }
 
+  /** Map team(member=N) index to delegate_number + plan step for workbench labels. */
+  resolveMemberTarget(
+    teamId: string,
+    memberIdx: number,
+  ): {
+    delegateNumber: number;
+    memberIdx: number;
+    stepId?: string;
+    stepLabel?: string;
+    taskShort?: string;
+  } | null {
+    const team = this._teamsById.get(teamId);
+    if (!team?.members?.length) return null;
+    const idx = Number(memberIdx);
+    if (!Number.isFinite(idx) || idx < 0 || idx >= team.members.length) return null;
+    const member = team.members[idx];
+    const step = member.step_id
+      ? this._steps().find(s => s.id === member.step_id)
+      : undefined;
+    const taskShort = (member.task || '').split('\n')[0].trim().slice(0, 56);
+    return {
+      delegateNumber: member.delegate_number,
+      memberIdx: idx,
+      stepId: member.step_id || undefined,
+      stepLabel: step?.label || member.step_id || undefined,
+      taskShort: taskShort || undefined,
+    };
+  }
+
   /** Seed RunView from REST delegates.json (reconnect / late UI attach). */
   hydrateDelegates(data: {
     batches?: Record<string, {

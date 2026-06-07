@@ -18,7 +18,17 @@ from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
-from .plan_store import Plan, PlanStore, get_delegation_waves
+from .plan_store import (
+    Plan,
+    PlanStep,
+    PlanStore,
+    get_delegation_waves,
+    is_deploy_step,
+    is_pending_plan_step,
+    next_pending_wave_index,
+    skipped_pending_steps_before_wave,
+    _resolve_dep_id,
+)
 from .delegate_manager import DELEGATE_DEFAULT_MAX_STEPS, DELEGATE_UNASSIGNED_NUMBER
 
 logger = logging.getLogger(__name__)
@@ -465,6 +475,7 @@ class TeamManager:
         self._teams: dict[str, Team] = {}
         self._escalation_counts: dict[int, int] = {}
         self._last_create_error: str = ""
+        self._last_create_error_code: str = ""
         self._dispatch_drain: Callable[[str], int] | None = None
         self._dispatch_has_prefix: Callable[[str], bool] | None = None
         self._schedule_orchestration_wake: Callable[[str, str], None] | None = None
@@ -1227,13 +1238,22 @@ class TeamManager:
         Reads the plan, extracts the specified wave, creates TeamMembers
         for each step, and optionally creates linked Kanban items.
         """
+        self._last_create_error = ""
+        self._last_create_error_code = ""
+
         plan = self._plan_store.load(plan_id)
         if plan is None:
+            self._last_create_error = f"Plan {plan_id} not found"
+            self._last_create_error_code = "plan_not_found"
             logger.error("TeamManager: plan %s not found", plan_id)
             return None
 
         waves = get_delegation_waves(plan)
         if wave_index >= len(waves):
+            self._last_create_error = (
+                f"Wave {wave_index} out of range (plan has {len(waves)} waves)"
+            )
+            self._last_create_error_code = "wave_out_of_range"
             logger.error(
                 "TeamManager: wave %d out of range (plan has %d waves)",
                 wave_index, len(waves),
@@ -1244,8 +1264,61 @@ class TeamManager:
         wave_steps = [
             s for s in all_wave_steps
             if plan.get_step(s.id) is None
-            or plan.get_step(s.id).status not in ("done", "skipped")
+            or is_pending_plan_step(plan.get_step(s.id))
         ]
+
+        skipped = skipped_pending_steps_before_wave(plan, wave_index, waves)
+        if skipped:
+            by_wave: dict[int, list[PlanStep]] = {}
+            for wi, step in skipped:
+                by_wave.setdefault(wi, []).append(step)
+            parts = [
+                f"wave {wi}: {', '.join(s.label[:40] for s in steps[:3])}"
+                for wi, steps in sorted(by_wave.items())
+            ]
+            first_wave = skipped[0][0]
+            self._last_create_error_code = "skipped_pending_wave"
+            self._last_create_error = (
+                f"Cannot create wave {wave_index} — "
+                f"{len(skipped)} earlier pending step(s) must run first "
+                f"({'; '.join(parts)}). "
+                f"Use team(action='create', plan_id='{plan_id}', "
+                f"wave={first_wave}, name='...')."
+            )
+            logger.info(
+                "TeamManager: blocked wave %d — %d skipped pending step(s) in earlier waves",
+                wave_index, len(skipped),
+            )
+            return None
+
+        if wave_steps and all(is_deploy_step(s) for s in wave_steps):
+            step_map = {s.id: s for s in plan.steps}
+            label_map = {s.label.lower().strip(): s.id for s in plan.steps}
+            unmet: list[str] = []
+            for step in wave_steps:
+                for dep_ref in step.depends_on:
+                    dep_id = _resolve_dep_id(dep_ref, step_map, label_map)
+                    dep = step_map.get(dep_id)
+                    if dep and is_pending_plan_step(dep):
+                        unmet.append(f"\"{step.label}\" needs \"{dep.label}\"")
+            if unmet:
+                nw = next_pending_wave_index(plan, waves)
+                hint = (
+                    f" Use team(action='create', wave={nw}, ...) first."
+                    if nw is not None else ""
+                )
+                self._last_create_error_code = "deploy_blocked"
+                self._last_create_error = (
+                    f"Cannot create deploy-only wave {wave_index} — "
+                    f"prerequisites still pending: "
+                    f"{'; '.join(unmet[:3])}.{hint}"
+                )
+                logger.info(
+                    "TeamManager: blocked deploy wave %d — unmet prerequisites",
+                    wave_index,
+                )
+                return None
+
         if not wave_steps:
             done_labels = [s.label for s in all_wave_steps]
             next_waves = [
@@ -1261,6 +1334,7 @@ class TeamManager:
                     f"({len(nw_steps)} step(s): "
                     f"{', '.join(s.label[:50] for s in nw_steps[:3])})."
                 )
+            self._last_create_error_code = "no_pending_steps"
             self._last_create_error = (
                 f"Wave {wave_index} has no pending steps — "
                 f"{len(all_wave_steps)} step(s) already done: "
@@ -1324,6 +1398,8 @@ class TeamManager:
         self.save(team)
         self._broadcast_sync("team_created", team)
         self._refresh_plan_wm(plan_id)
+        self._last_create_error = ""
+        self._last_create_error_code = ""
         logger.info(
             "TeamManager: created team %s (%s) with %d members from plan %s wave %d",
             team.id, team.name, len(team.members), plan_id, wave_index,
@@ -3097,40 +3173,24 @@ class TeamManager:
             return None
 
         waves = get_delegation_waves(plan)
-        next_wave = completed_team.wave_index + 1
-        if next_wave >= len(waves):
+        next_wave = next_pending_wave_index(plan, waves)
+        if next_wave is None:
             return None
 
-        # Check that all previous waves' steps are done/skipped
-        for w_idx in range(next_wave):
-            for step in waves[w_idx]:
-                plan_step = plan.get_step(step.id)
-                if plan_step and plan_step.status not in ("done", "skipped"):
-                    logger.info(
-                        "TeamManager: cannot advance to wave %d — "
-                        "step '%s' in wave %d still %s",
-                        next_wave, step.label, w_idx,
-                        plan_step.status if plan_step else "?",
-                    )
-                    return None
-
-        # Skip waves where all steps are already done (e.g. manually
-        # completed out-of-band).  Find the first wave with pending work.
-        while next_wave < len(waves):
-            has_pending = any(
-                plan.get_step(s.id) is not None
-                and plan.get_step(s.id).status not in ("done", "skipped")
-                for s in waves[next_wave]
-            )
-            if has_pending:
-                break
+        if next_wave < completed_team.wave_index:
             logger.info(
-                "TeamManager: skipping wave %d — all steps already done",
+                "TeamManager: pending wave %d is before completed wave %d — "
+                "skip auto-create (use team(create) on the pending wave)",
+                next_wave, completed_team.wave_index,
+            )
+            return None
+
+        if next_wave == completed_team.wave_index:
+            logger.info(
+                "TeamManager: wave %d still has pending work — "
+                "skip auto-create (use team(create) to retry)",
                 next_wave,
             )
-            next_wave += 1
-
-        if next_wave >= len(waves):
             return None
 
         _existing = [

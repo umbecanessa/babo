@@ -102,6 +102,71 @@ def test_pending_launch_wrong_tool_nudge():
     ) is None
 
 
+def test_create_skipped_wave_breadcrumb():
+    engine = BreadcrumbEngine()
+    ctx = BreadcrumbContext(
+        tool_name="team",
+        action="create",
+        is_error=True,
+        result_details={
+            "action": "create",
+            "skipped_pending_wave": True,
+            "plan_id": "plan_icf",
+            "recommended_wave": 2,
+        },
+        unlocked_tools=frozenset({"team", "plan"}),
+        orchestration_profile="orchestrated",
+        is_coordinator=True,
+    )
+    hint = engine.evaluate(ctx)
+    assert hint is not None
+    assert "wave=2" in hint
+    assert "deploy" in hint.lower()
+
+
+def test_create_duplicate_recreate_breadcrumb():
+    engine = BreadcrumbEngine()
+    ctx = BreadcrumbContext(
+        tool_name="team",
+        action="create",
+        is_error=True,
+        result_details={
+            "action": "create",
+            "duplicate_wave_recreate": True,
+            "plan_id": "plan_icf",
+            "recommended_wave": 2,
+        },
+        unlocked_tools=frozenset({"team", "plan"}),
+        orchestration_profile="orchestrated",
+        is_coordinator=True,
+    )
+    hint = engine.evaluate(ctx)
+    assert hint is not None
+    assert "disband" in hint.lower() or "recreat" in hint.lower()
+
+
+def test_create_deploy_blocked_breadcrumb():
+    engine = BreadcrumbEngine()
+    ctx = BreadcrumbContext(
+        tool_name="team",
+        action="create",
+        is_error=True,
+        result_details={
+            "action": "create",
+            "deploy_blocked": True,
+            "plan_id": "plan_icf",
+            "recommended_wave": 2,
+        },
+        unlocked_tools=frozenset({"team", "plan"}),
+        orchestration_profile="orchestrated",
+        is_coordinator=True,
+    )
+    hint = engine.evaluate(ctx)
+    assert hint is not None
+    assert "wave=2" in hint
+    assert "deploy" in hint.lower()
+
+
 def test_pending_launch_nudge_orchestrated_only():
     assert maybe_pending_launch_wrong_tool_nudge(
         orchestration_profile="solo_structured",

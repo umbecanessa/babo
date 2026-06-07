@@ -90,15 +90,35 @@ describe('activity-format.util', () => {
         message: 'Wrap up and verify the repo.',
       },
       'Hint delivered to member 2',
+      {
+        memberTarget: {
+          delegateNumber: 3,
+          memberIdx: 2,
+          stepId: 'step-3',
+          stepLabel: 'Backend API Foundation',
+        },
+      },
     );
     expect(pres.title).toBe('Team hint');
     expect(pres.subtitle).toBeUndefined();
     expect(pres.chips.some((c) => c.label === 'From' && c.value === 'Orchestrator')).toBe(
       true,
     );
-    expect(pres.chips.some((c) => c.label === 'To' && c.value === 'Sub #2')).toBe(true);
+    expect(pres.chips.some(
+      (c) => c.label === 'To' && c.value === 'Sub #3 · Backend API Foundation',
+    )).toBe(true);
     const block = pres.chips.find((c) => c.variant === 'block');
     expect(block?.value).toContain('Wrap up');
+  });
+
+  it('team hint falls back to wave slot when member target unresolved', () => {
+    const pres = teamWorkbenchPresentation(
+      { action: 'hint', team_id: 'team_x', member: 2, message: 'Go' },
+      '',
+    );
+    expect(pres.chips.some((c) => c.label === 'To' && c.value === 'Wave member 3')).toBe(
+      true,
+    );
   });
 
   it('builds switch_mode summary from turn_end arguments when cache is empty', () => {

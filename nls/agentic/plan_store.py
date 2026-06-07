@@ -1354,3 +1354,108 @@ def get_delegation_waves(plan: Plan) -> list[list[PlanStep]]:
         remaining = [s for s in remaining if s.id not in wave_ids]
 
     return waves
+
+
+_TERMINAL_STEP_STATUS = frozenset({"done", "skipped"})
+
+
+def is_pending_plan_step(step: PlanStep) -> bool:
+    """True when a step still needs execution work."""
+    return step.status not in _TERMINAL_STEP_STATUS
+
+
+def pending_steps_in_wave(
+    plan: Plan,
+    wave_index: int,
+    waves: list[list[PlanStep]] | None = None,
+) -> list[PlanStep]:
+    """Pending steps assigned to a delegation wave by the dependency graph."""
+    waves = waves if waves is not None else get_delegation_waves(plan)
+    if wave_index < 0 or wave_index >= len(waves):
+        return []
+    out: list[PlanStep] = []
+    for step in waves[wave_index]:
+        live = plan.get_step(step.id) or step
+        if is_pending_plan_step(live):
+            out.append(live)
+    return out
+
+
+def next_pending_wave_index(
+    plan: Plan,
+    waves: list[list[PlanStep]] | None = None,
+) -> int | None:
+    """First wave index (0-based) that still has pending steps, or None."""
+    waves = waves if waves is not None else get_delegation_waves(plan)
+    for i in range(len(waves)):
+        if pending_steps_in_wave(plan, i, waves):
+            return i
+    return None
+
+
+def is_deploy_step(step: PlanStep) -> bool:
+    """Heuristic: deploy/release/docker/railway style final step."""
+    return _classify_step_phase(step.label) >= 7
+
+
+def skipped_pending_steps_before_wave(
+    plan: Plan,
+    wave_index: int,
+    waves: list[list[PlanStep]] | None = None,
+) -> list[tuple[int, PlanStep]]:
+    """Pending delegatable steps in earlier waves than ``wave_index``."""
+    waves = waves if waves is not None else get_delegation_waves(plan)
+    skipped: list[tuple[int, PlanStep]] = []
+    for i in range(min(wave_index, len(waves))):
+        for step in pending_steps_in_wave(plan, i, waves):
+            if step.delegatable:
+                skipped.append((i, step))
+    return skipped
+
+
+def detect_out_of_order_done_steps(plan: Plan) -> list[tuple[PlanStep, PlanStep]]:
+    """Done steps whose declared dependencies are still pending."""
+    step_map = {s.id: s for s in plan.steps}
+    label_map = {s.label.lower().strip(): s.id for s in plan.steps}
+    out: list[tuple[PlanStep, PlanStep]] = []
+    for step in plan.steps:
+        if step.status != "done":
+            continue
+        for dep_ref in step.depends_on:
+            dep_id = _resolve_dep_id(dep_ref, step_map, label_map)
+            dep = step_map.get(dep_id)
+            if dep and is_pending_plan_step(dep):
+                out.append((step, dep))
+    return out
+
+
+def format_wave_execution_hints(plan: Plan) -> str:
+    """Actionable wave guidance after fix_dependencies or team(create) blocks."""
+    waves = get_delegation_waves(plan)
+    nw = next_pending_wave_index(plan, waves)
+    if nw is None:
+        return "All plan steps are done or skipped."
+
+    pending = pending_steps_in_wave(plan, nw, waves)
+    labels = ", ".join(s.label[:45] for s in pending[:4])
+    if len(pending) > 4:
+        labels += f", +{len(pending) - 4} more"
+    lines = [
+        f"Next team wave: wave={nw} ({len(pending)} pending: {labels}).",
+        f"  team(action='create', plan_id='{plan.id}', wave={nw}, name='...')",
+        f"  or wave='auto' to pick the next pending wave automatically.",
+    ]
+
+    out_of_order = detect_out_of_order_done_steps(plan)
+    if out_of_order:
+        pairs = ", ".join(
+            f"{done.label[:30]}→{dep.label[:30]} ({dep.status})"
+            for done, dep in out_of_order[:3]
+        )
+        lines.append(
+            f"OUT-OF-ORDER: step(s) marked done while dependencies still "
+            f"pending: {pairs}. Launch the pending dependency wave before "
+            f"deploy or integration steps."
+        )
+
+    return "\n".join(lines)

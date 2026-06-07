@@ -169,6 +169,43 @@ describe('RunViewService', () => {
     expect(svc.collapsedActivity().filter(a => a.status === 'queued').length).toBe(2);
   });
 
+  it('resolveMemberTarget maps wave index to delegate_number', () => {
+    svc.handleMessage({
+      type: 'agentic_plan',
+      plan_id: 'plan_a',
+      title: 'Build',
+      steps: [
+        { id: 'step-2', label: 'Database Schema', status: 'pending', delegatable: true },
+        { id: 'step-7', label: 'Frontend Shell', status: 'pending', delegatable: true },
+        { id: 'step-3', label: 'Backend API Foundation', status: 'pending', delegatable: true },
+      ],
+    });
+    svc.hydrateTeams([{
+      id: 'team_w2',
+      name: 'Wave 2',
+      plan_id: 'plan_a',
+      wave_index: 1,
+      wave_attempt: 1,
+      status: 'active',
+      mission: '',
+      briefing: '',
+      members: [
+        { delegate_number: 1, step_id: 'step-2', task: 'Database Schema\n\nDescription', status: 'running', result_summary: '', kanban_task_id: '', iterations: 0, tool_calls: 0, elapsed_seconds: 0 },
+        { delegate_number: 2, step_id: 'step-7', task: 'Frontend Shell', status: 'running', result_summary: '', kanban_task_id: '', iterations: 0, tool_calls: 0, elapsed_seconds: 0 },
+        { delegate_number: 3, step_id: 'step-3', task: 'Backend API Foundation', status: 'running', result_summary: '', kanban_task_id: '', iterations: 0, tool_calls: 0, elapsed_seconds: 0 },
+      ],
+      batch_id: 'batch_1',
+      checkback_job: '',
+      kanban_parent_id: '',
+      results_log: [],
+      created_at: 1,
+      completed_at: 0,
+    }]);
+    const target = svc.resolveMemberTarget('team_w2', 2);
+    expect(target?.delegateNumber).toBe(3);
+    expect(target?.stepLabel).toBe('Backend API Foundation');
+  });
+
   it('keeps one delegate when delegate_start and team hydrate overlap', () => {
     svc.handleMessage({
       type: 'agentic_plan',

@@ -2276,7 +2276,9 @@ class PlanTool:
             break_service_before_api_edges,
             detect_dependency_cycles,
             format_dependency_cycle_hints,
+            format_wave_execution_hints,
             get_delegation_waves,
+            next_pending_wave_index,
         )
 
         plan = self._resolve_plan(params)
@@ -2316,10 +2318,16 @@ class PlanTool:
         else:
             parts.append("No cycles detected.")
 
+        wave_hints = format_wave_execution_hints(plan)
+        if wave_hints:
+            parts.append(wave_hints)
+
+        nw = next_pending_wave_index(plan, waves)
         parts.append(
             "\nNEXT: team(action='create', plan_id='"
-            f"{plan.id}', wave=N) → team(action='launch') for pending "
-            "delegatable steps. Do NOT plan(delete) or plan(create) from scratch."
+            f"{plan.id}', wave={nw if nw is not None else 'auto'}) → "
+            "team(action='launch') for pending delegatable steps. "
+            "Do NOT plan(delete) or plan(create) from scratch."
         )
 
         return ToolResult(
@@ -2329,6 +2337,7 @@ class PlanTool:
                 "action": "fix_dependencies",
                 "cycles_remaining": len(cycles_after),
                 "waves": wave_sizes,
+                "recommended_wave": nw,
             },
         )
 
