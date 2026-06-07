@@ -75,6 +75,8 @@ class TeamTool:
             "Steps with no depends_on form wave 0. "
             "Actions: create, list, inspect, launch, advance, hint, "
             "brief, pause, resume, disband, intervene, rewake, grant_paths.\n"
+            "HINT delivery: default 'both' (ring + chat with ack). Use "
+            "delivery='ring' for a quiet nudge without interrupting.\n"
             "GRANT_PATHS: When a delegate escalates for file_access (e.g. "
             ".gitignore), use grant_paths to rent them write scope mid-wave.\n"
             "REWAKE: If a member finished/failed but work is incomplete, "
@@ -150,6 +152,16 @@ class TeamTool:
                     "description": (
                         "Hint message or briefing content "
                         "(required for 'hint', 'brief', optional for 'intervene' and 'rewake')."
+                    ),
+                },
+                "delivery": {
+                    "type": "string",
+                    "enum": ["both", "ring"],
+                    "description": (
+                        "Hint delivery for 'hint' and intervene(decision='hint'|'extend'). "
+                        "'both' (default): SubCryptex ring plus chat interrupt with ack. "
+                        "'ring': quiet ring-only nudge — use when you do not want to "
+                        "break the delegate's current chain of thought."
                     ),
                 },
                 "decision": {
@@ -973,6 +985,15 @@ class TeamTool:
         if not message:
             return ToolResult(content="message is required.", is_error=True)
 
+        from nls.agentic.orchestrator_hint import normalize_delivery_mode
+
+        delivery = normalize_delivery_mode(params.get("delivery"))
+        if delivery is None:
+            return ToolResult(
+                content="delivery must be 'both' or 'ring'.",
+                is_error=True,
+            )
+
         team = self._tm._teams.get(team_id)
         if team is None:
             return ToolResult(content=f"Team '{team_id}' not found.", is_error=True)
@@ -1000,19 +1021,29 @@ class TeamTool:
                 is_error=True,
             )
 
-        ok = await self._tm.hint_member_async(
+        delivered, status = await self._tm.hint_member_async(
             team_id, int(member_idx), message,
+            delivery=delivery,
         )
-        if not ok:
+        if not delivered:
             return ToolResult(
-                content=(
-                    f"Could not send hint — team '{team_id}' member "
-                    f"#{member_idx} may not be running."
+                content=status,
+                is_error=(
+                    "suppressed" not in status.lower()
+                    and "duplicate" not in status.lower()
                 ),
-                is_error=True,
+                details={
+                    "action": "hint",
+                    "hint_suppressed": "suppressed" in status.lower(),
+                },
             )
         return ToolResult(
-            content=f"Hint sent to team {team_id} member #{member_idx}.",
+            content=status,
+            details={
+                "action": "hint",
+                "member_idx": int(member_idx),
+                "delivery": delivery,
+            },
         )
 
     async def _intervene(self, params: dict[str, Any]) -> ToolResult:
@@ -1021,6 +1052,15 @@ class TeamTool:
         decision = (params.get("decision") or "").strip().lower()
         message = (params.get("message") or "").strip()
         extra_iters = params.get("extra_iterations", 10)
+
+        from nls.agentic.orchestrator_hint import normalize_delivery_mode
+
+        delivery = normalize_delivery_mode(params.get("delivery"))
+        if delivery is None:
+            return ToolResult(
+                content="delivery must be 'both' or 'ring'.",
+                is_error=True,
+            )
 
         if not team_id:
             active = [
@@ -1152,6 +1192,7 @@ class TeamTool:
                     action="terminate",
                     message=message or "Terminated by orchestrator.",
                     extra_iterations=extra_iters,
+                    delivery=delivery,
                 )
             else:
                 result = True
@@ -1162,14 +1203,45 @@ class TeamTool:
                 )
                 self._tm.save(team)
         else:
+            _intervene_msg = message or (
+                "Approved by orchestrator." if decision == "approve" else ""
+            )
+            _msg_suppressed = False
+            if _intervene_msg.strip() and decision in ("hint", "extend"):
+                suppress, reason = self._tm.evaluate_hint_suppression(
+                    team_id, idx, _intervene_msg,
+                )
+                if suppress:
+                    if decision == "extend":
+                        _msg_suppressed = True
+                        _intervene_msg = (
+                            "[ORCHESTRATOR] Iteration budget extended — "
+                            "prior guidance still applies."
+                        )
+                    else:
+                        return ToolResult(
+                            content=reason,
+                            details={
+                                "action": "intervene",
+                                "decision": decision,
+                                "hint_suppressed": True,
+                            },
+                        )
             result = await dm.intervene(
                 member.delegate_number,
                 action=_dm_action,
-                message=message or (
-                    "Approved by orchestrator." if decision == "approve" else ""
-                ),
+                message=_intervene_msg,
                 extra_iterations=extra_iters,
+                delivery=delivery,
             )
+            if result is True and _intervene_msg.strip() and decision in (
+                "hint", "extend",
+            ) and not _msg_suppressed:
+                self._tm.record_member_hint(team_id, idx, _intervene_msg)
+            elif result is True and decision == "extend" and _msg_suppressed:
+                self._tm.record_member_hint(
+                    team_id, idx, message or _intervene_msg,
+                )
         if result is not True:
             err_detail = result if isinstance(result, str) else (
                 f"delegate #{member.delegate_number} not found"

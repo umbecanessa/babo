@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import shutil
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
@@ -23,7 +24,10 @@ from .base import ToolResult
 logger = logging.getLogger(__name__)
 
 
-from .write import _resolve_path  # shared dedup-aware resolver
+from .write import (  # noqa: E402
+    DELEGATE_MAX_PATH_DELETES,
+    _resolve_path,
+)
 
 
 class DeleteFileTool:
@@ -35,12 +39,30 @@ class DeleteFileTool:
         Working directory for resolving relative paths.
     shared_cwd : object | None
         Shared mutable CWD updated by the bash tool.
+    write_counts_ref : dict[str, int] | None
+        Shared delegate write counters — reset for a path after delete.
+    delete_counts_ref : dict[str, int] | None
+        Shared delegate delete counters per resolved path.
     """
 
-    def __init__(self, cwd: str, shared_cwd: object | None = None) -> None:
+    def __init__(
+        self,
+        cwd: str,
+        shared_cwd: object | None = None,
+        *,
+        write_counts_ref: dict[str, int] | None = None,
+        delete_counts_ref: dict[str, int] | None = None,
+        on_repeated_delete_escalation: Callable[
+            [str, int],
+            Awaitable[tuple[str, bool]] | tuple[str, bool] | None,
+        ] | None = None,
+    ) -> None:
         self._cwd = cwd
         self._workspace_root = cwd
         self._shared_cwd = shared_cwd
+        self._write_counts_ref = write_counts_ref
+        self._delete_counts_ref = delete_counts_ref
+        self._on_repeated_delete_escalation = on_repeated_delete_escalation
 
     @property
     def _effective_cwd(self) -> str:
@@ -97,6 +119,61 @@ class DeleteFileTool:
         recursive = bool(params.get("recursive", False))
         target = _resolve_path(path_str, self._effective_cwd)
 
+        resolved_key = ""
+        prev_delete_count = 0
+        if self._delete_counts_ref is not None:
+            try:
+                resolved_key = str(target.resolve())
+                prev_delete_count = self._delete_counts_ref.get(resolved_key, 0)
+            except OSError:
+                resolved_key = ""
+
+        if (
+            resolved_key
+            and self._delete_counts_ref is not None
+            and prev_delete_count >= DELEGATE_MAX_PATH_DELETES
+            and target.is_file()
+        ):
+            _block_msg = (
+                f"BLOCKED: {path_str} was already deleted and rewritten "
+                f"{prev_delete_count} time(s) this session. Use edit() for "
+                f"fixes or escalate() — do not delete/rewrite this path again."
+            )
+            if self._on_repeated_delete_escalation:
+                try:
+                    _cb = self._on_repeated_delete_escalation(
+                        path_str, prev_delete_count + 1,
+                    )
+                    if asyncio.iscoroutine(_cb):
+                        _extra, _terminate = await _cb
+                    elif _cb is not None:
+                        _extra, _terminate = _cb
+                    else:
+                        _extra, _terminate = ("", False)
+                    if _extra:
+                        _block_msg += "\n\n" + _extra
+                    if _terminate:
+                        return ToolResult(
+                            content=_block_msg,
+                            is_error=True,
+                            details={
+                                "delete_blocked": True,
+                                "path": path_str,
+                                "recommended_tool": "edit",
+                            },
+                        )
+                except Exception:
+                    logger.debug("delete-block escalation failed", exc_info=True)
+            return ToolResult(
+                content=_block_msg,
+                is_error=True,
+                details={
+                    "delete_blocked": True,
+                    "path": path_str,
+                    "recommended_tool": "edit",
+                },
+            )
+
         if not target.exists() and not target.is_symlink():
             return ToolResult(
                 content=f"Error: Path not found: {path_str}",
@@ -122,7 +199,23 @@ class DeleteFileTool:
 
             if target.is_file():
                 target.unlink()
-                return ToolResult(content=f"Deleted file: {path_str}")
+                _msg = f"Deleted file: {path_str}"
+                if resolved_key and self._delete_counts_ref is not None:
+                    self._delete_counts_ref[resolved_key] = prev_delete_count + 1
+                    if self._write_counts_ref is not None:
+                        self._write_counts_ref.pop(resolved_key, None)
+                    if prev_delete_count == 0:
+                        _msg += (
+                            " Write counter reset — you may write() this path "
+                            "once from scratch, then use edit()."
+                        )
+                    elif prev_delete_count == 1:
+                        _msg += (
+                            " Second delete on this path — one more "
+                            "delete+rewrite cycle will require orchestrator "
+                            "guidance."
+                        )
+                return ToolResult(content=_msg)
 
             if target.is_dir():
                 child_count = sum(1 for _ in target.iterdir())

@@ -4032,7 +4032,7 @@ class CryptexMemory:
             "coordinator_mode", "solo_plan_workflow", "native_skill_authoring",
             "desktop_support_debug",
         })
-        _REFRESH_ENV_DOMAINS = frozenset({"platform_docs"})
+        _REFRESH_ENV_DOMAINS = frozenset({"platform_docs", "local_verification"})
 
         for d in behavioral_defs:
             if d["domain"] in existing and d["domain"] not in _REFRESH_DOMAINS:
@@ -4054,6 +4054,7 @@ class CryptexMemory:
                 BABO_GITHUB_REPO_URL,
                 BABO_BUNDLED_SKILLS_GITHUB_TREE,
             )
+            from nls.agentic.delegate_verification import LOCAL_VERIFICATION_ENV_CONTENT
 
             env_defs = [
                 {
@@ -4068,6 +4069,10 @@ class CryptexMemory:
                         "platform features — bundled examples are not in the "
                         "agent workspace unless the user cloned Babo."
                     ),
+                },
+                {
+                    "domain": "local_verification",
+                    "content": LOCAL_VERIFICATION_ENV_CONTENT,
                 },
                 {
                     "domain": "shell",

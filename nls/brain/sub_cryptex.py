@@ -42,6 +42,7 @@ from .cryptex import (
     RingSpec,
     WMRing,
     RING_FIXED,
+    RING_ENVIRONMENT,
     RING_PROJECT_FACTS,
     RING_CREDENTIALS,
     RING_SKILLS,
@@ -90,6 +91,8 @@ _SUB_RING_REGISTRY: tuple[RingSpec, ...] = (
              allow_cross_read=True, max_slots_per_position=6),
     RingSpec(RING_SKILLS, RING_FIXED, "Skills",
              allow_cross_read=True, max_slots_per_position=8),
+    RingSpec(RING_ENVIRONMENT, RING_FIXED, "Environment + Runtime",
+             allow_cross_read=True, max_slots_per_position=10),
 )
 
 _SUB_SPECS_BY_ID: dict[str, RingSpec] = {s.ring_id: s for s in _SUB_RING_REGISTRY}
@@ -97,6 +100,7 @@ _SUB_SPECS_BY_ID: dict[str, RingSpec] = {s.ring_id: s for s in _SUB_RING_REGISTR
 _DEFAULT_PRIORITIES: dict[str, float] = {
     SUB_RING_TASK: 1.0,
     SUB_RING_ORCHESTRATOR: 0.97,
+    RING_ENVIRONMENT: 0.93,
     SUB_RING_PROGRESS: 0.9,
     SUB_RING_KNOWLEDGE: 0.8,
     RING_PROJECT_FACTS: 0.65,
@@ -118,6 +122,7 @@ _RING_HEADERS: dict[str, str] = {
     RING_CREDENTIALS: "[CREDENTIALS]",
     RING_TACTICAL_GOALS: "[GOALS]",
     RING_SKILLS: "[RELEVANT SKILLS]",
+    RING_ENVIRONMENT: "[ENVIRONMENT — platform, shell, docs, verification]",
 }
 
 _SKILL_BOOST_HEADER = "[⚠ RELEVANT SKILLS — use now (stuck recovery)]"
@@ -371,6 +376,12 @@ class SubCryptex:
             results = skills_ring.search(task, max_results=5)
             for _, slot, _ in results:
                 sc._rings[RING_SKILLS].add_slot(deepcopy(slot))
+
+        # Environment — platform docs, shell, URLs, verification (shared with EM)
+        env_ring = parent.get_ring(RING_ENVIRONMENT)
+        if env_ring:
+            for slot in env_ring.get_active_slots()[:10]:
+                sc._rings[RING_ENVIRONMENT].add_slot(deepcopy(slot))
 
         # User model → store as knowledge in a dedicated position
         user_ring = parent.get_ring(RING_USER_MODEL)

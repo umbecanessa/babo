@@ -1080,6 +1080,16 @@ async def run_loop(
     if _cached_team_manager is not None:
         hooks._cached_team_manager = _cached_team_manager  # type: ignore[attr-defined]
 
+    from nls.agentic.orchestration_policy import (
+        note_escalation_from_dispatch_source,
+        note_escalation_from_text,
+    )
+
+    note_escalation_from_text(state, user_input)
+    note_escalation_from_dispatch_source(
+        state, dispatch_source, _cached_team_manager,
+    )
+
     # Recovery / auto-reconcile: launch prepared next waves without a full
     # EM review loop when policy allows (saves tokens vs stall → idle).
     if (
@@ -3785,7 +3795,25 @@ async def run_loop(
                         pass
 
                 if _tool_name == "team" and not result.is_error:
-                    if state.has_pending_escalation:
+                    from .team_hint_policy import team_tool_resolves_escalation
+
+                    _team_action = ""
+                    _team_decision = ""
+                    try:
+                        _pa = json.loads(_args_raw) if isinstance(_args_raw, str) else _args_raw
+                        if isinstance(_pa, dict):
+                            _team_action = str(_pa.get("action") or "")
+                            _team_decision = str(_pa.get("decision") or "")
+                    except Exception:
+                        pass
+                    if (
+                        state.has_pending_escalation
+                        and team_tool_resolves_escalation(
+                            result,
+                            action=_team_action,
+                            decision=_team_decision,
+                        )
+                    ):
                         state.has_pending_escalation = False
                         state.pending_escalation_team_id = ""
                         state.pending_escalation_member_idx = -1
@@ -3793,9 +3821,46 @@ async def run_loop(
                         state.pending_escalation_paths = []
                         logger.info(
                             "[LOOP:%s] iter %d: escalation handled — "
-                            "cleared has_pending_escalation (team action)",
+                            "cleared has_pending_escalation (team %s/%s)",
                             state.loop_id, state.iteration,
+                            _team_action, _team_decision or "-",
                         )
+
+                if (
+                    _tool_name == "ask_user"
+                    and not getattr(result, "is_error", False)
+                    and config.enable_delegation
+                    and getattr(state, "has_pending_escalation", False)
+                    and "User answered:" in (result.content or "")
+                ):
+                    _answer = (result.content or "").split("User answered:", 1)[-1].strip()
+                    _team_id = (
+                        getattr(state, "pending_escalation_team_id", "")
+                        or "<team_id from escalation>"
+                    )
+                    _member_idx = getattr(state, "pending_escalation_member_idx", -1)
+                    _member_hint = (
+                        str(_member_idx)
+                        if _member_idx >= 0
+                        else "<member index from escalation>"
+                    )
+                    context.append({
+                        "role": "system",
+                        "content": (
+                            "PRIORITY: The user answered a paused team member's "
+                            "ask_user escalation. Forward the answer NOW:\n"
+                            f"  team(action='intervene', team_id='{_team_id}', "
+                            f"member={_member_hint}, decision='hint', "
+                            f"message={json.dumps(_answer)})\n"
+                            "Then team(action='inspect', team_id=...) for live wave "
+                            "status. Do NOT run bash or other IC work while waves "
+                            "are active — monitoring is team(inspect)/wait()."
+                        ),
+                    })
+                    logger.info(
+                        "[LOOP:%s] iter %d: ask_user answer — forward-to-member nudge",
+                        state.loop_id, state.iteration,
+                    )
 
                 if _tool_name == "plan" and not result.is_error:
                     _plan_details = getattr(result, "details", None) or {}
@@ -4441,29 +4506,13 @@ async def run_loop(
                         for msg in _post_steering:
                             context.append(msg)
                         if _esc_msgs:
-                            state.has_pending_escalation = True
                             from .orchestration_policy import (
-                                parse_escalation_steering,
+                                note_escalation_from_text,
                             )
-                            _meta = parse_escalation_steering(
-                                (_esc_msgs[0].get("content") or ""),
+
+                            note_escalation_from_text(
+                                state, (_esc_msgs[0].get("content") or ""),
                             )
-                            if _meta.get("team_id"):
-                                state.pending_escalation_team_id = str(
-                                    _meta["team_id"],
-                                )
-                            if _meta.get("member_idx") is not None:
-                                state.pending_escalation_member_idx = int(
-                                    _meta["member_idx"],
-                                )
-                            if _meta.get("writes") is not None:
-                                state.pending_escalation_writes = int(
-                                    _meta["writes"],
-                                )
-                            if _meta.get("paths"):
-                                state.pending_escalation_paths = list(
-                                    _meta["paths"],
-                                )
                             _member_hint = (
                                 f"member={state.pending_escalation_member_idx}"
                                 if state.pending_escalation_member_idx >= 0

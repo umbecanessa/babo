@@ -15,6 +15,12 @@ from .base import ToolResult
 
 _logger = logging.getLogger(__name__)
 
+# Delegate per-path limits: initial write + one full rewrite per cycle.
+# Further full writes require delete_file() (which starts a new cycle) or edit().
+DELEGATE_MAX_FULL_WRITES_PER_CYCLE = 2
+# Delete+rewrite cycles are counted separately; block spiraling delete/redo.
+DELEGATE_MAX_PATH_DELETES = 2
+
 _SENSITIVE_SKILL_FILES = {"__init__.py", "adapter.py", "webhook.py"}
 
 import re
@@ -295,23 +301,57 @@ class WriteTool:
 
             resolved_key = str(path.resolve())
             prev_count = self._write_counts.get(resolved_key, 0)
-            if prev_count >= 1 and self._block_full_rewrite_after_first:
+            if (
+                prev_count >= DELEGATE_MAX_FULL_WRITES_PER_CYCLE
+                and self._block_full_rewrite_after_first
+            ):
                 if not path.exists():
                     self._write_counts.pop(resolved_key, None)
                     prev_count = 0
                 else:
+                    _block_msg = (
+                        f"BLOCKED: {path_str} already has {prev_count} full "
+                        f"write(s) this cycle (initial + one rewrite). "
+                        f"Use read() then edit() for targeted fixes, OR "
+                        f"delete_file(path={path_str!r}) and write() once from "
+                        f"scratch — then use edit(). Do not loop write/delete."
+                    )
+                    if (
+                        self._on_repeated_write_escalation
+                        and prev_count >= DELEGATE_MAX_FULL_WRITES_PER_CYCLE
+                    ):
+                        try:
+                            _cb = self._on_repeated_write_escalation(
+                                path_str, prev_count + 1,
+                            )
+                            if asyncio.iscoroutine(_cb):
+                                _extra, _terminate = await _cb
+                            elif _cb is not None:
+                                _extra, _terminate = _cb
+                            else:
+                                _extra, _terminate = ("", False)
+                            if _extra:
+                                _block_msg += "\n\n" + _extra
+                            if _terminate:
+                                return ToolResult(
+                                    content=_block_msg, is_error=True,
+                                    details={
+                                        "rewrite_blocked": True,
+                                        "path": path_str,
+                                        "recommended_tool": "edit",
+                                    },
+                                )
+                        except Exception:
+                            _logger.debug(
+                                "rewrite-block escalation failed", exc_info=True,
+                            )
                     return ToolResult(
-                        content=(
-                            f"BLOCKED: You already wrote {path_str} once this session. "
-                            f"Delegates get one full write() per path — use read() then "
-                            f"edit() for targeted fixes. If you truly need a from-scratch "
-                            f"rewrite, delete_file(path={path_str!r}) first, then write() "
-                            f"again (deleting resets the limit)."
-                        ),
+                        content=_block_msg,
                         is_error=True,
                         details={
                             "rewrite_blocked": True,
                             "path": path_str,
+                            "recommended_tool": "edit",
                         },
                     )
 
@@ -368,7 +408,12 @@ class WriteTool:
                     " Future changes to this file should use edit() "
                     "for targeted modifications, not write()."
                 )
-            elif prev_count >= 1:
+            elif prev_count == 1:
+                msg += (
+                    "\n\nOne full rewrite used for this path. Next time prefer "
+                    "edit(), or delete_file() then a single write() from scratch."
+                )
+            elif prev_count >= 2:
                 msg += (
                     f"\n\n⚠ REPEATED WRITE: You have now written this "
                     f"same file {prev_count + 1} times this session. "
@@ -383,7 +428,10 @@ class WriteTool:
                     "Repeated write #%d to %s (%d lines, %d bytes)",
                     prev_count + 1, path_str, line_count, byte_count,
                 )
-                if prev_count >= 2 and self._on_repeated_write_escalation:
+                if (
+                    prev_count >= DELEGATE_MAX_FULL_WRITES_PER_CYCLE
+                    and self._on_repeated_write_escalation
+                ):
                     _escalation_msg = (
                         "\n\n⚠ Third full rewrite — waiting for orchestrator "
                         "guidance (up to 2 minutes)..."

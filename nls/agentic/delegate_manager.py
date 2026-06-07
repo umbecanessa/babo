@@ -333,51 +333,55 @@ class DelegateManager:
         message: str,
         ring_ops: list[dict] | None = None,
         *,
-        also_chat_hint: bool = False,
+        delivery: str = "both",
+        also_chat_hint: bool | None = None,
         directive_domain: str | None = None,
     ) -> bool:
         """Inject a steering hint into a running delegate's context.
 
-        Directives are written to the SubCryptex ``orchestrator`` ring
-        (high priority, survives context compaction).  A short chat hint is
-        optional via ``also_chat_hint`` (default False).
+        ``delivery='both'`` (default): SubCryptex orchestrator ring plus a
+        chat-turn on ``hint_queue`` (triggers ack path).  ``delivery='ring'``:
+        ring only — quiet nudge without interrupting the delegate loop.
         """
         from .orchestrator_hint import (
             apply_orchestrator_directive,
+            build_orchestrator_chat_hint,
             build_orchestrator_ring_ops,
+            resolve_hint_delivery,
         )
 
         ds = self._delegates.get(delegate_number)
         if not ds or ds.state != "running":
             return False
 
+        use_ring, use_chat, delivery_label = resolve_hint_delivery(
+            delivery=delivery,
+            also_chat_hint=also_chat_hint,
+        )
+
         sc = ds.sub_cryptex
-        if sc is not None and message.strip():
+        if use_ring and sc is not None and message.strip():
             apply_orchestrator_directive(
                 sc, message, domain=directive_domain,
             )
             ds.sub_cryptex.boost_priority("orchestrator", 0.15)
 
-        _ops = list(ring_ops or [])
-        if message.strip() and not any(
-            o.get("ring") == "orchestrator" for o in _ops
-        ):
-            _ops.extend(build_orchestrator_ring_ops(
-                message, domain=directive_domain,
-            ))
-        self._apply_ring_ops(sc, _ops)
+        if use_ring:
+            _ops = list(ring_ops or [])
+            if message.strip() and not any(
+                o.get("ring") == "orchestrator" for o in _ops
+            ):
+                _ops.extend(build_orchestrator_ring_ops(
+                    message, domain=directive_domain,
+                ))
+            self._apply_ring_ops(sc, _ops)
 
-        if also_chat_hint and message.strip():
-            ds.hint_queue.put_nowait({
-                "role": "user",
-                "content": (
-                    "[ORCHESTRATOR HINT] See ORCHESTRATOR directives in "
-                    f"your system context. {message[:300]}"
-                ),
-            })
+        if use_chat and message.strip():
+            ds.hint_queue.put_nowait(build_orchestrator_chat_hint(message))
         logger.info(
-            "[DelegateManager] hint sent to delegate #%d (ring=yes chat=%s): %.200s",
-            delegate_number, also_chat_hint, message,
+            "[DelegateManager] hint sent to delegate #%d "
+            "(delivery=%s ring=%s chat=%s): %.200s",
+            delegate_number, delivery_label, use_ring, use_chat, message,
         )
         return True
 
@@ -393,6 +397,8 @@ class DelegateManager:
         message: str = "",
         extra_iterations: int = 10,
         ring_ops: list[dict] | None = None,
+        *,
+        delivery: str = "both",
     ) -> bool | str:
         """Send an orchestrator decision to a delegate waiting on escalation.
 
@@ -422,10 +428,15 @@ class DelegateManager:
         from .orchestrator_hint import (
             apply_orchestrator_directive,
             infer_directive_domain,
+            resolve_hint_delivery,
+        )
+
+        use_ring, use_chat, delivery_label = resolve_hint_delivery(
+            delivery=delivery,
         )
 
         sc = ds.sub_cryptex
-        if sc is not None and message.strip():
+        if use_ring and sc is not None and message.strip():
             apply_orchestrator_directive(
                 sc, message,
                 domain=infer_directive_domain(message, action=action),
@@ -435,18 +446,20 @@ class DelegateManager:
             elif action == "terminate":
                 sc.boost_priority("orchestrator", 0.2)
 
-        self._apply_ring_ops(sc, ring_ops)
+        if use_ring:
+            self._apply_ring_ops(sc, ring_ops)
 
         ds.hint_queue.put_nowait({
             "action": action,
             "message": message,
             "extra_iterations": extra_iterations,
+            "delivery": delivery_label,
         })
         logger.info(
-            "[DelegateManager] intervene #%d: action=%s extra_iters=%d "
-            "ring_ops=%d msg=%.100s",
-            delegate_number, action, extra_iterations,
-            len(ring_ops or []), message,
+            "[DelegateManager] intervene #%d: action=%s delivery=%s "
+            "extra_iters=%d ring_ops=%d chat=%s msg=%.100s",
+            delegate_number, action, delivery_label, extra_iterations,
+            len(ring_ops or []), use_chat, message,
         )
         return True
 

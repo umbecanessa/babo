@@ -166,6 +166,16 @@ class TeamMember:
     elapsed_seconds: float = 0.0
     last_actions: list[str] = field(default_factory=list)
     hint_ack: str = ""
+    last_hint_at: float = 0.0
+    last_hint_preview: str = ""
+    tool_calls_at_last_hint: int = 0
+    escalation_opened_at: float = 0.0
+    escalation_tool_calls: int = 0
+    escalation_iterations: int = 0
+    hints_for_escalation: int = 0
+    last_inspected_at: float = 0.0
+    last_progress_at: float = 0.0
+    last_progress_tool_calls: int = 0
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -351,6 +361,11 @@ class Team:
                 extra = f" {' | '.join(parts)}" if parts else ""
                 if m.last_actions:
                     extra += f"\n       Recent: {', '.join(m.last_actions[-3:])}"
+                if m.escalation_opened_at > 0:
+                    extra += (
+                        f"\n       Escalation open (tool_calls={m.escalation_tool_calls}"
+                        f", hints_sent={m.hints_for_escalation}) — inspect before re-hinting."
+                    )
                 if m.hint_ack:
                     extra += f"\n       Response: \"{m.hint_ack}\""
             elif m.result_summary:
@@ -422,8 +437,6 @@ def _member_launch_preamble(
     project_dir_block: str = "",
 ) -> list[str]:
     """Build per-delegate preamble: peer awareness + wave context, not full specs."""
-    from nls.agentic.delegate_verification import format_delegate_verification_block
-
     parts: list[str] = []
     peer = _peer_awareness_block(team, member_idx)
     if peer:
@@ -439,7 +452,6 @@ def _member_launch_preamble(
         parts.append(uploads_block)
     if project_dir_block:
         parts.append(project_dir_block)
-    parts.append(format_delegate_verification_block())
     return parts
 
 
@@ -1454,17 +1466,25 @@ class TeamManager:
 
     def _apply_delegate_status_to_member(self, member: TeamMember, ds: Any) -> None:
         """Update a team member from a delegate status snapshot."""
-        member.iterations = getattr(ds, "iteration", member.iterations)
-        member.tool_calls = getattr(ds, "total_tool_calls", member.tool_calls)
         member.elapsed_seconds = getattr(
             ds, "elapsed_seconds", getattr(ds, "elapsed", member.elapsed_seconds),
         )
+        prev_tool_calls = member.tool_calls
+        member.iterations = getattr(ds, "iteration", member.iterations)
+        member.tool_calls = getattr(ds, "total_tool_calls", member.tool_calls)
+        if member.tool_calls > prev_tool_calls:
+            member.last_progress_at = time.time()
+            member.last_progress_tool_calls = member.tool_calls
         last_actions = getattr(ds, "last_actions", None)
         if last_actions:
             member.last_actions = list(last_actions[-5:])
         hint_ack = getattr(ds, "hint_ack", "")
         if hint_ack:
             member.hint_ack = hint_ack
+
+        from .team_hint_policy import sync_member_escalation_progress
+
+        sync_member_escalation_progress(member)
 
         state = self._effective_delegate_state(ds)
         if state == "running":
@@ -1538,6 +1558,16 @@ class TeamManager:
 
         if self._delegate_manager is not None and not team.is_terminal:
             self.reconcile_with_delegates(team_id=team_id, persist=True)
+            team = self._teams.get(team_id)
+            if team is None:
+                return None
+            from .team_hint_policy import record_member_inspected
+
+            _now = time.time()
+            for member in team.members:
+                if member.status == "running":
+                    record_member_inspected(member, now=_now)
+            self.save(team)
             team = self._teams.get(team_id)
             if team is None:
                 return None
@@ -2255,17 +2285,83 @@ class TeamManager:
 
     async def hint_member_async(
         self, team_id: str, member_idx: int, message: str,
-    ) -> bool:
-        """Async version of hint_member."""
+        *, delivery: str = "both",
+    ) -> tuple[bool, str]:
+        """Async hint delivery. Returns (delivered, status_message)."""
         team = self._teams.get(team_id)
         if team is None or team.status != "active":
-            return False
+            return False, f"Team '{team_id}' is not active."
         if member_idx < 0 or member_idx >= len(team.members):
-            return False
+            return False, f"Invalid member index {member_idx}."
         member = team.members[member_idx]
         if member.status != "running" or self._delegate_manager is None:
-            return False
-        return await self._delegate_manager.hint(member.delegate_number, message)
+            return False, (
+                f"Member #{member_idx} is not running or delegate manager unavailable."
+            )
+
+        self.reconcile_with_delegates(team_id=team_id, persist=False)
+        team = self._teams.get(team_id)
+        if team is None:
+            return False, f"Team '{team_id}' not found."
+        member = team.members[member_idx]
+
+        from .team_hint_policy import (
+            evaluate_hint_suppression_for_member,
+            record_hint_delivery,
+        )
+        from .orchestrator_hint import normalize_delivery_mode
+
+        delivery_mode = normalize_delivery_mode(delivery)
+        if delivery_mode is None:
+            return False, "delivery must be 'both' or 'ring'."
+
+        suppress, reason = evaluate_hint_suppression_for_member(member, message)
+        if suppress:
+            logger.info(
+                "TeamManager: duplicate hint suppressed for %s member #%d (%s)",
+                team_id, member_idx, reason[:80],
+            )
+            return False, reason
+
+        ok = await self._delegate_manager.hint(
+            member.delegate_number, message, delivery=delivery_mode,
+        )
+        if ok:
+            record_hint_delivery(member, message)
+            self.save(team)
+            return True, (
+                f"Hint sent to team {team_id} member #{member_idx} "
+                f"(delivery={delivery_mode})."
+            )
+        return False, (
+            f"Could not send hint — delegate #{member.delegate_number} may not be running."
+        )
+
+    def evaluate_hint_suppression(
+        self, team_id: str, member_idx: int, message: str,
+    ) -> tuple[bool, str]:
+        """Return (suppress, reason) before sending orchestrator guidance."""
+        team = self._teams.get(team_id)
+        if team is None or member_idx < 0 or member_idx >= len(team.members):
+            return False, ""
+        if self._delegate_manager is not None and team.status == "active":
+            self.reconcile_with_delegates(team_id=team_id, persist=False)
+            team = self._teams.get(team_id)
+            if team is None:
+                return False, ""
+        member = team.members[member_idx]
+        from .team_hint_policy import evaluate_hint_suppression_for_member
+
+        return evaluate_hint_suppression_for_member(member, message)
+
+    def record_member_hint(self, team_id: str, member_idx: int, message: str) -> None:
+        team = self._teams.get(team_id)
+        if team is None or member_idx < 0 or member_idx >= len(team.members):
+            return
+        from .team_hint_policy import record_hint_delivery
+
+        record_hint_delivery(team.members[member_idx], message)
+        self.save(team)
 
     def update_briefing(self, team_id: str, content: str) -> bool:
         team = self._teams.get(team_id)
@@ -2493,7 +2589,7 @@ class TeamManager:
         # --- First escalation: auto-extend immediately (passive limits only) ---
         # Proactive escalate()/ask_user() from the member always reach the
         # orchestrator — they are asking for help, not hitting a guard rail.
-        _PROACTIVE_PREFIXES = ("escalate:", "ask_user:", "repeated_write:")
+        _PROACTIVE_PREFIXES = ("escalate:", "ask_user:", "repeated_write:", "repeated_delete:")
         _is_proactive = any(reason.startswith(p) for p in _PROACTIVE_PREFIXES)
 
         # Scale extension with original budget: at least 10, up to 1/2 of
@@ -2554,6 +2650,11 @@ class TeamManager:
                 )
 
         # --- Orchestrator escalation (proactive or 2nd+ passive) ---
+        from .team_hint_policy import open_member_escalation
+
+        open_member_escalation(member)
+        self.save(team)
+
         if _is_proactive:
             _writes_n = 0
             for line in (context_summary or "").splitlines():
@@ -2562,6 +2663,18 @@ class TeamManager:
                         _writes_n = int(line.split(":", 1)[1].strip())
                     except (ValueError, IndexError):
                         pass
+            _ask_user_hint = ""
+            if reason.startswith("ask_user:"):
+                _ask_user_hint = (
+                    "\n\nASK_USER ESCALATION — resolve runtime paths yourself "
+                    "when possible (project `.venv`, `bash(command='python --version')`, "
+                    "`where python` on Windows). Only ask_user() for secrets or "
+                    "choices only the owner can make.\n"
+                    "If you do ask_user(), forward the answer immediately via "
+                    f"team(action='intervene', team_id='{team.id}', member={member_idx}, "
+                    "decision='hint', message='<user answer>'). Then team(inspect) — "
+                    "use the live wave index, not stale Wave 0 notes."
+                )
             _finish_hint = (
                 " They listed a bounded finish list — prefer extend (+15 iters) "
                 "with a one-paragraph hint naming exact files/edits, NOT terminate."
@@ -2594,6 +2707,7 @@ class TeamManager:
                 )
                 + _finish_hint
                 + _file_access_hint
+                + _ask_user_hint
                 + "\n\nRespond with: team(action='intervene', "
                 f"team_id='{team.id}', member={member_idx}, "
                 f"decision='extend' (default) or 'hint', "
@@ -2635,12 +2749,13 @@ class TeamManager:
                     "TeamManager: broadcast escalation failed", exc_info=True,
                 )
 
-        if self._copilot_queue is not None:
+        _skip_copilot_queue = _is_proactive and reason.startswith("ask_user:")
+        if self._copilot_queue is not None and not _skip_copilot_queue:
             try:
                 self._copilot_queue.put_nowait(help_msg)
             except Exception:
                 logger.debug("TeamManager: copilot_queue injection failed", exc_info=True)
-        else:
+        elif self._copilot_queue is None and not _skip_copilot_queue:
             logger.warning(
                 "TeamManager: no copilot_queue — escalation won't reach orchestrator loop"
             )

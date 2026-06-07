@@ -231,8 +231,12 @@ async def _handle_ask_user(
     hooks: LoopHooks,
     iteration: int,
     tool_call_id: str,
+    *,
+    state: "LoopState | None" = None,
 ) -> ToolResult:
     """Handle ask_user virtual tool — blocks on copilot_queue."""
+    from .orchestration_policy import note_escalation_from_text
+
     question = args.get("question", "What do you need?")
     await emit(on_event, AgentEvent(
         EventType.ASK_USER,
@@ -243,17 +247,8 @@ async def _handle_ask_user(
             "iteration": iteration,
         },
     ))
-    # The question often lives only in tool args (visible text truncates before
-    # the call). Mirror it in chat via communicate + status so the UI cannot
-    # miss a silent 5-minute copilot_queue wait.
-    await emit(on_event, AgentEvent(
-        EventType.COMMUNICATE,
-        {
-            "message": question,
-            "iteration": iteration,
-            "user_facing": True,
-        },
-    ))
+    # Dedicated ask_user UI (card + composer banner) surfaces the question;
+    # do not mirror via communicate() — that duplicated the same text in chat.
     await emit(on_event, AgentEvent(
         EventType.STATUS,
         {
@@ -269,11 +264,60 @@ async def _handle_ask_user(
             is_error=True,
         )
 
+    _ESCALATION_PREFIXES = (
+        "[TEAM MEMBER HELP REQUEST",
+        "[TEAM INFO — AUTO-EXTENDED]",
+        "[TEAM COMPLETED",
+    )
+
+    def _non_user_copilot_item(item: object) -> bool:
+        if isinstance(item, dict):
+            if item.get("action"):
+                return True
+            role = str(item.get("role") or "").lower()
+            content = str(item.get("content") or "").strip()
+            if role == "user" and content:
+                return False
+            if role and role != "user":
+                return True
+            return any(content.startswith(p) for p in _ESCALATION_PREFIXES)
+        if isinstance(item, str):
+            return any(item.startswith(p) for p in _ESCALATION_PREFIXES)
+        return False
+
+    _loop = asyncio.get_running_loop()
+    _deadline = _loop.time() + 300
+    answer_text = "(user did not respond within 5 minutes)"
     try:
-        answer = await asyncio.wait_for(hooks.copilot_queue.get(), timeout=300)
-        answer_text = str(answer) if answer else "(no answer)"
+        while _loop.time() < _deadline:
+            _remaining = _deadline - _loop.time()
+            if _remaining <= 0:
+                break
+            answer = await asyncio.wait_for(
+                hooks.copilot_queue.get(),
+                timeout=_remaining,
+            )
+            if _non_user_copilot_item(answer):
+                if isinstance(answer, str):
+                    _esc_text = answer
+                elif isinstance(answer, dict):
+                    _esc_text = str(answer.get("content") or "")
+                else:
+                    _esc_text = ""
+                if state is not None and _esc_text.strip():
+                    note_escalation_from_text(state, _esc_text)
+                logger.info(
+                    "ask_user: skipped non-answer copilot item (type=%s)",
+                    type(answer).__name__,
+                )
+                continue
+            if isinstance(answer, dict) and answer.get("content"):
+                answer_text = str(answer["content"]).strip() or "(no answer)"
+            else:
+                answer_text = str(answer).strip() if answer else "(no answer)"
+            break
     except asyncio.TimeoutError:
-        answer_text = "(user did not respond within 5 minutes)"
+        pass
 
     await emit(on_event, AgentEvent(
         EventType.USER_ANSWER,
@@ -610,6 +654,8 @@ async def _handle_delegate(
         _delegate_cwd = _SharedCWD(_pd_abs)
         _FILE_TOOLS = {"read", "write", "edit", "grep", "glob", "list_dir",
                        "delete_file", "move_file", "semantic_search", "bash"}
+        _delegate_write_counts: dict[str, int] | None = None
+        _delegate_delete_counts: dict[str, int] | None = None
         for _tname in _FILE_TOOLS:
             _orig = sub_tools.get(_tname)
             if _orig is None:
@@ -638,7 +684,13 @@ async def _handle_delegate(
                     })
                 if _tname == "write":
                     _cloned._write_counts = {}
+                    _delegate_write_counts = _cloned._write_counts
                     _cloned._block_full_rewrite_after_first = True
+                if _tname == "delete_file" and _delegate_write_counts is not None:
+                    if _delegate_delete_counts is None:
+                        _delegate_delete_counts = {}
+                    _cloned._write_counts_ref = _delegate_write_counts
+                    _cloned._delete_counts_ref = _delegate_delete_counts
                 if _tname == "read":
                     _cloned._reader_label = f"delegate #{delegate_number}"
                 sub_tools[_tname] = _cloned
@@ -672,15 +724,10 @@ async def _handle_delegate(
 
     _project_dir_info = ""
     if _pd:
-        from nls.agentic.delegate_verification import (
-            format_delegate_verification_block,
-            format_project_directory_block,
-        )
+        from nls.agentic.delegate_verification import format_project_directory_block
         _project_dir_info = (
             "\n"
             + format_project_directory_block(_pd)
-            + "\n"
-            + format_delegate_verification_block()
             + "\n"
         )
 
@@ -1112,6 +1159,10 @@ def classify_independence(
 
     for tc in tool_calls:
         fn = tc.get("function", {})
+        name = fn.get("name", "")
+        if name == "team":
+            dependent.append(tc)
+            continue
         args_str = fn.get("arguments", "")
         refs_other = any(
             oid in args_str
@@ -1855,6 +1906,28 @@ async def run_delegate_detached(
             esc_cb=_escalation_cb,
         )
 
+    async def _notify_repeated_delete(path_str: str, count: int) -> tuple[str, bool]:
+        if _escalation_cb is None:
+            return (
+                "Repeated delete+rewrite — no orchestrator channel. "
+                "Use edit() or escalate().",
+                False,
+            )
+        _ls = _state_holder[0] if _state_holder else None
+        _summary = f"Delete+rewrite cycle #{count} on {path_str}"
+        if _ls is not None:
+            _summary += (
+                f"\niteration: {_ls.iteration}/{sub_config.max_iterations}"
+            )
+        return await _await_orchestrator_escalation(
+            reason=f"repeated_delete:{path_str}",
+            state=_ls,
+            context_summary=_summary,
+            config=sub_config,
+            copilot_queue=hint_queue,
+            esc_cb=_escalation_cb,
+        )
+
     from nls.tools.agent_tools.plan import PlanReadOnlyTool
     sub_tools = {k: v for k, v in tools.items() if k not in _DELEGATE_EXCLUDED}
     plan_tool = tools.get("plan")
@@ -1914,6 +1987,8 @@ async def run_delegate_detached(
         _delegate_cwd = _SharedCWD(_pd_abs)
         _FILE_TOOLS = {"read", "write", "edit", "grep", "glob", "list_dir",
                        "delete_file", "move_file", "semantic_search", "bash"}
+        _delegate_write_counts: dict[str, int] | None = None
+        _delegate_delete_counts: dict[str, int] | None = None
         for _tname in _FILE_TOOLS:
             _orig = sub_tools.get(_tname)
             if _orig is None:
@@ -1946,10 +2021,16 @@ async def run_delegate_detached(
                     })
                 if _tname == "write":
                     _cloned._write_counts = {}
-                if _tname == "write" and _escalation_cb is not None:
-                    _cloned._on_repeated_write_escalation = _notify_repeated_write
-                if _tname == "write":
+                    _delegate_write_counts = _cloned._write_counts
+                    if _escalation_cb is not None:
+                        _cloned._on_repeated_write_escalation = _notify_repeated_write
                     _cloned._block_full_rewrite_after_first = True
+                if _tname == "delete_file" and _delegate_write_counts is not None:
+                    if _delegate_delete_counts is None:
+                        _delegate_delete_counts = {}
+                    _cloned._write_counts_ref = _delegate_write_counts
+                    _cloned._delete_counts_ref = _delegate_delete_counts
+                    _cloned._on_repeated_delete_escalation = _notify_repeated_delete
                 if _tname == "read":
                     _cloned._reader_label = f"delegate #{spec.delegate_number}"
                 sub_tools[_tname] = _cloned
@@ -1978,15 +2059,10 @@ async def run_delegate_detached(
         )
 
     if _pd:
-        from nls.agentic.delegate_verification import (
-            format_delegate_verification_block,
-            format_project_directory_block,
-        )
+        from nls.agentic.delegate_verification import format_project_directory_block
         _project_dir_info = (
             "\n"
             + format_project_directory_block(_pd)
-            + "\n"
-            + format_delegate_verification_block()
             + "\n"
         )
 
@@ -2470,9 +2546,19 @@ async def _handle_delegate_status(
             return ToolResult(content="delegate_number required for hint.", is_error=True)
         if not msg:
             return ToolResult(content="message required for hint.", is_error=True)
-        ok = await delegate_manager.hint(int(num), msg)
+        from nls.agentic.orchestrator_hint import normalize_delivery_mode
+
+        delivery = normalize_delivery_mode(args.get("delivery")) or "both"
+        ok = await delegate_manager.hint(
+            int(num), msg,
+            delivery=delivery,
+        )
         return ToolResult(
-            content=f"Hint {'delivered — delegate will see it next iteration' if ok else 'failed (not running?)'}.",
+            content=(
+                f"Hint {'delivered — delegate will see ring+chat next iteration' if ok else 'failed (not running?)'}."
+                if delivery != "ring"
+                else f"Hint {'delivered — ring-only nudge queued' if ok else 'failed (not running?)'}."
+            ),
         )
 
     statuses = delegate_manager.get_status()
@@ -2728,7 +2814,10 @@ async def execute_tools(
                     hooks,
                 )
                 continue
-            r = await _handle_ask_user(args, on_event, hooks or LoopHooks(), state.iteration, call_id)
+            r = await _handle_ask_user(
+                args, on_event, hooks or LoopHooks(), state.iteration, call_id,
+                state=state,
+            )
             ordered_results[idx] = r
             continue
         if name == "communicate":

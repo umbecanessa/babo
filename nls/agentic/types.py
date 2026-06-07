@@ -1081,6 +1081,14 @@ _DELEGATE_STATUS_TOOL_SCHEMA = {
                         "their approach, or provide missing context."
                     ),
                 },
+                "delivery": {
+                    "type": "string",
+                    "enum": ["both", "ring"],
+                    "description": (
+                        "For action='hint': 'both' (default) writes ring + "
+                        "chat interrupt with ack; 'ring' is a quiet nudge."
+                    ),
+                },
             },
             "required": ["action"],
         },

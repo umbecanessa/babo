@@ -2349,6 +2349,28 @@ def build_hooks_v4(
                     if "[ORCHESTRATOR HINT]" in _content or "[ORCHESTRATOR REVIEW" in _content:
                         _has_hint = True
                     logger.info("[STEERING] drained dict msg: %.80s", _content[:80])
+                elif isinstance(item, dict) and "action" in item:
+                    from nls.agentic.orchestrator_hint import (
+                        intervention_dict_to_steering_msg,
+                    )
+
+                    _steering = intervention_dict_to_steering_msg(item)
+                    if _steering is not None:
+                        msgs.append(_steering)
+                        _content = _steering.get("content", "")
+                        if "[ORCHESTRATOR HINT]" in _content:
+                            _has_hint = True
+                        logger.info(
+                            "[STEERING] converted intervene action=%s to chat",
+                            item.get("action"),
+                        )
+                    else:
+                        q.put_nowait(item)
+                        logger.info(
+                            "[STEERING] preserved intervene action=%s on queue",
+                            item.get("action"),
+                        )
+                        break
                 else:
                     logger.warning("[STEERING] skipped item type=%s repr=%.100s", type(item).__name__, repr(item)[:100])
             except Exception:

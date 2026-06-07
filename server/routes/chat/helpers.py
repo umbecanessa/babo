@@ -404,6 +404,50 @@ def _dedup_signal_tags(text: str) -> str:
     return strip_nls_artifacts(text)
 
 
+def _merge_transcript_event_prose(
+    built: list[dict],
+    eager: list[dict],
+) -> list[dict]:
+    """Merge mid-loop prose and richer tool metadata from WS eager_events."""
+    if not eager:
+        return list(built)
+    eager_by_step = {
+        int(e["step"]): e
+        for e in eager
+        if isinstance(e, dict) and e.get("step") is not None
+    }
+    if not built:
+        return [dict(e) for e in eager if isinstance(e, dict)]
+
+    merged: list[dict] = []
+    built_steps: set[int] = set()
+    for entry in built:
+        if not isinstance(entry, dict):
+            continue
+        step = int(entry.get("step") or 0)
+        built_steps.add(step)
+        out = dict(entry)
+        e = eager_by_step.get(step)
+        if e:
+            prose = (e.get("prose") or e.get("response_text") or "").strip()
+            if prose and not e.get("hold_prose"):
+                out["prose"] = prose
+            if len(e.get("tool_calls") or []) >= len(out.get("tool_calls") or []):
+                if e.get("tool_calls"):
+                    out["tool_calls"] = e["tool_calls"]
+                if e.get("tool_results"):
+                    out["tool_results"] = e["tool_results"]
+            if e.get("duration_ms") and not out.get("duration_ms"):
+                out["duration_ms"] = e["duration_ms"]
+        merged.append(out)
+
+    for step, e in sorted(eager_by_step.items()):
+        if step not in built_steps:
+            merged.append(dict(e))
+    merged.sort(key=lambda x: int(x.get("step") or 0))
+    return merged
+
+
 def _build_agentic_metadata(result) -> dict:
     """Build frontend-compatible metadata from an AgenticResult."""
     from nls.agentic.types import EventType
@@ -411,6 +455,18 @@ def _build_agentic_metadata(result) -> dict:
     step_data: dict = {}
     for ev in (result.events or []):
         d = ev.data if hasattr(ev, "data") else {}
+        if ev.type == EventType.TURN_END:
+            step = int(d.get("iteration", 0))
+            if step not in step_data:
+                step_data[step] = {
+                    "step": step, "tool_calls": [],
+                    "tool_results": [], "hormones": {},
+                    "duration_ms": 0,
+                }
+            resp = (d.get("response_text") or "").strip()
+            if resp and not d.get("hold_prose"):
+                step_data[step]["prose"] = resp
+            continue
         if ev.type == EventType.TOOL_EXECUTION_END:
             step = d.get("iteration", 0)
             if step not in step_data:

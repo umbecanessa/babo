@@ -1,4 +1,4 @@
-"""ask_user must surface the question in chat, not only block on copilot_queue."""
+"""ask_user surfaces the dedicated UI card and blocks on copilot_queue."""
 
 from __future__ import annotations
 
@@ -32,16 +32,12 @@ async def test_handle_ask_user_emits_chat_visible_events():
 
     types = [e.type for e in events]
     assert EventType.ASK_USER in types
-    assert EventType.COMMUNICATE in types
     assert EventType.STATUS in types
+    assert EventType.COMMUNICATE not in types
 
     ask = next(e for e in events if e.type == EventType.ASK_USER)
     assert ask.data["question"] == "What is your Discord bot token?"
     assert ask.data["request_id"] == "call_test"
-
-    comm = next(e for e in events if e.type == EventType.COMMUNICATE)
-    assert comm.data["message"] == "What is your Discord bot token?"
-    assert comm.data.get("user_facing") is True
 
     status = next(e for e in events if e.type == EventType.STATUS)
     assert status.data.get("status") == "waiting_for_user"

@@ -1501,16 +1501,20 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                         if len(history) > 40:
                             history = history[-40:]
                         runtime.save_conversation_history(history)
-                        from .helpers import _build_agentic_metadata
+                        from .helpers import (
+                            _build_agentic_metadata,
+                            _merge_transcript_event_prose,
+                        )
 
                         _agentic_final_text = (
                             agentic_result.final_response or ""
                         ).strip()
                         _transcript_meta = _build_agentic_metadata(agentic_result)
                         if _eager_events:
-                            _built = _transcript_meta.get("events") or []
-                            if not _built or len(_built) < len(_eager_events):
-                                _transcript_meta["events"] = list(_eager_events)
+                            _transcript_meta["events"] = _merge_transcript_event_prose(
+                                _transcript_meta.get("events") or [],
+                                _eager_events,
+                            )
                         record_visible_chat_turn(
                             runtime,
                             user=_strip_internal_blocks(user_content_raw),

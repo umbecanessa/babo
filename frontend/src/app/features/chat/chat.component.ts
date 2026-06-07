@@ -3264,6 +3264,10 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
       case 'communicate': {
         this.streamingText.set('');
+        // ask_user card already shows the question — skip duplicate bubble.
+        if (this.askUserPending()) {
+          break;
+        }
         // Auto-surfaced turn text stays in workbench; explicit communicate() + milestones show here.
         const hideAutonomousChatter =
           (msg.mid_loop || msg.autonomous)

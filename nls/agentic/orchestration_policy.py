@@ -691,7 +691,7 @@ def parse_escalation_steering(content: str) -> dict[str, Any]:
     if m:
         out["team_id"] = m.group(1)
     else:
-        m = re.search(r"\[(team_[a-f0-9]+)\]", content)
+        m = re.search(r"\[(team_[^\]]+)\]", content)
         if m:
             out["team_id"] = m.group(1)
     m = re.search(r"writes:\s*(\d+)", content, re.IGNORECASE)
@@ -708,7 +708,62 @@ def parse_escalation_steering(content: str) -> dict[str, Any]:
         out["proactive"] = True
     if "file_access" in content.lower():
         out["file_access"] = True
+    if "ask_user:" in content.lower():
+        out["ask_user"] = True
     return out
+
+
+_ESCALATION_STEERING_MARKERS = (
+    "[TEAM MEMBER HELP REQUEST",
+)
+
+
+def note_escalation_from_text(state: LoopState, text: str) -> bool:
+    """Populate pending escalation fields from a help-request steering blob."""
+    content = (text or "").strip()
+    if not content or not any(m in content for m in _ESCALATION_STEERING_MARKERS):
+        return False
+    meta = parse_escalation_steering(content)
+    state.has_pending_escalation = True
+    if meta.get("team_id"):
+        state.pending_escalation_team_id = str(meta["team_id"])
+    if meta.get("member_idx") is not None:
+        state.pending_escalation_member_idx = int(meta["member_idx"])
+    if meta.get("writes") is not None:
+        state.pending_escalation_writes = int(meta["writes"])
+    if meta.get("paths"):
+        state.pending_escalation_paths = list(meta["paths"])
+    return True
+
+
+def note_escalation_from_dispatch_source(
+    state: LoopState,
+    dispatch_source: str,
+    team_manager: Any | None = None,
+) -> bool:
+    """Seed pending escalation when wake source is a member-escalation dispatch."""
+    from nls.agentic.wake_coordination import (
+        is_member_escalation_source,
+        parse_member_escalation_source,
+    )
+
+    if not is_member_escalation_source(dispatch_source):
+        return False
+    team_id, delegate_number = parse_member_escalation_source(dispatch_source)
+    if not team_id:
+        return False
+    state.has_pending_escalation = True
+    state.pending_escalation_team_id = team_id
+    member_idx = -1
+    if team_manager is not None:
+        team = getattr(team_manager, "_teams", {}).get(team_id)
+        if team is not None:
+            for idx, member in enumerate(team.members):
+                if getattr(member, "delegate_number", None) == delegate_number:
+                    member_idx = idx
+                    break
+    state.pending_escalation_member_idx = member_idx
+    return True
 
 
 def block_terminate_intervention(
