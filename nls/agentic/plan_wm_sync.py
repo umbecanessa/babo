@@ -275,10 +275,10 @@ def sync_pending_teams_breadcrumb(
         _remove_wm_domain(wm, domain)
         return
     breadcrumb = build_pending_teams_breadcrumb(team_manager, plan_id)
-    if breadcrumb:
-        _upsert_wm_domain(wm, domain, breadcrumb[:2000], salience=0.98)
-    else:
+    if not breadcrumb:
         _remove_wm_domain(wm, domain)
+        return
+    _upsert_wm_domain(wm, domain, breadcrumb[:2000], salience=0.98)
 
 
 def _scrub_stale_domains(wm: Any) -> None:

@@ -14,6 +14,7 @@ from nls.agentic.plan_triage_policy import (
     build_plan_triage_continuation_block,
     enforce_loop_profile_for_active_plan,
     plan_requires_orchestrated_profile,
+    sync_loop_plan_team_tracking,
 )
 from nls.agentic.team_manager import Team, TeamMember
 from nls.agentic.types import LoopState
@@ -201,3 +202,50 @@ def test_apply_active_plan_goals_and_hints_without_triage():
     assert state.goals
     assert "continuation:plan_orchestration" in state.hints
     assert not any("forbid:team" in h for h in state.hints)
+
+
+def test_sync_loop_plan_team_tracking_restores_pending_launch():
+    plan = Plan(
+        id="plan_x",
+        title="ICF",
+        status="in_progress",
+        steps=[PlanStep(id="step-9", label="Completion page", status="pending")],
+    )
+    team = Team(
+        id="team_w5",
+        plan_id="plan_x",
+        wave_index=4,
+        status="created",
+    )
+    state = LoopState()
+    sync_loop_plan_team_tracking(
+        state,
+        _FakeStore(plan),
+        _FakeTeamManager([team]),
+    )
+    assert state.active_plan_id == "plan_x"
+    assert state.pending_launch_team_id == "team_w5"
+
+
+def test_sync_loop_plan_team_tracking_clears_when_no_unlaunched():
+    plan = Plan(
+        id="plan_x",
+        title="ICF",
+        status="in_progress",
+        steps=[PlanStep(id="step-9", label="Completion page", status="pending")],
+    )
+    team = Team(
+        id="team_w5",
+        plan_id="plan_x",
+        wave_index=4,
+        status="active",
+        batch_id="batch_1",
+    )
+    state = LoopState(pending_launch_team_id="stale_team")
+    sync_loop_plan_team_tracking(
+        state,
+        _FakeStore(plan),
+        _FakeTeamManager([team]),
+    )
+    assert state.active_plan_id == "plan_x"
+    assert state.pending_launch_team_id == ""

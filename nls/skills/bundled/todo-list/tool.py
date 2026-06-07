@@ -196,6 +196,11 @@ class TodoTool:
                 f"status='in_progress', notes='...') — do NOT add again."
             ),
             is_error=False,
+            details={
+                "todo_id": existing.id,
+                "action": "add",
+                "skipped_duplicate": True,
+            },
         )
 
     async def _add(self, params: dict[str, Any]) -> ToolResult:

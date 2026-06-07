@@ -40,6 +40,8 @@ class BreadcrumbContext:
     is_coordinator: bool = False
     goals: tuple[str, ...] = ()
     orchestration_profile: str = "solo_structured"
+    pending_launch_team_id: str = ""
+    active_plan_id: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -143,6 +145,91 @@ def _has_delegatable_steps(ctx: BreadcrumbContext) -> bool:
     return any(s.get("delegatable") for s in steps)
 
 
+def _todo_add_needs_plan(ctx: BreadcrumbContext) -> bool:
+    if ctx.is_error or ctx.result_details.get("skipped_duplicate"):
+        return False
+    if ctx.active_plan_id or ctx.pending_launch_team_id:
+        return False
+    return True
+
+
+def update_loop_state_from_tool_result(
+    tool_name: str,
+    result: Any,
+    state: Any,
+) -> None:
+    """Track active plan + pending wave launch from tool outcomes."""
+    details = result.details or {}
+    if tool_name == "team":
+        act = str(details.get("action", "")).strip()
+        tid = str(details.get("team_id", "")).strip()
+        if act == "create" and tid and (
+            not result.is_error or details.get("duplicate_team")
+        ):
+            state.pending_launch_team_id = tid
+        elif act == "launch" and not result.is_error:
+            state.pending_launch_team_id = ""
+    if tool_name == "plan" and not result.is_error:
+        act = str(details.get("action", "")).strip()
+        pid = str(details.get("plan_id", "")).strip()
+        if pid and act in ("create", "read"):
+            state.active_plan_id = pid
+
+
+def should_evaluate_tool_breadcrumb(
+    tool_name: str,
+    result: Any,
+    bc_ctx: BreadcrumbContext,
+) -> bool:
+    """Whether breadcrumb rules should run despite tool errors."""
+    if not result.is_error:
+        return True
+    details = bc_ctx.result_details
+    if tool_name == "team" and (
+        details.get("wave_needs_advance") or details.get("duplicate_team")
+    ):
+        return True
+    if tool_name == "plan" and details.get("already_existed"):
+        return True
+    if details.get("rewrite_blocked"):
+        return True
+    return False
+
+
+def _plan_create_success(ctx: BreadcrumbContext) -> bool:
+    return not ctx.is_error
+
+
+def _plan_create_em_delegatable(ctx: BreadcrumbContext) -> bool:
+    return not ctx.is_error and _has_delegatable_steps(ctx)
+
+
+def _render_plan_already_exists_em(ctx: BreadcrumbContext) -> str:
+    pid = ctx.result_details.get("plan_id", "???")
+    tid = ctx.pending_launch_team_id
+    if tid:
+        return (
+            f"[BREADCRUMB] Plan {pid} already exists and wave team is ready. "
+            f"Do NOT plan(create) or todo(add) again. "
+            f"NEXT: team(action='launch', team_id='{tid}')."
+        )
+    return (
+        f"[BREADCRUMB] Plan {pid} already exists — use plan(action='read', "
+        f"plan_id='{pid}'), then team(create)/team(launch). "
+        f"Do NOT plan(create) again."
+    )
+
+
+def _render_plan_already_exists_solo(ctx: BreadcrumbContext) -> str:
+    pid = ctx.result_details.get("plan_id", "???")
+    return (
+        f"[BREADCRUMB] Plan {pid} already exists — use plan(action='read', "
+        f"plan_id='{pid}') and execute the next pending step yourself "
+        f"(write/bash/edit). Do NOT plan(create) again — no team waves in "
+        f"solo_structured mode."
+    )
+
+
 # -------------------------------------------------------------------
 # Default rules
 # -------------------------------------------------------------------
@@ -154,6 +241,16 @@ def _render_todo_plan(ctx: BreadcrumbContext) -> str:
         f"plan(action='create', todo_id='{tid}', "
         f"title='<descriptive title>'). "
         f"The title parameter is REQUIRED."
+    )
+
+
+def _render_todo_plan_solo(ctx: BreadcrumbContext) -> str:
+    tid = ctx.result_details.get("todo_id", "???")
+    return (
+        f"[BREADCRUMB] NEXT: Create a solo execution plan for this todo — "
+        f"plan(action='create', todo_id='{tid}', title='<descriptive title>'). "
+        f"Then switch_mode(executing) and work each step yourself — "
+        f"no team or delegate waves."
     )
 
 
@@ -376,7 +473,10 @@ def _render_lookup_answer(ctx: BreadcrumbContext) -> str:
     )
 
 
-_EM_PROFILES = frozenset({"orchestrated"})
+# team() wave/delegate EM workflow — orchestrated profile only.
+# squad_lead uses squad() for persistent fleet coordination; do not conflate.
+_TEAM_WAVE_PROFILES = frozenset({"orchestrated"})
+_EM_PROFILES = _TEAM_WAVE_PROFILES  # alias for existing rule tables
 _SOLO_PROFILES = frozenset({"solo_structured"})
 _DIRECT_PROFILES = frozenset({"conversational"})
 _SOLO_AND_EM_PROFILES = frozenset({"solo_structured", "orchestrated"})
@@ -387,8 +487,17 @@ DEFAULT_RULES: list[BreadcrumbRule] = [
     BreadcrumbRule(
         trigger=("todo", "add"),
         profiles=_SOLO_PROFILES,
+        requires_tools=frozenset({"plan", "todo"}),
+        condition=_todo_add_needs_plan,
+        render=_render_todo_plan_solo,
+    ),
+    BreadcrumbRule(
+        trigger=("todo", "add"),
+        profiles=_SOLO_PROFILES,
         requires_tools=frozenset({"todo"}),
-        condition=lambda ctx: "plan" not in ctx.unlocked_tools,
+        condition=lambda ctx: (
+            "plan" not in ctx.unlocked_tools and _todo_add_needs_plan(ctx)
+        ),
         render=_render_todo_list_solo,
     ),
     BreadcrumbRule(
@@ -435,6 +544,7 @@ DEFAULT_RULES: list[BreadcrumbRule] = [
         trigger=("todo", "add"),
         profiles=_EM_PROFILES,
         requires_tools=frozenset({"plan"}),
+        condition=_todo_add_needs_plan,
         render=_render_todo_plan,
     ),
     # plan(create) with delegatable steps → team(create)
@@ -442,15 +552,37 @@ DEFAULT_RULES: list[BreadcrumbRule] = [
         trigger=("plan", "create"),
         profiles=_EM_PROFILES,
         requires_tools=frozenset({"team"}),
-        condition=_has_delegatable_steps,
+        condition=_plan_create_em_delegatable,
         render=_render_plan_team,
+    ),
+    # plan(create) blocked — root plan already exists (EM)
+    BreadcrumbRule(
+        trigger=("plan", "create"),
+        profiles=_EM_PROFILES,
+        requires_tools=frozenset({"team", "plan"}),
+        condition=lambda ctx: (
+            ctx.is_error
+            and bool(ctx.result_details.get("already_existed"))
+        ),
+        render=_render_plan_already_exists_em,
+    ),
+    # plan(create) blocked — root plan already exists (solo)
+    BreadcrumbRule(
+        trigger=("plan", "create"),
+        profiles=_SOLO_PROFILES,
+        requires_tools=frozenset({"plan"}),
+        condition=lambda ctx: (
+            ctx.is_error
+            and bool(ctx.result_details.get("already_existed"))
+        ),
+        render=_render_plan_already_exists_solo,
     ),
     # plan(create) on solo profile → execute steps yourself
     BreadcrumbRule(
         trigger=("plan", "create"),
         profiles=_SOLO_PROFILES,
         requires_tools=frozenset({"plan"}),
-        condition=lambda ctx: not ctx.is_error,
+        condition=_plan_create_success,
         render=_render_plan_execute_solo,
     ),
     # team(create) → team(launch)

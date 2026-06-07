@@ -1,9 +1,11 @@
-"""Team launch breadcrumb + stall guards after team(create)."""
+"""Team launch breadcrumb + guards after team(create)."""
 
 from nls.agentic.breadcrumbs import BreadcrumbContext, BreadcrumbEngine
-from nls.agentic.evaluator import detect_stall
+from nls.agentic.orchestration_policy import (
+    maybe_pending_launch_wrong_tool_nudge,
+    pending_launch_wrong_tool_message,
+)
 from nls.agentic.orchestration_profile_spec import behavioral_domain_visible_for_profile
-from nls.agentic.types import LoopConfig, LoopState
 
 
 def test_duplicate_team_create_breadcrumb():
@@ -15,7 +17,7 @@ def test_duplicate_team_create_breadcrumb():
         result_details={
             "action": "create",
             "duplicate_team": True,
-            "team_id": "team_5a78e945",
+            "team_id": "team_88370db2",
         },
         unlocked_tools=frozenset({"team", "plan"}),
         orchestration_profile="orchestrated",
@@ -23,21 +25,98 @@ def test_duplicate_team_create_breadcrumb():
     )
     hint = engine.evaluate(ctx)
     assert hint is not None
-    assert "team_5a78e945" in hint
+    assert "team_88370db2" in hint
     assert "launch" in hint.lower()
-    assert "do not team(create)" in hint.lower()
 
 
-def test_stall_nudge_when_pending_launch_team():
-    state = LoopState(
+def test_todo_duplicate_skips_plan_breadcrumb_when_team_pending():
+    engine = BreadcrumbEngine()
+    ctx = BreadcrumbContext(
+        tool_name="todo",
+        action="add",
+        is_error=False,
+        result_details={
+            "action": "add",
+            "todo_id": "1cc36940",
+            "skipped_duplicate": True,
+        },
+        unlocked_tools=frozenset({"team", "plan"}),
         orchestration_profile="orchestrated",
-        pending_launch_team_id="team_5a78e945",
-        tool_call_signatures=["todo:list", "todo:list", "todo:list"],
+        active_plan_id="plan_7db076e0",
+        pending_launch_team_id="team_88370db2",
     )
-    msg = detect_stall(state, LoopConfig())
+    assert engine.evaluate(ctx) is None
+
+
+def test_plan_create_blocked_points_to_launch():
+    engine = BreadcrumbEngine()
+    ctx = BreadcrumbContext(
+        tool_name="plan",
+        action="create",
+        is_error=True,
+        result_details={
+            "action": "create",
+            "already_existed": True,
+            "plan_id": "plan_7db076e0",
+        },
+        unlocked_tools=frozenset({"team", "plan"}),
+        orchestration_profile="orchestrated",
+        pending_launch_team_id="team_88370db2",
+    )
+    hint = engine.evaluate(ctx)
+    assert hint is not None
+    assert "team_88370db2" in hint
+    assert "launch" in hint.lower()
+    assert "solo" not in hint.lower()
+
+
+def test_plan_create_blocked_solo_no_team():
+    engine = BreadcrumbEngine()
+    ctx = BreadcrumbContext(
+        tool_name="plan",
+        action="create",
+        is_error=True,
+        result_details={
+            "action": "create",
+            "already_existed": True,
+            "plan_id": "plan_abc",
+        },
+        unlocked_tools=frozenset({"plan"}),
+        orchestration_profile="solo_structured",
+    )
+    hint = engine.evaluate(ctx)
+    assert hint is not None
+    assert "plan_abc" in hint
+    assert "team(action" not in hint
+    assert "solo_structured" in hint
+
+
+def test_pending_launch_wrong_tool_nudge():
+    msg = pending_launch_wrong_tool_message(
+        "todo", "add", pending_team_id="team_88370db2",
+    )
     assert msg is not None
-    assert "team_5a78e945" in msg
     assert "launch" in msg.lower()
+    assert pending_launch_wrong_tool_message(
+        "team", "launch", pending_team_id="team_88370db2",
+    ) is None
+
+
+def test_pending_launch_nudge_orchestrated_only():
+    assert maybe_pending_launch_wrong_tool_nudge(
+        orchestration_profile="solo_structured",
+        tool_name="todo",
+        action="add",
+        pending_team_id="team_88370db2",
+        is_delegate_loop=False,
+    ) is None
+    assert maybe_pending_launch_wrong_tool_nudge(
+        orchestration_profile="orchestrated",
+        tool_name="todo",
+        action="add",
+        pending_team_id="team_88370db2",
+        is_delegate_loop=False,
+    ) is not None
 
 
 def test_solo_plan_workflow_hidden_for_orchestrated():

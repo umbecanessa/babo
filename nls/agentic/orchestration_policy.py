@@ -1400,3 +1400,59 @@ def should_suppress_checkback_wake(
     except Exception:
         return False
     return False
+
+
+_PENDING_LAUNCH_OK_TOOLS: frozenset[tuple[str, str]] = frozenset({
+    ("team", "launch"),
+    ("team", "inspect"),
+    ("team", "list"),
+    ("plan", "read"),
+    ("switch_mode", ""),
+    ("await_delegates", ""),
+    ("communicate", ""),
+    ("scheduler", ""),
+    ("delegate_status", ""),
+})
+
+
+def maybe_pending_launch_wrong_tool_nudge(
+    *,
+    orchestration_profile: str,
+    tool_name: str,
+    action: str,
+    pending_team_id: str,
+    is_delegate_loop: bool,
+) -> str | None:
+    """Inject launch nudge when orchestrator uses setup tools mid-launch."""
+    if is_delegate_loop or not (pending_team_id or "").strip():
+        return None
+    from nls.agentic.profile_guard_policy import normalize_profile
+
+    if normalize_profile(orchestration_profile) != "orchestrated":
+        return None
+    return pending_launch_wrong_tool_message(
+        tool_name, action, pending_team_id=pending_team_id,
+    )
+
+
+def pending_launch_wrong_tool_message(
+    tool_name: str,
+    action: str,
+    *,
+    pending_team_id: str,
+) -> str | None:
+    """Nudge when orchestrator uses setup tools while a wave team awaits launch."""
+    tid = (pending_team_id or "").strip()
+    if not tid:
+        return None
+    act = (action or "").strip().lower()
+    name = (tool_name or "").strip().lower()
+    if (name, act) in _PENDING_LAUNCH_OK_TOOLS or (name, "") in _PENDING_LAUNCH_OK_TOOLS:
+        return None
+    if name == "team" and act in ("launch", "inspect", "list", "advance"):
+        return None
+    return (
+        f"[LOOP CONTROL] Team '{tid}' is created but NOT launched. "
+        f"Call team(action='launch', team_id='{tid}') now — "
+        f"do NOT {name}({act or '...'}) until the wave is executing."
+    )

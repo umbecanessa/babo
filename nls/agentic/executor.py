@@ -3169,7 +3169,7 @@ async def execute_tools(
             _plan_tool = tools.get("plan")
             if (
                 not _simple_delegate
-                and _profile in ("orchestrated", "squad_lead")
+                and _profile == "orchestrated"
                 and _plan_tool
                 and hasattr(_plan_tool, "_store")
             ):

@@ -24,7 +24,12 @@ from typing import Any, Callable
 from nls.tools.agent_tools.base import AgentTool, tool_to_openai_schema
 
 from .bridge import LoopHooks
-from .breadcrumbs import BreadcrumbContext, BreadcrumbEngine
+from .breadcrumbs import (
+    BreadcrumbContext,
+    BreadcrumbEngine,
+    should_evaluate_tool_breadcrumb,
+    update_loop_state_from_tool_result,
+)
 from .compactor import CompactionAnchor, compact, should_compact
 from .context_supersession import (
     apply_supersession_with_cache_refs,
@@ -992,6 +997,8 @@ def _build_bc_ctx(
         is_coordinator=state.coordinator_mode,
         goals=tuple(state.goals),
         orchestration_profile=getattr(state, "orchestration_profile", "") or "solo_structured",
+        pending_launch_team_id=getattr(state, "pending_launch_team_id", "") or "",
+        active_plan_id=getattr(state, "active_plan_id", "") or "",
     )
 
 
@@ -1427,6 +1434,7 @@ async def run_loop(
         apply_active_plan_goals_and_hints,
         enforce_loop_profile_for_active_plan,
         get_plan_store_from_tool,
+        sync_loop_plan_team_tracking,
     )
 
     _plan_store = get_plan_store_from_tool(_plan_tool_goals)
@@ -1711,6 +1719,15 @@ async def run_loop(
             logger.debug(
                 "Active-plan profile enforcement failed", exc_info=True,
             )
+
+    try:
+        sync_loop_plan_team_tracking(
+            state, _plan_store, _cached_team_manager,
+        )
+    except Exception:
+        logger.debug(
+            "Loop plan/team tracking sync failed", exc_info=True,
+        )
 
     if _profile == "conversational" and not state.coordinator_mode:
         from nls.agentic.profile_guard_policy import conversational_tool_surface
@@ -2408,12 +2425,55 @@ async def run_loop(
                 if _squad_nudge:
                     context.append({"role": "system", "content": _squad_nudge})
 
-                if not result.is_error:
-                    _pbc_hint = _breadcrumb_engine.evaluate(
-                        _build_bc_ctx(_pre_name, result, state, _deferred_actions, anchor)
-                    )
+                update_loop_state_from_tool_result(_pre_name, result, state)
+                if (
+                    not _is_delegate_loop
+                    and _pre_name in ("plan", "team")
+                    and _plan_store is not None
+                ):
+                    try:
+                        from nls.agentic.plan_triage_policy import (
+                            enforce_loop_profile_for_active_plan,
+                        )
+
+                        enforce_loop_profile_for_active_plan(
+                            state, _plan_store, _cached_team_manager,
+                        )
+                        if state.pending_profile_anchor:
+                            context.append({
+                                "role": "system",
+                                "content": state.pending_profile_anchor,
+                            })
+                            state.pending_profile_anchor = ""
+                    except Exception:
+                        logger.debug(
+                            "Pre-loop profile enforce after %s failed",
+                            _pre_name,
+                            exc_info=True,
+                        )
+
+                _pbc_ctx = _build_bc_ctx(
+                    _pre_name, result, state, _deferred_actions, anchor,
+                )
+                if should_evaluate_tool_breadcrumb(_pre_name, result, _pbc_ctx):
+                    _pbc_hint = _breadcrumb_engine.evaluate(_pbc_ctx)
                     if _pbc_hint:
                         context.append({"role": "system", "content": _pbc_hint})
+
+                if state.pending_launch_team_id and not _is_delegate_loop:
+                    from nls.agentic.orchestration_policy import (
+                        maybe_pending_launch_wrong_tool_nudge,
+                    )
+
+                    _pl_msg = maybe_pending_launch_wrong_tool_nudge(
+                        orchestration_profile=state.orchestration_profile,
+                        tool_name=_pre_name,
+                        action=str((result.details or {}).get("action", "")),
+                        pending_team_id=state.pending_launch_team_id,
+                        is_delegate_loop=_is_delegate_loop,
+                    )
+                    if _pl_msg:
+                        context.append({"role": "system", "content": _pl_msg})
 
             _apply_context_supersession_pass(
                 context,
@@ -3500,39 +3560,7 @@ async def run_loop(
                 })
 
                 # --- Context-aware breadcrumb hints ---
-                _bc_ctx = _build_bc_ctx(
-                    _tool_name, result, state, _deferred_actions, anchor,
-                )
-                if not result.is_error or (
-                    _tool_name == "team"
-                    and (
-                        _bc_ctx.result_details.get("wave_needs_advance")
-                        or _bc_ctx.result_details.get("duplicate_team")
-                    )
-                ) or bool(result.details.get("rewrite_blocked")):
-                    _bc_hint = _breadcrumb_engine.evaluate(_bc_ctx)
-                else:
-                    _bc_hint = None
-                if _bc_hint:
-                    context.append({"role": "system", "content": _bc_hint})
-                    _slog(_session_log_path, {
-                        "event": "breadcrumb",
-                        "loop_id": state.loop_id,
-                        "iteration": state.iteration,
-                        "trigger_tool": _tool_name,
-                        "hint_preview": _bc_hint[:200],
-                    })
-
-                if _tool_name == "team":
-                    _team_act = str((result.details or {}).get("action", "")).strip()
-                    _team_tid = str((result.details or {}).get("team_id", "")).strip()
-                    if _team_act == "create" and _team_tid and (
-                        not result.is_error
-                        or (result.details or {}).get("duplicate_team")
-                    ):
-                        state.pending_launch_team_id = _team_tid
-                    elif _team_act == "launch" and not result.is_error:
-                        state.pending_launch_team_id = ""
+                update_loop_state_from_tool_result(_tool_name, result, state)
 
                 if (
                     not _is_delegate_loop
@@ -3559,6 +3587,38 @@ async def run_loop(
                             _tool_name,
                             exc_info=True,
                         )
+
+                _bc_ctx = _build_bc_ctx(
+                    _tool_name, result, state, _deferred_actions, anchor,
+                )
+                if should_evaluate_tool_breadcrumb(_tool_name, result, _bc_ctx):
+                    _bc_hint = _breadcrumb_engine.evaluate(_bc_ctx)
+                else:
+                    _bc_hint = None
+                if _bc_hint:
+                    context.append({"role": "system", "content": _bc_hint})
+                    _slog(_session_log_path, {
+                        "event": "breadcrumb",
+                        "loop_id": state.loop_id,
+                        "iteration": state.iteration,
+                        "trigger_tool": _tool_name,
+                        "hint_preview": _bc_hint[:200],
+                    })
+
+                if state.pending_launch_team_id and not _is_delegate_loop:
+                    from nls.agentic.orchestration_policy import (
+                        maybe_pending_launch_wrong_tool_nudge,
+                    )
+
+                    _pl_msg = maybe_pending_launch_wrong_tool_nudge(
+                        orchestration_profile=state.orchestration_profile,
+                        tool_name=_tool_name,
+                        action=str((result.details or {}).get("action", "")),
+                        pending_team_id=state.pending_launch_team_id,
+                        is_delegate_loop=_is_delegate_loop,
+                    )
+                    if _pl_msg:
+                        context.append({"role": "system", "content": _pl_msg})
 
                 if _tool_name == "read" and not result.is_error:
                     _read_path = str(_iter_args.get("path", "") or "")

@@ -353,3 +353,39 @@ def enforce_loop_profile_for_active_plan(
         "Loop profile enforced %s for active plan %s (was %s)",
         target, _plan_id, prev,
     )
+
+
+def sync_loop_plan_team_tracking(
+    state: Any,
+    plan_store: Any | None,
+    team_manager: Any | None,
+) -> None:
+    """Restore active plan + pending launch from runtime on loop entry."""
+    if plan_store is None:
+        return
+    try:
+        plan = plan_store.find_active()
+    except Exception:
+        plan = None
+    if plan is None or plan.status in ("done", "archived"):
+        state.active_plan_id = ""
+        state.pending_launch_team_id = ""
+        return
+
+    state.active_plan_id = plan.id
+    if team_manager is None:
+        return
+
+    unlaunched = [
+        t for t in _teams_for_plan(team_manager, plan.id)
+        if getattr(t, "status", None) == "created"
+        and not getattr(t, "batch_id", "")
+    ]
+    if unlaunched:
+        team = sorted(
+            unlaunched,
+            key=lambda t: (getattr(t, "wave_index", 0), getattr(t, "created_at", 0)),
+        )[0]
+        state.pending_launch_team_id = team.id
+    else:
+        state.pending_launch_team_id = ""

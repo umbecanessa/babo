@@ -163,16 +163,20 @@ def test_solo_todo_breadcrumb_without_plan():
     assert "todo(action='list'" in hint
 
 
-def test_solo_todo_no_breadcrumb_when_plan_unlocked():
-    """Solo profile should not nudge todo→plan even if plan tool exists."""
+def test_solo_todo_plan_breadcrumb_when_plan_unlocked():
     engine = BreadcrumbEngine()
     ctx = BreadcrumbContext(
         tool_name="todo",
         action="add",
         unlocked_tools=frozenset({"plan", "todo"}),
         orchestration_profile="solo_structured",
+        result_details={"todo_id": "abc123", "action": "add"},
     )
-    assert engine.evaluate(ctx) is None
+    hint = engine.evaluate(ctx)
+    assert hint is not None
+    assert "solo execution plan" in hint.lower()
+    assert "no team" in hint.lower()
+    assert "abc123" in hint
 
 
 def test_solo_plan_create_breadcrumb():
