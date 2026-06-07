@@ -420,10 +420,20 @@ def _build_agentic_metadata(result) -> dict:
                     "duration_ms": 0,
                 }
             tc_name = d.get("tool_name", d.get("name", "tool"))
-            step_data[step]["tool_calls"].append({"name": tc_name})
-            step_data[step]["tool_results"].append({
+            tc_entry: dict = {"name": tc_name}
+            if d.get("call_id"):
+                tc_entry["call_id"] = d["call_id"]
+            tc_args = d.get("arguments")
+            if tc_args:
+                tc_entry["arguments"] = tc_args
+            step_data[step]["tool_calls"].append(tc_entry)
+            tr_entry: dict = {
                 "success": not d.get("is_error", False),
-            })
+            }
+            preview = d.get("result_preview") or d.get("preview")
+            if preview:
+                tr_entry["result_preview"] = str(preview)[:400]
+            step_data[step]["tool_results"].append(tr_entry)
             step_data[step]["duration_ms"] += d.get("duration_ms", 0)
 
     events_summary = list(step_data.values())

@@ -453,6 +453,7 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
             if not user_input and not (msg.get("attachments") or []):
                 continue
 
+            user_content_raw = user_input
             # Session / thread routing
             session_key = msg.get("session_key", "websocket:main")
 
@@ -891,9 +892,10 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                     runtime.save_conversation_history(history)
                     record_visible_chat_turn(
                         runtime,
-                        user=user_input,
+                        user=user_content_raw or None,
                         assistant=_stopped if _stopped != "Stopped." else None,
                         reasoning=_initial_thinking or None,
+                        attachments=attachments or None,
                     )
                     if consciousness_scheduler is not None:
                         consciousness_scheduler.on_user_message_complete(agent_id)
@@ -1008,9 +1010,10 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                     runtime.save_conversation_history(history)
                     record_visible_chat_turn(
                         runtime,
-                        user=user_input,
+                        user=user_content_raw or None,
                         assistant=regen_response,
                         reasoning=_regen_reasoning or None,
+                        attachments=attachments or None,
                     )
 
                     if consciousness_scheduler is not None:
@@ -1176,9 +1179,10 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                     runtime.save_conversation_history(history)
                     record_visible_chat_turn(
                         runtime,
-                        user=user_input,
+                        user=user_content_raw or None,
                         assistant=regen_response,
                         reasoning=_regen2_thinking or None,
+                        attachments=attachments or None,
                     )
 
                     if consciousness_scheduler is not None:
@@ -1264,6 +1268,8 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                     _eager_events: list[dict] = []
                     websocket.state._pending_agentic_transcript = {
                         "user_input": user_input,
+                        "user_content_raw": user_content_raw,
+                        "attachments": list(attachments),
                         "initial_thinking": _initial_thinking,
                         "eager_events": _eager_events,
                         "saved": False,
@@ -1507,10 +1513,11 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                                 _transcript_meta["events"] = list(_eager_events)
                         record_visible_chat_turn(
                             runtime,
-                            user=_strip_internal_blocks(user_input),
+                            user=_strip_internal_blocks(user_content_raw),
                             assistant=_agentic_final_text or None,
                             reasoning=_initial_thinking or None,
                             metadata=_transcript_meta,
+                            attachments=attachments or None,
                         )
                         _pending = getattr(
                             websocket.state, "_pending_agentic_transcript", None,
@@ -1863,9 +1870,10 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                     runtime.save_conversation_history(history)
                 record_visible_chat_turn(
                     runtime,
-                    user=user_input,
+                    user=user_content_raw or None,
                     assistant=_final_resp,
                     reasoning=_reasoning or None,
+                    attachments=attachments or None,
                 )
 
                 if result_dict.get("sleep_request"):
@@ -1999,9 +2007,10 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                 runtime.save_conversation_history(history)
                 record_visible_chat_turn(
                     runtime,
-                    user=user_input,
+                    user=user_content_raw or None,
                     assistant=result_dict.get("response", full_response),
                     reasoning=_reasoning or None,
+                    attachments=attachments or None,
                 )
 
                 # Reset post-completion drive cooldown after any chat turn
@@ -2039,9 +2048,14 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                 try:
                     persist_partial_agentic_transcript(
                         runtime,
-                        user_input=str(_pending.get("user_input") or ""),
+                        user_input=str(
+                            _pending.get("user_content_raw")
+                            or _pending.get("user_input")
+                            or ""
+                        ),
                         eager_events=list(_pending.get("eager_events") or []),
                         initial_thinking=_pending.get("initial_thinking") or None,
+                        attachments=list(_pending.get("attachments") or []) or None,
                     )
                     logger.info(
                         "Agent %s: persisted partial agentic transcript "
@@ -2532,12 +2546,16 @@ async def _dispatch_agentic_event(
                 **_sa_tag,
             })
         if not _sa_tag:
-            eager_events.append({
+            _turn_entry: dict = {
                 "step": data.get("iteration", 0),
                 "tool_calls": data.get("tool_calls", []),
                 "tool_results": data.get("tool_results", []),
                 "duration_ms": round(data.get("duration_ms", 0), 1),
-            })
+            }
+            _resp_text = (data.get("response_text") or "").strip()
+            if _resp_text and not data.get("hold_prose"):
+                _turn_entry["prose"] = _resp_text
+            eager_events.append(_turn_entry)
 
     elif etype == "agent_start" and _sa_tag:
         await websocket.send_json({

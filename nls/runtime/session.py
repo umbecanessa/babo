@@ -337,6 +337,7 @@ def append_chat_transcript_turn(
     assistant: str | None = None,
     reasoning: str | None = None,
     metadata: dict | None = None,
+    attachments: list | None = None,
 ) -> None:
     """Append one visible chat turn to the append-only transcript log."""
     user_text = (user or "").strip()
@@ -356,6 +357,7 @@ def append_chat_transcript_turn(
             _append_jsonl_message(path, {
                 "role": "user",
                 "content": user_text,
+                **({"attachments": attachments} if attachments else {}),
             })
             last = {"role": "user", "content": user_text}
 

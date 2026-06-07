@@ -3,6 +3,7 @@ import {
   isChatSystemInjection,
   buildWorkbenchRestoreEntries,
   transcriptHasAgenticTrace,
+  parseTranscriptUserContent,
 } from './chat-transcript-restore.util';
 
 describe('chat-transcript-restore.util', () => {
@@ -68,7 +69,11 @@ describe('chat-transcript-restore.util', () => {
           events: [
             {
               step: 1,
-              tool_calls: [{ name: 'plan' }],
+              tool_calls: [{
+                name: 'plan',
+                call_id: 'call_1',
+                arguments: { action: 'create', plan_id: 'plan_abc', title: 'My plan' },
+              }],
               tool_results: [{ success: true }],
               duration_ms: 120,
             },
@@ -79,6 +84,35 @@ describe('chat-transcript-restore.util', () => {
     expect(transcriptHasAgenticTrace(rows)).toBe(true);
     const entries = buildWorkbenchRestoreEntries(rows);
     expect(entries.some(e => e.kind === 'agentic' && e.title.includes('restored'))).toBe(true);
-    expect(entries.some(e => e.kind === 'tool' && e.title === 'plan')).toBe(true);
+    expect(entries.some(e => e.kind === 'tool' && e.title === 'Create plan')).toBe(true);
+  });
+
+  it('parseTranscriptUserContent extracts attachment chips', () => {
+    const parsed = parseTranscriptUserContent({
+      role: 'user',
+      content: `[The user attached 1 file(s):
+  - prd.md (text, 22.7KB)
+    read(path="C:\\\\data\\\\uploads\\\\prd.md")
+Use the read tool with the EXACT path shown above.]
+
+Build the platform`,
+    });
+    expect(parsed.content).toBe('Build the platform');
+    expect(parsed.attachments?.length).toBe(1);
+    expect(parsed.attachments?.[0].name).toBe('prd.md');
+  });
+
+  it('restores user rows with attachments only', () => {
+    const restored = restoreChatMessagesFromTranscript([
+      {
+        role: 'user',
+        content: '',
+        attachments: [{ name: 'doc.pdf', path: '/tmp/doc.pdf', mime_type: 'application/pdf' }],
+        timestamp: 1_700_000_000,
+      },
+    ]);
+    expect(restored).toHaveLength(1);
+    expect(restored[0].type).toBe('user');
+    expect(restored[0].attachments?.[0].name).toBe('doc.pdf');
   });
 });

@@ -5370,6 +5370,7 @@ class AgentRuntime:
         assistant: str | None = None,
         reasoning: str | None = None,
         metadata: dict | None = None,
+        attachments: list | None = None,
     ) -> None:
         from nls.runtime.session import append_chat_transcript_turn
         append_chat_transcript_turn(
@@ -5378,6 +5379,7 @@ class AgentRuntime:
             assistant=assistant,
             reasoning=reasoning,
             metadata=metadata,
+            attachments=attachments,
         )
 
     def load_autonomous_history(self, max_turns: int = 10) -> list[dict]:

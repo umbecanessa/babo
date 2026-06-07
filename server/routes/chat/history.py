@@ -53,6 +53,7 @@ def record_visible_chat_turn(
     assistant: str | None = None,
     reasoning: str | None = None,
     metadata: dict | None = None,
+    attachments: list | None = None,
 ) -> None:
     """Persist a user-visible turn for UI transcript restore."""
     record = getattr(runtime, "record_chat_turn", None)
@@ -64,6 +65,7 @@ def record_visible_chat_turn(
             assistant=assistant,
             reasoning=reasoning,
             metadata=metadata,
+            attachments=attachments,
         )
     except Exception:
         logger.debug("record_visible_chat_turn failed", exc_info=True)
@@ -77,6 +79,7 @@ def persist_partial_agentic_transcript(
     initial_thinking: str | None = None,
     aborted: bool = True,
     abort_reason: str = "Connection closed during task",
+    attachments: list | None = None,
 ) -> None:
     """Save in-progress agentic trace when the client disconnects mid-loop."""
     user_text = _strip_internal_blocks(user_input)
@@ -102,6 +105,7 @@ def persist_partial_agentic_transcript(
         assistant=None,
         reasoning=initial_thinking or None,
         metadata=metadata,
+        attachments=attachments or None,
     )
 
 

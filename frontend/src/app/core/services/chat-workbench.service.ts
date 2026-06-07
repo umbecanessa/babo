@@ -231,6 +231,10 @@ export class ChatWorkbenchService {
       subtitle: row.subtitle,
       status: row.status,
       toolLabel: row.toolLabel,
+      chips: row.chips,
+      filePaths: row.filePaths,
+      filePath: row.filePaths?.[0],
+      mode: row.mode,
     }));
 
     this.restoreState(true, entries);
