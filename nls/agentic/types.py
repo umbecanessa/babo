@@ -109,7 +109,8 @@ MODE_PRIMARY_TOOLS: dict[AgentMode, frozenset[str]] = {
     AgentMode.EVALUATING: (
         _RESEARCH_TOOLS | _FILE_TOOLS | _COMM_TOOLS
         | frozenset({"bash", "todo", "plan", "team", "switch_mode",
-                     "scheduler", "wait", "delegate_status", "delegate_ring",
+                     "scheduler", "wait", "await_delegates", "delegate_status",
+                     "delegate_ring",
                      "task_complete", "offer_download", "server_install",
                      "project_install"})
         | _DISCOVERY_TOOLS
@@ -1410,11 +1411,11 @@ _V5_AGENTIC_SUPPLEMENT = (
     "components the user asked for.\n"
     "1. PLAN FIRST: Create a COMPREHENSIVE plan with a descriptive "
     "project_dir name. Include ALL phases in one call:\n"
-    "   Option A — all at once:\n"
-    "     plan(action='create', title='Recipe Sharing App', "
+    "   Option A — all at once (EXAMPLE ONLY — substitute the user's project):\n"
+    "     plan(action='create', title='<User Project Title>', "
     "requirements='...', tech_stack={backend_language:'typescript', "
     "backend_framework:'express', frontend_framework:'react', orm:'prisma'}, "
-    "project_dir='recipe-app', steps=[\n"
+    "project_dir='<user-project-slug>', steps=[\n"
     "       {\"label\": \"Initialize project scaffolding\", \"delegatable\": true},\n"
     "       {\"label\": \"Design database schema\", \"delegatable\": true, "
     "\"depends_on\": [\"Initialize project scaffolding\"]},\n"
@@ -1433,10 +1434,10 @@ _V5_AGENTIC_SUPPLEMENT = (
     "     ])\n"
     "   This produces 5 waves: scaffolding → DB+backend+frontend → API+AI → UI features → deploy.\n"
     "   Option B — incremental (create plan first, then add steps):\n"
-    "     plan(action='create', title='Recipe Sharing App', "
+    "     plan(action='create', title='<User Project Title>', "
     "requirements='...', tech_stack={backend_language:'typescript', "
     "backend_framework:'express', frontend_framework:'react', orm:'prisma'}, "
-    "project_dir='recipe-app')\n"
+    "project_dir='<user-project-slug>')\n"
     "     plan(action='add_step', plan_id='...', label='Initialize project scaffolding', delegatable=true)\n"
     "     plan(action='add_step', plan_id='...', label='Build FastAPI backend', "
     "delegatable=true, depends_on=['Initialize project scaffolding'])\n"
@@ -1444,7 +1445,7 @@ _V5_AGENTIC_SUPPLEMENT = (
     "   Update stack lock-in anytime: plan(action='set_tech_stack', tech_stack={...}) "
     "or plan(action='set_requirements', requirements='...').\n"
     "   ALWAYS set project_dir to a short, descriptive slug for the actual "
-    "project (e.g. 'recipe-app', 'task-manager'). Never use "
+    "project (e.g. the user's chosen slug from their request). Never use "
     "generic names like 'scaffolding', 'backend', 'project'.\n"
     "   DEPENDENCY WAVES — CRITICAL:\n"
     "   Steps with no depends_on form wave 0 (run in parallel).\n"

@@ -1,6 +1,7 @@
 import {
   isUserFacingOrchestrationMessage,
   isSilentAutonomousCompletion,
+  runtimeModeForYieldExit,
 } from './orchestration-ui.util';
 
 describe('isUserFacingOrchestrationMessage', () => {
@@ -29,5 +30,13 @@ describe('isSilentAutonomousCompletion', () => {
         source: 'team_checkback:team_x',
       }),
     ).toBe(true);
+  });
+});
+
+describe('runtimeModeForYieldExit', () => {
+  it('maps wave launch yields to monitoring', () => {
+    expect(runtimeModeForYieldExit('post_launch_yield')).toBe('monitoring');
+    expect(runtimeModeForYieldExit('awaiting_delegates')).toBe('monitoring');
+    expect(runtimeModeForYieldExit('task_complete')).toBeNull();
   });
 });

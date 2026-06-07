@@ -2512,6 +2512,7 @@ async def _dispatch_agentic_event(
             "type": "agentic_iteration",
             "step": data.get("iteration", 0),
             "max_steps": agentic_config.max_iterations,
+            "active_mode": data.get("active_mode", ""),
             "tool_calls": data.get("tool_calls", []),
             "tool_results": data.get("tool_results", []),
             "hormones": live_hormones,

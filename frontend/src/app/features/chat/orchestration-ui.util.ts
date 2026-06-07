@@ -52,6 +52,23 @@ export function delegateNumberFromMessage(msg: {
   return typeof n === 'number' && n >= 0 ? n : undefined;
 }
 
+export function runtimeModeForYieldExit(
+  reason: string | undefined | null,
+): string | null {
+  const r = (reason || '').trim();
+  if (
+    r === 'post_launch_yield'
+    || r === 'awaiting_delegates'
+    || r === 'idle_monitor'
+    || r === 'idle_monitor_yield'
+    || r === 'coordinator_burn'
+    || r === 'monitor_iter_cap'
+  ) {
+    return 'monitoring';
+  }
+  return null;
+}
+
 /** User-facing label when the orchestrator yields after team launch / monitoring. */
 export function orchestratorYieldLabel(reason: string | undefined | null): string {
   const r = (reason || '').trim();

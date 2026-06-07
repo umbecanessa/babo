@@ -137,6 +137,24 @@ export class AgentOrchestrationProfileService {
     const next = (mode ?? '').trim().toLowerCase();
     if (!id || !next) return;
     this.runtimeModeByAgent.set(id, next);
+    this.agenticActiveByAgent.set(id, true);
+    this.epoch.update(v => v + 1);
+  }
+
+  /** Orchestrator loop yielded but delegates/teams are still running. */
+  noteOrchestratorYield(
+    agentId: string | null | undefined,
+    exitReason: string | null | undefined,
+    yieldMode: string | null | undefined,
+  ): void {
+    const id = (agentId ?? '').trim();
+    if (!id) return;
+    const mode = (yieldMode ?? '').trim().toLowerCase();
+    if (mode) {
+      this.setRuntimeMode(id, mode);
+      return;
+    }
+    this.agenticActiveByAgent.set(id, true);
     this.epoch.update(v => v + 1);
   }
 

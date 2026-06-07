@@ -5289,6 +5289,7 @@ async def run_loop(
 
             _turn_end_data: dict[str, Any] = {
                 "iteration": state.iteration,
+                "active_mode": state.active_mode.value,
                 "has_tool_calls": True,
                 "tool_calls": _iter_tool_calls,
                 "tool_results": _iter_tool_results,

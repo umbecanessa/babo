@@ -1094,11 +1094,12 @@ def prose_hold_from_stream(state: "LoopState") -> bool:
     return not getattr(state, "prose_show_to_user", True)
 
 
-def prose_turn_end_extra(state: "LoopState") -> dict[str, bool]:
-    """Extra TURN_END fields so the UI can discard held prose."""
+def prose_turn_end_extra(state: "LoopState") -> dict[str, Any]:
+    """Extra TURN_END fields for UI (mode + held prose)."""
+    extra: dict[str, Any] = {"active_mode": state.active_mode.value}
     if prose_hold_from_stream(state):
-        return {"hold_prose": True}
-    return {}
+        extra["hold_prose"] = True
+    return extra
 
 
 def _diverse_bash_signatures(state: "LoopState", window: int) -> bool:

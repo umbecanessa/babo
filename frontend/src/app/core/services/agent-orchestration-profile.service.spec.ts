@@ -22,6 +22,14 @@ describe('AgentOrchestrationProfileService', () => {
     expect(svc.triggerLabel('agent-1')).toBe('Solo · Planning');
   });
 
+  it('keeps mode visible after orchestrator yield', () => {
+    svc.setAgenticActive('agent-1', true);
+    svc.setRuntimeMode('agent-1', 'planning');
+    svc.noteOrchestratorYield('agent-1', 'post_launch_yield', 'monitoring');
+    expect(svc.modeLabel('agent-1')).toBe('Monitoring');
+    expect(svc.triggerLabel('agent-1')).toContain('Monitoring');
+  });
+
   it('shows triage resolution under auto', () => {
     svc.noteTriageProfile('agent-1', { profile: 'orchestrated' });
     expect(svc.depthLabel('agent-1')).toBe('Auto · EM');

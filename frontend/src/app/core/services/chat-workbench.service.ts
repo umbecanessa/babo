@@ -5,6 +5,7 @@ import {
   isSilentAutonomousCompletion,
   isSilentOrchestrationExit,
   orchestratorYieldLabel,
+  runtimeModeForYieldExit,
 } from '../../features/chat/orchestration-ui.util';
 import { enrichWorkspaceRelativePath } from '../../features/projects/workspace/workspace-path.util';
 import { AgentWorkspaceContextService } from './agent-workspace-context.service';
@@ -484,6 +485,12 @@ export class ChatWorkbenchService {
         const step = msg.step || 0;
         const maxSteps = msg.max_steps || 15;
         const toolCalls = msg.tool_calls || [];
+        if (!isSubAgent) {
+          const mode = String(msg.active_mode || '').trim().toLowerCase();
+          if (mode) {
+            this.orchProfiles.setRuntimeMode(this._agentId(), mode);
+          }
+        }
         const groupKey = this._stepGroupKey(corrNs, step);
         if (toolCalls.length > 0) {
           this._tagToolsForIteration(groupKey, toolCalls, dlgNum);
@@ -627,7 +634,18 @@ export class ChatWorkbenchService {
           toolLabel: 'Task',
         });
         if (!msg.autonomous) {
-          this.orchProfiles.setAgenticActive(this._agentId(), false);
+          const exitReason = String(
+            msg.exit_reason || msg.abort_reason || '',
+          ).trim();
+          if (isSilentOrchestrationExit(exitReason)) {
+            this.orchProfiles.noteOrchestratorYield(
+              this._agentId(),
+              exitReason,
+              runtimeModeForYieldExit(exitReason),
+            );
+          } else {
+            this.orchProfiles.setAgenticActive(this._agentId(), false);
+          }
         }
         break;
       }
@@ -639,6 +657,11 @@ export class ChatWorkbenchService {
           lastMode: this._lastAgentMode,
         });
         if (toolName === 'switch_mode' && parsed.modeTransition) {
+          const callId = msg.call_id || '';
+          if (callId) {
+            this._modeSwitchFromByCallId.set(callId, this._lastAgentMode);
+          }
+        } else if (toolName === 'coordinator_mode') {
           const callId = msg.call_id || '';
           if (callId) {
             this._modeSwitchFromByCallId.set(callId, this._lastAgentMode);
@@ -740,17 +763,20 @@ export class ChatWorkbenchService {
           );
         }
         let chips: ActivityChip[] | undefined;
-        if (toolName === 'switch_mode') {
-          const toMode = String(endArgs['mode'] || '').trim().toLowerCase();
+        if (toolName === 'switch_mode' || toolName === 'coordinator_mode') {
+          const toMode = toolName === 'coordinator_mode'
+            ? (endArgs['enabled'] ? 'planning' : 'executing')
+            : endArgs['mode'];
+          const toModeStr = String(toMode || '').trim().toLowerCase();
           const fromMode =
             (callId ? this._modeSwitchFromByCallId.get(callId) : undefined)
             || 'planning';
           if (callId) {
             this._modeSwitchFromByCallId.delete(callId);
           }
-          if (!isError && toMode) {
-            this._lastAgentMode = toMode;
-            this.orchProfiles.setRuntimeMode(this._agentId(), toMode);
+          if (!isError && toModeStr) {
+            this._lastAgentMode = toModeStr;
+            this.orchProfiles.setRuntimeMode(this._agentId(), toModeStr);
           } else {
             this._lastAgentMode = fromMode;
             this.orchProfiles.setRuntimeMode(this._agentId(), fromMode);
@@ -760,10 +786,10 @@ export class ChatWorkbenchService {
             : undefined;
           const arrow = (metaTitle || startTitle).match(/^(.+?)\s*→\s*(.+)$/);
           chips = [
-            { label: 'From', value: arrow?.[1]?.trim() || '?', tone: 'muted' },
+            { label: 'From', value: arrow?.[1]?.trim() || formatAgentMode(fromMode), tone: 'muted' },
             {
               label: 'To',
-              value: arrow?.[2]?.trim() || formatAgentMode(toMode),
+              value: arrow?.[2]?.trim() || formatAgentMode(toModeStr),
               tone: 'accent',
             },
           ];
@@ -796,6 +822,14 @@ export class ChatWorkbenchService {
               ? { detail: rawPreview.slice(0, DETAIL_KEEP) }
               : {}),
           });
+          if (!isSubAgent && !isError) {
+            const action = String(endArgs['action'] || '').trim().toLowerCase();
+            if (action === 'launch') {
+              this.orchProfiles.setRuntimeMode(this._agentId(), 'monitoring');
+            } else if (action === 'create') {
+              this.orchProfiles.setRuntimeMode(this._agentId(), 'delegating');
+            }
+          }
           break;
         } else if (toolName === 'plan') {
           const pres = planWorkbenchPresentation(endArgs, preview);
@@ -928,6 +962,9 @@ export class ChatWorkbenchService {
       case 'delegate_batch_started': {
         const count = msg.count || 0;
         const batchId = msg.batch_id || 'batch';
+        if (!isSubAgent) {
+          this.orchProfiles.setRuntimeMode(this._agentId(), 'monitoring');
+        }
         this._upsert(`delegate-batch-${batchId}`, {
           lane,
           kind: 'agentic',
