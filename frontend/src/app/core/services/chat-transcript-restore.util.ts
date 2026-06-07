@@ -179,3 +179,91 @@ export function restoreChatMessagesFromTranscript(
 
   return restored;
 }
+
+export interface WorkbenchRestoreEntry {
+  kind: 'agentic' | 'tool';
+  title: string;
+  subtitle?: string;
+  status?: 'ok' | 'warn' | 'error';
+  toolLabel?: string;
+}
+
+/** Rebuild workbench rows from persisted agentic transcript metadata. */
+export function buildWorkbenchRestoreEntries(rows: unknown[]): WorkbenchRestoreEntry[] {
+  const out: WorkbenchRestoreEntry[] = [];
+
+  for (const row of rows) {
+    if (!row || typeof row !== 'object') continue;
+    const meta = ((row as TranscriptRow).metadata || {}) as Record<string, unknown>;
+    if (!meta['agentic']) continue;
+
+    const iterations = Number(meta['iterations'] || 0);
+    const toolCallsTotal = Number(meta['tool_calls'] || 0);
+    const aborted = Boolean(meta['aborted']);
+    const events = Array.isArray(meta['events']) ? meta['events'] : [];
+
+    out.push({
+      kind: 'agentic',
+      title: aborted ? 'Task stopped (restored)' : 'Agent task (restored)',
+      subtitle: iterations
+        ? `Up to ${iterations} steps`
+        : `${toolCallsTotal || events.length} tool call(s)`,
+      status: aborted ? 'error' : 'ok',
+      toolLabel: 'Task',
+    });
+
+    for (const ev of events) {
+      const stepEv = ev as Record<string, unknown>;
+      const step = Number(stepEv['step'] || 0);
+      const tcList = (stepEv['tool_calls'] || []) as Array<Record<string, unknown>>;
+      const trList = (stepEv['tool_results'] || []) as Array<Record<string, unknown>>;
+      const toolNames = tcList
+        .map(tc => String(tc['name'] || tc['tool_name'] || 'tool'))
+        .join(', ');
+      const successes = trList.filter(r => r['success'] !== false).length;
+      const durationMs = Number(stepEv['duration_ms'] || stepEv['durationMs'] || 0);
+
+      out.push({
+        kind: 'agentic',
+        title: step ? `Step ${step}` : 'Step',
+        subtitle: toolNames
+          ? `${toolNames} (${successes}/${Math.max(trList.length, tcList.length)} ok)`
+          : 'Processing',
+        status: trList.some(r => r['success'] === false) ? 'warn' : 'ok',
+        toolLabel: 'Step',
+      });
+
+      tcList.forEach((tc, idx) => {
+        const name = String(tc['name'] || tc['tool_name'] || 'tool');
+        const tr = trList[idx];
+        const ok = tr ? tr['success'] !== false : true;
+        out.push({
+          kind: 'tool',
+          title: name,
+          subtitle: tcList.length === 1 && durationMs
+            ? `${(durationMs / 1000).toFixed(1)}s`
+            : undefined,
+          status: ok ? 'ok' : 'error',
+          toolLabel: name.charAt(0).toUpperCase() + name.slice(1),
+        });
+      });
+    }
+
+    out.push({
+      kind: 'agentic',
+      title: aborted ? 'Task stopped' : 'Task complete',
+      subtitle: `${iterations || events.length} steps, ${toolCallsTotal} tools`,
+      status: aborted ? 'error' : 'ok',
+      toolLabel: 'Task',
+    });
+  }
+
+  return out;
+}
+
+export function transcriptHasAgenticTrace(rows: unknown[]): boolean {
+  return rows.some(row => {
+    if (!row || typeof row !== 'object') return false;
+    return Boolean(((row as TranscriptRow).metadata || {})['agentic']);
+  });
+}

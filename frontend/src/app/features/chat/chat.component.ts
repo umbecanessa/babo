@@ -54,7 +54,7 @@ import { ChatPanelService } from '../../core/services/chat-panel.service';
 import { ConversationService, ConversationThread } from '../../core/services/conversation.service';
 import { composerDestination } from '../../core/services/composer-destination.util';
 import { ChatMainTranscriptService } from '../../core/services/chat-main-transcript.service';
-import { restoreChatMessagesFromTranscript, isChatSystemInjection } from '../../core/services/chat-transcript-restore.util';
+import { restoreChatMessagesFromTranscript, isChatSystemInjection, transcriptHasAgenticTrace } from '../../core/services/chat-transcript-restore.util';
 import { ChatLeftDockComponent } from './chat-left-dock/chat-left-dock.component';
 import { ChatRightDockComponent } from './chat-right-dock/chat-right-dock.component';
 import { ConversationNavComponent } from './conversation-nav/conversation-nav.component';
@@ -225,6 +225,14 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
   private _agenticStepEvents: { step: number; toolCalls: { name: string }[]; toolResults: { success: boolean }[]; durationMs: number }[] = [];
 
+  /** True once main-thread transcript was loaded from REST or WS history. */
+  private mainTranscriptLoaded = false;
+  /** Raw JSONL row count last applied — avoids comparing expanded message counts. */
+  private mainTranscriptRows = 0;
+  /** Cap runtime hydration retries when the server starts slowly after app launch. */
+  private runtimeHydrateAttempts = 0;
+  private static readonly MAX_RUNTIME_HYDRATE = 4;
+
   private sub!: Subscription;
   private routerSub?: Subscription;
   private paramSub?: Subscription;
@@ -326,6 +334,8 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       this.handleRuntimeMessage(msg);
     });
 
+    this.loadMainThreadHistory();
+
     this.startProjectProcessesPoll();
 
     // Prefill from query param (used by skill escalation)
@@ -359,6 +369,9 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
     this.agentId = nextId;
     this._seenLearningKeys.clear();
+    this.mainTranscriptLoaded = false;
+    this.mainTranscriptRows = 0;
+    this.runtimeHydrateAttempts = 0;
     this.awaitingResponse.set(false);
     this.projectProcesses.set([]);
     this.projectProcessesOpen.set(false);
@@ -383,6 +396,8 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     this.sub = this.ws.onMessage(nextId).subscribe((msg) => {
       this.handleRuntimeMessage(msg);
     });
+
+    this.loadMainThreadHistory();
 
     this.startProjectProcessesPoll();
   }
@@ -438,6 +453,28 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       durationMs: 0,
       aborted: reason !== 'server_idle',
     });
+    if (!this.mainTranscriptLoaded) {
+      this.loadMainThreadHistory();
+    }
+  }
+
+  /** Retry REST hydration when runtime connects before agent data is readable. */
+  private retryRuntimeHydration(): void {
+    if (this.runtimeHydrateAttempts >= ChatComponent.MAX_RUNTIME_HYDRATE) return;
+    this.runtimeHydrateAttempts += 1;
+    if (!this.runView.visible()) {
+      this.hydrateRunFromApi();
+    }
+    const needsWorkbenchRestore =
+      this.workbench.snapshotState().entries.length === 0
+      && this.messages().some(m =>
+        m.type === 'agentic_start'
+        || m.type === 'agentic_iteration'
+        || m.type === 'agentic_complete',
+      );
+    if (!this.mainTranscriptLoaded || needsWorkbenchRestore) {
+      this.loadMainThreadHistory();
+    }
   }
 
   toggleProjectProcessesMenu(event: MouseEvent): void {
@@ -1248,23 +1285,16 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       next: (res) => {
         const teams = res.teams || [];
         if (teams.length) this.runView.hydrateTeams(teams);
-        const planId = teams.find((t: { plan_id?: string }) => t.plan_id)?.plan_id;
+        const withPlan = teams
+          .filter((t: { plan_id?: string }) => t.plan_id)
+          .sort((a: { created_at?: number }, b: { created_at?: number }) =>
+            (b.created_at || 0) - (a.created_at || 0),
+          );
+        const planId = withPlan[0]?.plan_id;
         if (planId) {
-          this.api.getTimeline(this.agentId, planId).subscribe({
-            next: (tl) => {
-              if (!tl?.waves?.length) return;
-              const steps = tl.waves.flatMap((w: { steps?: unknown[] }) => w.steps || []);
-              if (steps.length) {
-                this.runView.hydratePlan({
-                  id: tl.plan_id,
-                  title: tl.title || '',
-                  status: tl.status || 'in_progress',
-                  progress: '',
-                  steps,
-                });
-              }
-            },
-          });
+          this._hydrateTimelinePlan(planId);
+        } else {
+          this._hydratePlanFromTodos();
         }
       },
     });
@@ -1274,6 +1304,136 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         this._seedChatFromDelegatesApi(data);
       },
       error: () => {},
+    });
+  }
+
+  private _hydrateTimelinePlan(planId: string): void {
+    this.api.getTimeline(this.agentId, planId).subscribe({
+      next: (tl) => {
+        if (!tl?.waves?.length) return;
+        const steps = tl.waves.flatMap((w: { steps?: unknown[] }) => w.steps || []);
+        if (steps.length) {
+          this.runView.hydratePlan({
+            id: tl.plan_id,
+            title: tl.title || '',
+            status: tl.status || 'in_progress',
+            progress: '',
+            steps,
+          });
+        }
+      },
+    });
+  }
+
+  private _hydratePlanFromTodos(): void {
+    this.api.getTodoItems(this.agentId).subscribe({
+      next: (res) => {
+        const items = (res.items || [])
+          .filter((i: { plan_id?: string }) => i.plan_id)
+          .sort((a: { updated_at?: number }, b: { updated_at?: number }) =>
+            (b.updated_at || 0) - (a.updated_at || 0),
+          );
+        const item = items[0];
+        if (!item?.plan_id) return;
+        this.api.getTodoPlan(this.agentId, item.id).subscribe({
+          next: (planRes: { plan?: { id: string; title?: string; status?: string; steps?: unknown[] } }) => {
+            if (planRes?.plan?.steps?.length) {
+              this.runView.hydratePlan(planRes.plan as any, item.id);
+            } else if (item.plan_id) {
+              this._hydrateTimelinePlan(item.plan_id);
+            }
+          },
+          error: () => {
+            if (item.plan_id) this._hydrateTimelinePlan(item.plan_id);
+          },
+        });
+      },
+    });
+  }
+
+  private _onPlanHydrateFromMeta(meta: Record<string, unknown>): void {
+    const planSteps = meta['plan_steps'];
+    if (!Array.isArray(planSteps) || planSteps.length === 0) return;
+    this.runView.hydratePlan({
+      id: String(meta['plan_id'] || ''),
+      title: String(meta['plan_title'] || 'Restored plan'),
+      status: 'in_progress',
+      progress: '',
+      steps: planSteps.map((s: any, idx: number) => ({
+        id: s.id || `step-${idx + 1}`,
+        label: typeof s === 'string' ? s : (s.label || ''),
+        status: typeof s === 'string' ? 'pending' : (s.status || 'pending'),
+        depends_on: [],
+        delegatable: true,
+      })),
+    });
+  }
+
+  private _applyMainThreadTranscript(
+    raw: unknown[],
+    _source: 'rest' | 'ws',
+  ): void {
+    if (this.agenticActive() || !raw?.length) return;
+
+    const restored = restoreChatMessagesFromTranscript(raw, {
+      onPlanHydrate: (meta) => this._onPlanHydrateFromMeta(meta),
+    });
+    const mainMsgs = this.messages().filter(
+      m => !m.sessionKey || m.sessionKey === 'websocket:main',
+    );
+    const hasAgentic = transcriptHasAgenticTrace(raw);
+    const needsWorkbench = hasAgentic && this.workbench.snapshotState().entries.length === 0;
+    const hasNewRows = raw.length > this.mainTranscriptRows;
+    const hasMoreMessages = restored.length > mainMsgs.length;
+
+    if (
+      this.mainTranscriptLoaded
+      && !hasNewRows
+      && !hasMoreMessages
+      && !needsWorkbench
+    ) {
+      return;
+    }
+
+    if (hasNewRows || hasMoreMessages || !this.mainTranscriptLoaded) {
+      this.messages.update(msgs => {
+        const branch = msgs.filter(
+          m => m.sessionKey && m.sessionKey !== 'websocket:main',
+        );
+        return [...branch, ...restored];
+      });
+      this.mainTranscriptRows = Math.max(this.mainTranscriptRows, raw.length);
+      this.mainTranscriptLoaded = true;
+      this.syncMainTranscript();
+    }
+
+    if (hasAgentic) {
+      this.workbench.hydrateFromTranscript(raw, { force: needsWorkbench });
+      if (needsWorkbench || hasNewRows) {
+        this.panels.openLeft('workbench');
+      }
+    }
+  }
+
+  /** REST fallback for websocket:main — survives app restart when WS history races. */
+  private loadMainThreadHistory(): void {
+    if (!this.agentId || this.currentThread() !== 'websocket:main') return;
+
+    const url = this.platform.isElectron
+      ? `${(window as any).nls?.runtimeUrl || 'http://127.0.0.1:9222'}/sessions/${this.agentId}/${encodeURIComponent('websocket:main')}`
+      : `${this.api.apiBase}/agents/${this.agentId}/sessions/${encodeURIComponent('websocket:main')}`;
+
+    this.http.get<{ messages?: unknown[] }>(url).subscribe({
+      next: (res) => {
+        const sessionMsgs = Array.isArray(res?.messages) ? res.messages : [];
+        if (!sessionMsgs.length) return;
+        this._applyMainThreadTranscript(sessionMsgs, 'rest');
+      },
+      error: () => {
+        if (this.runtimeHydrateAttempts < ChatComponent.MAX_RUNTIME_HYDRATE) {
+          this.runtimeHydrateAttempts += 1;
+        }
+      },
     });
   }
 
@@ -1528,29 +1688,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
           break;
         }
         if (Array.isArray(msg.messages) && msg.messages.length > 0) {
-          const restored = restoreChatMessagesFromTranscript(msg.messages, {
-            onPlanHydrate: (meta) => {
-              const planSteps = meta['plan_steps'];
-              if (!Array.isArray(planSteps) || planSteps.length === 0) {
-                return;
-              }
-              this.runView.hydratePlan({
-                id: String(meta['plan_id'] || ''),
-                title: String(meta['plan_title'] || 'Restored plan'),
-                status: 'in_progress',
-                progress: '',
-                steps: planSteps.map((s: any, idx: number) => ({
-                  id: s.id || `step-${idx + 1}`,
-                  label: typeof s === 'string' ? s : (s.label || ''),
-                  status: typeof s === 'string' ? 'pending' : (s.status || 'pending'),
-                  depends_on: [],
-                  delegatable: true,
-                })),
-              });
-            },
-          });
-          this.messages.set(restored);
-          this.syncMainTranscript();
+          this._applyMainThreadTranscript(msg.messages, 'ws');
         }
         break;
 
@@ -1646,6 +1784,10 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
           }]);
         } else if (statusText === 'alive' && msg.sleep_complete) {
           // Wake chat bubble handled in case 'sleep_complete'
+        } else if (statusText === 'alive' || msg.agent_status === 'alive') {
+          if (!this.runView.visible() || !this.mainTranscriptLoaded) {
+            this.retryRuntimeHydration();
+          }
         } else if (statusText !== 'alive') {
           // Show other status messages (errors, custom content)
           this.clearAwaitingResponse();

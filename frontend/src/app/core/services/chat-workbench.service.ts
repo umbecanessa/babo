@@ -29,6 +29,9 @@ import {
 import { resolveToolDisplayOutcome } from './workbench-tool-outcome.util';
 
 import {
+  buildWorkbenchRestoreEntries,
+} from './chat-transcript-restore.util';
+import {
   filterWorkbenchEntries,
   type WorkbenchDensity,
 } from './workbench-density.util';
@@ -208,6 +211,29 @@ export class ChatWorkbenchService {
             .slice(-MAX_ENTRIES)
         : [],
     );
+  }
+
+  /** Populate workbench from persisted chat transcript agentic metadata. */
+  hydrateFromTranscript(rows: unknown[], opts?: { force?: boolean }): void {
+    if (!rows?.length) return;
+    if (!opts?.force && this.entries().length > 0) return;
+
+    const restored = buildWorkbenchRestoreEntries(rows);
+    if (!restored.length) return;
+
+    const baseTs = Date.now() - restored.length * 1000;
+    const entries: WorkbenchEntry[] = restored.map((row, idx) => ({
+      id: newId(),
+      ts: baseTs + idx * 1000,
+      lane: 'chat',
+      kind: row.kind,
+      title: row.title,
+      subtitle: row.subtitle,
+      status: row.status,
+      toolLabel: row.toolLabel,
+    }));
+
+    this.restoreState(true, entries);
   }
 
   snapshotState(): { open: boolean; entries: WorkbenchEntry[]; density: WorkbenchDensity } {

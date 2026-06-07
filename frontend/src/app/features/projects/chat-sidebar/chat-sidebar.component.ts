@@ -36,7 +36,7 @@ import { AgentModelService } from '../../../core/services/agent-model.service';
 import { AgentOrchestrationProfileService } from '../../../core/services/agent-orchestration-profile.service';
 import { ChatMainTranscriptService } from '../../../core/services/chat-main-transcript.service';
 import { ChatWorkbenchService } from '../../../core/services/chat-workbench.service';
-import { restoreChatMessagesFromTranscript } from '../../../core/services/chat-transcript-restore.util';
+import { restoreChatMessagesFromTranscript, transcriptHasAgenticTrace } from '../../../core/services/chat-transcript-restore.util';
 import { agenticAbortLabel } from '../../chat/orchestration-ui.util';
 
 @Component({
@@ -440,19 +440,19 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
   private loadHistory(sessionKey: string): void {
     if (!this.agentId) return;
 
-    if (sessionKey === 'websocket:main') {
+    const isMain = sessionKey === 'websocket:main';
+    if (isMain) {
       const shared = this.mainTranscript.get(this.agentId);
       if (shared.length > 0) {
         this.setMessages(structuredClone(shared));
-        this.loadingHistory.set(false);
-        return;
       }
+    } else {
+      this.messages.update((msgs) =>
+        msgs.filter((m) => (m.sessionKey || 'websocket:main') !== sessionKey),
+      );
     }
 
     this.loadingHistory.set(true);
-    this.messages.update((msgs) =>
-      msgs.filter((m) => (m.sessionKey || 'websocket:main') !== sessionKey),
-    );
     this.streamingText.set('');
     this.streamingReasoning.set('');
 
@@ -462,13 +462,26 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
 
     this.http.get<any>(url).subscribe({
       next: (res) => {
-        const restored = restoreChatMessagesFromTranscript(res?.messages || [], { sessionKey });
-        this.messages.update((msgs) => {
-          const keep = msgs.filter((m) => (m.sessionKey || 'websocket:main') !== sessionKey);
-          return [...keep, ...restored];
-        });
-        if (sessionKey === 'websocket:main') {
+        const sessionMsgs = Array.isArray(res?.messages) ? res.messages : [];
+        const restored = restoreChatMessagesFromTranscript(sessionMsgs, { sessionKey });
+        if (isMain) {
+          const mainMsgs = this.messages().filter(
+            m => !m.sessionKey || m.sessionKey === 'websocket:main',
+          );
+          if (restored.length >= mainMsgs.length || sessionMsgs.length > 0) {
+            this.setMessages(restored);
+          }
+          if (transcriptHasAgenticTrace(sessionMsgs)) {
+            this.workbench.hydrateFromTranscript(sessionMsgs, {
+              force: !this.workbench.snapshotState().entries.length,
+            });
+          }
           this.syncMainTranscript();
+        } else {
+          this.messages.update((msgs) => {
+            const keep = msgs.filter((m) => (m.sessionKey || 'websocket:main') !== sessionKey);
+            return [...keep, ...restored];
+          });
         }
         this.loadingHistory.set(false);
       },
@@ -517,13 +530,19 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
         if (this.activeThread() !== 'websocket:main') return;
         if (this.agenticActive()) return;
         if (Array.isArray(msg.messages) && msg.messages.length > 0) {
-          const shared = this.mainTranscript.get(this.agentId);
-          if (shared.length >= msg.messages.length) {
-            this.pullFromMainTranscript();
-          } else {
-            const restored = restoreChatMessagesFromTranscript(msg.messages);
+          const restored = restoreChatMessagesFromTranscript(msg.messages);
+          const mainMsgs = this.messages().filter(
+            m => !m.sessionKey || m.sessionKey === 'websocket:main',
+          );
+          if (restored.length > mainMsgs.length) {
             this.setMessages(restored);
           }
+          if (transcriptHasAgenticTrace(msg.messages)) {
+            this.workbench.hydrateFromTranscript(msg.messages, {
+              force: !this.workbench.snapshotState().entries.length,
+            });
+          }
+          this.syncMainTranscript();
         }
         this.loadingHistory.set(false);
         break;

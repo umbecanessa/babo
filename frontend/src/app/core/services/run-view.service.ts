@@ -360,12 +360,15 @@ export class RunViewService {
   }
 
   /** Merge authoritative plan from REST (Projects load / todo plan). */
-  hydratePlan(plan: PlanSummary, todoId?: string): void {
+  hydratePlan(plan: PlanSummary, todoId?: string, opts?: { expand?: boolean }): void {
     if (!plan?.steps?.length) return;
     this._archived.set(false);
     this._planId.set(plan.id || '');
     this._title.set(plan.title || 'Project plan');
     if (todoId) this._todoId.set(todoId);
+    if (opts?.expand !== false) {
+      this._expanded.set(true);
+    }
 
     const existing = new Map(this._steps().map(s => [s.id, s]));
     const steps: RunStep[] = plan.steps.map((ps, idx) => {
