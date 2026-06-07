@@ -2850,6 +2850,9 @@ async def execute_tools(
                     state, "orchestrator_recovery", False,
                 ),
                 orchestration_profile=getattr(state, "orchestration_profile", None),
+                pending_launch_team_id=getattr(
+                    state, "pending_launch_team_id", "",
+                ) or "",
             )
             if _exec_block:
                 ordered_results[idx] = ToolResult(

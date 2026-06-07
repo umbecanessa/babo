@@ -202,7 +202,7 @@ def pre_delegate_reason(
         return None
     if state.active_mode in _EXECUTING_ESCAPE_OK_MODES:
         return None
-    if has_running_delegates or has_non_terminal_team:
+    if has_running_delegates:
         return None
     if orchestrator_recovery:
         return None
@@ -286,8 +286,9 @@ def block_executing_mode_escape(
     is_delegate_loop: bool,
     orchestrator_recovery: bool = False,
     orchestration_profile: str | None = None,
+    pending_launch_team_id: str = "",
 ) -> str | None:
-    """Block switch_mode(executing) only for team-style plans before Wave 0."""
+    """Block switch_mode(executing) for team-style plans and open wave teams."""
     if not enable_delegation or is_delegate_loop or orchestrator_recovery:
         return None
     if normalize_profile(orchestration_profile) != "orchestrated":
@@ -296,8 +297,19 @@ def block_executing_mode_escape(
         return None
     if active_mode in _EXECUTING_ESCAPE_OK_MODES:
         return None
+    tid = (pending_launch_team_id or "").strip()
+    if tid:
+        return (
+            f"Blocked: switch_mode(mode='executing') — team '{tid}' is created "
+            f"but NOT launched. Call team(action='launch', team_id='{tid}') "
+            "then switch_mode(mode='monitoring')."
+        )
     if has_non_terminal_team:
-        return None
+        return (
+            "Blocked: switch_mode(mode='executing') while a team wave is open on "
+            "this plan. Use team(inspect/launch/advance) and "
+            "switch_mode(monitoring) — do not self-implement delegatable steps."
+        )
     if not plan_requires_team_delegation:
         return None
     if active_mode in (AgentMode.PLANNING, AgentMode.DELEGATING):

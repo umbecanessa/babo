@@ -358,7 +358,7 @@ def test_must_delegate_false_when_team_active():
 
         plan_requires_team_delegation=True,
 
-        has_non_terminal_team=True,
+        has_running_delegates=True,
 
     )
 
@@ -483,6 +483,88 @@ def test_block_executing_allowed_simple_plan():
         is_delegate_loop=False,
 
     ) is None
+
+
+
+
+
+def test_block_executing_when_pending_launch_team():
+
+    msg = block_executing_mode_escape(
+
+        AgentMode.EXECUTING,
+
+        active_mode=AgentMode.DELEGATING,
+
+        plan_requires_team_delegation=True,
+
+        has_non_terminal_team=True,
+
+        enable_delegation=True,
+
+        is_delegate_loop=False,
+
+        orchestration_profile="orchestrated",
+
+        pending_launch_team_id="team_65601aa8",
+
+    )
+
+    assert msg is not None
+
+    assert "team_65601aa8" in msg
+
+    assert "launch" in msg.lower()
+
+
+
+
+
+def test_block_executing_when_open_team_no_pending_id():
+
+    msg = block_executing_mode_escape(
+
+        AgentMode.EXECUTING,
+
+        active_mode=AgentMode.DELEGATING,
+
+        plan_requires_team_delegation=True,
+
+        has_non_terminal_team=True,
+
+        enable_delegation=True,
+
+        is_delegate_loop=False,
+
+        orchestration_profile="orchestrated",
+
+    )
+
+    assert msg is not None
+
+    assert "Blocked" in msg
+
+
+
+
+
+def test_must_delegate_when_created_team_not_launched():
+
+    state = LoopState(user_input="build")
+
+    state.active_mode = AgentMode.EXECUTING
+
+    state.orchestration_profile = "orchestrated"
+
+    assert _must(
+
+        state=state,
+
+        plan_requires_team_delegation=True,
+
+        has_non_terminal_team=True,
+
+    )
 
 
 

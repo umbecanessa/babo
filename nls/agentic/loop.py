@@ -2636,23 +2636,44 @@ async def run_loop(
             and state.active_mode == AgentMode.EXECUTING
             and not _il_user_switched_recently
         ):
-            state.active_mode = AgentMode.MONITORING
-            invalidate_tool_policy_cache(state)  # re-filter schemas for MONITORING
-            _rmode_ref = getattr(hooks, "_render_mode_ref", None)
-            if _rmode_ref:
-                _rmode_ref[0] = AgentMode.MONITORING.value
-            logger.info(
-                "[LOOP:%s] iter %d: INTRA-LOOP coordinator activation — "
-                "active teams detected, switching to MONITORING",
-                state.loop_id, state.iteration,
-            )
-            context.append({"role": "system", "content": (
-                "MONITORING MODE ACTIVATED — you just launched delegates. "
-                "You are now the ORCHESTRATOR. Do NOT implement code yourself. "
-                "Use team(action='inspect') to check progress, wait() for "
-                "running delegates, and team(action='advance') when waves "
-                "complete."
-            )})
+            _pending_launch = (
+                getattr(state, "pending_launch_team_id", "") or ""
+            ).strip()
+            if _pending_launch:
+                state.active_mode = AgentMode.DELEGATING
+                invalidate_tool_policy_cache(state)
+                if _rmode_ref := getattr(hooks, "_render_mode_ref", None):
+                    _rmode_ref[0] = AgentMode.DELEGATING.value
+                logger.info(
+                    "[LOOP:%s] iter %d: unlaunched team — forcing DELEGATING "
+                    "(pending launch %s)",
+                    state.loop_id, state.iteration, _pending_launch,
+                )
+                context.append({"role": "system", "content": (
+                    f"DELEGATING MODE — team '{_pending_launch}' is created but "
+                    f"NOT launched. Call team(action='launch', "
+                    f"team_id='{_pending_launch}') now, then "
+                    "switch_mode(monitoring). Do NOT list_dir/write/bash until "
+                    "the wave is executing."
+                )})
+            else:
+                state.active_mode = AgentMode.MONITORING
+                invalidate_tool_policy_cache(state)
+                _rmode_ref = getattr(hooks, "_render_mode_ref", None)
+                if _rmode_ref:
+                    _rmode_ref[0] = AgentMode.MONITORING.value
+                logger.info(
+                    "[LOOP:%s] iter %d: INTRA-LOOP coordinator activation — "
+                    "active teams detected, switching to MONITORING",
+                    state.loop_id, state.iteration,
+                )
+                context.append({"role": "system", "content": (
+                    "MONITORING MODE ACTIVATED — delegates are running. "
+                    "You are now the ORCHESTRATOR. Do NOT implement code "
+                    "yourself. Use team(action='inspect') to check progress, "
+                    "wait() for running delegates, and team(action='advance') "
+                    "when waves complete."
+                )})
 
         _has_plan_now = bool(
             hooks.has_active_plan and hooks.has_active_plan()
