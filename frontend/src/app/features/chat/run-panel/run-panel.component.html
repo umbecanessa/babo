@@ -30,6 +30,9 @@
         @if (!run.expanded() && run.isLive()) {
           <span class="run-panel-spinner" aria-hidden="true"></span>
         }
+        @if (!run.expanded() && run.needsWrapUp()) {
+          <button type="button" class="run-panel-dismiss" (click)="dismissWrapUp($event)" title="Dismiss">×</button>
+        }
         @if (mode === 'chat' && agentId) {
           <a class="run-panel-link" [routerLink]="projectsLink()" (click)="$event.stopPropagation()">Projects</a>
         }

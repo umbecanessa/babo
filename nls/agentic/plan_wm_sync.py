@@ -50,6 +50,8 @@ _SCRUB_RING_IDS = frozenset({
 _STALE_FACT_DOMAINS = frozenset({
     "Consolidation.SessionProgress",
     "Project.Step.Status",
+    "Project.Status",
+    "Project.NextStep",
     "Project.Missing",
     "Project.Wave.Status",
     "Project.Progress",
@@ -74,6 +76,7 @@ _CANONICAL_PLAN_POSITION_DOMAINS = frozenset({
 
 _PROGRESS_RE = re.compile(r"\b(\d+)/(\d+)\b")
 _STEP_ID_RE = re.compile(r"step-\d+")
+_FILE_MISSING_RE = re.compile(r"^File missing:\s*(\S+)", re.I)
 _PLAN_POSITION_HDR_RE = re.compile(
     r"\[PLAN POSITION\s*[—-]\s*(\d+)/(\d+)",
     re.IGNORECASE,
@@ -83,11 +86,24 @@ SYNC_MODE_FULL = "full"
 SYNC_MODE_REFRESH = "refresh"
 
 
-def audit_issue_is_stale(issue: str, plan: Plan) -> bool:
+def audit_issue_is_stale(
+    issue: str,
+    plan: Plan,
+    workspace: Path | None = None,
+) -> bool:
     """True when an audit issue references steps already marked done."""
     low = (issue or "").lower()
     if not low:
         return False
+
+    m = _FILE_MISSING_RE.match((issue or "").strip())
+    if m and workspace is not None:
+        fname = m.group(1)
+        candidates = [workspace / fname]
+        if plan.project_dir:
+            candidates.insert(0, workspace / plan.project_dir / fname)
+        if any(p.is_file() for p in candidates):
+            return True
 
     for step in plan.steps:
         if step.status not in ("done", "skipped"):
@@ -110,12 +126,18 @@ def audit_issue_is_stale(issue: str, plan: Plan) -> bool:
     return False
 
 
-def prune_stale_audit_issues(plan: Plan) -> int:
+def prune_stale_audit_issues(
+    plan: Plan,
+    workspace: Path | None = None,
+) -> int:
     """Drop audit issues superseded by step completion. Returns removed count."""
     audit = plan.audit
     if audit is None or not audit.issues:
         return 0
-    kept = [i for i in audit.issues if not audit_issue_is_stale(i, plan)]
+    kept = [
+        i for i in audit.issues
+        if not audit_issue_is_stale(i, plan, workspace=workspace)
+    ]
     removed = len(audit.issues) - len(kept)
     if removed:
         audit.issues = kept
@@ -411,7 +433,14 @@ def apply_plan_wm_sync(
 
     if mode == SYNC_MODE_FULL:
         dirty = False
-        if prune_stale_audit_issues(plan):
+        _ws = None
+        if plan_store is not None:
+            _ws = getattr(plan_store, "_workspace", None) or getattr(
+                plan_store, "workspace", None,
+            )
+            if _ws is not None:
+                _ws = Path(_ws)
+        if prune_stale_audit_issues(plan, workspace=_ws):
             dirty = True
         if reconcile_plan_status(plan, team_manager):
             dirty = True

@@ -182,6 +182,21 @@
   }
 }
 
+.run-panel-dismiss {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted, #94a3b8);
+  font-size: 18px;
+  line-height: 1;
+  padding: 0 4px;
+  cursor: pointer;
+
+  &:hover {
+    color: var(--text-primary, #e2e8f0);
+  }
+}
+
 .run-panel--archived {
   opacity: 0.72;
 

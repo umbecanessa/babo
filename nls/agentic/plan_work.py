@@ -46,6 +46,26 @@ def all_steps_properly_done(plan: Plan) -> bool:
     return all(s.status == "done" for s in plan.steps)
 
 
+def plan_ledger_complete(plan: Plan) -> bool:
+    """True when every plan step is terminal (done or skipped)."""
+    if not plan.steps:
+        return False
+    return all(s.status in ("done", "skipped") for s in plan.steps)
+
+
+def plan_needs_closure(plan: Plan, team_manager: Any | None = None) -> bool:
+    """Ledger finished but plan was never formally closed."""
+    if plan.status in ("done", "archived"):
+        return False
+    if not plan_ledger_complete(plan):
+        return False
+    if plan_has_active_execution_team(plan.id, team_manager):
+        return False
+    if plan_has_unresolved_partial_team(plan.id, team_manager):
+        return False
+    return True
+
+
 def plan_has_improper_closure(plan: Plan) -> bool:
     """True when plan was closed (done) but steps were abandoned without review."""
     if plan.status != "done":
@@ -259,9 +279,11 @@ def resolve_work_plan(
     return find_recoverable_plan(store, team_manager, reopen=reopen)
 
 
-def work_plan_has_open_steps(plan: Plan) -> bool:
+def work_plan_has_open_steps(plan: Plan, team_manager: Any | None = None) -> bool:
     """True when orchestration should continue (pending work or recovery)."""
-    if plan_needs_recovery(plan):
+    if plan_needs_closure(plan, team_manager):
+        return False
+    if plan_needs_recovery(plan, team_manager):
         return True
     return bool(plan.pending_steps()) or any(
         s.status == "failed" for s in plan.steps
@@ -377,6 +399,15 @@ async def auto_complete_active_plan_if_ready(
             active = None
     if active is None or active.status in ("done", "archived"):
         return None
+    try:
+        from pathlib import Path
+        from nls.agentic.plan_wm_sync import prune_stale_audit_issues
+
+        _ws = getattr(plan_tool, "_workspace", None)
+        if _ws and prune_stale_audit_issues(active, workspace=Path(_ws)):
+            store.save(active)
+    except Exception:
+        logger.debug("plan audit prune before auto-complete failed", exc_info=True)
     if not can_complete_plan(active, tm):
         return None
     try:
@@ -389,6 +420,63 @@ async def auto_complete_active_plan_if_ready(
     if getattr(result, "is_error", False):
         return None
     return active.id
+
+
+async def prepare_stale_plan_for_closure(
+    plan_tool: Any,
+    team_manager: Any | None = None,
+) -> str | None:
+    """Prune audit, auto-verify if needed, then auto-complete when gate passes."""
+    if plan_tool is None or not hasattr(plan_tool, "execute"):
+        return None
+    store = plan_tool.get_store() if hasattr(plan_tool, "get_store") else None
+    if store is None:
+        return None
+    tm = team_manager if team_manager is not None else getattr(
+        plan_tool, "_team_manager", None,
+    )
+    try:
+        active = store.find_active()
+    except Exception:
+        active = None
+    if active is None or active.status in ("done", "archived"):
+        return None
+    if not plan_needs_closure(active, tm):
+        return None
+
+    try:
+        from pathlib import Path
+        from nls.agentic.plan_wm_sync import prune_stale_audit_issues
+
+        _ws = getattr(plan_tool, "_workspace", None)
+        if _ws and prune_stale_audit_issues(active, workspace=Path(_ws)):
+            store.save(active)
+    except Exception:
+        logger.debug("plan audit prune before prepare closure failed", exc_info=True)
+
+    needs_verify = (
+        active.audit is None
+        or getattr(active.audit, "last_verified_at", None) is None
+        or (active.audit.issues and not active.audit.all_criteria_met)
+    )
+    if needs_verify:
+        try:
+            result = await plan_tool.execute(
+                {"action": "verify", "plan_id": active.id},
+            )
+            if not getattr(result, "is_error", False):
+                active = store.load(active.id) or active
+                _ws = getattr(plan_tool, "_workspace", None)
+                if _ws:
+                    from pathlib import Path
+                    from nls.agentic.plan_wm_sync import prune_stale_audit_issues
+
+                    if prune_stale_audit_issues(active, workspace=Path(_ws)):
+                        store.save(active)
+        except Exception:
+            logger.debug("auto plan verify before closure failed", exc_info=True)
+
+    return await auto_complete_active_plan_if_ready(plan_tool, tm)
 
 
 def runtime_has_open_plan_work(runtime: Any) -> bool:
@@ -407,7 +495,7 @@ def runtime_has_open_plan_work(runtime: Any) -> bool:
                 work = resolve_work_plan(store, "", team_manager, reopen=False)
                 if work is None:
                     continue
-                if work_plan_has_open_steps(work):
+                if work_plan_has_open_steps(work, team_manager):
                     return True
                 if plan_needs_recovery(work, team_manager):
                     return True

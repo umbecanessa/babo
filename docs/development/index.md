@@ -5,6 +5,7 @@
 - [Troubleshooting](troubleshooting.md) — relay, deploy, and build issues
 - [UI surfaces](ui-surfaces.md) — glass vs context-menu vs modal floating panels
 - [Product scope](product-scope.md) — what this repository ships
+- [Known gaps & bugs](known-gaps.md) — field-tracked orchestration, WM, UI, shell issues
 - [Design notes: Job/Trust/Squads](../brainstorm/job-trust-task-squads.md) — historical design draft (canonical guide is under User guides)
 - [Extension guide](../extension/index.md) — add tools, skills, channels
 - [Reference](../reference/index.md) — APIs, relay protocol, env vars

@@ -1484,6 +1484,12 @@ async def run_loop(
             _active_plan_for_goals = _plan_store.find_active()
         except Exception:
             pass
+    from nls.agentic.plan_work import plan_ledger_complete
+
+    state.plan_ledger_complete_at_loop_start = bool(
+        _active_plan_for_goals is not None
+        and plan_ledger_complete(_active_plan_for_goals),
+    )
     if pre_extracted_goals:
         state.goals = filter_stale_tactical_goals(
             list(pre_extracted_goals), _active_plan_for_goals,
@@ -1671,6 +1677,49 @@ async def run_loop(
         state.goals = filter_stale_tactical_goals(
             state.goals, _active_plan_for_goals,
         )
+
+    if (
+        _is_user_dispatch
+        and state.plan_ledger_complete_at_loop_start
+        and _active_plan_for_goals is not None
+        and _active_plan_for_goals.status != "done"
+        and _plan_tool_goals is not None
+    ):
+        try:
+            from nls.agentic.plan_work import prepare_stale_plan_for_closure
+
+            _closed_plan_id = await prepare_stale_plan_for_closure(
+                _plan_tool_goals, _cached_team_manager,
+            )
+            if _closed_plan_id:
+                logger.info(
+                    "[LOOP:%s] auto-closed stale plan %s before follow-up task",
+                    state.loop_id,
+                    _closed_plan_id,
+                )
+                if _plan_store is not None:
+                    try:
+                        _active_plan_for_goals = _plan_store.find_active()
+                    except Exception:
+                        pass
+        except Exception:
+            logger.debug(
+                "Stale plan auto-close at follow-up loop start failed",
+                exc_info=True,
+            )
+
+    if _is_user_dispatch and state.plan_ledger_complete_at_loop_start:
+        try:
+            from nls.agentic.phase_boundary import trim_context_for_phase_boundary
+
+            context[:] = trim_context_for_phase_boundary(
+                context,
+                user_input=user_input,
+                goals=list(state.goals or []),
+                plan_id=getattr(_active_plan_for_goals, "id", "") or "",
+            )
+        except Exception:
+            logger.debug("Phase boundary context trim failed", exc_info=True)
 
     _profile = state.orchestration_profile or "solo_structured"
     if hooks is not None and getattr(hooks, "agent_dir", None) and getattr(hooks, "agent_id", ""):
@@ -2812,7 +2861,9 @@ async def run_loop(
 
                             _needs_resume = (
                                 _active_plan is not None
-                                and work_plan_has_open_steps(_active_plan)
+                                and work_plan_has_open_steps(
+                                    _active_plan, _tm,
+                                )
                             )
                             if _needs_resume:
                                 _open = incomplete_steps(_active_plan)
@@ -5622,9 +5673,9 @@ async def run_loop(
         and not _has_running_team
     ):
         try:
-            from nls.agentic.plan_work import auto_complete_active_plan_if_ready
+            from nls.agentic.plan_work import prepare_stale_plan_for_closure
 
-            _completed_id = await auto_complete_active_plan_if_ready(
+            _completed_id = await prepare_stale_plan_for_closure(
                 _plan_tool, _tm,
             )
             if _completed_id:

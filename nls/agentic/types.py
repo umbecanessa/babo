@@ -2148,6 +2148,10 @@ class LoopState:
     last_pending_indices: list[int] | None = None
     cumulative_actions: list[str] = field(default_factory=list)
     files_written: list[str] = field(default_factory=list)
+    # True when this loop started with an already-finished plan ledger
+    # (all steps done/skipped) — artifact auto-complete must not apply.
+    plan_ledger_complete_at_loop_start: bool = False
+    follow_up_delivery_verified: bool = False
 
     # Lazy tool loading (v3-compatible)
     unlocked_tools: set[str] = field(default_factory=set)
@@ -2327,6 +2331,17 @@ class LoopState:
         _is_err = effective_tool_error(name, result, args=_args)
         if name == "bash" and _is_err and not result.is_error:
             result.is_error = True
+        if name == "bash" and getattr(
+            self, "plan_ledger_complete_at_loop_start", False,
+        ):
+            from nls.platform_shell import classify_bash_runtime_outcome
+
+            _cmd = str((_args or {}).get("command", "") or "")
+            if classify_bash_runtime_outcome(
+                getattr(result, "content", "") or "",
+                command=_cmd,
+            ) == "verified":
+                self.follow_up_delivery_verified = True
         _budget_err = counts_toward_error_budget(name, result, args=_args)
         _hist_err = getattr(result, "is_error", False) or _is_err
 

@@ -101,6 +101,8 @@ export class RunViewService {
   private readonly _expanded = signal(false);
   private readonly _background = signal(false);
   private readonly _archived = signal(false);
+  private readonly _dismissed = signal(false);
+  private readonly _planStatus = signal('');
   private readonly _recoveryPending = signal(false);
   private readonly _unassigned = signal<RunDelegate[]>([]);
   private readonly _batchId = signal('');
@@ -114,6 +116,8 @@ export class RunViewService {
   readonly expanded = this._expanded.asReadonly();
   readonly background = this._background.asReadonly();
   readonly archived = this._archived.asReadonly();
+  readonly dismissed = this._dismissed.asReadonly();
+  readonly planStatus = this._planStatus.asReadonly();
   readonly recoveryPending = this._recoveryPending.asReadonly();
   readonly batchId = this._batchId.asReadonly();
   readonly batchCount = this._batchCount.asReadonly();
@@ -151,7 +155,10 @@ export class RunViewService {
     return total > 0 && done === total && !this.isLive();
   });
 
-  readonly visible = computed(() => this._steps().length > 0 || this._unassigned().length > 0);
+  readonly visible = computed(() => {
+    if (this._dismissed() && this.needsWrapUp()) return false;
+    return this._steps().length > 0 || this._unassigned().length > 0;
+  });
 
   readonly doneCount = computed(() =>
     this._steps().filter(s => s.status === 'done').length,
@@ -174,7 +181,11 @@ export class RunViewService {
 
   readonly isLive = computed(() => {
     if (this._archived()) return false;
+    if (this._planStatus() === 'done') return false;
     if (this.runningDelegateCount() > 0) return true;
+    const total = this.totalCount();
+    const terminal = this.doneCount() + this.skippedCount();
+    if (total > 0 && terminal === total) return false;
     return this._steps().some(s => s.status === 'active');
   });
 
@@ -329,6 +340,11 @@ export class RunViewService {
     };
   }
 
+  dismissWrapUp(): void {
+    this._dismissed.set(true);
+    this._expanded.set(false);
+  }
+
   /** Mark the current run archived (plan deleted / superseded). */
   markPlanArchived(planId?: string): void {
     const current = this._planId();
@@ -363,6 +379,8 @@ export class RunViewService {
   hydratePlan(plan: PlanSummary, todoId?: string, opts?: { expand?: boolean }): void {
     if (!plan?.steps?.length) return;
     this._archived.set(false);
+    this._dismissed.set(false);
+    this._planStatus.set(plan.status || '');
     this._planId.set(plan.id || '');
     this._title.set(plan.title || 'Project plan');
     if (todoId) this._todoId.set(todoId);
@@ -559,6 +577,8 @@ export class RunViewService {
     if (planId) this._planId.set(planId);
     this._title.set(title.replace(/^Archived · /i, ''));
     this._archived.set(false);
+    this._dismissed.set(false);
+    this._planStatus.set(String(msg['status'] || msg['plan_status'] || ''));
     if (todoId) this._todoId.set(todoId);
     if (msg['project_dir']) {
       this.workspaceCtx.setProjectDir(this.agentId, String(msg['project_dir']));

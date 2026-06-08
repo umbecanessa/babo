@@ -548,4 +548,75 @@ def looks_like_shell_command_failure(output: str, command: str) -> bool:
         or "FullyQualifiedErrorId" in output
     ):
         return True
+    if looks_like_server_launch_command(command):
+        if looks_like_python_runtime_crash(output, command=command):
+            return True
     return False
+
+
+_PYTHON_CRASH_RE = re.compile(
+    r"\b(ImportError|ModuleNotFoundError|SyntaxError|TypeError|"
+    r"AttributeError|NameError|ValueError):\s",
+    re.I,
+)
+_SERVER_LAUNCH_CMD_RE = re.compile(
+    r"\b(uvicorn|gunicorn|flask run|npm run dev|yarn dev|pnpm dev|"
+    r"next dev|vite|webpack serve|rails server|manage\.py runserver)\b",
+    re.I,
+)
+
+
+def looks_like_server_launch_command(command: str) -> bool:
+    return bool(_SERVER_LAUNCH_CMD_RE.search(command or ""))
+
+
+def looks_like_python_runtime_crash(
+    output: str,
+    *,
+    command: str = "",
+) -> bool:
+    """True when Python/server output includes a traceback or fatal import error."""
+    if not output:
+        return False
+    if "Traceback (most recent call last)" in output:
+        return True
+    if _PYTHON_CRASH_RE.search(output):
+        return True
+    return False
+
+
+def classify_bash_runtime_outcome(
+    output: str,
+    *,
+    command: str = "",
+) -> str | None:
+    """Return ``verified``, ``failed``, or None for runtime start/health checks."""
+    if not output:
+        return None
+    if looks_like_python_runtime_crash(output, command=command):
+        return "failed"
+    low = output.lower()
+    cmd = (command or "").lower()
+    if "[server/daemon started" in low and not looks_like_python_runtime_crash(
+        output, command=command,
+    ):
+        return "verified"
+    if "curl" in cmd or "invoke-restmethod" in cmd or "invoke-webrequest" in cmd:
+        if any(
+            tok in low
+            for tok in (
+                "200 ok",
+                '"status":"ok"',
+                '"status": "ok"',
+                "healthy",
+                '"health":"ok"',
+            )
+        ):
+            return "verified"
+        if looks_like_http_api_shell_failure(output, command):
+            return "failed"
+    if _SERVER_LAUNCH_CMD_RE.search(cmd) and looks_like_python_runtime_crash(
+        output, command=command,
+    ):
+        return "failed"
+    return None

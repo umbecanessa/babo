@@ -25,6 +25,7 @@ from .project_runtime import (
     ensure_project_venv,
     format_project_root_hint,
     format_scaffold_before_install_hint,
+    format_post_root_install_hint,
     list_partial_python_scaffolds,
     list_workspace_project_candidates,
     looks_like_pypi_package_spec,
@@ -341,6 +342,7 @@ class ProjectInstallTool:
                 project_root,
                 package,
                 venv_root=venv_root,
+                install_dir=install_dir,
             )
             if extra and not result.is_error:
                 result = ToolResult(content=result.content + extra)
@@ -376,6 +378,7 @@ class ProjectInstallTool:
         package: str,
         *,
         venv_root: str | None = None,
+        install_dir: str = "",
     ) -> ToolResult:
         venv_root = venv_root or project_root
         base_name = (
@@ -496,6 +499,7 @@ class ProjectInstallTool:
                 f"Python: {python_exe}"
                 f"{verify}\n\n"
                 "bash `python` in this project directory uses the same venv."
+                f"{format_post_root_install_hint(self._workspace_root, install_dir=install_dir)}"
             ),
         )
 

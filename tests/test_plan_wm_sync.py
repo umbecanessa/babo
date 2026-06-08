@@ -165,6 +165,70 @@ def test_prune_stale_audit_issues():
     assert "Real blocker" in plan.audit.issues[0]
 
 
+def test_prune_stale_file_missing_when_path_exists(tmp_path: Path):
+    rel = "backend/app/main.py"
+    fpath = tmp_path / rel
+    fpath.parent.mkdir(parents=True)
+    fpath.write_text("# ok", encoding="utf-8")
+    plan = Plan(
+        id="plan_a",
+        title="Test",
+        audit=PlanAudit(
+            issues=[f"File missing: {rel} (entrypoint)"],
+            all_criteria_met=False,
+        ),
+        steps=[PlanStep(id="step-1", label="Backend", status="done")],
+    )
+    removed = prune_stale_audit_issues(plan, workspace=tmp_path)
+    assert removed == 1
+    assert plan.audit.issues == []
+    assert plan.audit.all_criteria_met is True
+
+
+def test_prune_stale_file_missing_uses_plan_store_workspace(tmp_path: Path):
+    from nls.agentic.plan_store import PlanStore
+
+    rel = "backend/app/main.py"
+    fpath = tmp_path / rel
+    fpath.parent.mkdir(parents=True)
+    fpath.write_text("# ok", encoding="utf-8")
+    plan = Plan(
+        id="plan_b",
+        title="Test",
+        audit=PlanAudit(
+            issues=[f"File missing: {rel} (entrypoint)"],
+            all_criteria_met=False,
+        ),
+        steps=[PlanStep(id="step-1", label="Backend", status="done")],
+    )
+    store = PlanStore(tmp_path)
+    removed = prune_stale_audit_issues(plan, workspace=getattr(store, "_workspace"))
+    assert removed == 1
+    assert plan.audit.issues == []
+
+
+def test_apply_plan_wm_sync_prunes_file_missing_via_plan_store(tmp_path: Path):
+    from nls.agentic.plan_store import PlanStore
+
+    rel = "backend/app/main.py"
+    fpath = tmp_path / rel
+    fpath.parent.mkdir(parents=True)
+    fpath.write_text("# ok", encoding="utf-8")
+    plan = Plan(
+        id="plan_c",
+        title="Test",
+        audit=PlanAudit(
+            issues=[f"File missing: {rel} (entrypoint)"],
+            all_criteria_met=False,
+        ),
+        steps=[PlanStep(id="step-1", label="Backend", status="done")],
+    )
+    store = PlanStore(tmp_path)
+    apply_plan_wm_sync(plan, plan_store=store, persist=False)
+    assert plan.audit.issues == []
+    assert plan.audit.all_criteria_met is True
+
+
 def test_reconcile_plan_status_unblocks_when_recovery_cleared():
     plan = Plan(
         id="plan_a",

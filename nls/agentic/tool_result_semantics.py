@@ -146,6 +146,17 @@ def effective_tool_error(
     content = (getattr(result, "content", None) or "")[:800].lower()
     if not content:
         return False
+    from nls.platform_shell import (
+        looks_like_python_runtime_crash,
+        looks_like_server_launch_command,
+    )
+
+    _cmd = str((args or {}).get("command", "") or "")
+    if looks_like_server_launch_command(_cmd) and looks_like_python_runtime_crash(
+        getattr(result, "content", None) or "",
+        command=_cmd,
+    ):
+        return True
     if not any(p in content for p in _BASH_SOFT_ERROR_PATTERNS):
         return False
     cmd = ""

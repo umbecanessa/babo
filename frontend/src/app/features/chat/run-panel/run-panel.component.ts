@@ -90,6 +90,11 @@ export class RunPanelComponent {
   projectsLink(): string[] {
     return this.agentId ? ['/projects', this.agentId] : [];
   }
+
+  dismissWrapUp(event: Event): void {
+    event.stopPropagation();
+    this.run.dismissWrapUp();
+  }
 }
 
 function taskTitle(task: string): string {

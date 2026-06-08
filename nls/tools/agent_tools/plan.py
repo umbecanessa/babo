@@ -2183,6 +2183,8 @@ class PlanTool:
 
     async def _complete(self, params: dict[str, Any]) -> ToolResult:
         from nls.agentic.plan_work import can_complete_plan, completion_gate_message
+        from nls.agentic.plan_wm_sync import prune_stale_audit_issues
+        from pathlib import Path
 
         plan = self._resolve_plan(params)
         if plan is None:
@@ -2198,6 +2200,9 @@ class PlanTool:
                 ),
                 is_error=True,
             )
+
+        if prune_stale_audit_issues(plan, workspace=Path(self._workspace)):
+            self._store.save(plan)
 
         gate = completion_gate_message(plan, self._team_manager)
         if gate is not None:

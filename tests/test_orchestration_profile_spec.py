@@ -138,9 +138,15 @@ class _FakeStep:
 
 
 class _FakePlan:
-    def __init__(self, steps: list[_FakeStep], project_dir: str = ""):
+    def __init__(
+        self,
+        steps: list[_FakeStep],
+        project_dir: str = "",
+        status: str = "in_progress",
+    ):
         self.steps = steps
         self.project_dir = project_dir
+        self.status = status
 
 
 class _FakeStore:
@@ -189,3 +195,76 @@ def test_plan_artifact_does_not_complete_on_prose_and_writes_only():
     plan = _FakePlan([_FakeStep("in_progress"), _FakeStep("pending")])
     hooks = _FakeHooks(_FakePlanTool(plan, "/tmp/ws"))
     assert evaluate_plan_artifact_complete(state, hooks) is False
+
+
+def test_plan_artifact_does_not_complete_when_all_steps_done_only():
+    """Ledger-only completion must not exit the loop (GAP-EVAL-01)."""
+    state = LoopState(user_input="ship the feature")
+    state.orchestration_profile = "solo_structured"
+    plan = _FakePlan([_FakeStep("done"), _FakeStep("done")])
+    hooks = _FakeHooks(_FakePlanTool(plan, "/tmp/ws"))
+    assert evaluate_plan_artifact_complete(state, hooks) is False
+
+
+def test_plan_artifact_blocks_follow_up_on_stale_plan(tmp_path):
+    """Second user task must not inherit completion from an unclosed build plan."""
+    artifact = tmp_path / "backend" / "app" / "main.py"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text("print('ok')", encoding="utf-8")
+    state = LoopState(user_input="run the backend locally")
+    state.orchestration_profile = "solo_structured"
+    state.plan_ledger_complete_at_loop_start = True
+    plan = _FakePlan(
+        [_FakeStep("done", ["backend/app/main.py"])],
+        status="in_progress",
+    )
+    hooks = _FakeHooks(_FakePlanTool(plan, str(tmp_path)))
+    assert evaluate_plan_artifact_complete(state, hooks) is False
+
+
+def test_plan_artifact_allows_build_loop_completion(tmp_path):
+    artifact = tmp_path / "backend" / "app" / "main.py"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text("print('ok')", encoding="utf-8")
+    state = LoopState(user_input="finish the backend API")
+    state.orchestration_profile = "solo_structured"
+    state.plan_ledger_complete_at_loop_start = False
+    plan = _FakePlan(
+        [_FakeStep("done", ["backend/app/main.py"])],
+        status="in_progress",
+    )
+    hooks = _FakeHooks(_FakePlanTool(plan, str(tmp_path)))
+    assert evaluate_plan_artifact_complete(state, hooks) is True
+
+
+def test_plan_artifact_does_not_complete_on_partial_ledger(tmp_path):
+    artifact = tmp_path / "backend" / "app" / "main.py"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text("print('ok')", encoding="utf-8")
+    state = LoopState(user_input="finish the backend API")
+    state.orchestration_profile = "solo_structured"
+    state.plan_ledger_complete_at_loop_start = False
+    plan = _FakePlan(
+        [
+            _FakeStep("done", ["backend/app/main.py"]),
+            _FakeStep("pending"),
+        ],
+        status="in_progress",
+    )
+    hooks = _FakeHooks(_FakePlanTool(plan, str(tmp_path)))
+    assert evaluate_plan_artifact_complete(state, hooks) is False
+
+
+def test_follow_up_task_still_needs_work():
+    from nls.agentic.evaluator import follow_up_task_still_needs_work
+
+    state = LoopState(user_input="run the backend locally")
+    state.plan_ledger_complete_at_loop_start = True
+    assert follow_up_task_still_needs_work(state) is True
+
+    state.follow_up_delivery_verified = True
+    assert follow_up_task_still_needs_work(state) is False
+
+    state.follow_up_delivery_verified = False
+    state.tool_successes = {"project_install": 3, "bash": 2}
+    assert follow_up_task_still_needs_work(state) is True

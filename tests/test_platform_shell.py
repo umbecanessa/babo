@@ -246,3 +246,42 @@ def test_v5_supplement_includes_clawhub_block_on_windows():
         return
     assert "CLAWHUB / INSTRUCTION SKILLS" in agentic_types._V5_AGENTIC_SUPPLEMENT
     assert "CLAWHUB / INSTRUCTION SKILLS" in agentic_types._SUB_AGENT_SUPPLEMENT
+
+
+def test_python_runtime_crash_detected():
+    from nls.platform_shell import (
+        classify_bash_runtime_outcome,
+        looks_like_python_runtime_crash,
+        looks_like_shell_command_failure,
+    )
+
+    uvicorn_out = (
+        "INFO:     Uvicorn running on http://127.0.0.1:8000\n"
+        "Traceback (most recent call last):\n"
+        "TypeError: non-default argument 'created_at' follows default argument\n"
+    )
+    cmd = "uvicorn app.main:app --reload"
+    assert looks_like_python_runtime_crash(uvicorn_out, command=cmd)
+    assert classify_bash_runtime_outcome(uvicorn_out, command=cmd) == "failed"
+    assert looks_like_shell_command_failure(uvicorn_out, cmd)
+
+
+def test_daemon_start_without_crash_is_verified():
+    from nls.platform_shell import classify_bash_runtime_outcome
+
+    out = (
+        "[SERVER/DAEMON STARTED — process detached to background (pid: 1234)]\n"
+        "INFO:     Uvicorn running on http://127.0.0.1:8000\n"
+    )
+    assert classify_bash_runtime_outcome(out, command="uvicorn app.main:app") == "verified"
+
+
+def test_traceback_shell_failure_scoped_to_server_commands():
+    from nls.platform_shell import looks_like_shell_command_failure
+
+    crash = (
+        "Traceback (most recent call last):\n"
+        "TypeError: non-default argument 'created_at' follows default argument\n"
+    )
+    assert looks_like_shell_command_failure(crash, "uvicorn app.main:app --reload")
+    assert not looks_like_shell_command_failure(crash, "cat error.log")

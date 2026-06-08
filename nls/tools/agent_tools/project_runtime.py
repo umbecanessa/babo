@@ -558,6 +558,20 @@ def scaffold_requirements_line(project_dir: Path, package: str) -> Path | None:
         return None
 
 
+def format_post_root_install_hint(workspace_root: str, install_dir: str = "") -> str:
+    """Breadcrumb when deps were installed at repo root but app lives in a subdir."""
+    if install_dir:
+        return ""
+    scaffolds = list_partial_python_scaffolds(workspace_root)
+    if len(scaffolds) != 1:
+        return ""
+    name = scaffolds[0].name
+    return (
+        f"\n[INSTALL NOTE] App stack likely lives in `{name}/`. "
+        f"Next: project_install(install_dir='{name}') or cd {name} before bash/python."
+    )
+
+
 def format_scaffold_before_install_hint(
     workspace_root: str,
     *,

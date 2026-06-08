@@ -424,12 +424,15 @@ def evaluate_plan_artifact_complete(
     spec = get_profile_spec(getattr(state, "orchestration_profile", None))
     if not spec.complete_on_plan_artifacts:
         return False
-    last_text = getattr(state, "_last_iter_text", "") or ""
-    written = list(getattr(state, "files_written", []) or [])
     if hooks is None:
         return False
     plan_tool = getattr(hooks, "_cached_plan_tool", None)
     if plan_tool is None:
+        return False
+    # Follow-up user tasks (e.g. "run locally") must not inherit completion
+    # from a prior build plan whose ledger was already finished but never
+    # plan(complete)'d — that stale plan must not end the new loop.
+    if getattr(state, "plan_ledger_complete_at_loop_start", False):
         return False
     try:
         store = plan_tool.get_store()
@@ -439,8 +442,10 @@ def evaluate_plan_artifact_complete(
         from pathlib import Path
 
         ws = Path(plan_tool._workspace)
-        if plan.steps and all(s.status in ("done", "skipped") for s in plan.steps):
-            return True
+        if plan.steps and not all(
+            s.status in ("done", "skipped") for s in plan.steps
+        ):
+            return False
         done_with_files = [
             s for s in plan.steps
             if s.status in ("done", "skipped") and (s.output_files or [])
@@ -475,6 +480,8 @@ def evaluate_plan_step_started_complete(
         return False
     last_text = getattr(state, "_last_iter_text", "") or ""
     if len(last_text) < 80:
+        return False
+    if getattr(state, "plan_ledger_complete_at_loop_start", False):
         return False
     if hooks is None:
         return False

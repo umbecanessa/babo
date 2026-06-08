@@ -98,6 +98,7 @@ def strip_redundant_project_prefix(path_str: str, cwd: str) -> str:
         return p
     from pathlib import Path
 
+    p = strip_path_through_cwd_segment(p, cwd)
     parts = Path(p).parts
     if len(parts) < 2:
         return p
@@ -107,6 +108,21 @@ def strip_redundant_project_prefix(path_str: str, cwd: str) -> str:
     cwd_norm = str(cwd_path).replace("\\", "/").rstrip("/")
     if cwd_norm.endswith("/" + parts[0]):
         return Path(*parts[1:]).as_posix()
+    return p
+
+
+def strip_path_through_cwd_segment(path_str: str, cwd: str) -> str:
+    """When CWD is backend/, drop .../backend/ prefix from WM-stored paths."""
+    p = normalize_ledger_path(path_str)
+    if not p or not cwd:
+        return p
+    from pathlib import Path
+
+    cwd_name = Path(cwd).name
+    parts = Path(p).parts
+    if cwd_name in parts:
+        idx = parts.index(cwd_name)
+        return Path(*parts[idx + 1:]).as_posix() if idx + 1 < len(parts) else p
     return p
 
 

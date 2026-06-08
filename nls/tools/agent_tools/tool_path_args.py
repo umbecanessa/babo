@@ -11,7 +11,11 @@ import logging
 import re
 from typing import Any
 
-from .file_ledger import normalize_ledger_path, strip_redundant_project_prefix
+from .file_ledger import (
+    normalize_ledger_path,
+    strip_path_through_cwd_segment,
+    strip_redundant_project_prefix,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +84,7 @@ def normalize_tool_path_arg(
 
     path_str = normalize_ledger_path(path_str) or path_str
     if cwd:
+        path_str = strip_path_through_cwd_segment(path_str, cwd)
         path_str = strip_redundant_project_prefix(path_str, cwd)
 
     if path_arg_looks_malformed(path_str):

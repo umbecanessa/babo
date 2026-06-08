@@ -711,6 +711,43 @@ class BashTool:
         except ValueError:
             return self._cwd
 
+    def _cwd_context_prefix(self) -> str:
+        """Remind the model when CWD is a subfolder (avoid redundant cd)."""
+        try:
+            if Path(self._cwd).resolve() != Path(self._workspace_root).resolve():
+                name = Path(self._cwd).name
+                return (
+                    f"[CWD: {self._friendly_cwd()} — inside {name}/; "
+                    f"run commands directly, do NOT `cd {name}` again]\n"
+                )
+        except Exception:
+            pass
+        return ""
+
+    def _venv_context_suffix(self) -> str:
+        """Clarify which .venv applies when monorepo has nested layouts."""
+        try:
+            cwd = Path(self._cwd).resolve()
+            ws = Path(self._workspace_root).resolve()
+            cwd_venv = cwd / ".venv"
+            root_venv = ws / ".venv"
+            if cwd_venv.is_dir() and (cwd_venv / "Scripts" / "python.exe").exists():
+                py = cwd_venv / "Scripts" / "python.exe"
+            elif cwd_venv.is_dir() and (cwd_venv / "bin" / "python").exists():
+                py = cwd_venv / "bin" / "python"
+            else:
+                py = None
+            if py is not None:
+                return f"\n[venv: {cwd_venv}]"
+            if root_venv.is_dir() and cwd != ws:
+                return (
+                    f"\n[venv: no .venv in {cwd.name}/ — root has {root_venv}; "
+                    f"use project_install(install_dir='{cwd.name}') for app deps]"
+                )
+        except Exception:
+            pass
+        return ""
+
     _NO_SUCH_RE = re.compile(
         r"(?:No such file or directory|cannot access)[:\s]*['\"]?"
         r"([^\s'\"]+)",
@@ -1537,6 +1574,13 @@ class BashTool:
                     is_error=_result.is_error,
                     details=_result.details,
                 )
+            _cwd_prefix = self._cwd_context_prefix()
+            if _cwd_prefix and _result.content:
+                _result = ToolResult(
+                    content=_cwd_prefix + _result.content,
+                    is_error=_result.is_error,
+                    details=_result.details,
+                )
             return _result
         except Exception as e:
             return ToolResult(
@@ -1734,6 +1778,28 @@ class BashTool:
                 self._reap_finished_procs()
 
                 partial = b"".join(output_chunks).decode("utf-8", errors="replace")
+                from nls.platform_shell import looks_like_python_runtime_crash
+
+                if looks_like_python_runtime_crash(partial, command=command):
+                    try:
+                        proc.kill()
+                        await proc.wait()
+                    except (ProcessLookupError, OSError):
+                        pass
+                    return ToolResult(
+                        content=(
+                            partial
+                            + "\n\n[ERROR] Server process crashed during startup "
+                            "(see traceback above). Fix the import/runtime error "
+                            "before retrying."
+                        ),
+                        is_error=True,
+                        details={
+                            "exit_code": proc.returncode,
+                            "daemon": False,
+                            "startup_crash": True,
+                        },
+                    )
                 await self._register_detached(proc, command, partial, "server")
                 return ToolResult(
                     content=(
@@ -1943,7 +2009,7 @@ class BashTool:
                     "the deprecation/warning message above.)"
                 )
 
-        result_text += f"\n\n[CWD: {self._friendly_cwd()}]"
+        result_text += f"\n\n[CWD: {self._friendly_cwd()}]{self._venv_context_suffix()}"
 
         return ToolResult(
             content=result_text,

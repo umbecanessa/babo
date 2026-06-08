@@ -60,13 +60,31 @@ def requires_substantive_delivery(state: LoopState) -> bool:
     if "setup:instruction_skill" in hints or "setup:native_skill" in hints:
         return True
     goals = " ".join(g or "" for g in (state.goals or [])).lower()
+    text = f"{goals} {(state.user_input or '').lower()}"
+    if re.search(r"\brun\b.*\blocally\b", text) or re.search(
+        r"\b(start|launch)\b.*\b(server|backend|frontend|app)\b", text,
+    ):
+        return True
     return any(
-        tok in goals
+        tok in text
         for tok in (
             "install", "configure", "deploy", "build", "setup",
             "verify bot", "connect",
+            "run locally", "run the app", "start the server", "start server",
+            "start backend", "start frontend", "npm run dev", "uvicorn",
+            "health check", "verify it runs", "dev server",
+            "run backend", "run frontend",
         )
     )
+
+
+def follow_up_task_still_needs_work(state: LoopState) -> bool:
+    """Follow-up loop on a finished build ledger that has not delivered yet."""
+    if not getattr(state, "plan_ledger_complete_at_loop_start", False):
+        return False
+    if not requires_substantive_delivery(state):
+        return False
+    return not getattr(state, "follow_up_delivery_verified", False)
 
 _FAILURE_PATTERNS = (
     "not logged in", "not found", "command not found",
@@ -330,6 +348,12 @@ async def should_complete(
     if state.consecutive_text_only >= config.consecutive_text_only_limit:
         # Coordinators with active plans should NOT auto-exit on text-only
         # limit — the loop.py stall nudge will redirect them to act.
+        if follow_up_task_still_needs_work(state):
+            logger.info(
+                "[EVAL] -> CONTINUE (text_only limit but follow-up task "
+                "on closed plan ledger still needs substantive work)",
+            )
+            return False
         if state.coordinator_mode and hooks and hooks.has_active_plan:
             try:
                 if hooks.has_active_plan():
@@ -558,6 +582,7 @@ async def should_complete(
         and not state.coordinator_mode
         and _spec.complete_on_implicit_delivery
         and _last_text_len >= _implicit_min_chars
+        and not follow_up_task_still_needs_work(state)
         and (
             has_substantive_tool_success(state)
             or not requires_substantive_delivery(state)
@@ -669,6 +694,13 @@ async def should_complete(
     ):
         logger.info(
             "[EVAL] -> CONTINUE (orchestrator must plan+team before exiting)"
+        )
+        return False
+
+    if follow_up_task_still_needs_work(state):
+        logger.info(
+            "[EVAL] -> CONTINUE (follow-up task on closed plan ledger "
+            "still needs substantive work)",
         )
         return False
 

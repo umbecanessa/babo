@@ -372,21 +372,33 @@ class EditTool:
             )
 
         if not path.exists():
-            hint = "After cd, use paths relative to the NEW directory."
-            parts = Path(path_str).parts
-            if len(parts) > 1:
-                stripped = str(Path(*parts[1:]))
-                alt = Path(self._effective_cwd) / stripped
+            from .file_ledger import strip_path_through_cwd_segment
+            from pathlib import Path as _Path
+
+            hint = "Use paths relative to [CWD] (see bash footer)."
+            alt_rel = strip_path_through_cwd_segment(path_str, self._effective_cwd)
+            if alt_rel and alt_rel != path_str:
+                alt = _Path(self._effective_cwd) / alt_rel
                 if alt.exists():
                     hint = (
-                        f"Did you mean: `{stripped}`?  "
-                        f"Your CWD is already the workspace root — "
-                        f"drop the '{parts[0]}/' prefix."
+                        f"Did you mean `{alt_rel}` relative to [CWD]? "
+                        f"(You passed `{path_str}` — drop the project folder prefix.)"
                     )
+            else:
+                parts = _Path(path_str).parts
+                if len(parts) > 1:
+                    stripped = str(_Path(*parts[1:]))
+                    alt = _Path(self._effective_cwd) / stripped
+                    if alt.exists():
+                        hint = (
+                            f"Did you mean `{stripped}`? "
+                            f"CWD is `{self._effective_cwd}` — "
+                            f"drop the `{parts[0]}/` prefix."
+                        )
             return ToolResult(
                 content=(
                     f"Error: File not found: {path_str}\n"
-                    f"CWD (workspace root): {self._effective_cwd}\n"
+                    f"CWD: {self._effective_cwd}\n"
                     f"Resolved: {path}\n"
                     f"{hint}"
                 ),

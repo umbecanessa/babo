@@ -1449,6 +1449,7 @@ class TeamManager:
                     return True
                 if any(m.status == "pending" for m in team.members):
                     return True
+                continue
         return False
 
     def _effective_delegate_state(self, ds: Any) -> str:
