@@ -30,9 +30,12 @@ Details: **[Deployment topologies](architecture/deployment-topologies.md)**
 |------|------------|
 | Why Babo exists | [Manifesto](manifesto.md) |
 | Install & first agent | [Download (Releases)](https://github.com/umbecanessa/babo/releases) → [Installation](getting-started/installation.md) → [Quickstart](getting-started/quickstart.md) |
+| First-run wizard (desktop) | [First run & setup](guides/first-run-and-setup.md) |
+| Configure Settings | [Settings](guides/settings.md) |
 | Understand concepts | [Core concepts](getting-started/concepts.md) |
 | Deploy backend to Railway | [Cloud deployment](configuration/cloud-deployment.md) |
 | See how chat/memory/tools work | [User guides](guides/index.md) |
+| Configure four workloads | [Vision, voice & embeddings](guides/vision-voice-and-embeddings.md) |
 | Set agent roles & fleet squads | [Job, Trust & Squads](guides/job-trust-and-squads.md) |
 | Understand the full architecture | [Architecture index](architecture/index.md) |
 | Look up APIs & relay protocol | [Reference](reference/index.md) |
@@ -49,21 +52,27 @@ Details: **[Deployment topologies](architecture/deployment-topologies.md)**
 |-------|-------------|
 | [Installation](getting-started/installation.md) | Desktop, self-host, cloud hub |
 | [Quickstart](getting-started/quickstart.md) | First agent in minutes |
+| [First run & setup](guides/first-run-and-setup.md) | Desktop wizard phases |
+| [Creating agents](guides/creating-agents.md) | Genesis templates |
 | [Core concepts](getting-started/concepts.md) | Agents, memory, sleep, loop |
 
 ### User guides
 
 | Guide | Description |
 |-------|-------------|
-| [Chat](guides/chat.md) | Streaming, voice, commands |
+| [Dashboard & fleet](guides/dashboard-and-fleet.md) | Agent cards, squads, charter |
+| [Chat](guides/chat.md) | Streaming, model picker, voice |
 | [Agentic loop & plans](guides/agentic-loop-and-plans.md) | Autonomy, plans, sub-agents |
-| [Projects & teams](guides/projects-and-teams.md) | Board, timeline, orchestration |
+| [Projects & teams](guides/projects-and-teams.md) | Board, teams panel, files IDE |
 | [Job, Trust & Squads](guides/job-trust-and-squads.md) | Owner charter, tool rails, dashboard fleets |
 | [Memory](guides/memory.md) | Cryptex, knowledge, soul |
-| [Brain dashboard](guides/brain-dashboard.md) | Hormones, drives, signals |
+| [Brain dashboard](guides/brain-dashboard.md) | All Brain tabs |
 | [Sleep & consolidation](guides/sleep-and-consolidation.md) | Long-term memory |
 | [Tools & skills](guides/tools-and-skills.md) | Integrations, MCP, ClawHub |
-| [Settings & API keys](guides/settings-and-api-keys.md) | Account prefs, automation keys |
+| [Settings](guides/settings.md) | Models & AI, system, permissions |
+| [Settings & API keys](guides/settings-and-api-keys.md) | `nlsk_` automation keys |
+| [Remote mode & relay](guides/remote-mode-and-relay.md) | Web UI + desktop runtime |
+| [Vision, voice & embeddings](guides/vision-voice-and-embeddings.md) | Four AI workloads |
 | [Integrations](guides/integrations/index.md) | WhatsApp, Telegram, Discord, Slack, Google, email |
 
 ### Architecture (deep)

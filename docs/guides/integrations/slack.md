@@ -25,6 +25,8 @@ Connect a **Slack app** so users can @mention your agent in workspace channels a
 | **Public HTTPS NestJS URL** | Slack Event Subscriptions Request URL |
 | **Babo Desktop online** | Relay delivers events to the sidecar in real time |
 
+**Runtime agent id:** Webhook and register URLs use `{runtimeAgentId}` — the Python directory name under `data/agents/`, visible on the agent card in **Dashboard** (**Agents** nav). See [Dashboard & fleet](../dashboard-and-fleet.md).
+
 ---
 
 ## Setup

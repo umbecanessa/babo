@@ -1,6 +1,6 @@
 # UI surfaces (floating panels)
 
-Design contract for **floating overlays** in the Angular UI (`frontend/`). Introduced in v1.1.15 to fix readability when menus sat on top of chat text and the composer.
+Design contract for **floating overlays** in the Angular UI (`frontend/`). Introduced in v1.1.x to fix readability when menus sat on top of chat text and the composer.
 
 **Styles:** `frontend/src/app/shared/styles/_context-menu.scss` · **Tokens:** `frontend/src/styles.scss`
 
@@ -55,13 +55,13 @@ Active/hover states use `color-mix` against `--context-menu-bg` so selection tin
 
 ---
 
-## Migrated components (v1.1.15)
+## Migrated components (v1.1.x)
 
 These were moved from bespoke translucent SCSS to the shared contract:
 
 | Component | Path | Notes |
 |-----------|------|-------|
-| Model picker | `chat-model-picker/` | Search + model list |
+| Model picker | `chat-model-picker/` | Search + model list; LAN/Popular/More groups; orchestrator/sub-agent tabs |
 | Orchestration profile picker | `chat-orchestration-profile-picker/` | Profile depth + per-agent overrides |
 | Thread / session menu | `chat.component.html` | Uses `.context-menu-panel` |
 | Workspace explorer menu | `workspace-explorer/` | Right-click file actions |

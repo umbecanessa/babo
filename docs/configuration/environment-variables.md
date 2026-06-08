@@ -7,6 +7,9 @@
 | `NLS_VLLM_BASE_URL` | — | OpenAI-compatible inference base URL |
 | `NLS_HF_MODEL` | — | Model id for chat/completions |
 | `NLS_INFERENCE_API_KEY` | — | Bearer for inference (provider key, `nlsk_`, or JWT on Babo Cloud — desktop syncs session JWT when relaying through Nest) |
+| `NLS_LAN_INFERENCE_URL` | — | LAN/local OpenAI-compatible base (`…/v1`) — hybrid desktop installs |
+| `NLS_BABO_CLOUD_INFERENCE_URL` | — | Babo Cloud relay (`{nestjs}/api/inference/v1`) — hybrid desktop installs |
+| `NLS_DELEGATE_HF_MODEL` | — | Global delegate model when profile delegate ≠ primary |
 | `NLS_SLEEP_ENABLED` | `true` | Enable consolidation sleep |
 | `NLS_DEFAULT_GENESIS` | `standard-v1` | Default agent template |
 | `NLS_DATA_DIR` | `data` | Runtime data root |

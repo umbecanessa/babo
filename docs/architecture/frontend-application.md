@@ -39,9 +39,9 @@ Electron may override via IPC `urls:get` after config wizard.
 | `/create` | Genesis wizard |
 | `/chat/:agentId` | Main chat + **run panel** + **model picker** |
 | `/tools/:agentId` | Integrations & skills |
-| `/projects/:agentId` | Board, timeline, teams |
+| `/projects/:agentId` | Overview (teams panel + activity), Board, Files IDE |
 | `/memory/:agentId` | Memory browser |
-| `/brain/:agentId` | Hormones & drives |
+| `/brain/:agentId` | Twelve Brain tabs (state, cognition, perception, system) |
 | `/settings` | User settings |
 | `/settings/api-keys` | Programmatic runtime keys |
 | `/tasks/:agentId` | Alias → same as `/projects/:agentId` |
@@ -54,7 +54,8 @@ Electron may override via IPC `urls:get` after config wizard.
 |---------|------|
 | `ApiService` | HTTP — splits NestJS vs runtime URLs |
 | `WebSocketService` | Chat — **one Socket.IO/WS connection per agent** (parallel runs) |
-| `AgentModelService` | Per-agent session + delegate model binding |
+| `AgentModelService` | Per-agent session + delegate model/route; hybrid LAN/cloud catalog |
+| `ChatTranscriptRestoreUtil` | Reload agentic traces, attachments, mid-loop prose |
 | `RunViewService` | Run panel timeline state |
 | `ThemeService` | Light/dark theme tokens |
 | `WorkspaceNavService` | Project workspace routing |
@@ -120,7 +121,7 @@ Uses `ProjectService` + runtime APIs for plan/team state. Legacy IDE/files/timel
 
 **Multi-agent:** opening several agents keeps separate WebSocket sessions so parallel benchmark runs do not cross-stream events.
 
-**Transcript sync (v1.1.12+):** Home chat history is shared between `/chat/:agentId` and the Projects chat sidebar via `ChatMainTranscriptService`. Agentic tool traces restore on reload (`chat-transcript-restore.util.ts`); partial in-progress agentic turns persist on disconnect (`server/routes/chat/history.py`, `ws_handler.py`).
+**Transcript sync (shipped v1.1+):** Home chat history is shared between `/chat/:agentId` and the Projects chat sidebar via `ChatMainTranscriptService`. Agentic tool traces restore on reload (`chat-transcript-restore.util.ts`); partial in-progress agentic turns persist on disconnect (`server/routes/chat/history.py`, `ws_handler.py`).
 
 **Orchestration composer chip:** one control in the composer shows orchestration **depth** (profile) and live **mode** (planning / delegating / executing). Profile picker reflects **per-agent floored overrides** when an active team plan requires `orchestrated`. Mode label updates only after a successful `switch_mode` (not on failed attempts).
 

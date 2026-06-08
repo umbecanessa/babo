@@ -6,18 +6,20 @@ The Babo desktop app is an **Electron** shell around the Angular UI and a **loca
 
 ## First-run wizard (UI)
 
-The onboarding wizard in `desktop/src/app/features/setup/` walks through capability placement and account setup. Typical flow:
+The onboarding wizard in `frontend/src/app/features/setup/` walks through capability placement and account setup. Typical flow:
 
 | Phase | What happens |
 |-------|----------------|
 | Welcome & prepare | App checks whether the Python venv exists; may start background setup |
 | Device scan | Local GPU/RAM probe and optional LAN inference discovery |
-| Capability cards | Choose where **brain** (inference), **features**, and **vision** run |
+| Thinking & Extras | Choose where chat inference, vision, transcribe, and embeddings run |
 | Sign-in / billing | Babo Cloud account (optional) |
 | Agent naming | First agent display name |
 | Launch | Start uvicorn on `127.0.0.1:9222` (configurable) |
 
-Settings → **Capabilities** can change the profile later (`capabilityProfile` in `nls-config.json`).
+Settings → **Models & AI** can change the profile later (`capabilityProfile` in `nls-config.json`).
+
+See [First run & setup](../guides/first-run-and-setup.md).
 
 See [Capability profiles & onboarding](../architecture/capability-profiles-and-onboarding.md).
 
@@ -158,7 +160,9 @@ The Angular UI talks to NestJS with **JWT**. The local Python runtime only reads
 
 It hot-reloads the running runtime via IPC `runtime.hotReloadInference` → Python `POST /admin/hot-reload` (updates `vllm_client` Authorization header without restart).
 
-Sync triggers: app boot (`APP_INITIALIZER`), login, token refresh, runtime ready, chat open, post-setup `runtime.start`, and after saving capability settings.
+Sync triggers: app boot (`APP_INITIALIZER` waits for `api.whenReady()`), login, token refresh, runtime ready (`markRuntimeReady()` after uvicorn starts), chat open, post-setup `runtime.start`, and after saving capability settings.
+
+**Hybrid local + Babo Cloud:** Even when chat inference tier is local/LAN, the provision service still syncs cloud JWT when NestJS is configured — required for `NLS_BABO_CLOUD_INFERENCE_URL` and hybrid model picker catalog. If cloud models return 401 after boot, restart desktop or re-sign-in so JWT sync runs after runtime is ready.
 
 You only need to create an API key manually for headless automation or when you prefer a long-lived `nlsk_` token over JWT expiry during very long runs.
 

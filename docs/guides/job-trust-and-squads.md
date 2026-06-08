@@ -6,7 +6,7 @@ Babo separates **who an agent is at work** (Job), **what they may do** (Trust), 
 
 **API surface:** Python FastAPI runtime only (`server/routes/job_trust.py`, `server/routes/squads.py`). The hosted cloud browser reaches these routes through the existing **`/api/rt` runtime proxy** — there are **no** dedicated NestJS routes for job, trust, or squads.
 
-**Design history:** [Brainstorm: Job, Trust, Task & Squads](../brainstorm/job-trust-task-squads.md) · **API reference:** [Job, Trust & Squad API](../reference/job-trust-squad-api.md)
+**Design history (draft):** [Brainstorm: Job, Trust, Task & Squads](../brainstorm/job-trust-task-squads.md) — canonical guide is this page. **API reference:** [Job, Trust & Squad API](../reference/job-trust-squad-api.md)
 
 ---
 
@@ -90,6 +90,21 @@ Each tab has its own **Save** button (job and trust are patched independently).
 
 **Job tab fields** include strategic priorities and optional background Job ticks (`background_enabled`, interval in seconds) in addition to title, mission, persona, playbook, and scope lists.
 
+### Job-driven background
+
+When `background_enabled` is true and the charter is non-stock, the inner loop may wake the agent on a **minimum 300s interval** to pursue strategic priorities from the Job — independent of channel traffic.
+
+| Priority (high → low) | Source |
+|-----------------------|--------|
+| User message / channel dispatch | Immediate |
+| Squad checkback / escalation | Event-driven |
+| Job background tick | Interval-gated |
+| Todo idle / daydream | Drive-gated |
+
+Background ticks use `job_background.py` and respect Trust rails. They do not override an active user conversation or running team wave.
+
+Code: `nls/runtime/job_background.py` · `nls/engine/inner_loop.py`.
+
 ### Cryptex domains (summary)
 
 | Job content | Typical Cryptex domain |
@@ -138,7 +153,7 @@ Trust tab → **Channel overlays** → add channel key, profile cap, tools allow
 |--|---------------------|------------------------|
 | Lifetime | Ephemeral wave in one agent’s loop | Persistent until deleted |
 | Members | Sub-agent delegates | Full agents (separate runtimes, memory, Job) |
-| UI | `/projects/:agentId` board & timeline | Dashboard **Squads** panel |
+| UI | `/projects/:agentId` board + Overview **Teams panel** | Dashboard (**Agents** nav) **Squads** panel |
 | Coordination | `team` tool, `TeamManager` | `squad` tool, `SquadManager` |
 
 Squad membership **adds** coordination tools; it does **not** remove `plan`, `team`, `delegate`, or other tools. Job and Trust still gate each member.
@@ -317,7 +332,7 @@ Use `channel_manage(channel='discord', ...)` for Discord admin — **never** pas
 
 ## Example: three-agent Discord fleet
 
-See the role matrix in the [brainstorm doc](../brainstorm/job-trust-task-squads.md#reference-roles-discord--telegram-fleet). In production:
+See the role matrix in the [brainstorm doc](../brainstorm/job-trust-task-squads.md#reference-roles-discord-telegram-fleet). In production:
 
 1. Create three agents with distinct **Job** charters (admin, moderator, QA).
 2. Tighten **Trust** per channel (public caps on `#general`).

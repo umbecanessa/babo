@@ -47,7 +47,7 @@ When the user sends a **non-orchestration** message, `AgentRuntime` clears `_las
 
 Drains `AgentEventQueue` each breath when `is_user_busy` is false (background jobs do not block the queue). Channel events carry serializable reply metadata (`channel_name`, `reply_target`, `session_key`) so deferred events from `background_queue.jsonl` can reconstruct outbound sends.
 
-Thalamic routing: see [Channels & webhooks](../channels-and-webhooks.md#execution-slots-micro--focus--deep).
+Thalamic routing: see [Channels & webhooks — execution slots](channels-and-webhooks.md#execution-slots-micro-focus-deep).
 
 ---
 

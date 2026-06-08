@@ -67,6 +67,17 @@ They are different code paths. Fix relay connectivity, not only local WS.
 - Verify `NLS_VLLM_BASE_URL` and `NLS_HF_MODEL`
 - Test provider with curl to `/v1/chat/completions`
 - Set `NLS_INFERENCE_API_KEY` if required (direct OpenRouter/Ollama/etc.)
+- **Hybrid desktop:** confirm `NLS_LAN_INFERENCE_URL` and `NLS_BABO_CLOUD_INFERENCE_URL` in runtime env; pick model from correct picker section (Local vs Popular)
+
+### Empty model picker
+
+- LAN server unreachable — re-run device scan or fix URL in Settings → Models & AI
+- Babo Cloud catalog empty — sign in; check backend connectivity
+- Backdrop/scroll issues were fixed in v1.2.1+ — update desktop if picker appears blocked
+
+### Orchestrator stalled after team(create)
+
+The orchestrator must call **`team(launch)`** before switching to executing mode. If wave create fails with `skipped_pending_wave` or `wave_needs_advance`, use **`team(advance)`** on the prior wave first. See [Orchestration & delegation](../architecture/orchestration-and-delegation.md#wave-selection-and-create-guards).
 
 ### Babo Cloud: "I'm having trouble generating a response" (401)
 

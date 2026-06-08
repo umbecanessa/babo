@@ -78,7 +78,7 @@ Supported on Telegram, Discord, Slack, WhatsApp, and email (see bundled webhook 
 
 ## Reply routing & preemption
 
-One brain, layered concurrency — see [Execution slots](#execution-slots-micro--focus--deep).
+One brain, layered concurrency — see [Execution slots](#execution-slots-micro-focus-deep).
 
 | Trigger | Preempt behavior |
 |---------|------------------|

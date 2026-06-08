@@ -8,6 +8,10 @@ The **Tools** page is your agent's capability control center.
 
 ## Page sections
 
+### Pending reviews
+
+When the agent proposes **crystallizing** a heavily used instruction skill, approval cards appear at the top of the Tools page. Review success rate and usage stats before approve/deny.
+
 ### Integrations
 
 One-click cards for bundled channel skills:
@@ -36,14 +40,7 @@ Policy: `nls/skills_setup_policy.py`.
 
 ### Agent tools
 
-Built-in tools the loop can call (read, bash, browser, plan, team, squad, **set_job** (solo Home), **channel_manage**, **channel_history**, etc.). Expand cards for parameter schemas.
-
-| Tool | Notes |
-|------|-------|
-| **`set_job`** | Solo agents on Home only — persist owner-confirmed Job charter after `ask_user()` |
-| **`channel_manage`** | Channel-agnostic admin (sync scope, inspect config, grant access) |
-| **`channel_history`** | Read session + ambient history for a channel thread |
-
+Built-in tools the agentic loop can call. Expand cards on the Tools page for parameter schemas. Full categorized list: [Built-in tool reference](#built-in-tool-reference) below.
 ### Connected extensions
 
 Active **MCP server** connections. Disconnect or inspect health here.
@@ -116,6 +113,10 @@ When an instruction-based skill is used heavily with high success:
 
 ## Built-in tool reference
 
+Tools below are in the **agentic loop** schema (`nls/tools/agent_tools/`). They appear on the Tools page and in chat tool cards.
+
+### Files, shell, web, code
+
 | Category | Tools |
 |----------|-------|
 | **Files** | `read`, `write`, `edit`, `grep`, `glob`, `list_dir`, `move_file` |
@@ -123,20 +124,60 @@ When an instruction-based skill is used heavily with high success:
 | **Dependencies** | `project_install`, `server_install` (pip/npm routing; plan-aware) |
 | **Web** | `browser`, `web_search`, `web_fetch` |
 | **Code** | `semantic_search` |
-| **Orchestration** | `plan`, `team`, `delegate_ring`, `task_complete` |
-| **Memory** | `wm` |
-| **Comms** | `contacts`, `email_history`, `discord_send`, `slack_send` (when channel skills enabled) |
+| **Comms** | `contacts`, `email_history` (+ channel skill send tools when enabled) |
 | **Media** | `vision`, `screenshot`, `eyes` |
 | **Scheduling** | `scheduler`, `poller` |
-| **Meta** | `discover_tools`, `get_tool_schema`, `skill_configure`, `clawhub` |
 | **Output** | `offer_download` |
 
-Channel skills add their own tools (e.g. `whatsapp_send`, `discord_send`, `slack_send`, Gmail read/write).
+### Orchestration & memory
+
+| Category | Tools |
+|----------|-------|
+| **Orchestration** | `plan`, `team`, `delegate_ring`, `task_complete` |
+| **Memory** | `wm` |
+| **Meta** | `discover_tools`, `get_tool_schema`, `skill_configure`, `clawhub`, `crystallize_skill`, `skill_install`, `request_restart` |
+
+### Job, channels & chat admin
+
+| Tool | Notes |
+|------|-------|
+| **`set_job`** | Solo agents on Home only — persist owner-confirmed Job charter after `ask_user()` |
+| **`channel_manage`** | Channel-agnostic admin (sync scope, inspect config, grant access) |
+| **`channel_inspect`** | Read-only channel/skill status (squad lead may pass `target_agent_id`) |
+| **`channel_history`** | Read session + ambient history for a channel thread |
+| **`chat_history`** | Search prior Home chat sessions for context |
+
+### Squad tools (fleet)
+
+When an agent is a **squad lead** or member, additional tools apply:
+
+| Tool | Role |
+|------|------|
+| **`squad`** | Inbox propose/approve, member coordination |
+| **`squad_setup`** | Configure squad membership and lead |
+| **`squad_message`** | Message squad members |
+| **`squad_escalate`** | Escalate blocked work to lead |
+| **`squad_report_done`** | Mark squad todo complete |
+
+See [Job, Trust & Squads](job-trust-and-squads.md).
+
+Channel skills add send tools (e.g. `whatsapp_send`, `discord_send`, `slack_send`, Gmail read/write).
+
+### Inner-loop JSON registry (not agentic loop)
+
+These live in `nls/config/tools/*.json` and are used by the **AgencyEngine / inner loop** for proactive autonomy — they do **not** appear in the main chat OpenAI tool schema:
+
+| Examples | Purpose |
+|----------|---------|
+| `pdf_tools`, `docx_tools` | Document processing in background loops |
+| `docker` | Container ops in inner loop |
+| `cron_scheduler` | Scheduled inner-loop jobs |
+
+See [Tools system](../architecture/tools-system.md#2-json-tool-registry-agency-inner-loop) and `nls/config/tools/README.md`.
 
 ### Legacy JSON tools
 
-`nls/config/tools/discord.json` and `slack.json` are **deprecated** when the bundled `discord-channel` / `slack-channel` skills are enabled for an agent — they are filtered from the Tools list. Use channel skill send tools instead.
-
+`nls/config/tools/discord.json` and `slack.json` are **deprecated** when the bundled `discord-channel` / `slack-channel` skills are enabled — filtered from the Tools list. Use channel skill send tools instead.
 ---
 
 ## Related

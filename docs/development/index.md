@@ -5,6 +5,7 @@
 - [Troubleshooting](troubleshooting.md) — relay, deploy, and build issues
 - [UI surfaces](ui-surfaces.md) — glass vs context-menu vs modal floating panels
 - [Product scope](product-scope.md) — what this repository ships
+- [Design notes: Job/Trust/Squads](../brainstorm/job-trust-task-squads.md) — historical design draft (canonical guide is under User guides)
 - [Extension guide](../extension/index.md) — add tools, skills, channels
 - [Reference](../reference/index.md) — APIs, relay protocol, env vars
 - [Contributing](https://github.com/umbecanessa/babo/blob/main/CONTRIBUTING.md) — pull requests and standards

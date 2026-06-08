@@ -27,6 +27,8 @@ Connect a **Discord bot** so users can talk to your agent in scoped guild channe
 
 Local-only stacks without NestJS can fall back to a **local `discord.py` Gateway** on the desktop sidecar when NestJS registration fails or `NESTJS_URL` is unset.
 
+**Runtime agent id:** Register URLs use `{runtimeAgentId}` — the Python directory name under `data/agents/`, visible on the agent card in **Dashboard** (**Agents** nav). See [Dashboard & fleet](../dashboard-and-fleet.md).
+
 ---
 
 ## Setup

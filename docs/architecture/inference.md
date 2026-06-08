@@ -18,6 +18,26 @@ See [Inference providers](../configuration/inference-providers.md).
 
 ---
 
+## Hybrid routing (desktop v1.2+)
+
+When both LAN and Babo Cloud URLs are set, `AgentRuntime._vllm_for_message()` selects the client:
+
+1. Explicit per-message `model_route` (`local` | `cloud`)
+2. Session orchestrator/delegate route when model matches session default
+3. Heuristic — local catalog match → LAN; OpenAI-style id → cloud if not local
+
+Agent inference settings persist on `PATCH /agents/{id}/inference`:
+
+| Field | Purpose |
+|-------|---------|
+| `orchestrator_model` / `orchestrator_route` | Main loop defaults |
+| `delegate_model` / `delegate_route` | Sub-agent defaults when unlocked |
+| `delegate_lock_orchestrator` | Force delegates to orchestrator model (default true) |
+
+Chat WebSocket messages may include `model` and `model_route` for one-shot overrides.
+
+---
+
 ## Product mode
 
 With `NLS_PRODUCT_MODE=1` (default), inference is **HTTP only** — no custom model runtimes or weight training in this repository. Sleep consolidation uses the same API to summarize and write into Cryptex / DomainDB.

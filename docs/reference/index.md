@@ -17,7 +17,7 @@ Canonical technical reference for Babo. Use this section when you need **exact b
 | Chat WS commands | [Chat slash commands](chat-commands.md) |
 | Teams / projects REST | [Teams & projects API](teams-api.md) |
 | Job, Trust, Squads REST | [Job, Trust & Squad API](job-trust-squad-api.md) |
-| NestJS modules & routes | [NestJS API](nestjs-api.md) |
+| NestJS modules & routes | [NestJS API](nestjs-api.md) — includes `/api/rt` runtime proxy |
 | Relay WebSocket protocol | [Relay protocol](relay-protocol.md) |
 | Postgres models | [Database schema](database-schema.md) |
 | Socket.IO chat events | [WebSocket events](websocket-events.md) |

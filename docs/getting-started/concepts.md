@@ -50,8 +50,8 @@ You inspect plan progress in **Projects → Overview** and the orchestration rib
 For large tasks, the orchestrator spawns **sub-agents** (delegates) with isolated context and their own tool access.
 
 - Each **team** maps to a delegation wave from the plan
-- **Timeline** shows which wave is running, completed, or failed
-- You can send **hints** to running delegates from the Teams panel
+- **Overview → Teams panel** shows which wave is running, completed, or failed
+- You can send **hints** to running delegates; **Last response** confirms hint ack
 - Sub-agents write to **SubCryptex** — memory isolated from the parent but inheriting shared rings
 
 Think of it as a project manager (main agent) coordinating specialists (sub-agents).
@@ -190,10 +190,9 @@ The **Projects** page is the command center for serious work:
 
 | Tab | Purpose |
 |-----|---------|
-| **Overview** | Teams panel + activity feed |
-| **Board** | Kanban lists and cards |
-| **Timeline** | Wave execution history |
-| **Files** | Workspace artifacts |
+| **Overview** | Teams panel (wave timeline) + activity feed |
+| **Board** | Status columns — Inbox → Queued → In Progress → Done → Deferred |
+| **Files** | Workspace IDE and artifacts |
 
 A **command bar** sends instructions to the agent in project context. **Chat sidebar** keeps conversation alongside the board.
 

@@ -122,7 +122,7 @@ flowchart LR
   S0 --> S1 --> S2 --> S3 --> S4
 ```
 
-**Shipped:** full wizard (Environment → Scan → Capabilities → Account → Launch) plus Settings → Capabilities — see [Shipped vs target](#shipped-vs-target-for-release-testing).
+**Shipped:** full wizard (Environment → Scan → Capabilities → Account → Launch) plus Settings → Models & AI — see [Shipped vs target](#shipped-vs-target-for-release-testing).
 
 ---
 
@@ -282,13 +282,13 @@ Run quick checks:
 
 [ Launch Babo ] → start uvicorn, mark `setupComplete`, route to app.
 
-**Post-launch:** Settings → Capabilities can reopen the same four cards without reinstalling Python.
+**Post-launch:** Settings → Models & AI can reopen the same four cards without reinstalling Python.
 
 ---
 
 ## Settings (post-onboarding)
 
-**Settings → Capabilities** mirrors Step 3 so users can:
+**Settings → Models & AI** mirrors Step 3 so users can:
 
 - Point brain to a new Ollama model.  
 - Turn ambient vision on (triggers Moondream prefetch/warmup).  
@@ -301,7 +301,7 @@ Run quick checks:
 | Area | Shipped today | Target (production onboarding) |
 |------|---------------|--------------------------------|
 | Wizard steps | **5:** Environment → Scan → Capabilities → Account → Launch | — |
-| Settings → Capabilities | `CapabilitySettingsPanelComponent` — edit profile post-onboarding | — |
+| Settings → Models & AI | `CapabilitySettingsPanelComponent` — edit profile post-onboarding | — |
 | Device scan | IPC `capabilities:scan-device` | — |
 | LAN discovery | IPC `capabilities:probe-lan` | — |
 | Capability cards | Four cards + ambient toggle + experience strip | — |
@@ -360,4 +360,4 @@ Runtime env + default agent `visual_cortex.json` generated from `capabilityProfi
 | `nls/config/model-capabilities.json` | Multimodal registry |
 | `docs/architecture/vision-worker.md` | Moondream tiers |
 | `frontend/.../setup/setup.component.ts` | Onboarding wizard |
-| `frontend/.../capability-settings-panel/` | Settings → Capabilities |
+| `frontend/.../capability-settings-panel/` | Settings → Models & AI |

@@ -20,7 +20,7 @@
 
 Babo is a full-stack agent platform: a desktop app, web UI, and self-hostable backend. Each agent has long-term memory, an autonomous agentic loop, project orchestration with sub-agents, and one-click integrations for the channels and tools you already use.
 
-Connect any OpenAI-compatible model (OpenRouter, Ollama, local vLLM, etc.) and run Babo on your machine or your own server.
+Connect any OpenAI-compatible model (OpenRouter, Ollama, local vLLM, LAN server, Babo Cloud hybrid routing, etc.) and run Babo on your machine or your own server.
 
 > **Not just a chat UI** — Babo is an **extensible agent platform**: native skills, agent tools, and channels you can add in code (MCP, ClawHub, crystallize). Memory, board, and teams survive sessions. See the [manifesto](https://babo.agency/manifesto/) and [extension guide](https://babo.agency/extension/).
 
@@ -43,10 +43,9 @@ The **Projects** workspace is where Babo runs serious work:
 
 | View | What you get |
 |------|----------------|
-| **Overview** | Live team orchestration, activity feed, plan progress |
-| **Board** | Kanban-style task board (Inbox, Projects, Research, Creative, custom lists) |
-| **Timeline** | Wave-based execution — see which sub-agent team is running, done, or queued |
-| **Files** | Project files and workspace artifacts |
+| **Overview** | Live team orchestration, activity feed, wave timeline in Teams panel |
+| **Board** | Kanban by status — Inbox, Queued, In Progress, Done, Deferred |
+| **Files** | Project workspace IDE — explorer + editor for artifacts |
 
 Babo can **spawn sub-agent teams** to work in parallel on plan steps. You see active teams, member progress, failures, and overall plan completion in real time — and can send hints to running delegates.
 
@@ -83,6 +82,8 @@ Install and configure capabilities from the **Tools** page:
 |-------------|--------|
 | **WhatsApp** | Scan a QR code — connect your personal account |
 | **Telegram** | Create a bot via @BotFather; Babo walks you through it |
+| **Discord** | Bot in scoped guild channels + DMs |
+| **Slack** | App in scoped workspace channels + DMs |
 | **Google Workspace** | OAuth modal — Gmail, Calendar, Drive, Sheets |
 | **Email** | Auto-provisioned agent inbox for threaded conversations |
 | **MCP servers** | Connect any MCP tool server; browse 20,000+ extensions |
@@ -189,7 +190,7 @@ See the [documentation](https://babo.agency/getting-started/) for full guides.
 - [Quickstart](docs/getting-started/quickstart.md)
 - [Extension guide](docs/extension/index.md)
 
-The optional marketing homepage in `website/` is **not** deployed from this workflow; it can be hosted separately if needed.
+The marketing homepage in `website/` is **deployed with the docs** — GitHub Actions overlays it onto the MkDocs build at [babo.agency](https://babo.agency/). See `website/README.md` and `.github/workflows/docs.yml`.
 
 ---
 

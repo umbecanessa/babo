@@ -12,18 +12,17 @@ Create your first Babo agent and have a conversation in about five minutes.
 
 ### 2. Complete setup
 
-Walk through the onboarding wizard:
+Walk through the onboarding wizard — full step-by-step: [First run & setup](../guides/first-run-and-setup.md).
 
 | Phase | What to do |
 |-------|------------|
 | **Prepare** | Wait for Python environment setup (venv, dependencies, bundled Node/PowerShell on Windows) |
 | **Device scan** | Review detected GPU/RAM; optional LAN server probe |
-| **Capabilities** | Choose where inference, features, and vision run |
-| **Inference** | URL, model, API key — e.g. OpenRouter `https://openrouter.ai/api/v1`, model `openai/gpt-4o-mini` |
-| **Backend** | NestJS URL — `http://localhost:3000` for self-host or your Babo Cloud URL |
-| **Launch** | Start the local runtime |
+| **Thinking & Extras** | Choose where inference, vision, transcribe, and embeddings run (wizard labels: brain tier + feature workloads) |
+| **Account & backend** | Optional Babo Cloud sign-in; NestJS URL for self-host or cloud |
+| **Launch & name** | Start runtime; name your first agent |
 
-Use **Test Connection** on inference before continuing. Settings → Capabilities can be changed later.
+Use **Test Connection** on inference before continuing. Change workloads later in **Settings → Models & AI**.
 
 ### 3. Register and sign in
 
@@ -37,7 +36,7 @@ Agent creation takes a few seconds. Babo seeds a standard brain configuration lo
 
 ### 5. Chat
 
-Open the agent from the **Dashboard**. Type a message:
+Open the agent from the **Dashboard** (**Agents** in the nav bar). Type a message:
 
 > Remember that my favorite stack is FastAPI on the backend and Angular on the frontend.
 
@@ -50,8 +49,8 @@ Babo streams the reply and may emit learning signals (visible in the signal side
 | **Chat** | `/chat/:agentId` | Ask follow-up questions; watch tool calls live |
 | **Memory** | `/memory/:agentId` | Knowledge tab, working memory slots |
 | **Tools** | `/tools/:agentId` | Browse integrations |
-| **Projects** | `/projects/:agentId` | Board and timeline |
-| **Brain** | `/brain/:agentId` | Hormone and signal charts |
+| **Projects** | `/projects/:agentId` | Overview (teams + board strip), Board, Files |
+| **Brain** | `/brain/:agentId` | All twelve Brain tabs — hormones, signals, schedule |
 
 ### 7. Trigger sleep (optional)
 

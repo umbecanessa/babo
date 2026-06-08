@@ -1,8 +1,8 @@
 # Settings & API keys
 
-Configure your account and programmatic access to the **local Python runtime**.
+Configure programmatic access to the **local Python runtime** and automation keys.
 
-**Routes:** `/settings`, `/settings/api-keys`
+**Routes:** `/settings/api-keys` · **Full Settings guide:** [Settings](settings.md)
 
 **Desktop:** Settings also includes **Support & Debug** (log export, full debug bundle). See [Desktop support & debug export](desktop-support-debug.md).
 

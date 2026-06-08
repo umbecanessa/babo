@@ -88,11 +88,22 @@ Parent agents use **team(hint/intervene)** and **delegate_ring** to steer worker
 For multi-step projects the orchestrator should use **team**, not solo IC tools:
 
 1. `plan(create)` — master plan with `project_dir` and dependencies  
-2. `team(create, wave=N)` — batch members for ready steps  
-3. `team(launch)` — start delegates  
-4. `await_delegates` / wake on completion — review, then `team(advance)`  
+2. `team(create, wave=N|auto)` — batch members for ready steps (`auto` picks next pending wave)
+3. `team(launch)` — **required** before monitoring; guards block `switch_mode(executing)` until launch
+4. `await_delegates` / wake on completion — review, then `team(advance)`
 
-See [Orchestration architecture](../architecture/orchestration-and-delegation.md).
+**Wave create failures** (user-visible in tool cards):
+
+| Flag | Meaning |
+|------|---------|
+| `skipped_pending_wave` | Prior wave not finished — advance first |
+| `deploy_blocked` | Deploy prerequisite step incomplete |
+| `duplicate_wave_recreate` | Same wave recreated too fast without launch |
+| `wave_needs_advance` | Finished wave awaiting advance |
+
+The breadcrumb engine injects recovery hints. See [Orchestration architecture](../architecture/orchestration-and-delegation.md#wave-selection-and-create-guards).
+
+**Hints:** `team(hint)` defaults to ring + chat delivery; delegate ack appears in Projects Teams panel as **Last response**.
 
 ---
 

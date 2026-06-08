@@ -15,7 +15,9 @@ Choose the installer for your platform from the **Assets** section of the latest
 
 **Linux** installers are not published by GitHub Actions today. Build locally: `cd desktop && npm run dist:linux` (see [Desktop configuration](../configuration/desktop.md)).
 
-After install, the setup wizard walks you through device scan, capability placement, inference, backend URL, and first agent — no terminal required for normal use.
+After install, the setup wizard walks you through device scan, capability placement (Thinking + Extras in the UI), optional Babo Cloud sign-in, and first agent — no terminal required for normal use.
+
+Step-by-step: [First run & setup](../guides/first-run-and-setup.md). Architecture macro phases (Environment → Scan → Capabilities → Account → Launch) map to those wizard screens — “Capabilities” in architecture docs = **Thinking + Extras** steps in the app.
 
 The app checks for updates on launch (see [Desktop configuration — Updates](../configuration/desktop.md#updates)).
 
@@ -51,9 +53,11 @@ The setup wizard includes:
 
 1. **Environment prep** — Python venv, pip deps, Playwright, bundled Node (and PowerShell 7 on Windows)
 2. **Device scan** — local GPU/RAM and optional LAN inference probe
-3. **Capability cards** — where brain, features, and vision run
-4. **Account & backend** — Babo Cloud sign-in and NestJS URL
-5. **Launch** — local runtime on `127.0.0.1:9222`
+3. **Thinking & Extras** — where chat inference, vision, transcribe, and embeddings run
+4. **Account & backend** — Babo Cloud sign-in (optional) and NestJS URL
+5. **Launch & name agent** — local runtime on `127.0.0.1:9222`
+
+See [First run & setup](../guides/first-run-and-setup.md) for the full wizard map.
 
 See [Desktop configuration](../configuration/desktop.md) for the full setup pipeline and userData paths.
 

@@ -10,7 +10,7 @@ Babo is the **shippable open-source product**: desktop app, web UI, NestJS backe
 | **Memory** | Cryptex, working memory, DomainDB, Merkle chain, episodes |
 | **Sleep** | LLM-based consolidation into long-term memory |
 | **Agentic loop** | Tools, plans, sub-agents, projects workspace |
-| **Integrations** | WhatsApp, Telegram, email, Google Workspace, MCP, ClawHub |
+| **Integrations** | WhatsApp, Telegram, Discord, Slack, email, Google Workspace, MCP, ClawHub |
 | **Desktop** | Electron shell, bundled runtimes, local uvicorn sidecar |
 
 ## Out of scope in this repository

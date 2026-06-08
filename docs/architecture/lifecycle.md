@@ -73,7 +73,7 @@ For multi-step work:
 1. Orchestrator creates a **plan**
 2. **Team** tool launches sub-agents per delegatable step
 3. Teams persist in `teams/team_{id}.json` — survive restarts
-4. Timeline UI reflects wave state
+4. Teams panel on **Overview** reflects wave state
 5. Parent merges results and continues plan
 
 Sub-agents use **SubCryptex** — isolated memory, inherited fixed rings.

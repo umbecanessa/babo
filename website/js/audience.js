@@ -42,9 +42,9 @@ window.BABO_AUDIENCE = {
     productLead: "Real early-access UI — chat, board, integrations, brain.",
     captions: {
       chat: "Agentic chat, workbench, live state.",
-      projects: "Waves, Kanban, sub-agent teams.",
+      projects: "Teams panel, status board, sub-agent waves.",
       memory: "Memory rings and durable facts.",
-      tools: "Google, WhatsApp, MCP, ClawHub.",
+      tools: "Google, WhatsApp, Discord, Slack, MCP, ClawHub.",
       brain: "Hormones, network, visual cortex.",
     },
     manifesto: {
@@ -173,6 +173,8 @@ window.BABO_AUDIENCE = {
       { id: "google-calendar", name: "Google Calendar" },
       { id: "whatsapp", name: "WhatsApp" },
       { id: "telegram", name: "Telegram" },
+      { id: "discord", name: "Discord" },
+      { id: "slack", name: "Slack" },
     ],
     marquee: [
       "Local inference",
@@ -180,7 +182,7 @@ window.BABO_AUDIENCE = {
       "Persistent memory",
       "Team waves",
       "Kanban pickup",
-      "WhatsApp · Telegram",
+      "WhatsApp · Telegram · Discord · Slack",
       "Open source · MIT",
       "Native skills · MCP",
       "Extension guide",
@@ -227,9 +229,9 @@ window.BABO_AUDIENCE = {
     productLead: "The actual app — not mockups.",
     captions: {
       chat: "Talk to your agent. It uses tools and remembers context.",
-      projects: "Assign tasks. Watch progress on a board.",
+      projects: "Teams panel and status board — assign and track tasks.",
       memory: "It remembers people, projects, and facts.",
-      tools: "Connect Google, WhatsApp, and more in clicks.",
+      tools: "Connect Google, WhatsApp, Discord, Slack, and more in clicks.",
       brain: "Optional — see what your agent is doing inside.",
     },
     manifesto: {
@@ -340,11 +342,13 @@ window.BABO_AUDIENCE = {
       { id: "google-calendar", name: "Google Calendar" },
       { id: "whatsapp", name: "WhatsApp" },
       { id: "telegram", name: "Telegram" },
+      { id: "discord", name: "Discord" },
+      { id: "slack", name: "Slack" },
     ],
     marquee: [
       "Beyond ChatGPT",
       "Gmail · Google Calendar",
-      "WhatsApp · Telegram",
+      "WhatsApp · Telegram · Discord · Slack",
       "Kanban tasks",
       "No terminal",
       "Private · local",

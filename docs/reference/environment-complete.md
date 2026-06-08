@@ -18,6 +18,9 @@ From `server/config.py` (`env_prefix = NLS_`):
 | `NLS_VLLM_BASE_URL` | `http://localhost:8000` | Inference API base |
 | `NLS_HF_MODEL` | `gpt-4o-mini` | Model id |
 | `NLS_INFERENCE_API_KEY` | — | Bearer token (provider key, `nlsk_`, or user JWT for Babo Cloud relay) |
+| `NLS_LAN_INFERENCE_URL` | — | LAN/local OpenAI-compatible base (`…/v1`) — hybrid desktop |
+| `NLS_BABO_CLOUD_INFERENCE_URL` | — | Babo Cloud relay (`{nestjs}/api/inference/v1`) — hybrid desktop |
+| `NLS_DELEGATE_HF_MODEL` | — | Global delegate model when profile delegate ≠ primary |
 | `NLS_DEFAULT_GENESIS` | `standard-v1` | Default template |
 | `NLS_DATA_DIR` | `./data` | Runtime data root |
 | `NLS_SLEEP_ENABLED` | `true` | Sleep scheduler |

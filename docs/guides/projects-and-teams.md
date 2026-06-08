@@ -1,20 +1,32 @@
 # Projects & teams
 
-The **Projects** workspace is where Babo manages multi-step work with boards, timelines, and sub-agent **teams**.
+The **Projects** workspace is where Babo manages multi-step work with boards, delegation waves, and sub-agent **teams**.
 
-**Route:** `/projects/:agentId` (also `/tasks/:agentId`)
+**Route:** `/projects/:agentId` (alias `/tasks/:agentId`)
 
-> **Not squads:** **Teams** here are ephemeral delegate waves inside **one** agent’s loop. **Squads** are persistent multi-agent groups on the **Dashboard** (shared inbox, squad lead, `squad` tools). See [Job, Trust & Squads](job-trust-and-squads.md).
+> **Not squads:** **Teams** here are ephemeral delegate waves inside **one** agent's loop. **Squads** are persistent multi-agent groups on the **Dashboard**. See [Job, Trust & Squads](job-trust-and-squads.md).
 
 ---
 
-## Views
+## Tabs
 
-### Overview
+Projects has three top-level tabs (query param `?tab=`):
+
+| Tab | Purpose |
+|-----|---------|
+| **Overview** | Teams panel, activity feed, orchestration ribbon |
+| **Board** | Kanban task board |
+| **Files** | Workspace IDE — explorer + editor for project artifacts |
+
+There is no separate Timeline tab — wave execution history lives in the **Teams panel** on Overview.
+
+---
+
+## Overview
 
 Split layout:
 
-- **Teams panel** — active and completed delegation waves
+- **Teams panel** — active, completed, and planned delegation **waves** with per-member progress
 - **Activity panel** — recent plan steps, todo changes, team events
 
 The **orchestration ribbon** at the top shows:
@@ -24,42 +36,55 @@ The **orchestration ribbon** at the top shows:
 - Failed members (if any)
 - Overall plan progress %
 
-### Board
-
-Kanban-style **task board** with lists:
-
-- Inbox
-- Projects
-- Research
-- Creative
-- Custom lists you define
-
-Drag cards between columns. Tasks link to plans when the agent creates them. WebSocket updates refresh the board in real time.
-
-### Timeline
-
-**Wave-based timeline** of team execution:
-
-- Each **wave** corresponds to a plan delegation round
-- States: queued, running, completed, failed
-- Elapsed time and per-member progress bars
-
-Use timeline to see what sub-agents are doing without reading raw logs.
-
-### Files
-
-Project **workspace files** and artifacts the agent created or referenced.
-
----
-
-## Teams panel details
+### Wave timeline (Teams panel)
 
 Each wave card shows:
 
-- Linked plan steps
-- Team status (`running`, `completed`, `failed`, `partial`)
-- Member list with individual progress
-- **Hint** action — send guidance to a running delegate
+| State | Meaning |
+|-------|---------|
+| **awaiting_launch** | Created but not yet launched — orchestrator must `team(launch)` |
+| **running** | Delegates executing |
+| **completed** / **failed** / **partial** | Wave finished |
+
+Expand a running member tile to see iterations, tools used, and hint controls.
+
+---
+
+## Board
+
+Kanban-style **task board** with **status columns** (not topic lists):
+
+| Column | Typical use |
+|--------|-------------|
+| **Inbox** | New or un triaged items |
+| **Queued** | Accepted, waiting to start |
+| **In Progress** | Active work |
+| **Done** | Completed (collapsible) |
+| **Deferred** | Paused or blocked |
+
+Drag cards between columns. Tasks link to plans when the agent creates them. WebSocket updates refresh the board in real time.
+
+**Todo lists** (Research, Creative, Projects, etc.) exist in the todo-list skill as **`list_id` metadata** on cards — they are not separate board columns. The agent can filter or assign list labels via the todo tool; the UI columns always reflect **status**.
+
+---
+
+## Files
+
+Project **workspace** with file explorer and CodeMirror editor. The agent reads/writes here via file tools; you can inspect and edit artifacts directly. Former standalone IDE tab — now folded into Projects.
+
+---
+
+## Teams panel — hints & ack
+
+Each wave card shows linked plan steps, team status, and members.
+
+**Send Hint:** Expand a running member → type guidance → Enter. Hints use default delivery **`both`** — written to the delegate SubCryptex ring **and** injected as `[ORCHESTRATOR HINT]` in the delegate chat loop.
+
+**Last response:** After the delegate acknowledges, the expanded tile shows **Last response:** with a snippet of the delegate's next prose (up to ~150 chars). This confirms the hint was received.
+
+Orchestrator-side recovery when waves stall: [Orchestration & delegation](../architecture/orchestration-and-delegation.md#wave-selection-and-create-guards).
+
+Panel actions also include pause, resume, disband, skip, and force-start where policy allows.
 
 Teams persist across sleep cycles (`teams/team_{id}.json` on disk).
 
@@ -75,11 +100,11 @@ Commands route through the same agentic loop with project-scoped Cryptex rings a
 
 ## Chat sidebar
 
-Toggle the **chat sidebar** to talk to the agent while viewing the board or timeline. Useful for steering orchestration without leaving Projects.
+Toggle the **chat sidebar** to talk to the agent while viewing the board or files.
 
-**Same transcript as Chat:** the sidebar shows the shared **Home** thread (`ChatMainTranscriptService`) — messages, tool traces, and streaming state match `/chat/:agentId`. Reload restores agentic cards; partial progress survives a disconnect.
+**Same transcript as Chat:** the sidebar shows the shared **Home** thread — messages, tool traces, attachments, mid-loop prose, and streaming state match `/chat/:agentId`.
 
-Channel threads in the sidebar are **per-agent** only (no cross-agent leakage when switching fleet members on the dashboard).
+Channel threads in the sidebar are **per-agent** only.
 
 ---
 
@@ -87,8 +112,8 @@ Channel threads in the sidebar are **per-agent** only (no cross-agent leakage wh
 
 1. Ask in chat: *"Create a plan to launch the marketing site"*
 2. Agent creates plan + todo cards appear on the board
-3. Delegatable steps spawn **teams** — visible on Overview and Timeline
-4. Monitor progress; send hints if a sub-agent stalls
+3. Delegatable steps spawn **teams** — visible on Overview → Teams panel
+4. Monitor wave progress; send hints if a sub-agent stalls; watch **Last response** for ack
 5. Completed steps mark todos done; plan progress hits 100%
 
 ---
@@ -101,7 +126,7 @@ The todo-list skill connects board items to **idle-mode execution**: when you're
 
 ## Related
 
-- [Job, Trust & Squads](job-trust-and-squads.md) — persistent fleet (vs Teams here)
+- [Job, Trust & Squads](job-trust-and-squads.md)
 - [Agentic loop & plans](agentic-loop-and-plans.md)
 - [Chat](chat.md)
-- [Memory](memory.md)
+- [Orchestration & delegation](../architecture/orchestration-and-delegation.md)

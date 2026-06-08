@@ -26,6 +26,10 @@
 | **`channel_manage`** | Unified agent tool for channel admin (sync, scope, permissions) — dispatches to skill adapters |
 | **`squad_lead`** | Orchestration profile for a squad lead — extends `orchestrated` with squad coordination depth |
 | **Team** | Ephemeral sub-agent wave inside one parent agentic run (`TeamManager`, Projects UI) |
+| **Wave** | One batch of delegates for plan steps with satisfied dependencies |
+| **`wave=auto`** | `team(create)` resolves next pending delegatable wave index |
+| **Hint ack** | Delegate prose after `[ORCHESTRATOR HINT]` — surfaced in Teams panel as Last response |
+| **`model_route`** | Per-message inference route hint: `local` or `cloud` (hybrid desktop) |
 | **Delegate / sub-agent** | Child agentic run with scoped context (`nls/agentic/orchestrator.py`) |
 | **Desktop hub** | User machine running Electron + Python runtime |
 | **DMN** | Default Mode Network — idle replay/exploration (`nls/brain/dmn.py`) |

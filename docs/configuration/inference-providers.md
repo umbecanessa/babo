@@ -36,6 +36,60 @@ Vision, transcribe, and embed GPU routes on the same Nest host (`/api/gpu/*`) al
 
 ---
 
+## Hybrid LAN + cloud (desktop v1.2+)
+
+Many desktop installs run **two inference endpoints at once**:
+
+| Endpoint | Env var | Typical use |
+|----------|---------|-------------|
+| **Local / LAN** | `NLS_LAN_INFERENCE_URL` | Ollama, vLLM, or a GPU box on your network |
+| **Babo Cloud relay** | `NLS_BABO_CLOUD_INFERENCE_URL` | Hosted models via NestJS (`{nestjs}/api/inference/v1`) |
+| **Primary install URL** | `NLS_VLLM_BASE_URL` | Fallback client; also used for non-hybrid profiles |
+
+The desktop **capability profile** sets these automatically during setup (tiers **This computer** + Babo Cloud sign-in, or **My server (LAN)** + cloud). You do not paste them manually unless self-hosting the runtime.
+
+### How routing works
+
+Each chat turn can specify which endpoint to use:
+
+1. **Per-message override** — model picker one-shot selection sends `model` + `model_route` (`local` or `cloud`) on the WebSocket
+2. **Agent session default** — persisted via `PATCH /agents/{id}/inference` (`orchestrator_model`, `orchestrator_route`, `delegate_model`, `delegate_route`)
+3. **Heuristic fallback** — if no route is set, the runtime picks LAN when the model id is served locally, otherwise cloud
+
+**Orchestrator vs sub-agents:** In advanced model picker mode you can set different models for the main loop and delegate loops. `delegate_lock_orchestrator` (default `true`) forces sub-agents to use the orchestrator model.
+
+```bash
+# Example hybrid env (set by desktop ConfigManager)
+NLS_LAN_INFERENCE_URL=http://192.168.1.50:8000/v1
+NLS_BABO_CLOUD_INFERENCE_URL=https://api.babo.agency/api/inference/v1
+NLS_HF_MODEL=llama3.2
+NLS_INFERENCE_API_KEY=<JWT or nlsk_ for cloud relay>
+```
+
+### User-facing model picker
+
+In chat, the model picker groups models:
+
+| Section | Contents |
+|---------|----------|
+| **Local / LAN inference** | Models from your LAN probe or local Ollama |
+| **Popular** | Babo Cloud catalog (hybrid) or curated defaults (cloud-only) |
+| **More models** | Remaining ids, alphabetical |
+
+Indicators on the chip:
+
+- **Orange dot** — one-shot override (next message only)
+- **Green dot** — agent session default
+- **Split badge** — orchestrator and sub-agent models differ
+
+Use **Set as agent default** in the picker footer to persist; **Clear one-shot override** resets the next-message pick.
+
+**Babo Brain (hosted tier):** When the capability profile is fully hosted Babo Brain, all turns route through Babo Cloud regardless of route hints.
+
+See [Chat guide](../guides/chat.md#model-picker) and [Architecture: Inference](../architecture/inference.md).
+
+---
+
 ## OpenRouter
 
 ```bash
@@ -94,6 +148,9 @@ The setup wizard **Test Connection** calls the inference health/completions endp
 | Model not found | Match `NLS_HF_MODEL` to provider's exact id |
 | Timeout on long tools | Use a model/provider with higher context and rate limits |
 | Local only | Ollama or local vLLM — no data leaves machine |
+| Empty model picker | Confirm LAN server is reachable; sign in for Babo Cloud catalog; check runtime logs |
+| Wrong endpoint used | Pick model from correct section (Local vs Popular); check `model_route` in agent inference settings |
+| Hybrid 401 on cloud | JWT sync — sign in again; see [Desktop configuration](desktop.md#babo-cloud-inference-auth) |
 
 ---
 

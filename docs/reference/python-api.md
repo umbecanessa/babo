@@ -29,7 +29,7 @@ FastAPI application: `server/main.py` → `create_app()`.
 | DELETE | `/agents/{id}` | Unload agent |
 | PATCH | `/agents/{id}/name` | Rename |
 | PATCH | `/agents/{id}/owner-email` | Owner identity for channels |
-| GET/PATCH | `/agents/{id}/inference` | Per-agent model / inference config |
+| GET/PATCH | `/agents/{id}/inference` | Per-agent model config: `orchestrator_model`, `orchestrator_route` (`local`\|`cloud`), `delegate_model`, `delegate_route`, `delegate_lock_orchestrator`; `clear_orchestrator` / `clear_delegate` on PATCH |
 | GET | `/agents/{id}/relay-status` | NestJS relay connection state |
 | GET/DELETE | `/agents/{id}/processes` | Background project processes |
 | POST | `/agents/{id}/pause` / `unpause` / `evict` | Lifecycle |

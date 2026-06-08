@@ -37,7 +37,15 @@ From `create_coding_tools()` in `nls/tools/agent_tools/__init__.py`:
 | team | `team.py` | Sub-agent orchestration |
 | delegate_ring | | Delegate communication |
 | contacts | | Cross-channel address book |
+| set_job | `set_job.py` | Owner Job charter (Home solo) |
+| channel_manage | `channel_manage.py` | Channel admin dispatch |
+| channel_inspect | `channel_inspect.py` | Read-only channel status |
+| channel_history | `channel_history.py` | Thread + ambient history |
+| chat_history | `chat_history.py` | Prior session search |
+| squad | `squad.py` | Fleet inbox + coordination |
 | skill_configure | | Skill settings |
+| skill_install | | Install skill packages |
+| request_restart | | Runtime restart request |
 | MCP proxies | `mcp_*.py` | Dynamic MCP tools |
 
 ### setup_tools pipeline
@@ -60,7 +68,9 @@ create_coding_tools(agent_dir/workspace)
 **Loader:** `nls/engine/tool_loader.py`  
 **Consumer:** `AgencyEngine` via `factory.py`
 
-Used for **proactive** inner-loop tool use (NLSTool executors: shell, http, file_*), not the main chat OpenAI schema set.
+Used for **proactive** inner-loop tool use (NLSTool executors: shell, http, file_*, `pdf_tools`, `docx_tools`, `docker`, `cron_scheduler`, …), not the main chat OpenAI schema set.
+
+These tools are **not** listed on the Tools page agent-tools grid unless explicitly bridged. User-facing agent loop tools live in section 1 above.
 
 Documented in `nls/config/tools/README.md`.
 
@@ -71,7 +81,7 @@ Documented in `nls/config/tools/README.md`.
 **Module:** `nls/engine/tools_builtin.py`  
 **Routes:** `server/routes/filesystem.py`
 
-Separate from agentic loop — powers IDE panel file tree.
+Separate from agentic loop — powers **Projects → Files** workspace explorer (former standalone IDE tab).
 
 ---
 

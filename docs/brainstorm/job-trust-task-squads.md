@@ -1,7 +1,6 @@
 # Brainstorm: Job, Trust, Task & Squads
 
-> **Status:** Implemented (Slice A + B v1).  
-> **Public documentation:** [Job, Trust & Squads](../guides/job-trust-and-squads.md) · [Job, Trust & Squad API](../reference/job-trust-squad-api.md)  
+> **Status:** Design draft — **canonical docs:** [Job, Trust & Squads](../guides/job-trust-and-squads.md) · [Job, Trust & Squad API](../reference/job-trust-squad-api.md)  
 > **Last updated:** 2026-05-26  
 > **Runtime API only:** Cloud browser → `/api/rt` → Python FastAPI — **no** NestJS proxies for job/trust/squad.  
 > **Related:** [Cryptex / WM](../architecture/brain-and-memory.md), [Agentic loop](../architecture/agentic-loop.md), [Orchestration & delegation](../architecture/orchestration-and-delegation.md), [Projects & teams](../guides/projects-and-teams.md)

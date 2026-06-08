@@ -51,7 +51,20 @@ Events are JSON messages with a `type` field. Chat streaming types are sent dire
 | `batch_update` | Batched low-priority events |
 | `channel_event` / `connection_request` | Channel skill notifications |
 
-**Client → server:** `{"type": "message", "content": "…"}` or `{"type": "command", "command": "…"}` (slash commands — see [Chat slash commands](chat-commands.md)).
+**Client → server:** `{"type": "message", "content": "…", "model": "…", "model_route": "local"|"cloud"}` or `{"type": "command", "command": "…"}` (slash commands — see [Chat slash commands](chat-commands.md)).
+
+### Transcript restore
+
+On WebSocket `history` or page reload, the frontend rebuilds agentic UI from persisted events:
+
+| Source event | Restored UI |
+|--------------|-------------|
+| `agentic_start` / `agentic_iteration` / `agentic_complete` | Workbench cards, per-step tool traces |
+| `agentic_iteration` prose | Mid-loop assistant updates during long runs |
+| User rows with `attachments` | Attachment cards in message list |
+| `tool_execution_*` metadata | Expanded tool cards with plan/team context |
+
+See [Chat guide](../guides/chat.md#sessions) and `chat-transcript-restore.util.ts`.
 
 ---
 

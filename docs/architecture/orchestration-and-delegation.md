@@ -80,6 +80,23 @@ Modes (`nls/agentic/types.py` → `AgentMode`) gate which tools appear in the sc
 
 **Wave coordination** (`wave_coordination.py`): file ownership blocks, tech stack hints injected into delegate SubCryptex.
 
+### Wave selection and create guards
+
+`team(create)` supports explicit wave index or **`wave=auto`** — resolves to the next wave with pending delegatable steps via `next_pending_wave_index()`.
+
+| Guard | Error flag | Recovery |
+|-------|------------|----------|
+| Duplicate team for same plan+wave | `duplicate_team` | Launch existing team |
+| Skipped prior wave still active | `skipped_pending_wave`, `recommended_wave` | `team(advance)` then create |
+| Prior wave finished but not advanced | `wave_needs_advance` | Advance before next create |
+| Deploy prerequisites unmet | `deploy_blocked` | Complete deploy step first |
+| Rapid recreate same wave without launch | `duplicate_wave_recreate` | Use `force_retry` or advance |
+| Launch with unmet step dependencies | `needs_delegate_spawn` | Satisfy plan deps |
+
+Breadcrumb engine injects `[BREADCRUMB]` hints on these errors so the orchestrator self-corrects (launch, advance, await_delegates).
+
+**Pending launch:** Successful `team(create)` sets `pending_launch_team_id` until `team(launch)`. Coordinator guards block `switch_mode(executing)` until launch completes.
+
 ---
 
 ## Delegate runtime
@@ -93,6 +110,15 @@ Each delegate runs `run_loop()` with:
 | CWD | Plan `project_dir` pre-set on bash + file tools |
 | Budget | `max_steps` / iteration cap; `escalate()` for more budget or auth help |
 | Hints | Orchestrator `team(hint)` → steering queue → next delegate iteration |
+
+**Hint delivery modes** (`orchestrator_hint.py`):
+
+| Mode | Behavior |
+|------|----------|
+| `both` (default) | SubCryptex orchestrator ring + `[ORCHESTRATOR HINT]` chat interrupt |
+| `ring` | Ring-only; no chat steering message |
+
+Delegate's next prose triggers a **hint ack** back to TeamManager — surfaced in Projects Teams panel as **Last response**. Duplicate hints may be suppressed per `team_hint_policy`.
 
 **Executor entry:** `run_delegate_detached()` in `executor.py`.
 
@@ -132,9 +158,13 @@ Rule: **one user request → one master plan → one project folder**.
 - Orchestrator implementing delegatable steps after `team(launch)`
 - Raw `delegate()` when plan requires team delegation
 - Plan completion while steps still pending
+- **`switch_mode(executing)`** while `pending_launch_team_id` set, non-terminal teams exist, or completion review pending — must launch/monitor/advance first
 - **`plan(create)` solo circumvention** — blocking new plans where every step has `delegatable=false` while an active team plan still has pending delegatable steps (`incoming_plan_steps_are_solo_circumvention`)
+- **Implementation tools blocked** (`bash`/`write` with create patterns) when team plan or build goals active — unless evaluating mode or orchestrator recovery
 
 When circumvention is detected, the plan tool returns a block message listing pending delegatable steps and instructs the orchestrator to use `team(create/launch)` instead of rebuilding a solo plan.
+
+**Monitoring soft guard:** `team(advance)` may require a recent `team(inspect)` on the same team id.
 
 ---
 
@@ -151,7 +181,7 @@ When circumvention is detected, the plan tool returns a block message listing pe
 | `boost_triage_for_active_plan()` | Lifts triage toward `orchestrated` when teams already exist |
 | `build_plan_triage_continuation_block()` | Injects profile hint when triage is skipped but plan needs EM |
 
-User profile picks in the chat chip (`apply_user_profile_override`) respect the floor — UI shows when an override was raised. Triage goals for orchestrated plans are shaped toward delegation (`goals.py`, v1.1.14).
+User profile picks in the chat chip (`apply_user_profile_override`) respect the floor — UI shows when an override was raised. Triage goals for orchestrated plans are shaped toward delegation (`goals.py`).
 
 ---
 
@@ -160,7 +190,9 @@ User profile picks in the chat chip (`apply_user_profile_override`) respect the 
 | File | Role |
 |------|------|
 | `wake_coordination.py` | Scheduler wakes, token budget |
-| `orchestrator_hint.py` | Hint formatting |
+| `orchestrator_hint.py` | Hint formatting, delivery modes, ack path |
+| `breadcrumbs.py` | Post-tool steering (create→launch→monitor, wave errors) |
+| `team_advance_hints.py` | Advance / completion review nudges |
 | `outbound_notify.py` | Channel notifications on milestones |
 | `resume_guidance.py` | Post-crash loop resume |
 | `delegate_manager.py` | Active delegate registry |

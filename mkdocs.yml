@@ -74,6 +74,9 @@ nav:
       - Core concepts: getting-started/concepts.md
   - User guides:
       - Overview: guides/index.md
+      - First run & setup: guides/first-run-and-setup.md
+      - Creating agents: guides/creating-agents.md
+      - Dashboard & fleet: guides/dashboard-and-fleet.md
       - Chat: guides/chat.md
       - Agentic loop & plans: guides/agentic-loop-and-plans.md
       - Projects & teams: guides/projects-and-teams.md
@@ -82,11 +85,17 @@ nav:
       - Brain dashboard: guides/brain-dashboard.md
       - Sleep & consolidation: guides/sleep-and-consolidation.md
       - Tools & skills: guides/tools-and-skills.md
+      - Settings: guides/settings.md
       - Settings & API keys: guides/settings-and-api-keys.md
+      - Remote mode & relay: guides/remote-mode-and-relay.md
+      - Vision, voice & embeddings: guides/vision-voice-and-embeddings.md
+      - Desktop support & debug: guides/desktop-support-debug.md
       - Integrations:
           - Overview: guides/integrations/index.md
           - WhatsApp: guides/integrations/whatsapp.md
           - Telegram: guides/integrations/telegram.md
+          - Discord: guides/integrations/discord.md
+          - Slack: guides/integrations/slack.md
           - Google Workspace: guides/integrations/google-workspace.md
           - Email inbox: guides/integrations/email.md
           - MCP servers: guides/integrations/mcp.md
@@ -206,6 +215,7 @@ nav:
       - Troubleshooting: development/troubleshooting.md
       - UI surfaces: development/ui-surfaces.md
       - Product scope: development/product-scope.md
+      - Design notes (Job/Trust/Squads): brainstorm/job-trust-task-squads.md
   - Legal:
       - Overview: legal/index.md
       - Privacy Policy: legal/privacy-policy.md

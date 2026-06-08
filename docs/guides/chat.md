@@ -12,14 +12,45 @@ The chat view is your primary interface to a Babo agent.
 |------|---------|
 | **Message list** | Conversation history with streaming replies |
 | **Composer** | Text input, attachments, voice |
-| **Model picker** | Session model and delegate override (`chat-model-picker/`) — opaque context-menu panel |
+| **Model picker** | Session model, route (local/cloud), delegate override — see [Model picker](#model-picker) |
 | **Orchestration chip** | Profile depth + live mode (`chat-orchestration-profile-picker/`) |
 | **Run panel** | Live tool calls and orchestration timeline (`run-panel/`) — glass side dock |
 | **Signal sidebar** | Live learning signals (`LEARN`, `EVALUATE`, etc.) |
 | **Cryptex viz** | Snapshot of active memory rings |
 | **Hormone panel** | Current affective state (optional) |
-| **Agent browser** | Embedded view of the agent's browser workspace |
-| **Workbench** | File proposals and tool output cards |
+| **Left dock** | **Workbench** (file proposals, tool cards) and **Agent browser** tabs |
+| **Conversation breadcrumb** | Home vs channel destination (e.g. Discord `#general`) |
+| **Surface inbox** | Pending messages from other surfaces while on Home thread |
+
+### Model picker
+
+The model picker (`chat-model-picker/`) uses opaque [context-menu panels](../development/ui-surfaces.md). It appears when at least one model is available in the catalog.
+
+**Catalog sources (v1.2+ hybrid):**
+
+| Section | Models |
+|---------|--------|
+| **Local / LAN inference** | Ollama, vLLM, or LAN server from device scan |
+| **Popular** | Babo Cloud catalog on hybrid installs; curated defaults on cloud-only |
+| **More models** | Remaining ids alphabetically |
+
+**Chip indicators:**
+
+| Indicator | Meaning |
+|-----------|---------|
+| Orange dot | One-shot override — affects **next message only** |
+| Green dot | Agent session default (persisted) |
+| Split badge | Orchestrator and sub-agent models differ |
+
+**Advanced mode** (toggle in picker footer):
+
+- **Orchestrator** tab — main loop model + route
+- **Sub-agents** tab — delegate model when unlocked
+- **Lock sub-agents to orchestrator model** — default on; sub-agents follow orchestrator pick
+
+Footer actions: **Set as agent default**, **Clear agent default**, **Clear one-shot override**.
+
+Each selection sends `model` and optional `model_route` (`local` | `cloud`) on the wire. See [Inference providers](../configuration/inference-providers.md#hybrid-lan-cloud-desktop-v12).
 
 ### Orchestration chip
 
@@ -29,6 +60,27 @@ Next to the composer, one chip shows:
 - **Mode** — live runtime mode (planning, delegating, executing, …)
 
 When a **team plan** is active, triage enforces an **orchestration floor** — the chip shows when your pick was raised to `orchestrated` and cannot go below that until the plan completes. The mode label updates only after a successful mode switch, not on rejected attempts.
+
+**Blocked mode switches:** The runtime may reject `switch_mode(executing)` when a team awaits launch, waves are still running, or completion review is pending. The chip **reverts** to the previous mode on failure.
+
+---
+
+## Interactive prompts (`ask_user`)
+
+When the agent needs input mid-loop, an **`ask_user`** card appears in the message list with choices or a free-text field. Your answer resumes the loop without starting a new turn. Common in Job/Trust flows and squad coordination.
+
+---
+
+## Left dock: Workbench & Agent browser
+
+Toggle the left dock to switch between:
+
+| Tab | Purpose |
+|-----|---------|
+| **Workbench** | File change proposals, expanded tool output, plan summaries |
+| **Agent browser** | Live view when the agent uses the browser tool (isolated Playwright context) |
+
+Workbench state restores after app restart alongside chat transcript (v1.2.4+).
 
 ---
 
@@ -85,9 +137,20 @@ When the agent uses the **browser tool**, the **Agent browser** panel shows its 
 
 Conversations are grouped into **sessions** with titles. History persists across restarts. Resume prior sessions from the chat history controls.
 
-**Shared with Projects:** Home chat transcript and agentic tool traces sync with the Projects chat sidebar — open either surface and see the same main-thread history. Reload restores completed tool cards; disconnect mid-run preserves partial agentic progress server-side.
+**Shared with Projects:** Home chat transcript and agentic tool traces sync with the Projects chat sidebar — open either surface and see the same main-thread history.
+
+**Transcript restore (v1.2+):** On reload, Babo rebuilds:
+
+- User messages with **attachment cards** (images, files)
+- Agentic traces with per-iteration **mid-loop prose** (assistant updates during long runs)
+- Tool cards with expanded metadata (plan steps, team actions)
+- Workbench summaries linked to agentic events
+
+Disconnect mid-run preserves partial progress server-side; reconnect continues streaming where possible.
 
 **Per-agent threads:** Channel threads (Telegram, Discord, Slack, …) are scoped to the current agent — switching agents resets the sidebar thread list so squad members do not see each other's channel sessions.
+
+**Conversation breadcrumb:** When replying on a channel thread, the breadcrumb shows the destination (e.g. `Home › Discord › #general`). The composer hint reflects private Home vs surface send.
 
 When another surface messages the agent while you are chatting on Home, pending items may appear in the **surface inbox** — the agent can steer on them without starting a parallel deep loop.
 
@@ -107,7 +170,7 @@ While the agent streams tool calls and replies, the message list **follows the b
 
 **Watch signals.** Frequent `LEARN` signals mean the agent is capturing useful facts.
 
-**Use Projects chat sidebar.** For board/timeline work, open Projects and toggle the chat sidebar to keep context in one screen.
+**Use Projects chat sidebar.** For board work or Teams panel steering, open Projects and toggle the chat sidebar to keep context in one screen.
 
 ---
 

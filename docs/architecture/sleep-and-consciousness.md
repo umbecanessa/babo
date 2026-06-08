@@ -87,7 +87,7 @@ Channel `CHANNEL_MESSAGE` events are routed by `ThalamicRouter`:
 - **FOCUS / MICRO** when deep slot busy — lightweight channel reply without blocking orchestration
 - **DEFER** only for non-direct ambient-class traffic (not @mention / DM)
 
-See [Channels & webhooks — execution slots](channels-and-webhooks.md#execution-slots-micro--focus--deep).
+See [Channels & webhooks — execution slots](channels-and-webhooks.md#execution-slots-micro-focus-deep).
 
 ### Inner loop ticks
 

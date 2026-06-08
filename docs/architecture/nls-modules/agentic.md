@@ -65,6 +65,23 @@ Persistence: `hypothalamus_state.json`, `ans_state.json`, WM under `agent_dir`.
 
 ---
 
+## Breadcrumbs (`breadcrumbs.py`)
+
+After selected tool results, the loop injects `[BREADCRUMB]` steering blocks — compact NEXT hints for the orchestrator.
+
+| Trigger | Typical hint |
+|---------|--------------|
+| `team(create)` success | Call `team(launch)` next |
+| `team(create)` duplicate | Launch existing team |
+| `skipped_pending_wave` / `deploy_blocked` | Advance or fix deploy step; use `recommended_wave` |
+| `team(launch)` success | `await_delegates` / monitoring |
+| `team(inspect)` terminal + needs advance | `team(advance)` or approve |
+| `plan(create)` delegatable | switch delegating → create → launch → monitoring |
+
+Breadcrumbs still run on certain errors (`wave_needs_advance`, `duplicate_team`) so recovery does not stall silently.
+
+---
+
 ## Server integration
 
 | Module | Usage |

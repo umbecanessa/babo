@@ -72,6 +72,18 @@ Requires JWT. Maps DB `agentId` UUID → `runtimeAgentId`.
 
 Example: browser `GET /api/rt/agents/{runtimeId}/status` → relay `http_proxy` to desktop.
 
+### Related runtime APIs (not NestJS routes)
+
+These live on the **Python FastAPI** runtime. The hosted web UI reaches them via **`/api/rt`** when desktop relay is online, or direct `127.0.0.1:9222` in Electron:
+
+| API doc | Prefix / scope |
+|---------|------------------|
+| [Job, Trust & Squad API](job-trust-squad-api.md) | `/agents/{id}/job`, `/trust`, `/api/squads` |
+| [Teams & projects API](teams-api.md) | `/teams`, plan/todo proxies |
+| [Python API](python-api.md) | Full FastAPI surface |
+
+There are **no** dedicated NestJS controllers for job, trust, squads, or team waves — only relay proxying.
+
 ---
 
 ## Channels (`/api/channels`)
