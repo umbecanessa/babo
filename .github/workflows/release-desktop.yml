@@ -75,6 +75,9 @@ jobs:
   build-windows:
     needs: resolve-version
     runs-on: windows-latest
+    env:
+      ELECTRON_CACHE: ${{ github.workspace }}/.electron-cache
+      ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.electron-builder-cache
     steps:
       - uses: actions/checkout@v4
         with:
@@ -87,6 +90,23 @@ jobs:
           cache-dependency-path: |
             frontend/package-lock.json
             desktop/package-lock.json
+
+      - name: Cache Electron downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            .electron-cache
+            .electron-builder-cache
+          key: electron-cache-windows-${{ hashFiles('desktop/package-lock.json') }}
+          restore-keys: |
+            electron-cache-windows-
+
+      - name: Configure npm retries
+        shell: pwsh
+        run: |
+          npm config set fetch-retries 5
+          npm config set fetch-retry-mintimeout 20000
+          npm config set fetch-retry-maxtimeout 120000
 
       - uses: actions/setup-python@v5
         with:
@@ -107,7 +127,26 @@ jobs:
 
       - name: Install desktop dependencies
         working-directory: desktop
-        run: npm ci
+        shell: pwsh
+        run: |
+          $maxAttempts = 5
+          for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+            Write-Host "npm ci attempt $attempt/$maxAttempts"
+            npm ci
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+
+            Write-Warning "desktop npm ci failed (exit $LASTEXITCODE)"
+            if ($attempt -lt $maxAttempts) {
+              if (Test-Path node_modules) {
+                Write-Host "Removing desktop/node_modules before retry..."
+                Remove-Item -Recurse -Force node_modules -ErrorAction SilentlyContinue
+              }
+              $delay = 30 * $attempt
+              Write-Host "Retrying in ${delay}s (Electron CDN may have timed out)..."
+              Start-Sleep -Seconds $delay
+            }
+          }
+          throw "desktop npm ci failed after $maxAttempts attempts"
 
       - name: Build Angular (electron)
         working-directory: frontend
@@ -168,6 +207,9 @@ jobs:
     needs: resolve-version
     if: github.event_name != 'workflow_dispatch' || inputs.skip_mac != true
     runs-on: macos-latest
+    env:
+      ELECTRON_CACHE: ${{ github.workspace }}/.electron-cache
+      ELECTRON_BUILDER_CACHE: ${{ github.workspace }}/.electron-builder-cache
     steps:
       - uses: actions/checkout@v4
         with:
@@ -180,6 +222,22 @@ jobs:
           cache-dependency-path: |
             frontend/package-lock.json
             desktop/package-lock.json
+
+      - name: Cache Electron downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            .electron-cache
+            .electron-builder-cache
+          key: electron-cache-macos-${{ hashFiles('desktop/package-lock.json') }}
+          restore-keys: |
+            electron-cache-macos-
+
+      - name: Configure npm retries
+        run: |
+          npm config set fetch-retries 5
+          npm config set fetch-retry-mintimeout 20000
+          npm config set fetch-retry-maxtimeout 120000
 
       - uses: actions/setup-python@v5
         with:
@@ -200,7 +258,25 @@ jobs:
 
       - name: Install desktop dependencies
         working-directory: desktop
-        run: npm ci
+        shell: bash
+        run: |
+          set -euo pipefail
+          max_attempts=5
+          for attempt in $(seq 1 "$max_attempts"); do
+            echo "npm ci attempt ${attempt}/${max_attempts}"
+            if npm ci; then
+              exit 0
+            fi
+            echo "desktop npm ci failed (attempt ${attempt})"
+            if [[ "$attempt" -lt "$max_attempts" ]]; then
+              rm -rf node_modules
+              delay=$((30 * attempt))
+              echo "Retrying in ${delay}s (Electron CDN may have timed out)..."
+              sleep "$delay"
+            fi
+          done
+          echo "desktop npm ci failed after ${max_attempts} attempts" >&2
+          exit 1
 
       - name: Import macOS code signing certificate
         env:
