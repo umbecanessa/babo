@@ -146,6 +146,8 @@ export interface ChatMessage {
   /** Agent's internal reasoning / chain-of-thought (from <think> blocks). */
   reasoning?: string;
   timestamp?: Date;
+  /** Agentic iteration this message belongs to (mid-loop prose ordering). */
+  agenticStep?: number;
   nls?: any;
   tool?: { name: string; query: string; source: string; preview: string; success: boolean };
   drive?: DriveActionData;

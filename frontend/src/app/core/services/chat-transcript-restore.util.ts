@@ -248,7 +248,7 @@ function appendAgenticChatFromTrace(
         } else {
           label = outcome === 'error' ? 'Failed to write file' : 'File written';
         }
-        if (paths[0] && toolName !== 'bash') {
+        if (paths[0]) {
           label = `${label}: ${name}`;
         }
       }
