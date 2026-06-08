@@ -228,10 +228,16 @@ export class AgentsService {
 
   private async fetchRuntime(path: string, method: string = 'GET', body?: any): Promise<any> {
     try {
-      if (method === 'POST') {
-        return await this.runtime.proxyPost(path, body);
+      switch (method) {
+        case 'POST':
+          return await this.runtime.proxyPost(path, body);
+        case 'PATCH':
+          return await this.runtime.proxyPatch(path, body);
+        case 'DELETE':
+          return await this.runtime.proxyDelete(path);
+        default:
+          return await this.runtime.proxyGet(path);
       }
-      return await this.runtime.proxyGet(path);
     } catch (err: any) {
       const msg = typeof err.message === 'string' ? err.message : JSON.stringify(err.message);
       throw new NotFoundException(msg || 'Runtime error');

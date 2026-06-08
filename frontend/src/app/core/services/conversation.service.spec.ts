@@ -66,5 +66,14 @@ describe('ConversationService', () => {
     expect(keys).toContain('websocket:main');
     expect(keys).toContain('websocket:thread:abc');
     expect(keys).toContain('discord:channel:1');
+  it('tracks default home for message filtering', () => {
+    service.setDefaultHomeForAgent('agent-a', 'websocket:thread:home1');
+    const msgs = [
+      { sessionKey: 'websocket:thread:home1', content: 'a' },
+      { sessionKey: 'websocket:thread:other', content: 'b' },
+      { content: 'c' },
+    ];
+    expect(service.messagesForThread(msgs, 'websocket:thread:home1', 'agent-a').length).toBe(1);
+    expect(service.homeMessages(msgs, 'agent-a').length).toBe(1);
   });
 });

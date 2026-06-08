@@ -14,8 +14,11 @@ export interface ComposerDestination {
 }
 
 /** Honest composer labels — always state where a send goes. */
-export function composerDestination(meta: ThreadMeta | null | undefined): ComposerDestination {
-  if (!meta || meta.key === 'websocket:main') {
+export function composerDestination(
+  meta: ThreadMeta | null | undefined,
+  isDefaultHome = false,
+): ComposerDestination {
+  if (!meta || meta.key === 'websocket:main' || isDefaultHome) {
     return {
       placeholder: 'Message Babo (private — not sent externally)',
       hint: '',
@@ -122,8 +125,11 @@ export function composerDestination(meta: ThreadMeta | null | undefined): Compos
 }
 
 /** Breadcrumb segments for the active conversation. */
-export function conversationBreadcrumbs(meta: ThreadMeta | null | undefined): { label: string; level: string }[] {
-  if (!meta || meta.key === 'websocket:main') {
+export function conversationBreadcrumbs(
+  meta: ThreadMeta | null | undefined,
+  isDefaultHome = false,
+): { label: string; level: string }[] {
+  if (!meta || meta.key === 'websocket:main' || isDefaultHome) {
     return [{ label: 'Private desk', level: 'home' }];
   }
 

@@ -1,7 +1,7 @@
 import { Component, Input, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
-import type { ConversationThread } from '../../../core/services/conversation.service';
+import { ConversationService, type ConversationThread } from '../../../core/services/conversation.service';
 
 @Component({
   selector: 'app-conversation-context',
@@ -14,12 +14,15 @@ export class ConversationContextComponent {
   @Input() thread: ConversationThread | null = null;
   @Input() agentId = '';
 
+  private readonly conversations = inject(ConversationService);
+
   toolsLink(): string[] {
     return this.agentId ? ['/tools', this.agentId] : ['/tools'];
   }
 
   isHome(): boolean {
-    return !this.thread || this.thread.key === 'websocket:main';
+    if (!this.thread) return true;
+    return this.conversations.isDefaultHome(this.thread.key, this.agentId || undefined);
   }
 
   isSurface(): boolean {

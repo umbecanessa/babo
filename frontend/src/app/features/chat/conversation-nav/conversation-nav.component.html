@@ -1,15 +1,5 @@
 <nav class="conv-nav" [class.collapsed]="collapsed" aria-label="Conversations">
   @if (!collapsed) {
-    <button
-      type="button"
-      class="conv-nav-item"
-      [class.active]="isActive('websocket:main')"
-      (click)="onSelect('websocket:main')"
-    >
-      <span class="conv-nav-icon">◉</span>
-      <span class="conv-nav-label">Home</span>
-    </button>
-
     @if (panels.inboxBadge() > 0) {
       <button type="button" class="conv-nav-inbox" (click)="openInbox.emit()">
         <span class="conv-nav-icon">📥</span>
@@ -19,41 +9,45 @@
     }
 
     @for (group of conversations.groupedThreads(); track group.channel) {
-      @if (group.channel !== 'websocket' || group.threads.length > 1) {
+      @if (group.channel === 'websocket' || group.threads.length > 1) {
         <div class="conv-nav-group">
           <div class="conv-nav-group-header">{{ group.label }}</div>
           @for (t of group.threads; track t.key) {
-            @if (t.key !== 'websocket:main' || group.channel === 'websocket') {
-              <div class="conv-nav-row" [class.active]="isActive(t.key)">
-                <button
-                  type="button"
-                  class="conv-nav-item"
-                  [class.active]="isActive(t.key)"
-                  [attr.data-channel]="t.channel"
-                  (click)="onSelect(t.key); closeBranchMenu()"
-                >
-                  <span class="conv-nav-dot" [attr.data-channel]="t.channel"></span>
-                  <span class="conv-nav-label">{{ t.label }}</span>
-                  @if (unreadCount(t)) {
-                    <span class="conv-nav-unread"></span>
-                  }
-                </button>
-                @if (isBranch(t)) {
-                  <button
-                    type="button"
-                    class="conv-nav-branch-menu"
-                    title="Branch options"
-                    (click)="toggleBranchMenu($event, t.key)"
-                  >⋯</button>
+            <div class="conv-nav-row" [class.active]="isActive(t.key)">
+              <button
+                type="button"
+                class="conv-nav-item"
+                [class.active]="isActive(t.key)"
+                [class.is-home]="conversations.isDefaultHome(t.key)"
+                [attr.data-channel]="t.channel"
+                (click)="onSelect(t.key); closeBranchMenu()"
+              >
+                <span class="conv-nav-dot" [attr.data-channel]="t.channel"></span>
+                <span class="conv-nav-label">{{ conversations.displayLabel(t) }}</span>
+                @if (unreadCount(t)) {
+                  <span class="conv-nav-unread"></span>
                 }
-                @if (branchMenuKey === t.key) {
-                  <div class="conv-nav-branch-actions">
+              </button>
+              <button
+                type="button"
+                class="conv-nav-branch-menu"
+                title="Thread options"
+                (click)="toggleBranchMenu($event, t.key)"
+              >⋯</button>
+              @if (branchMenuKey === t.key) {
+                <div class="conv-nav-branch-actions">
+                  @if (conversations.isDefaultHome(t.key)) {
+                    <button type="button" (click)="onResetHome($event)">Reset Home…</button>
+                  } @else {
+                    <button type="button" (click)="onPromoteToHome(t.key, $event)">Set as Home</button>
+                  }
+                  @if (isBranch(t)) {
                     <button type="button" (click)="onRenameBranch(t.key, $event)">Rename</button>
                     <button type="button" class="danger" (click)="onDeleteBranch(t.key, $event)">Delete</button>
-                  </div>
-                }
-              </div>
-            }
+                  }
+                </div>
+              }
+            </div>
           }
         </div>
       }
@@ -68,9 +62,9 @@
     <button
       type="button"
       class="conv-nav-icon-btn"
-      [class.active]="isActive('websocket:main')"
+      [class.active]="isActive(conversations.defaultHomeKey())"
       title="Home"
-      (click)="onSelect('websocket:main')"
+      (click)="onSelect(conversations.defaultHomeKey())"
     >◉</button>
     @if (panels.inboxBadge() > 0) {
       <button type="button" class="conv-nav-icon-btn inbox" title="Inbox" (click)="openInbox.emit()">

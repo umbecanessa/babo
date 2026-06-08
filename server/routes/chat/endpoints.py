@@ -27,7 +27,7 @@ async def list_sessions(agent_id: str, request: Request):
     agent_manager = app.state.agent_manager
     runtime = agent_manager.get_runtime(agent_id)
     if runtime is None:
-        return {"sessions": {}}
+        return {"sessions": {}, "default_home_session_key": "websocket:main"}
 
     sessions: dict[str, Any] = {}
 
@@ -97,7 +97,7 @@ async def list_sessions(agent_id: str, request: Request):
         except Exception:
             pass
 
-    return {"sessions": sessions}
+    return {"sessions": sessions, "default_home_session_key": runtime.get_default_home_session_key()}
 
 
 @router.get("/sessions/{agent_id}/{session_key:path}")
@@ -183,8 +183,51 @@ async def delete_session(agent_id: str, session_key: str, request: Request):
     if runtime is None:
         return JSONResponse({"ok": False, "error": "agent not loaded"}, status_code=404)
 
+    if runtime.get_default_home_session_key() == session_key:
+        return JSONResponse(
+            {"ok": False, "error": "cannot delete the current Home session"},
+            status_code=400,
+        )
+
     ok = await asyncio.to_thread(runtime.delete_session_thread, session_key)
     return {"ok": ok, "session_key": session_key}
+
+
+@router.post("/sessions/{agent_id}/default-home")
+async def set_default_home_session(agent_id: str, request: Request):
+    """Point default Home at an existing websocket session (no data moves)."""
+    body = await request.json()
+    session_key = str(body.get("session_key") or "").strip()
+    if not session_key:
+        return JSONResponse({"ok": False, "error": "session_key required"}, status_code=400)
+
+    from nls.runtime.agent_runtime import is_valid_home_session_key
+
+    if not is_valid_home_session_key(session_key):
+        return JSONResponse(
+            {"ok": False, "error": "session_key must be websocket:main or a websocket branch"},
+            status_code=400,
+        )
+
+    runtime = request.app.state.agent_manager.get_runtime(agent_id)
+    if runtime is None:
+        return JSONResponse({"ok": False, "error": "agent not loaded"}, status_code=404)
+
+    if session_key != "websocket:main":
+        registry = getattr(runtime, "channel_registry", None)
+        if registry is None:
+            return JSONResponse({"ok": False, "error": "session router unavailable"}, status_code=503)
+        router = registry.session_router
+        if session_key not in router.list_sessions():
+            return JSONResponse({"ok": False, "error": "unknown session"}, status_code=404)
+
+    ok = await asyncio.to_thread(runtime.set_default_home_session_key, session_key)
+    if not ok:
+        return JSONResponse({"ok": False, "error": "failed to set default home"}, status_code=500)
+    return {
+        "ok": True,
+        "default_home_session_key": runtime.get_default_home_session_key(),
+    }
 
 
 def _build_team_thread(runtime, team_id: str) -> dict:

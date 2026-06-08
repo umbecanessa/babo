@@ -247,6 +247,8 @@
         (newBranch)="createNewThread()"
         (renameBranch)="renameThread($event)"
         (deleteBranch)="deleteThread($event)"
+        (promoteToHome)="promoteToHome($event)"
+        (resetHome)="resetHome()"
         (openInbox)="openInboxFromNav()"
       />
 
@@ -282,7 +284,7 @@
               }
             </svg>
           </button>
-          <app-conversation-breadcrumb [thread]="activeThreadMeta()" />
+          <app-conversation-breadcrumb [thread]="activeThreadMeta()" [agentId]="agentId" />
         </div>
 
         @if (activeThreadMeta()?.channel === 'email') {
@@ -548,6 +550,8 @@
         (newBranch)="createNewThread(); closeMobileConvNav()"
         (renameBranch)="renameThread($event)"
         (deleteBranch)="deleteThread($event)"
+        (promoteToHome)="promoteToHome($event)"
+        (resetHome)="resetHome()"
         (openInbox)="openInboxFromNav(); closeMobileConvNav(); openBottomSheet(); setMobileSheetTab('inbox')"
       />
     </aside>

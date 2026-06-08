@@ -204,23 +204,41 @@ export class RuntimeService implements OnModuleDestroy {
   }
 
   async proxyPost(path: string, body?: any): Promise<any> {
+    return this.proxyRequest(path, 'POST', body);
+  }
+
+  async proxyPatch(path: string, body?: any): Promise<any> {
+    return this.proxyRequest(path, 'PATCH', body);
+  }
+
+  async proxyDelete(path: string): Promise<any> {
+    return this.proxyRequest(path, 'DELETE');
+  }
+
+  async proxyRequest(path: string, method: string, body?: any): Promise<any> {
     const agentId = this.extractAgentIdFromPath(path);
     if (agentId && this.channels.hasRelaySocket(agentId)) {
       try {
-        return await this.channels.proxyHttpViaRelay(agentId, 'POST', path, body);
+        return await this.channels.proxyHttpViaRelay(agentId, method, path, body);
       } catch (relayErr: any) {
-        this.logger.warn(`proxyPost relay failed for ${path}: ${relayErr.message}`);
+        this.logger.warn(`proxyRequest relay failed for ${method} ${path}: ${relayErr.message}`);
       }
     }
-    const res = await fetch(`${this.baseUrl}${path}`, {
-      method: 'POST',
+    const init: RequestInit = {
+      method,
       headers: this.headers,
-      body: body ? JSON.stringify(body) : undefined,
       signal: AbortSignal.timeout(5000),
-    });
+    };
+    if (body !== undefined && method !== 'GET' && method !== 'DELETE') {
+      init.body = JSON.stringify(body);
+    }
+    const res = await fetch(`${this.baseUrl}${path}`, init);
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: res.statusText }));
       throw new Error(this.formatError(err, res.status));
+    }
+    if (res.status === 204) {
+      return {};
     }
     return res.json();
   }

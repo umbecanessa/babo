@@ -220,6 +220,21 @@ export class AgentsController {
     );
   }
 
+  @Post(':id/sessions/default-home')
+  async setDefaultHomeSession(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body() body: { session_key?: string },
+  ) {
+    const runtimeId = await this.agents.getRuntimeAgentId(req.user.userId, id);
+    return this.agents.proxyRuntime(
+      runtimeId,
+      `/sessions/${runtimeId}/default-home`,
+      'POST',
+      body,
+    );
+  }
+
   // =================================================================
   // CRUD — item-level (MUST be after sub-resource routes)
   // =================================================================

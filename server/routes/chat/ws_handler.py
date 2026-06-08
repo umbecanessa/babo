@@ -180,10 +180,20 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
         })
 
         chat_history = runtime.load_chat_transcript(max_turns=200)
+        _default_home = runtime.get_default_home_session_key()
+        if _default_home != "websocket:main":
+            _branch_ui = runtime.load_session_transcript(_default_home, max_turns=200)
+            if _branch_ui:
+                chat_history = _branch_ui
+            else:
+                chat_history = runtime.load_session_history(
+                    session_key=_default_home, max_turns=200,
+                )
         if chat_history:
             await websocket.send_json({
                 "type": "history",
                 "messages": chat_history,
+                "session_key": _default_home,
             })
 
         logger.info("WebSocket connected: agent %s", agent_id)
@@ -529,7 +539,10 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
 
             user_content_raw = user_input
             # Session / thread routing
-            session_key = msg.get("session_key", "websocket:main")
+            session_key = (
+                msg.get("session_key")
+                or runtime.get_default_home_session_key()
+            )
 
             if msg.get("type") == "message":
                 from nls.skills.surface_send import (

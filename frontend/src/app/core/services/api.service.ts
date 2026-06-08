@@ -905,6 +905,13 @@ export class ApiService {
     return this.http.delete(url);
   }
 
+  setDefaultHomeSession(agentId: string, sessionKey: string): Observable<any> {
+    const url = this.platform.isElectron
+      ? `${this.RUNTIME}/sessions/${agentId}/default-home`
+      : `${this.API}/agents/${agentId}/sessions/default-home`;
+    return this.http.post(url, { session_key: sessionKey });
+  }
+
   // ─── Visual Cortex ──────────────────────────────────────────────
   getVisualCortexBuffer(agentId: string, opts?: { channel?: string; limit?: number }): Observable<any> {
     let params = new HttpParams();

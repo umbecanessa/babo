@@ -169,23 +169,42 @@
 .conv-nav-row {
   position: relative;
   display: flex;
-  align-items: stretch;
-  gap: 2px;
+  align-items: center;
+  gap: 0;
+  min-width: 0;
 
   &.active .conv-nav-item {
-    background: var(--overlay-2);
+    background: var(--accent-primary-glow);
+    color: var(--accent-primary);
   }
 }
 
+.conv-nav-row .conv-nav-item {
+  flex: 1;
+  min-width: 0;
+  width: auto;
+}
+
+.conv-nav-item.is-home .conv-nav-dot {
+  background: var(--accent-primary);
+}
+
 .conv-nav-branch-menu {
-  flex: 0 0 auto;
+  flex: 0 0 28px;
   align-self: center;
   border: none;
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  padding: 4px 6px;
+  padding: 4px 0;
   border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+
+  .conv-nav-row:hover &,
+  .conv-nav-row.active & {
+    opacity: 1;
+  }
 
   &:hover {
     background: var(--overlay-2);
@@ -195,17 +214,17 @@
 
 .conv-nav-branch-actions {
   position: absolute;
-  right: 4px;
-  top: calc(100% - 2px);
-  z-index: 5;
+  left: 8px;
+  right: 8px;
+  top: calc(100% + 2px);
+  z-index: 10;
   display: flex;
   flex-direction: column;
-  min-width: 120px;
   background: var(--glass-bg, #1a1a1a);
   border: 1px solid var(--glass-border);
   border-radius: 8px;
   overflow: hidden;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
 
   button {
     border: none;
@@ -213,6 +232,7 @@
     color: var(--text-primary);
     text-align: left;
     padding: 8px 12px;
+    font-size: 0.8125rem;
     cursor: pointer;
 
     &:hover {

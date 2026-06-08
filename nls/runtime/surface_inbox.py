@@ -190,6 +190,9 @@ def resolve_foreground_session_key(runtime: Any) -> str:
     if src.startswith("user:channel"):
         return sk
     if src in ("user", "user:ws", "ws", ""):
+        get_home = getattr(runtime, "get_default_home_session_key", None)
+        if callable(get_home):
+            return get_home()
         return "websocket:main"
     return sk or "websocket:main"
 

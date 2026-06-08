@@ -85,9 +85,16 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
   private readonly workbench = inject(ChatWorkbenchService);
 
   /** Private desk threads only — no Discord/WhatsApp/etc. in Projects sidebar. */
-  readonly websocketThreads = computed(() =>
-    this.conversations.threads().filter((t) => t.channel === 'websocket'),
-  );
+  readonly websocketThreads = computed(() => {
+    const home = this.conversations.defaultHomeKey(this.agentId);
+    return this.conversations.threads()
+      .filter((t) => t.channel === 'websocket')
+      .sort((a, b) => {
+        if (a.key === home) return -1;
+        if (b.key === home) return 1;
+        return 0;
+      });
+  });
 
   readonly surfaceThreadCount = computed(() =>
     this.conversations.threads().filter((t) => t.channel !== 'websocket').length,
@@ -95,22 +102,21 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
 
   readonly composerHint = computed(() => {
     const meta = this.websocketThreads().find((t) => t.key === this.activeThread());
-    return composerDestination(meta ?? { key: 'websocket:main', label: 'Private desk', channel: 'websocket' });
+    const isHome = this.conversations.isDefaultHome(this.activeThread(), this.agentId);
+    return composerDestination(
+      meta ?? { key: 'websocket:main', label: 'Private desk', channel: 'websocket' },
+      isHome,
+    );
   });
 
-  readonly visibleMessages = computed(() => {
-    const thread = this.activeThread();
-    return this.messages().filter((m) => {
-      const sk = m.sessionKey || 'websocket:main';
-      return thread === 'websocket:main'
-        ? sk === 'websocket:main'
-        : sk === thread;
-    });
-  });
-
-  readonly isActiveBranch = computed(() =>
-    this.conversations.isWebsocketBranch(this.activeThread()),
+  readonly visibleMessages = computed(() =>
+    this.conversations.messagesForThread(this.messages(), this.activeThread(), this.agentId),
   );
+
+  readonly showThreadMenu = computed(() => {
+    const key = this.activeThread();
+    return key === 'websocket:main' || this.conversations.isWebsocketBranch(key);
+  });
 
   branchMenuOpen = signal(false);
 
@@ -186,6 +192,10 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
   deleteActiveBranch(): void {
     const key = this.activeThread();
     if (!this.conversations.isWebsocketBranch(key)) return;
+    if (this.conversations.isDefaultHome(key, this.agentId)) {
+      window.alert('Cannot delete the current Home thread. Reset Home or set another thread as Home first.');
+      return;
+    }
     this.branchMenuOpen.set(false);
     const current = this.conversations.threads().find((t) => t.key === key);
     if (!window.confirm(`Delete branch "${current?.label || key}" and its history?`)) return;
@@ -195,7 +205,42 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
     if (this.agentId) {
       this.api.deleteSession(this.agentId, key).subscribe({ error: () => {} });
     }
-    this.selectThread('websocket:main');
+    this.selectThread(this.conversations.defaultHomeKey(this.agentId));
+  }
+
+  promoteToHome(): void {
+    const key = this.activeThread();
+    if (!this.agentId || !key || this.conversations.isDefaultHome(key, this.agentId)) return;
+    const label = this.conversations.displayLabel(
+      this.conversations.threads().find((t) => t.key === key)
+        || { key, label: key, channel: 'websocket' },
+      this.agentId,
+    );
+    if (!window.confirm(`Set "${label}" as Home?`)) return;
+    this.api.setDefaultHomeSession(this.agentId, key).subscribe({
+      next: () => this.conversations.setDefaultHomeForAgent(this.agentId, key),
+      error: () => {},
+    });
+  }
+
+  resetHome(): void {
+    if (!this.agentId) return;
+    if (!window.confirm(
+      'Start a fresh Home thread? Current Home stays in the list. Agent knowledge is unchanged.',
+    )) return;
+    const id = Date.now().toString(36);
+    const key = `websocket:thread:${id}`;
+    const count = this.websocketThreads().filter((t) => this.conversations.isWebsocketBranch(t.key)).length;
+    const label = `Branch ${count + 1}`;
+    this.conversations.addBranch(label, key);
+    this.api.renameSession(this.agentId, key, label).subscribe({ error: () => {} });
+    this.api.setDefaultHomeSession(this.agentId, key).subscribe({
+      next: () => {
+        this.conversations.setDefaultHomeForAgent(this.agentId, key);
+        this.selectThread(key);
+      },
+      error: () => {},
+    });
   }
 
   createNewBranch(): void {
@@ -231,7 +276,7 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
       type: 'user',
       content: msg || '(attachment)',
       timestamp: new Date(),
-      sessionKey: threadKey !== 'websocket:main' ? threadKey : undefined,
+      sessionKey: this.outgoingSessionKey(threadKey),
     }]);
 
     this.sending.set(true);
@@ -368,25 +413,33 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   private syncMainTranscript(): void {
-    if (!this.agentId || this.activeThread() !== 'websocket:main') return;
-    const mainMsgs = this.messages().filter(
-      (m) => !m.sessionKey || m.sessionKey === 'websocket:main',
+    if (!this.agentId) return;
+    const home = this.conversations.defaultHomeKey(this.agentId);
+    if (this.activeThread() !== home) return;
+    this.mainTranscript.replace(
+      this.agentId,
+      this.conversations.homeMessages(this.messages(), this.agentId),
     );
-    this.mainTranscript.replace(this.agentId, mainMsgs);
   }
 
   private pullFromMainTranscript(): void {
-    if (!this.agentId || this.activeThread() !== 'websocket:main' || this.agenticActive()) return;
+    if (!this.agentId || this.agenticActive()) return;
+    const home = this.conversations.defaultHomeKey(this.agentId);
+    if (this.activeThread() !== home) return;
     const shared = this.mainTranscript.get(this.agentId);
-    const local = this.messages().filter(
-      (m) => !m.sessionKey || m.sessionKey === 'websocket:main',
-    );
+    const local = this.conversations.homeMessages(this.messages(), this.agentId);
     if (shared.length > local.length) {
-      const branch = this.messages().filter(
-        (m) => m.sessionKey && m.sessionKey !== 'websocket:main',
-      );
+      const branch = this.conversations.nonHomeMessages(this.messages(), this.agentId);
       this.messages.set([...branch, ...structuredClone(shared)]);
     }
+  }
+
+  private outgoingSessionKey(threadKey: string): string | undefined {
+    const home = this.conversations.defaultHomeKey(this.agentId);
+    if (threadKey === 'websocket:main' && home === 'websocket:main') {
+      return undefined;
+    }
+    return threadKey;
   }
 
   private uploadFiles(files: File[]): void {
@@ -448,7 +501,7 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
     this.prevAgentId = this.agentId;
 
     if (!this.websocketThreads().find((t) => t.key === this.activeThread())) {
-      this.activeThread.set('websocket:main');
+      this.activeThread.set(this.conversations.defaultHomeKey(this.agentId));
     }
     this.loadHistory(this.activeThread());
   }
@@ -462,6 +515,10 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
 
     this.http.get<any>(url).subscribe({
       next: (res) => {
+        const defaultHome = (res?.default_home_session_key || 'websocket:main').trim();
+        if (defaultHome) {
+          this.conversations.setDefaultHomeForAgent(this.agentId, defaultHome);
+        }
         const sessions: Record<string, any> = res?.sessions || {};
         const restored: {
           key: string;
@@ -483,7 +540,7 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
         this.conversations.resetThreadsForAgent(this.agentId, restored);
 
         if (!this.websocketThreads().find((t) => t.key === this.activeThread())) {
-          this.activeThread.set('websocket:main');
+          this.activeThread.set(defaultHome);
         }
       },
       error: () => {},

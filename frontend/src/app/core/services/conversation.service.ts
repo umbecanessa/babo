@@ -44,8 +44,9 @@ const SURFACE_LABELS: Record<string, string> = {
 @Injectable({ providedIn: 'root' })
 export class ConversationService {
   private _activeAgentId: string | null = null;
+  private readonly _defaultHomeByAgent = signal<Record<string, string>>({});
   private readonly _threads = signal<ConversationThread[]>([
-    { key: 'websocket:main', label: 'Home', channel: 'websocket' },
+    { key: 'websocket:main', label: 'Main chat', channel: 'websocket' },
   ]);
   private readonly _inbox = signal<InboxItem[]>([]);
 
@@ -63,10 +64,18 @@ export class ConversationService {
     for (const ch of SURFACE_ORDER) {
       const chThreads = threads.filter((t) => t.channel === ch);
       if (chThreads.length === 0) continue;
+      const sorted = ch === 'websocket'
+        ? [...chThreads].sort((a, b) => {
+            const home = this.defaultHomeKey();
+            if (a.key === home) return -1;
+            if (b.key === home) return 1;
+            return 0;
+          })
+        : chThreads;
       groups.push({
         channel: ch,
-        label: SURFACE_LABELS[ch] || ch,
-        threads: chThreads,
+        label: ch === 'websocket' ? 'Chat' : (SURFACE_LABELS[ch] || ch),
+        threads: sorted,
       });
     }
 
@@ -117,7 +126,7 @@ export class ConversationService {
   resetThreadsForAgent(agentId: string, restored: ConversationThread[] = []): void {
     const home: ConversationThread = {
       key: 'websocket:main',
-      label: 'Home',
+      label: 'Main chat',
       channel: 'websocket',
     };
     const sameAgent = agentId === this._activeAgentId;
@@ -233,6 +242,77 @@ export class ConversationService {
     return key.startsWith('websocket:thread:');
   }
 
+  private defaultHomeStorageKey(agentId: string): string {
+    return `babo:default-home:${agentId}`;
+  }
+
+  loadDefaultHomeLocal(agentId: string): string {
+    try {
+      return localStorage.getItem(this.defaultHomeStorageKey(agentId)) || '';
+    } catch {
+      return '';
+    }
+  }
+
+  defaultHomeKey(agentId?: string): string {
+    const id = agentId || this._activeAgentId;
+    if (!id) return 'websocket:main';
+    const mapped = this._defaultHomeByAgent()[id];
+    if (mapped) return mapped;
+    const local = this.loadDefaultHomeLocal(id);
+    if (local && (local === 'websocket:main' || local.startsWith('websocket:thread:'))) {
+      return local;
+    }
+    return 'websocket:main';
+  }
+
+  isDefaultHome(key: string, agentId?: string): boolean {
+    return key === this.defaultHomeKey(agentId);
+  }
+
+  displayLabel(thread: ConversationThread, agentId?: string): string {
+    if (this.isDefaultHome(thread.key, agentId)) return 'Home';
+    if (thread.key === 'websocket:main') return 'Main chat';
+    return thread.label;
+  }
+
+  setDefaultHomeForAgent(agentId: string, sessionKey: string): void {
+    this._defaultHomeByAgent.update((m) => ({ ...m, [agentId]: sessionKey }));
+    try {
+      localStorage.setItem(this.defaultHomeStorageKey(agentId), sessionKey);
+    } catch { /* ignore */ }
+  }
+
+  messageBelongsToHome(msg: { sessionKey?: string }, homeKey?: string, agentId?: string): boolean {
+    const home = homeKey || this.defaultHomeKey(agentId);
+    if (home === 'websocket:main') {
+      return !msg.sessionKey || msg.sessionKey === 'websocket:main';
+    }
+    return msg.sessionKey === home;
+  }
+
+  messagesForThread<T extends { sessionKey?: string }>(
+    msgs: T[],
+    threadKey: string,
+    agentId?: string,
+  ): T[] {
+    const home = this.defaultHomeKey(agentId);
+    if (threadKey === home) {
+      return msgs.filter((m) => this.messageBelongsToHome(m, home, agentId));
+    }
+    return msgs.filter((m) => m.sessionKey === threadKey);
+  }
+
+  homeMessages<T extends { sessionKey?: string }>(msgs: T[], agentId?: string): T[] {
+    const home = this.defaultHomeKey(agentId);
+    return msgs.filter((m) => this.messageBelongsToHome(m, home, agentId));
+  }
+
+  nonHomeMessages<T extends { sessionKey?: string }>(msgs: T[], agentId?: string): T[] {
+    const home = this.defaultHomeKey(agentId);
+    return msgs.filter((m) => !this.messageBelongsToHome(m, home, agentId));
+  }
+
   private branchLabelsKey(agentId: string): string {
     return `babo:branch-labels:${agentId}`;
   }
@@ -274,7 +354,7 @@ export class ConversationService {
     guild_name?: string;
     guildName?: string;
   }): string {
-    if (key === 'websocket:main') return 'Home';
+    if key === 'websocket:main') return 'Main chat';
     const parts = key.split(':');
     const threadType = parts[1] || '';
     const isGroup = threadType === 'group' || threadType === 'channel';

@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, Output, inject } from '@angular/core';
+import { Component, EventEmitter, HostListener, Input, Output, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ConversationService, ConversationThread } from '../../../core/services/conversation.service';
 import { ChatPanelService } from '../../../core/services/chat-panel.service';
@@ -18,11 +18,18 @@ export class ConversationNavComponent {
   @Output() openInbox = new EventEmitter<void>();
   @Output() renameBranch = new EventEmitter<string>();
   @Output() deleteBranch = new EventEmitter<string>();
+  @Output() promoteToHome = new EventEmitter<string>();
+  @Output() resetHome = new EventEmitter<void>();
 
   branchMenuKey: string | null = null;
 
   readonly conversations = inject(ConversationService);
   readonly panels = inject(ChatPanelService);
+
+  @HostListener('document:click')
+  closeBranchMenu(): void {
+    this.branchMenuKey = null;
+  }
 
   onSelect(key: string): void {
     this.selectThread.emit(key);
@@ -37,16 +44,12 @@ export class ConversationNavComponent {
   }
 
   isBranch(t: ConversationThread): boolean {
-    return t.channel === 'websocket' && t.key !== 'websocket:main';
+    return this.conversations.isWebsocketBranch(t.key);
   }
 
   toggleBranchMenu(event: MouseEvent, key: string): void {
     event.stopPropagation();
     this.branchMenuKey = this.branchMenuKey === key ? null : key;
-  }
-
-  closeBranchMenu(): void {
-    this.branchMenuKey = null;
   }
 
   onRenameBranch(key: string, event: MouseEvent): void {
@@ -59,5 +62,17 @@ export class ConversationNavComponent {
     event.stopPropagation();
     this.branchMenuKey = null;
     this.deleteBranch.emit(key);
+  }
+
+  onPromoteToHome(key: string, event: MouseEvent): void {
+    event.stopPropagation();
+    this.branchMenuKey = null;
+    this.promoteToHome.emit(key);
+  }
+
+  onResetHome(event: MouseEvent): void {
+    event.stopPropagation();
+    this.branchMenuKey = null;
+    this.resetHome.emit();
   }
 }

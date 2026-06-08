@@ -188,9 +188,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
   filteredMessages = computed(() => {
     const thread = this.currentThread();
     const msgs = this.messages();
-    const threadFiltered = thread === 'websocket:main'
-      ? msgs.filter(m => !m.sessionKey || m.sessionKey === 'websocket:main')
-      : msgs.filter(m => m.sessionKey === thread);
+    const threadFiltered = this.conversations.messagesForThread(msgs, thread, this.agentId);
     if (!this.runView.visible()) {
       return threadFiltered;
     }
@@ -213,7 +211,10 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     return t;
   });
 
-  composerDest = computed(() => composerDestination(this.activeThreadMeta()));
+  composerDest = computed(() => composerDestination(
+    this.activeThreadMeta(),
+    this.conversations.isDefaultHome(this.currentThread(), this.agentId),
+  ));
 
   /** Connected channel names for the sidebar status strip */
   connectedChannels = computed(() => {
@@ -234,6 +235,8 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
   private mainTranscriptLoaded = false;
   /** Raw JSONL row count last applied — avoids comparing expanded message counts. */
   private mainTranscriptRows = 0;
+  /** First sessions list load per agent — apply default Home once. */
+  private readonly agentSessionsBootstrapped = new Set<string>();
   /** Cap runtime hydration retries when the server starts slowly after app launch. */
   private runtimeHydrateAttempts = 0;
   private static readonly MAX_RUNTIME_HYDRATE = 4;
@@ -339,7 +342,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       this.handleRuntimeMessage(msg);
     });
 
-    this.loadMainThreadHistory();
+    this.loadHomeThreadHistory();
 
     this.startProjectProcessesPoll();
 
@@ -395,14 +398,13 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
     this.ws.connect();
     this.ws.joinAgent(nextId);
-    this.currentThread.set('websocket:main');
     this.loadPersistedThreads();
 
     this.sub = this.ws.onMessage(nextId).subscribe((msg) => {
       this.handleRuntimeMessage(msg);
     });
 
-    this.loadMainThreadHistory();
+    this.loadHomeThreadHistory();
 
     this.startProjectProcessesPoll();
   }
@@ -459,7 +461,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       aborted: reason !== 'server_idle',
     });
     if (!this.mainTranscriptLoaded) {
-      this.loadMainThreadHistory();
+      this.loadHomeThreadHistory();
     }
   }
 
@@ -478,7 +480,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         || m.type === 'agentic_complete',
       );
     if (!this.mainTranscriptLoaded || needsWorkbenchRestore) {
-      this.loadMainThreadHistory();
+      this.loadHomeThreadHistory();
     }
   }
 
@@ -628,24 +630,24 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
   }
 
   private syncMainTranscript(): void {
-    if (!this.agentId || this.currentThread() !== 'websocket:main') return;
-    const mainMsgs = this.messages().filter(
-      m => !m.sessionKey || m.sessionKey === 'websocket:main',
+    if (!this.agentId) return;
+    const home = this.conversations.defaultHomeKey(this.agentId);
+    if (this.currentThread() !== home) return;
+    this.mainTranscript.replace(
+      this.agentId,
+      this.conversations.homeMessages(this.messages(), this.agentId),
     );
-    this.mainTranscript.replace(this.agentId, mainMsgs);
   }
 
-  /** Adopt newer main-thread transcript from Projects sidebar. */
+  /** Adopt newer home-thread transcript from Projects sidebar. */
   private pullSharedMainTranscript(): void {
-    if (!this.agentId || this.currentThread() !== 'websocket:main' || this.agenticActive()) return;
+    if (!this.agentId || this.agenticActive()) return;
+    const home = this.conversations.defaultHomeKey(this.agentId);
+    if (this.currentThread() !== home) return;
     const shared = this.mainTranscript.get(this.agentId);
-    const local = this.messages().filter(
-      m => !m.sessionKey || m.sessionKey === 'websocket:main',
-    );
+    const local = this.conversations.homeMessages(this.messages(), this.agentId);
     if (shared.length <= local.length) return;
-    const branch = this.messages().filter(
-      m => m.sessionKey && m.sessionKey !== 'websocket:main',
-    );
+    const branch = this.conversations.nonHomeMessages(this.messages(), this.agentId);
     this.messages.set([...branch, ...structuredClone(shared)]);
   }
 
@@ -684,6 +686,14 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       sidebarOpen: this.panels.rightDockOpen(),
       currentThread: this.currentThread(),
     });
+  }
+
+  private outgoingSessionKey(threadKey: string): string | undefined {
+    const home = this.conversations.defaultHomeKey(this.agentId);
+    if (threadKey === 'websocket:main' && home === 'websocket:main') {
+      return undefined;
+    }
+    return threadKey;
   }
 
   sendMessage() {
@@ -742,7 +752,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         ? attachments.map(a => ({ name: a.name, path: a.path, mime_type: a.mime_type, size: a.size }))
         : undefined,
       timestamp: new Date(),
-      sessionKey: threadKey !== 'websocket:main' ? threadKey : undefined,
+      sessionKey: this.outgoingSessionKey(threadKey),
     }]);
 
     // If the agent is waiting for a budget decision or ask_user answer, route as user_answer
@@ -1395,22 +1405,23 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     });
   }
 
-  private _applyMainThreadTranscript(
+  private _applyHomeThreadTranscript(
     raw: unknown[],
     _source: 'rest' | 'ws',
+    homeKey?: string,
   ): void {
     if (this.agenticActive() || !raw?.length) return;
 
+    const home = homeKey || this.conversations.defaultHomeKey(this.agentId);
     const restored = restoreChatMessagesFromTranscript(raw, {
+      sessionKey: home === 'websocket:main' ? undefined : home,
       onPlanHydrate: (meta) => this._onPlanHydrateFromMeta(meta),
     });
-    const mainMsgs = this.messages().filter(
-      m => !m.sessionKey || m.sessionKey === 'websocket:main',
-    );
+    const homeMsgs = this.conversations.homeMessages(this.messages(), this.agentId);
     const hasAgentic = transcriptHasAgenticTrace(raw);
     const needsWorkbench = hasAgentic && this.workbench.snapshotState().entries.length === 0;
     const hasNewRows = raw.length > this.mainTranscriptRows;
-    const hasMoreMessages = restored.length > mainMsgs.length;
+    const hasMoreMessages = restored.length > homeMsgs.length;
 
     if (
       this.mainTranscriptLoaded
@@ -1423,10 +1434,8 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
     if (hasNewRows || hasMoreMessages || !this.mainTranscriptLoaded) {
       this.messages.update(msgs => {
-        const branch = msgs.filter(
-          m => m.sessionKey && m.sessionKey !== 'websocket:main',
-        );
-        const ephemeral = mainMsgs.filter(isEphemeralChatMessage);
+        const branch = this.conversations.nonHomeMessages(msgs, this.agentId);
+        const ephemeral = homeMsgs.filter(isEphemeralChatMessage);
         const merged = mergeTranscriptPreservingEphemeral(restored, ephemeral, {
           skipToolProgress: hasAgentic,
         });
@@ -1438,26 +1447,30 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     }
 
     if (hasAgentic) {
-      this.workbench.hydrateFromTranscript(raw, { force: needsWorkbench });
+      this.workbench.hydrateFromTranscript(raw, {
+        force: needsWorkbench,
+        sessionKey: home,
+      });
       if (needsWorkbench || hasNewRows) {
         this.panels.openLeft('workbench');
       }
     }
   }
 
-  /** REST fallback for websocket:main — survives app restart when WS history races. */
-  private loadMainThreadHistory(): void {
-    if (!this.agentId || this.currentThread() !== 'websocket:main') return;
+  /** REST fallback for home thread — survives app restart when WS history races. */
+  private loadHomeThreadHistory(): void {
+    const home = this.conversations.defaultHomeKey(this.agentId);
+    if (!this.agentId || this.currentThread() !== home) return;
 
     const url = this.platform.isElectron
-      ? `${(window as any).nls?.runtimeUrl || 'http://127.0.0.1:9222'}/sessions/${this.agentId}/${encodeURIComponent('websocket:main')}`
-      : `${this.api.apiBase}/agents/${this.agentId}/sessions/${encodeURIComponent('websocket:main')}`;
+      ? `${(window as any).nls?.runtimeUrl || 'http://127.0.0.1:9222'}/sessions/${this.agentId}/${encodeURIComponent(home)}`
+      : `${this.api.apiBase}/agents/${this.agentId}/sessions/${encodeURIComponent(home)}`;
 
     this.http.get<{ messages?: unknown[] }>(url).subscribe({
       next: (res) => {
         const sessionMsgs = Array.isArray(res?.messages) ? res.messages : [];
         if (!sessionMsgs.length) return;
-        this._applyMainThreadTranscript(sessionMsgs, 'rest');
+        this._applyHomeThreadTranscript(sessionMsgs, 'rest', home);
       },
       error: () => {
         if (this.runtimeHydrateAttempts < ChatComponent.MAX_RUNTIME_HYDRATE) {
@@ -1718,7 +1731,10 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
           break;
         }
         if (Array.isArray(msg.messages) && msg.messages.length > 0) {
-          this._applyMainThreadTranscript(msg.messages, 'ws');
+          const histKey = msg.session_key || this.conversations.defaultHomeKey(this.agentId);
+          if (this.currentThread() === histKey) {
+            this._applyHomeThreadTranscript(msg.messages, 'ws', histKey);
+          }
         }
         break;
 
@@ -3777,6 +3793,10 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
   deleteThread(key: string): void {
     if (!this.conversations.isWebsocketBranch(key)) return;
+    if (this.conversations.isDefaultHome(key)) {
+      window.alert('Cannot delete the current Home thread. Reset Home to start fresh, or set another thread as Home first.');
+      return;
+    }
     const current = this.conversations.threads().find((t) => t.key === key);
     if (!window.confirm(`Delete branch "${current?.label || key}" and its history?`)) return;
     this.conversations.removeBranch(key);
@@ -3786,8 +3806,51 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       this.api.deleteSession(this.agentId, key).subscribe({ error: () => {} });
     }
     if (this.currentThread() === key) {
-      this.switchThread('websocket:main');
+      this.switchThread(this.conversations.defaultHomeKey());
     }
+  }
+
+  promoteToHome(key: string): void {
+    if (!this.agentId || !key) return;
+    if (key === this.conversations.defaultHomeKey(this.agentId)) return;
+    const label = this.conversations.displayLabel(
+      this.conversations.threads().find((t) => t.key === key)
+        || { key, label: key, channel: 'websocket' },
+      this.agentId,
+    );
+    if (!window.confirm(`Set "${label}" as Home? Opening this agent will start here. Chat history stays on each thread — nothing is moved.`)) {
+      return;
+    }
+    this.api.setDefaultHomeSession(this.agentId, key).subscribe({
+      next: () => {
+        this.conversations.setDefaultHomeForAgent(this.agentId, key);
+        this.switchThread(key);
+      },
+      error: () => {},
+    });
+  }
+
+  resetHome(): void {
+    if (!this.agentId) return;
+    if (!window.confirm(
+      'Start a fresh Home thread?\n\n'
+      + 'A new branch is created and set as Home. Your current Home stays in the list as a branch. '
+      + 'Agent knowledge (facts, memory) is unchanged.',
+    )) return;
+
+    const id = Date.now().toString(36);
+    const key = `websocket:thread:${id}`;
+    const count = this.conversations.threads().filter((t) => this.conversations.isWebsocketBranch(t.key)).length;
+    const label = `Branch ${count + 1}`;
+    this.conversations.addBranch(label, key);
+    this.api.renameSession(this.agentId, key, label).subscribe({ error: () => {} });
+    this.api.setDefaultHomeSession(this.agentId, key).subscribe({
+      next: () => {
+        this.conversations.setDefaultHomeForAgent(this.agentId, key);
+        this.switchThread(key);
+      },
+      error: () => {},
+    });
   }
 
   /** Restore thread list from the runtime's persisted session index. */
@@ -3800,6 +3863,10 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
     this.http.get<any>(url).subscribe({
       next: (res) => {
+        const defaultHome = (res?.default_home_session_key || 'websocket:main').trim();
+        if (defaultHome) {
+          this.conversations.setDefaultHomeForAgent(this.agentId, defaultHome);
+        }
         const sessions: Record<string, any> = res?.sessions || {};
         const restored: ConversationThread[] = [];
         for (const [key, meta] of Object.entries(sessions) as [string, any][]) {
@@ -3828,8 +3895,14 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
           this.conversations.renameBranch(key, label);
         }
         const current = this.currentThread();
+        const snap = this.chatUiSnapshot.take(this.agentId);
         if (!this.conversations.threads().some((t) => t.key === current)) {
-          this.currentThread.set('websocket:main');
+          this.switchThread(defaultHome);
+        } else if (!this.agentSessionsBootstrapped.has(this.agentId)) {
+          this.agentSessionsBootstrapped.add(this.agentId);
+          if (!snap?.currentThread && current === 'websocket:main' && defaultHome !== 'websocket:main') {
+            this.switchThread(defaultHome);
+          }
         }
       },
       error: () => {},
@@ -3837,7 +3910,6 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
   }
 
   private loadThreadHistory(sessionKey: string): void {
-    if (sessionKey === 'websocket:main') return;
     if (!this.agentId) return;
 
     const url = this.platform.isElectron

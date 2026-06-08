@@ -24,6 +24,16 @@ from nls.brain.identity_renderer import apply_name_prompt_placeholders
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_HOME_SESSION_KEY = "websocket:main"
+
+
+def is_valid_home_session_key(session_key: str) -> bool:
+    """Home must be the legacy main key or a websocket branch."""
+    sk = (session_key or "").strip()
+    if sk == DEFAULT_HOME_SESSION_KEY:
+        return True
+    return sk.startswith("websocket:thread:")
+
 # ---------------------------------------------------------------------------
 # Inline tool_call block regex — supports both markdown fences and XML tags
 # since the model sometimes emits ```tool_call and sometimes <tool_call>.
@@ -343,6 +353,7 @@ class AgentRuntime:
             self._event_logger = None
 
         # Restore persisted state
+        self.default_home_session_key = DEFAULT_HOME_SESSION_KEY
         self._load_session_meta()
 
         # Rehydrate credentials from vault on initial load
@@ -3731,6 +3742,9 @@ class AgentRuntime:
                 self.session_delegate_lock_orchestrator = bool(
                     meta.get("delegate_lock_orchestrator")
                 )
+            _home = (meta.get("default_home_session_key") or "").strip()
+            if is_valid_home_session_key(_home):
+                self.default_home_session_key = _home
             logger.info(
                 "[Agent] agent=%s: restored meta (turns=%d, sleeps=%d)",
                 self.agent_id, self._turn_count, self._sleep_count,
@@ -3806,6 +3820,9 @@ class AgentRuntime:
         if self.session_delegate_route:
             meta["delegate_route"] = self.session_delegate_route
         meta["delegate_lock_orchestrator"] = self.session_delegate_lock_orchestrator
+        _home = (getattr(self, "default_home_session_key", None) or "").strip()
+        if is_valid_home_session_key(_home):
+            meta["default_home_session_key"] = _home
         meta_path = self.agent_dir / "session_meta.json"
         try:
             with open(meta_path, "w", encoding="utf-8") as f:
@@ -5424,6 +5441,35 @@ class AgentRuntime:
             return self.channel_registry.session_router.delete_session(session_key)
         except Exception:
             return False
+
+    def get_default_home_session_key(self) -> str:
+        key = (getattr(self, "default_home_session_key", None) or "").strip()
+        if is_valid_home_session_key(key):
+            return key
+        return DEFAULT_HOME_SESSION_KEY
+
+    def set_default_home_session_key(self, session_key: str) -> bool:
+        sk = (session_key or "").strip()
+        if not is_valid_home_session_key(sk):
+            return False
+        self.default_home_session_key = sk
+        meta_path = self.agent_dir / "session_meta.json"
+        meta: dict[str, Any] = {}
+        if meta_path.exists():
+            try:
+                with open(meta_path, "r", encoding="utf-8") as f:
+                    loaded = json.load(f)
+                if isinstance(loaded, dict):
+                    meta = loaded
+            except Exception:
+                meta = {}
+        meta["default_home_session_key"] = sk
+        try:
+            with open(meta_path, "w", encoding="utf-8") as f:
+                json.dump(meta, f, indent=2, ensure_ascii=False)
+        except Exception:
+            return False
+        return True
 
     def update_session_label(self, session_key: str, label: str) -> bool:
         if self.channel_registry is None:
