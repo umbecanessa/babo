@@ -6,6 +6,9 @@ Three execution slots, each representing a different depth of processing:
   FocusSlot  — lightweight lock, short agentic loop (5-10 iters)
   DeepSlot   — full lock, complete agentic loop with delegation (40+ iters)
 
+Channel sessions use additional DeepSlots via ``get_deep_for_context(session_key)``
+so WhatsApp/Telegram work keeps bash/tools while Home holds the primary slot.
+
 The key improvement over ``_agentic_lock``: the micro slot can run
 concurrently with a deep slot.  A WhatsApp status query gets answered
 in ~2 seconds even while a 40-iteration orchestration loop is running.

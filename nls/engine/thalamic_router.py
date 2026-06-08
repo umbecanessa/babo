@@ -265,8 +265,8 @@ class ThalamicRouter:
         if _is_greeting(text):
             return EngagementDepth.MICRO
 
-        # Direct @mention / DM / policy-triggered reply — never queue behind
-        # background daydreaming; use the focus slot while deep work runs.
+        # Direct @mention / DM / policy-triggered reply — full agentic on a
+        # per-session deep slot while the primary (Home) slot is busy.
         if user_direct:
             return EngagementDepth.FOCUS
 

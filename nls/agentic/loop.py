@@ -1830,6 +1830,22 @@ async def run_loop(
         elif state.active_mode == AgentMode.EXECUTING:
             state.active_mode = AgentMode.CHAT
             invalidate_tool_policy_cache(state)
+
+    if dispatch_source.startswith("user:channel"):
+        from nls.agentic.channel_dispatch_policy import apply_channel_loop_policy
+
+        _channel_triage_intent = (
+            getattr(pre_triage, "intent", "") if pre_triage is not None else ""
+        )
+        _profile = apply_channel_loop_policy(
+            state,
+            user_input=user_input,
+            dispatch_source=dispatch_source,
+            profile=_profile,
+            agent_dir=getattr(hooks, "agent_dir", None) if hooks else None,
+            triage_intent=_channel_triage_intent,
+        )
+
     if state.goals:
         from nls.agentic.profile_guard_policy import normalize_goals_for_profile
 

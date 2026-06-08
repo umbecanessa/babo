@@ -43,8 +43,27 @@ class SurfaceInboxItem:
     delivered_to_loop: bool = False
 
 
-# Re-steer cross-surface items that were shown but not handled on target surface.
+_SURFACE_INBOX_PREFIX = "[SURFACE INBOX"
+_SURFACE_INBOX_STEERING_HEADER = (
+    "[SURFACE INBOX — cross-channel awareness, NOT your current Home task]\n"
+    "These messages arrived on other channels while you work here. "
+    "Do NOT treat them as the owner's current Home request and do NOT "
+    "reply in chat as if they were tagged on Telegram. Continue the active "
+    "Home task unless the owner explicitly asked you to answer on that channel.\n"
+    "Pending:"
+)
+
+
+# Re-steer on channel/background turns when still unhandled. Home chat uses
+# Cryptex ring summary only — channel replies go through deferred CHANNEL events.
 _RESURFACE_AFTER_SECONDS = 120.0
+# Drop ancient unhandled inbox rows so stale greetings stop accumulating.
+_STALE_UNHANDLED_SECONDS = 86400.0 * 2
+
+
+def _is_home_foreground_session(session_key: str) -> bool:
+    sk = (session_key or "").strip()
+    return sk in ("websocket:main", "") or sk.startswith("websocket:")
 
 
 def _agents_dir() -> Path | None:
@@ -74,10 +93,13 @@ def load_agent_inbox(agent_id: str) -> None:
     path = _inbox_path(agent_id)
     if path is None or not path.is_file():
         _inboxes.setdefault(agent_id, [])
+        prune_stale_surface_inbox(agent_id)
         return
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(raw, list):
+            _inboxes.setdefault(agent_id, [])
+            prune_stale_surface_inbox(agent_id)
             return
         items: list[SurfaceInboxItem] = []
         for row in raw[-_MAX_ITEMS_PER_AGENT:]:
@@ -100,6 +122,7 @@ def load_agent_inbox(agent_id: str) -> None:
     except Exception as exc:
         logger.warning("Surface inbox [%s]: load failed: %s", agent_id, exc)
         _inboxes.setdefault(agent_id, [])
+    prune_stale_surface_inbox(agent_id)
 
 
 def _persist_inbox(agent_id: str) -> None:
@@ -206,7 +229,7 @@ def _runtime_is_busy(runtime: Any) -> bool:
 
 
 def should_defer_cross_surface(runtime: Any, session_key: str) -> bool:
-    """True when another surface is mid-turn — queue background channel processing."""
+    """True when another surface is mid-turn — record inbox for awareness only."""
     if not session_key:
         return False
     if not _runtime_is_busy(runtime):
@@ -281,57 +304,110 @@ def mark_session_inbox_handled(agent_id: str, session_key: str) -> None:
             pass
 
 
+def prune_stale_surface_inbox(
+    agent_id: str,
+    *,
+    max_age_seconds: float = _STALE_UNHANDLED_SECONDS,
+) -> int:
+    """Mark very old unhandled inbox items handled so they stop polluting awareness."""
+    if not agent_id:
+        return 0
+    load_agent_inbox(agent_id)
+    now = time.time()
+    changed = False
+    pruned = 0
+    for item in _inboxes.get(agent_id, []):
+        if item.handled:
+            continue
+        if (now - float(item.received_at or 0)) <= max_age_seconds:
+            continue
+        item.handled = True
+        changed = True
+        pruned += 1
+    if changed:
+        _persist_inbox(agent_id)
+        logger.info(
+            "Surface inbox [%s]: pruned %d stale unhandled item(s)",
+            agent_id,
+            pruned,
+        )
+    return pruned
+
+
 def drain_surface_inbox_steering(
     agent_id: str,
     active_session_key: str,
 ) -> list[dict[str, str]]:
-    """Non-delivered cross-surface items → user-role steering for the active loop."""
+    """Steer pending cross-surface items into orchestrator loops only.
+
+    Home and all external channel sessions (Discord, Slack, Telegram,
+    WhatsApp, …) stay conversation-clean. Cross-channel awareness lives in
+    the Cryptex Channels ring and ``channel_history`` — not loop injection.
+    """
+    if _is_home_foreground_session(active_session_key):
+        return []
+    try:
+        from nls.skills.surface_send import is_surface_session_key
+
+        if is_surface_session_key(active_session_key):
+            return []
+    except Exception:
+        pass
+
     load_agent_inbox(agent_id)
     items = _inboxes.get(agent_id, [])
     if not items:
         return []
 
-    msgs: list[dict[str, str]] = []
-    changed = False
     now = time.time()
+    batch: list[SurfaceInboxItem] = []
+    changed = False
     for item in items:
         if item.handled:
             continue
         if item.session_key == active_session_key:
             continue
-        if item.steered_at > 0 and (now - item.steered_at) < _RESURFACE_AFTER_SECONDS:
-            continue
+        if item.steered_at > 0:
+            if (now - item.steered_at) < _RESURFACE_AFTER_SECONDS:
+                continue
         item.steered_at = now
+        batch.append(item)
         changed = True
-        label = item.channel_label or item.channel
-        msgs.append({
-            "role": "user",
-            "content": (
-                f"[SURFACE INBOX — {item.channel} {label}] "
-                f"{item.sender_name}: {item.content}"
-            ),
-        })
+
+    if not batch:
+        return []
 
     if changed:
         _persist_inbox(agent_id)
 
-    if msgs:
-        logger.info(
-            "Surface inbox [%s]: draining %d item(s) into active loop (session=%s)",
-            agent_id,
-            len(msgs),
-            active_session_key,
+    lines: list[str] = []
+    for item in batch:
+        label = item.channel_label or item.channel
+        lines.append(
+            f"  • [{item.channel} {label}] "
+            f"{item.sender_name}: {item.preview or item.content[:_PREVIEW_CHARS]}"
         )
-        try:
-            from server.main import app
 
-            am = getattr(app.state, "agent_manager", None)
-            rt = am.get_runtime(agent_id) if am else None
-            if rt is not None:
-                _sync_surface_inbox_ring(rt, agent_id)
-        except Exception:
-            pass
-    return msgs
+    logger.info(
+        "Surface inbox [%s]: draining %d item(s) into active loop (session=%s)",
+        agent_id,
+        len(batch),
+        active_session_key,
+    )
+    try:
+        from server.main import app
+
+        am = getattr(app.state, "agent_manager", None)
+        rt = am.get_runtime(agent_id) if am else None
+        if rt is not None:
+            _sync_surface_inbox_ring(rt, agent_id)
+    except Exception:
+        pass
+
+    return [{
+        "role": "system",
+        "content": _SURFACE_INBOX_STEERING_HEADER + "\n" + "\n".join(lines),
+    }]
 
 
 def format_surface_inbox_summary(agent_id: str) -> str:
@@ -340,7 +416,11 @@ def format_surface_inbox_summary(agent_id: str) -> str:
     pending = [i for i in _inboxes.get(agent_id, []) if not i.handled]
     if not pending:
         return ""
-    lines = [f"Surface inbox: {len(pending)} unhandled on other channel(s):"]
+    lines = [
+        f"Surface inbox: {len(pending)} unhandled on other channel(s).",
+        "Use channel_history(action='recent'|'search', session_key=…) for "
+        "lookups — previews here are awareness only, not the active turn.",
+    ]
     for item in pending[-5:]:
         label = item.channel_label or item.channel
         tag = " (steered, awaiting reply)" if item.steered_at > 0 else ""
@@ -441,3 +521,69 @@ def clear_agent_inbox(agent_id: str) -> None:
             path.unlink()
         except Exception:
             pass
+
+
+def build_channel_replay_events(agent_id: str) -> list[Any]:
+    """Build CHANNEL_MESSAGE events for unhandled cross-surface inbox items."""
+    load_agent_inbox(agent_id)
+    items = [
+        i for i in _inboxes.get(agent_id, [])
+        if not i.handled
+    ]
+    if not items:
+        return []
+
+    from nls.skills.surface_send import (
+        _fallback_reply_target_from_key,
+        is_surface_session_key,
+    )
+
+    events: list[Any] = []
+    for item in items[:8]:
+        if not is_surface_session_key(item.session_key):
+            continue
+        channel = (item.channel or "").strip().lower()
+        if not channel:
+            parts = item.session_key.split(":")
+            channel = parts[0] if parts else ""
+        reply_target = _fallback_reply_target_from_key(item.session_key, channel)
+        if not reply_target:
+            continue
+        preview = (item.content or item.preview or "").strip()
+        if not preview:
+            continue
+        user_input = (
+            f"[CHANNEL: {channel} | reply_to: {reply_target} | "
+            f"Your text response will be automatically sent back. "
+            f"Do NOT manually call {channel}_send.]\n\n"
+            f"[Pending cross-surface inbox — replay on startup]\n"
+            f"{item.sender_name}: {preview}"
+        )
+        try:
+            from nls.engine.events import AgentEvent, EventType
+        except ImportError:
+            return events
+
+        events.append(AgentEvent(
+            type=EventType.CHANNEL_MESSAGE,
+            source=channel,
+            payload={
+                "user_input": user_input,
+                "session_key": item.session_key,
+                "channel_name": channel,
+                "reply_target": reply_target,
+                "needs_thinking": True,
+                "agent_id": agent_id,
+                "history": [],
+                "user_direct": True,
+                "surface_inbox_replay": True,
+            },
+        ))
+
+    if events:
+        logger.info(
+            "Surface inbox [%s]: built %d channel replay event(s)",
+            agent_id,
+            len(events),
+        )
+    return events

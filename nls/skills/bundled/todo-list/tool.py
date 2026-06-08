@@ -7,6 +7,7 @@ import logging
 from typing import Any
 
 from nls.tools.agent_tools.base import ToolResult
+from .idle_policy import infer_idle_eligible, looks_like_investigation_todo
 from .store import TodoStore, PRIORITIES, STATUSES
 
 logger = logging.getLogger(__name__)
@@ -46,7 +47,8 @@ class TodoTool:
             "plan(action='complete') auto-mark it done. "
             "For multi-step work, create a plan linked to the "
             "todo via plan(action='create', todo_id=<id>). "
-            "Tasks marked idle_eligible are picked up during idle time."
+            "Bug/QA/investigation todos MUST set idle_eligible=True so "
+            "background work can pick them up."
         )
 
     @property
@@ -85,8 +87,9 @@ class TodoTool:
                 "idle_eligible": {
                     "type": "boolean",
                     "description": (
-                        "If true, the agent will work on this task during "
-                        "idle time (autonomous dreams)."
+                        "If true, the agent picks this up during idle "
+                        "background time. Default true for bug/QA/channel "
+                        "todos; set explicitly when deferring work."
                     ),
                 },
                 "id": {
@@ -230,7 +233,9 @@ class TodoTool:
 
         status = params.get("status", "inbox")
         list_id = params.get("list_id", "inbox")
-        idle_eligible = params.get("idle_eligible", False)
+        idle_eligible = infer_idle_eligible(
+            params, title=title, description=description,
+        )
 
         # Auto-triage: if explicitly classified into a list or marked
         # idle-eligible, promote from "inbox" (untriaged) to "queued".
@@ -363,6 +368,10 @@ class TodoTool:
                 is_error=True,
             )
 
+        guard = self._investigation_complete_guard(item)
+        if guard is not None:
+            return guard
+
         item = self._store.update(item_id, status="done")
         self._sync_idle_intention()
         await self._broadcast("completed", item)
@@ -396,6 +405,13 @@ class TodoTool:
                 updates[key] = params[key]
         if not updates:
             return ToolResult(content="No fields to update.", is_error=True)
+
+        if updates.get("status") == "done":
+            existing = self._store.get(item_id)
+            if existing is not None:
+                guard = self._investigation_complete_guard(existing)
+                if guard is not None:
+                    return guard
 
         item = self._store.update(item_id, **updates)
         if item is None:
@@ -498,6 +514,27 @@ class TodoTool:
     # ------------------------------------------------------------------
     # WM + WebSocket helpers (delegate to manager when available)
     # ------------------------------------------------------------------
+
+    def _investigation_complete_guard(self, item: Any) -> ToolResult | None:
+        """Block empty completes on idle bug/QA todos without a linked plan."""
+        if not item.idle_eligible or item.plan_id:
+            return None
+        if not looks_like_investigation_todo(
+            item.title, item.description, item.tags,
+        ):
+            return None
+        if (item.notes or "").strip():
+            return None
+        return ToolResult(
+            content=(
+                f"Todo [{item.id}] is investigatory work — do real debugging "
+                f"first (logs, repo search, plan steps), add notes summarizing "
+                f"what you verified, then complete. Or create "
+                f"plan(action='create', todo_id='{item.id}') and finish via "
+                f"plan(action='complete')."
+            ),
+            is_error=True,
+        )
 
     def _sync_idle_intention(self) -> None:
         if self._manager:

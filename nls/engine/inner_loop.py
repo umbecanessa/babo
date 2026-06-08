@@ -225,6 +225,26 @@ class InnerLoop:
         logger.info(
             "InnerLoop started for agent %s", self.runtime.agent_id,
         )
+        asyncio.create_task(self._replay_pending_channel_inbox())
+
+    async def _replay_pending_channel_inbox(self) -> None:
+        """Replay cross-surface inbox channel messages after startup settles."""
+        await asyncio.sleep(2.0)
+        if self._interrupted or not self._running:
+            return
+        rt = self.runtime
+        try:
+            from nls.runtime.surface_inbox import build_channel_replay_events
+
+            events = build_channel_replay_events(rt.agent_id)
+            for ev in events:
+                self.push_event(ev)
+        except Exception:
+            logger.debug(
+                "Agent %s: surface inbox channel replay skipped",
+                rt.agent_id,
+                exc_info=True,
+            )
 
     def stop(self, reason: str = "external") -> None:
         """Stop the inner loop."""
@@ -550,6 +570,24 @@ class InnerLoop:
         agent_id = self.runtime.agent_id
         rt = self.runtime
 
+        if not getattr(rt, "is_busy", False):
+            try:
+                from nls.skills.channel_processing import flush_pending_channel_events
+
+                flushed = flush_pending_channel_events(agent_id, self)
+                if flushed:
+                    logger.info(
+                        "Agent %s: flushed %d deferred channel event(s) after foreground idle",
+                        agent_id,
+                        flushed,
+                    )
+            except Exception:
+                logger.debug(
+                    "Agent %s: deferred channel flush skipped",
+                    agent_id,
+                    exc_info=True,
+                )
+
         # Safety guard: if the ANS has already transitioned to sleeping
         # (e.g. user-triggered manual sleep), stop the loop immediately
         # so DMN and drives don't keep firing during sleep.
@@ -568,9 +606,9 @@ class InnerLoop:
 
         # --- Event-driven dispatch from priority queue (Phase 2) ---
         # Drain the event queue first (higher-priority events first).
-        # Falls back to legacy _pending_dispatches for backward compat.
+        # Channel messages may run on per-session deep slots while Home is busy.
         _dispatched_from_eq = False
-        if not self.event_queue.is_empty and self._can_dispatch_v2(rt):
+        if not self.event_queue.is_empty and self._can_dispatch_event_queue(rt):
             _dispatched_from_eq = await self._dispatch_from_event_queue(rt)
 
         # Legacy path: pending autonomous dispatches
@@ -1462,34 +1500,16 @@ class InnerLoop:
             return True
 
         _slot_mgr = getattr(rt, "_slot_manager", None)
-        _deep_locked = (
+        _primary_deep_busy = (
             _slot_mgr.deep.is_busy if _slot_mgr is not None else rt.is_busy
         )
 
-        # ── FOCUS while deep slot is held: lightweight reply on the channel ──
-        if depth == EngagementDepth.FOCUS and _deep_locked:
-            if user_input:
-                try:
-                    from nls.engine.micro_inference import micro_respond
-                    _tm = getattr(rt, "_team_manager", None)
-                    if rt.inference_available():
-                        await micro_respond(
-                            runtime=rt,
-                            user_input=user_input,
-                            team_manager=_tm,
-                            history=history,
-                            reply_channel=_reply,
-                        )
-                except Exception:
-                    logger.warning(
-                        "Agent %s: channel focus/micro dispatch failed",
-                        agent_id, exc_info=True,
-                    )
-            if session_key:
-                from nls.runtime.surface_inbox import mark_session_inbox_handled
-
-                mark_session_inbox_handled(agent_id, session_key)
-            return True
+        _parallel_ctx = self._resolve_channel_parallel_context(
+            session_key=session_key,
+            channel_name=channel_name,
+            reply_target=reply_target,
+            primary_deep_busy=_primary_deep_busy,
+        )
 
         # ── FOCUS / DEEP: full agentic processing ──
         if not user_input:
@@ -1500,7 +1520,8 @@ class InnerLoop:
             user_input = (
                 f"[CHANNEL: {channel_name} | reply_to: {reply_target} | "
                 f"Your text response will be automatically sent back. "
-                f"Do NOT manually call {channel_name}_send.]\n\n"
+                f"Do NOT manually call {channel_name}_send. "
+                f"Use communicate(message=...) for progress updates during long work.]\n\n"
                 + user_input
             )
 
@@ -1509,6 +1530,7 @@ class InnerLoop:
         # Build copilot_queue + progress reporter
         copilot_queue = asyncio.Queue()
         on_event_cb = None
+        _prev_tm_queue = None
 
         if registry is not None and channel_name and reply_target:
             adapter = registry.get(channel_name)
@@ -1516,18 +1538,21 @@ class InnerLoop:
                 reporter = ChannelProgressReporter(adapter, reply_target, agent_id)
                 on_event_cb = reporter.on_event
 
-        # Wire copilot_queue into TeamManager
+        # Wire copilot_queue into TeamManager (restore after dispatch — parallel
+        # channel work must not leave Home's queue overwritten).
         _tm = getattr(rt, "_team_manager", None)
         if _tm is not None:
+            _prev_tm_queue = getattr(_tm, "_copilot_queue", None)
             _tm._copilot_queue = copilot_queue
 
-        # Preempt daydream/DMN — channel dispatch runs inside the inner loop,
-        # so cancel background work without pausing the breath cycle.
-        self.preempt_background()
-        for _ in range(10):
-            if not rt.is_busy:
-                break
-            await asyncio.sleep(0.3)
+        # Preempt daydream/DMN when taking the primary deep slot. Parallel
+        # channel sessions use their own deep slot and must not wait on Home.
+        if _parallel_ctx is None:
+            self.preempt_background()
+            for _ in range(10):
+                if not rt.is_busy:
+                    break
+                await asyncio.sleep(0.3)
 
         # Register pending queue for ask_user routing
         from nls.skills.channel_processing import _pending_queues
@@ -1547,6 +1572,7 @@ class InnerLoop:
                     on_event=on_event_cb,
                     source="user:channel",
                     session_key=session_key or "",
+                    context_id=_parallel_ctx,
                 )
             else:
                 result = await rt.process_message_agentic_v2(
@@ -1599,6 +1625,8 @@ class InnerLoop:
         finally:
             if _queue_key:
                 _pending_queues.pop(_queue_key, None)
+            if _tm is not None:
+                _tm._copilot_queue = _prev_tm_queue
 
         return True
 
@@ -1798,6 +1826,55 @@ class InnerLoop:
             return False
         return True
 
+    def _can_dispatch_channel_parallel(self, rt: Any) -> bool:
+        """Whether inbound channel events may run while Home holds the primary deep slot."""
+        if getattr(self, "_autonomous_executing", False):
+            return False
+        use_v2 = rt.config.get("agency", {}).get(
+            "agentic_loop", {},
+        ).get("use_v2", False)
+        if not use_v2 or not rt.is_agentic_enabled():
+            return False
+        if not (
+            self._use_model_a
+            or (
+                hasattr(rt, "inference_available")
+                and rt.inference_available()
+            )
+        ):
+            return False
+        return True
+
+    def _can_dispatch_event_queue(self, rt: Any) -> bool:
+        """Event queue drain — includes parallel channel work while user-busy on Home."""
+        if self._can_dispatch_v2(rt):
+            return True
+        if self.event_queue.is_empty:
+            return False
+        if not self._can_dispatch_channel_parallel(rt):
+            return False
+        from nls.engine.events import EventType
+
+        return EventType.CHANNEL_MESSAGE in self.event_queue.peek_types()
+
+    @staticmethod
+    def _resolve_channel_parallel_context(
+        *,
+        session_key: str,
+        channel_name: str,
+        reply_target: str,
+        primary_deep_busy: bool,
+    ) -> str | None:
+        """Per-session deep slot so channel turns keep full tools while Home is busy."""
+        if not primary_deep_busy:
+            return None
+        sk = (session_key or "").strip()
+        if sk:
+            return sk
+        if channel_name and reply_target:
+            return f"channel:{channel_name}:{reply_target}"
+        return None
+
     def _build_mission_context(self, rt: Any, source: str) -> str:
         """Build a structured preamble for autonomous dispatches (§1.1).
 
@@ -1826,6 +1903,7 @@ class InnerLoop:
                     and isinstance(m.get("content"), str)
                     and not m.get("metadata", {}).get("autonomous")
                     and not _NAMING_RE.match(m.get("content", ""))
+                    and not m.get("content", "").startswith("[SURFACE INBOX")
                     and not any(
                         m.get("content", "").startswith(p)
                         for p in InnerLoop._STALL_NUDGE_PREFIXES
@@ -2210,6 +2288,13 @@ class InnerLoop:
             if _aborted:
                 self._last_agentic_abort_ts = time.time()
 
+            self._last_autonomous_meta = {
+                "aborted": _aborted,
+                "tool_calls": _tc,
+                "exit_reason": getattr(result, "exit_reason", "") or "",
+                "final": final,
+            }
+
             logger.info(
                 "Agent %s: autonomous dispatch completed (%s, %d chars, %d iters)",
                 agent_id, source, len(final), _iters,
@@ -2311,11 +2396,16 @@ class InnerLoop:
                     })
                 except Exception:
                     pass
+            self._last_autonomous_meta = {
+                "aborted": True,
+                "tool_calls": 0,
+                "exit_reason": "error",
+                "final": "",
+            }
             return ""
         finally:
             self._autonomous_executing = False
             self._autonomous_abort = None
-            # Clear the background activity slot from Cryptex
             if _wm is not None:
                 try:
                     _wm.remove_by_metadata("bg_slot_id", _bg_slot_id)
@@ -2584,6 +2674,22 @@ class InnerLoop:
 
     _DISPATCHABLE_SOURCES = frozenset(("todo-list", "user", "system"))
 
+    @staticmethod
+    def _wm_todo_dispatch_succeeded(meta: dict[str, Any] | None) -> bool:
+        """True only when an idle todo background run actually finished work."""
+        if not meta:
+            return False
+        if meta.get("aborted"):
+            return False
+        if meta.get("exit_reason") != "task_complete":
+            return False
+        if int(meta.get("tool_calls") or 0) <= 0:
+            return False
+        final = str(meta.get("final") or "").strip()
+        if final.startswith("[Loop stopped:"):
+            return False
+        return bool(final)
+
     async def _maybe_dispatch_wm_goal(self, rt: Any) -> bool:
         """Check WM for tactical goals and dispatch via agentic v2.
 
@@ -2666,6 +2772,7 @@ class InnerLoop:
         final = await self._dispatch_autonomous_v2(
             rt, dispatch_prompt, source=target.source,
         )
+        dispatch_meta = getattr(self, "_last_autonomous_meta", None) or {}
 
         # Clean up WM: remove the dispatched goal that triggered this
         # run.  Plan-sourced goals are handled by on_agent_end (success
@@ -2685,8 +2792,20 @@ class InnerLoop:
             except Exception:
                 pass
 
-        if final and todo_id:
-            await self._update_todo_status(rt, todo_id, "done")
+        if todo_id:
+            if self._wm_todo_dispatch_succeeded(dispatch_meta):
+                await self._update_todo_status(rt, todo_id, "done")
+            else:
+                await self._update_todo_status(rt, todo_id, "queued")
+                logger.info(
+                    "Agent %s: todo [%s] re-queued after incomplete "
+                    "background dispatch (aborted=%s, tools=%s, exit=%s)",
+                    rt.agent_id,
+                    todo_id,
+                    dispatch_meta.get("aborted"),
+                    dispatch_meta.get("tool_calls"),
+                    dispatch_meta.get("exit_reason"),
+                )
 
         return True
 

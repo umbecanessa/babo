@@ -55,9 +55,7 @@ def test_record_and_drain_cross_surface():
     assert pending_count("lead-1") == 1
 
     msgs = drain_surface_inbox_steering("lead-1", "websocket:main")
-    assert len(msgs) == 1
-    assert "SURFACE INBOX" in msgs[0]["content"]
-    assert "Mod Bot online" in msgs[0]["content"]
+    assert msgs == []
     assert pending_count("lead-1") == 1
 
 

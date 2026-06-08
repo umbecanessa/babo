@@ -799,20 +799,62 @@ class ChannelRelayClient:
             len(json.dumps(payload)) if payload else 0,
         )
 
-        try:
-            import httpx
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                resp = await client.post(endpoint, json=payload)
-                if resp.status_code >= 400:
+        await self._post_local_channel_webhook(endpoint, payload, channel)
+
+    async def _post_local_channel_webhook(
+        self,
+        endpoint: str,
+        payload: dict[str, Any],
+        channel: str,
+    ) -> None:
+        """POST to local skill webhook with retries while Python boots."""
+        import httpx
+
+        retry_delays = (0.0, 0.5, 1.0, 2.0, 4.0, 8.0)
+        last_exc: Exception | None = None
+        for attempt, delay in enumerate(retry_delays):
+            if delay:
+                await asyncio.sleep(delay)
+            try:
+                async with httpx.AsyncClient(timeout=120.0) as client:
+                    resp = await client.post(endpoint, json=payload)
+                    if resp.status_code < 400:
+                        if attempt > 0:
+                            logger.info(
+                                "ChannelRelay [%s]: local %s webhook OK after %d retries",
+                                self._agent_id, channel, attempt,
+                            )
+                        return
+                    last_exc = RuntimeError(f"HTTP {resp.status_code}")
+                    if resp.status_code in (404, 502, 503) and attempt < len(retry_delays) - 1:
+                        logger.info(
+                            "ChannelRelay [%s]: local %s webhook returned %d — retrying",
+                            self._agent_id, channel, resp.status_code,
+                        )
+                        continue
                     logger.warning(
                         "ChannelRelay [%s]: local %s webhook returned %d",
                         self._agent_id, channel, resp.status_code,
                     )
-        except Exception as exc:
+                    return
+            except Exception as exc:
+                last_exc = exc
+                if attempt < len(retry_delays) - 1:
+                    logger.info(
+                        "ChannelRelay [%s]: local %s webhook not ready (%r) — retrying",
+                        self._agent_id, channel, exc,
+                    )
+                    continue
+                logger.error(
+                    "ChannelRelay [%s]: failed to route %s message locally: %r",
+                    self._agent_id, channel, exc,
+                    exc_info=True,
+                )
+                return
+        if last_exc is not None:
             logger.error(
                 "ChannelRelay [%s]: failed to route %s message locally: %r",
-                self._agent_id, channel, exc,
-                exc_info=True,
+                self._agent_id, channel, last_exc,
             )
 
     async def _handle_skill_install(self, msg: dict[str, Any]) -> None:
@@ -996,6 +1038,10 @@ _TOOL_PROGRESS_LABELS: dict[str, str] = {
     "read": "Reading a file...",
     "write": "Writing a file...",
     "edit": "Editing a file...",
+    "grep": "Searching the codebase...",
+    "glob": "Scanning files...",
+    "list_dir": "Listing files...",
+    "todo": "Updating tasks...",
     "delegate": "Delegating a sub-task...",
     "plan": "Updating the plan...",
     "skill": "Using a skill...",
@@ -1004,35 +1050,80 @@ _TOOL_PROGRESS_LABELS: dict[str, str] = {
     "escalate": "Asking orchestrator for help...",
 }
 
+# Tools that should never spam channel progress (no user-visible action).
 _SILENT_TOOLS = frozenset({
-    "bash", "read", "write", "edit", "todo", "plan",
-    "skill", "screenshot", "codebase_index",
+    "screenshot", "codebase_index",
 })
 
-_MIN_TOOL_PROGRESS_INTERVAL_S = 30.0
-_MIN_STEP_PROGRESS_INTERVAL_S = 60.0
-_MILESTONE_EVERY_N_ITERATIONS = 10
+_MIN_TOOL_PROGRESS_INTERVAL_S = 15.0
+_MIN_STEP_PROGRESS_INTERVAL_S = 30.0
+_MILESTONE_EVERY_N_ITERATIONS = 5
+
+
+def _truncate(text: str, limit: int = 70) -> str:
+    text = (text or "").replace("\n", " ").strip()
+    if len(text) <= limit:
+        return text
+    return text[:limit].rstrip() + "..."
 
 
 def _rich_tool_label(tool_name: str, args: dict) -> str | None:
     """Build a context-aware progress label from tool name + arguments."""
     if tool_name in _SILENT_TOOLS:
         return None
+    if tool_name == "bash":
+        cmd = (args.get("command") or args.get("cmd") or "").strip()
+        if cmd:
+            return f"Running: {_truncate(cmd)}"
+        return _TOOL_PROGRESS_LABELS.get("bash")
+    if tool_name == "read":
+        path = args.get("path") or args.get("file") or ""
+        if path:
+            return f"Reading: {_truncate(str(path), 60)}"
+        return _TOOL_PROGRESS_LABELS.get("read")
+    if tool_name in ("write", "edit"):
+        path = args.get("path") or args.get("file") or ""
+        verb = "Writing" if tool_name == "write" else "Editing"
+        if path:
+            return f"{verb}: {_truncate(str(path), 60)}"
+        return _TOOL_PROGRESS_LABELS.get(tool_name)
+    if tool_name == "grep":
+        pattern = args.get("pattern") or args.get("query") or ""
+        if pattern:
+            return f"Searching code: {_truncate(str(pattern), 50)}"
+        return _TOOL_PROGRESS_LABELS.get("grep")
+    if tool_name in ("glob", "list_dir"):
+        pattern = args.get("pattern") or args.get("glob_pattern") or args.get("path") or ""
+        if pattern:
+            return f"Finding files: {_truncate(str(pattern), 50)}"
+        return _TOOL_PROGRESS_LABELS.get(tool_name)
+    if tool_name == "todo":
+        action = args.get("action") or ""
+        title = args.get("title") or args.get("text") or ""
+        if title:
+            return f"Todo ({action or 'update'}): {_truncate(str(title), 50)}"
+        if action:
+            return f"Todo: {action}"
+        return _TOOL_PROGRESS_LABELS.get("todo")
+    if tool_name == "plan":
+        return _TOOL_PROGRESS_LABELS.get("plan")
+    if tool_name == "skill":
+        name = args.get("skill") or args.get("name") or ""
+        if name:
+            return f"Using skill: {_truncate(str(name), 50)}"
+        return _TOOL_PROGRESS_LABELS.get("skill")
     if tool_name in ("web_search", "web_fetch"):
         q = args.get("query", "") or args.get("url", "")
         if q:
-            short = q[:60] + ("..." if len(q) > 60 else "")
-            return f"Searching: {short}"
+            return f"Searching: {_truncate(str(q), 60)}"
     if tool_name in ("gmail_search", "gmail_read"):
         q = args.get("query", "") or args.get("subject", "") or args.get("message_id", "")
         if q:
-            short = q[:60] + ("..." if len(q) > 60 else "")
-            return f"Email: {short}"
+            return f"Email: {_truncate(str(q), 60)}"
     if tool_name == "delegate":
         task = args.get("task", "")
         if task:
-            short = task[:50] + ("..." if len(task) > 50 else "")
-            return f"Delegating: {short}"
+            return f"Delegating: {_truncate(str(task), 50)}"
     return _TOOL_PROGRESS_LABELS.get(tool_name)
 
 
@@ -1076,6 +1167,8 @@ class ChannelProgressReporter:
         self._agent_id = agent_id
         self._last_send = 0.0
         self._plan_announced = False
+        self._started_announced = False
+        self._tool_progress_count = 0
         self._iteration = 0
         self._max_iterations = 40
         self._last_tool_label = ""
@@ -1112,13 +1205,16 @@ class ChannelProgressReporter:
                 await self._send(
                     f"Working on it \u2014 I have a plan with {n_steps} steps."
                 )
-            else:
+            elif not self._started_announced:
                 await self._send("Working on it...")
             self._plan_announced = True
             return
 
         if etype == "agent_start":
             self._max_iterations = data.get("max_iterations", 40)
+            if not self._started_announced:
+                await self._send("Working on it...")
+                self._started_announced = True
             return
 
         if etype == "communicate":
@@ -1165,7 +1261,11 @@ class ChannelProgressReporter:
             label = _rich_tool_label(tool_name, args)
             if label:
                 self._last_tool_label = label
-                if not self._throttled(_MIN_TOOL_PROGRESS_INTERVAL_S):
+                self._tool_progress_count += 1
+                if (
+                    self._tool_progress_count == 1
+                    or not self._throttled(_MIN_TOOL_PROGRESS_INTERVAL_S)
+                ):
                     await self._send(label)
             return
 

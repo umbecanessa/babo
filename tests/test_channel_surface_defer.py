@@ -1,4 +1,4 @@
-"""Channel processing defers parallel turns when another surface is active."""
+"""Channel processing — parallel cross-surface routing when Home is busy."""
 
 from __future__ import annotations
 
@@ -6,15 +6,19 @@ import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from nls.engine.events import EventType
 from nls.runtime.surface_inbox import clear_agent_inbox, pending_count
 from nls.skills.channel_processing import process_channel_message
 
 
 def setup_function():
     clear_agent_inbox("lead-1")
+    from nls.skills import channel_processing as cp
+
+    cp._pending_channel_events.clear()
 
 
-def test_process_channel_message_defers_when_home_busy():
+def test_process_channel_message_records_inbox_when_home_busy():
     runtime = SimpleNamespace(
         agent_id="lead-1",
         is_busy=lambda: True,
@@ -55,7 +59,7 @@ def test_process_channel_message_defers_when_home_busy():
     runtime.process_message_agentic_async.assert_not_called()
 
 
-def test_process_channel_message_cross_surface_skips_inner_loop_push():
+def test_process_channel_message_cross_surface_still_pushes_inner_loop_event():
     inner_loop = MagicMock()
     runtime = SimpleNamespace(
         agent_id="lead-1",
@@ -98,5 +102,12 @@ def test_process_channel_message_cross_surface_skips_inner_loop_push():
 
     assert result == ""
     assert pending_count("lead-1") == 1
-    inner_loop.push_event.assert_not_called()
+    inner_loop.push_event.assert_called_once()
+    pushed = inner_loop.push_event.call_args[0][0]
+    assert pushed.type == EventType.CHANNEL_MESSAGE
+    assert pushed.payload["session_key"] == "telegram:group:-100123"
     runtime.process_message_agentic_async.assert_not_called()
+
+    from nls.skills import channel_processing as cp
+
+    assert cp._pending_channel_events.get("lead-1", []) == []

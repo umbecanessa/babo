@@ -528,6 +528,7 @@ async def _direct_channel_dispatch(
             _pending_queues[_queue_key] = copilot_queue
 
     _tm = getattr(runtime, "_team_manager", None)
+    _prev_tm_queue = getattr(_tm, "_copilot_queue", None) if _tm is not None else None
     if _tm is not None and copilot_queue is not None:
         _tm._copilot_queue = copilot_queue
 
@@ -563,6 +564,8 @@ async def _direct_channel_dispatch(
     finally:
         if _queue_key:
             _pending_queues.pop(_queue_key, None)
+        if _tm is not None:
+            _tm._copilot_queue = _prev_tm_queue
         if _cs is not None:
             _cs.on_user_message_complete(agent_id)
 
@@ -643,24 +646,21 @@ async def process_channel_message(
         from nls.runtime.surface_inbox import (
             record_surface_inbound,
             should_defer_cross_surface,
-            try_feed_active_copilot,
-        )
-
-        record_surface_inbound(
-            agent_id,
-            session_key=session_key,
-            channel=_channel_source,
-            channel_label=channel_label,
-            sender_name=sender_name or "?",
-            content=raw_content or user_input,
-            runtime=runtime,
         )
 
         cross_surface_deferred = should_defer_cross_surface(runtime, session_key)
         if cross_surface_deferred:
-            try_feed_active_copilot(runtime, user_input)
+            record_surface_inbound(
+                agent_id,
+                session_key=session_key,
+                channel=_channel_source,
+                channel_label=channel_label,
+                sender_name=sender_name or "?",
+                content=raw_content or user_input,
+                runtime=runtime,
+            )
             logger.info(
-                "Channel [%s]: cross-surface defer — copilot + background queue "
+                "Channel [%s]: cross-surface inbound recorded for awareness "
                 "(foreground=%s, inbound=%s)",
                 agent_id,
                 getattr(runtime, "_foreground_session_key", ""),
@@ -735,23 +735,23 @@ async def process_channel_message(
             },
         )
 
-        # Push to event queue — the inner loop owns all routing & dispatch
+        # Push to event queue — inner loop routes FOCUS/MICRO in parallel with Home.
         if _inner_loop is not None:
+            flush_pending_channel_events(agent_id, _inner_loop)
+            _inner_loop.push_event(_ch_event)
             if cross_surface_deferred:
                 logger.info(
-                    "Channel [%s]: cross-surface defer — inbox only "
-                    "(foreground=%s, inbound=%s)",
+                    "Channel [%s]: cross-surface — inbox awareness + parallel "
+                    "inner-loop dispatch (foreground=%s, inbound=%s)",
                     agent_id,
                     getattr(runtime, "_foreground_session_key", ""),
                     session_key,
                 )
-                return ""
-            flush_pending_channel_events(agent_id, _inner_loop)
-            _inner_loop.push_event(_ch_event)
-            logger.info(
-                "Channel [%s]: event pushed to inner loop (channel=%s, target=%s)",
-                agent_id, _channel_source, reply_target or "none",
-            )
+            else:
+                logger.info(
+                    "Channel [%s]: event pushed to inner loop (channel=%s, target=%s)",
+                    agent_id, _channel_source, reply_target or "none",
+                )
         elif cross_surface_deferred:
             stash_deferred_channel_event(agent_id, _ch_event)
             logger.info(
