@@ -9,6 +9,8 @@ from typing import Any
 DISCORD_ADMIN_TOOL_NAMES = frozenset({
     "channel_manage",
     "channel_inspect",
+    "channel_remote",
+    "channel_history",
     "squad",
     "discord_send",
     "discord_setup",
@@ -29,6 +31,8 @@ _TOKEN_FRAGMENT_RE = re.compile(
 )
 
 DISCORD_PLAN_A_PIPELINE = (
+    "channel_history(action='recent', ...) for messages since bot joined; "
+    "channel_remote(action='read', channel_id=...) for pre-connect backfill; "
     "squad(action='check_channel_readiness', channel_id=...) "
     "→ follow next_steps / oauth_invite_url in JSON "
     "→ squad(action='invite_squad_bots', channel_id=...) "
@@ -101,20 +105,20 @@ def discord_channel_primary_guidance(
 
 def skill_discovery_prompt(unlocked_tools: set[str] | frozenset[str] | None = None) -> str:
     """Stall recovery — surface plan A only; do not advertise plan B."""
-    unlocked = set(unlocked_tools or ())
-    lines = [
-        "SKILL DISCOVERY — you appear stuck. Try these before retrying the same command:",
-        "1. clawhub(action='search', query='<keyword>') — find community skills",
-        "2. discover_tools(query='<keyword>') — find deferred tools",
-        "3. clawhub(action='install', slug='...') then follow skill instructions",
-    ]
-    if DISCORD_ADMIN_TOOL_NAMES.intersection(unlocked):
-        lines.append(
-            f"4. Discord multi-face (plan A): {DISCORD_PLAN_A_PIPELINE}"
-        )
-    else:
-        lines.append(
-            "4. wm(action='borrow', domain='Project.Credential.*') for non-Discord auth gaps"
-        )
-    lines.append("Do NOT loop on the same failing bash command.")
-    return "\n".join(lines)
+    unlocked = set(unlocked_tools or ())
+    lines = [
+        "SKILL DISCOVERY — you appear stuck. Try these before retrying the same command:",
+        "1. clawhub(action='search', query='<keyword>') — find community skills",
+        "2. discover_tools(query='<keyword>') — find deferred tools",
+        "3. clawhub(action='install', slug='...') then follow skill instructions",
+    ]
+    if DISCORD_ADMIN_TOOL_NAMES.intersection(unlocked):
+        lines.append(
+            f"4. Discord multi-face (plan A): {DISCORD_PLAN_A_PIPELINE}"
+        )
+    else:
+        lines.append(
+            "4. wm(action='borrow', domain='Project.Credential.*') for non-Discord auth gaps"
+        )
+    lines.append("Do NOT loop on the same failing bash command.")
+    return "\n".join(lines)

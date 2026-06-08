@@ -81,3 +81,24 @@ def test_diverse_bash_setup_not_stalled():
         state.tool_successes["bash"] = state.tool_successes.get("bash", 0) + 1
 
     assert detect_stall(state, cfg) is None
+
+
+def test_repeated_channel_rest_bash_stalls():
+    """Two+ bash hits against discord.com/api should nudge channel_remote."""
+    state = LoopState()
+    cfg = LoopConfig(max_iterations=50, enable_delegation=True)
+    sigs = [
+        'bash:{"command": "curl -H \\"Authorization: Bot x\\" '
+        'https://discord.com/api/v10/channels/1/messages"}',
+        'bash:{"command": "python -c \\"import httpx; '
+        'httpx.get(\'https://discord.com/api/channels/1/messages\')\\""}',
+    ]
+    for sig in sigs:
+        state.tool_call_signatures.append(sig)
+        state.tool_history.append(("bash", True))
+        state.tool_successes["bash"] = state.tool_successes.get("bash", 0) + 1
+
+    msg = detect_stall(state, cfg)
+    assert msg is not None
+    assert "channel_remote" in msg
+    assert "discord" in msg

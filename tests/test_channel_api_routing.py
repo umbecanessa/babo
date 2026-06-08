@@ -80,7 +80,45 @@ def test_detect_configured_channel_rest_in_command(tmp_path: Path):
     assert channel == "slack"
 
 
+def test_detect_configured_channel_rest_from_workspace_cwd(tmp_path: Path):
+    data_root = tmp_path / "data"
+    agent_id = "agent-ws"
+    agent_dir = data_root / "agents" / agent_id
+    workspace = agent_dir / "workspace"
+    workspace.mkdir(parents=True)
+    _write_agent_channel_cfg(
+        data_root, agent_id, "discord",
+        {"enabled": True, "bot_token": "secret"},
+    )
+
+    channel = detect_configured_channel_rest_in_command(
+        "curl https://discord.com/api/v10/channels/1/messages",
+        str(workspace),
+    )
+    assert channel == "discord"
+
+
 def test_format_hint_is_channel_agnostic():
     hint = format_channel_rest_bash_hint("matrix")
-    assert "channel_manage(channel='matrix'" in hint
+    assert "channel_history" in hint
+    assert "channel_remote" in hint
     assert "discord.com" not in hint
+
+
+def test_matched_channel_rest_in_commands():
+    from nls.runtime.channel_api_routing import matched_channel_rest_in_commands
+
+    cmds = [
+        "curl https://discord.com/api/v10/channels/1/messages",
+        "Invoke-RestMethod https://discord.com/api/channels/1/messages",
+    ]
+    assert matched_channel_rest_in_commands(cmds) == "discord"
+    assert matched_channel_rest_in_commands(cmds[:1]) is None
+
+
+def test_bash_signature_command():
+    from nls.runtime.channel_api_routing import bash_signature_command
+
+    sig = 'bash:{"command": "curl discord.com/api"}'
+    assert bash_signature_command(sig) == "curl discord.com/api"
+    assert bash_signature_command("read:{\"path\":\"x\"}") == ""

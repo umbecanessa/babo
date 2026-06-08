@@ -694,6 +694,11 @@ class BashTool:
         env["XDG_CONFIG_HOME"] = str(Path(agent_home) / ".config")
         env["XDG_DATA_HOME"] = str(Path(agent_home) / ".local" / "share")
 
+        # Windows: force UTF-8 for Python subprocesses (avoids cp1252 mojibake).
+        if sys.platform == "win32":
+            env["PYTHONUTF8"] = "1"
+            env["PYTHONIOENCODING"] = "utf-8"
+
         return env
 
     def _friendly_cwd(self) -> str:

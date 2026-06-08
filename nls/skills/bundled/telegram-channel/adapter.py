@@ -379,6 +379,37 @@ class TelegramAdapter:
     def channel_manage_actions(self) -> list[str]:
         return ["list"]
 
+    def channel_remote_actions(self) -> list[str]:
+        return ["delete", "send"]
+
+    async def delete_channel_message(
+        self,
+        agent_id: str,
+        channel_id: str,
+        message_id: str,
+    ) -> tuple[bool, str]:
+        cfg = self._agent_cfg(agent_id)
+        token = str(cfg.get("bot_token") or "").strip()
+        if not token:
+            return False, "Error: no bot_token configured."
+        url = f"{TELEGRAM_API}/bot{token}/deleteMessage"
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(
+                    url,
+                    json={
+                        "chat_id": channel_id,
+                        "message_id": int(message_id),
+                    },
+                )
+                resp.raise_for_status()
+                data = resp.json()
+            if not data.get("ok"):
+                return False, f"Telegram delete failed: {data.get('description', data)}"
+        except Exception as exc:
+            return False, f"Telegram delete failed: {exc}"
+        return True, f"Deleted message {message_id} in chat {channel_id}."
+
     async def manage_channel(
         self,
         agent_id: str,

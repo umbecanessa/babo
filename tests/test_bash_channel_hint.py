@@ -45,3 +45,13 @@ async def test_bash_appends_channel_hint_in_execute_scope(tmp_path: Path):
     assert "not defined" not in (result.content or "").lower()
     assert "CHANNEL HINT" in (result.content or "")
     assert result.details.get("channel_api_nudge") == "discord"
+
+
+def test_bash_isolated_env_sets_python_utf8_on_windows(tmp_path: Path, monkeypatch):
+    monkeypatch.setattr("nls.tools.agent_tools.bash.sys.platform", "win32")
+    agent_dir = tmp_path / "agents" / "agent-z"
+    agent_dir.mkdir(parents=True)
+    tool = BashTool(str(agent_dir))
+    env = tool._build_isolated_env(str(agent_dir))
+    assert env.get("PYTHONUTF8") == "1"
+    assert env.get("PYTHONIOENCODING") == "utf-8"

@@ -236,6 +236,7 @@ class SlackAdapter:
         self._connected_agents: set[str] = set()
         self._known_senders: dict[str, set[str]] = {}
         self._relay_clients: dict[str, Any] = {}
+        self._slack_user_cache: dict[str, dict[str, str]] = {}
         self._load_all_agent_configs()
         self._load_known_senders()
 
@@ -278,6 +279,31 @@ class SlackAdapter:
         if not data.get("ok"):
             raise RuntimeError(data.get("error", "slack_api_error"))
         return data
+
+    async def _slack_user_labels(
+        self,
+        token: str,
+        agent_id: str,
+        user_ids: set[str],
+    ) -> dict[str, str]:
+        cache = self._slack_user_cache.setdefault(agent_id, {})
+        for uid in sorted(user_ids):
+            if not uid or uid in cache:
+                continue
+            try:
+                data = await self._api_post(token, "users.info", {"user": uid})
+                user = data.get("user") or {}
+                profile = user.get("profile") or {}
+                display = (
+                    str(profile.get("display_name") or "").strip()
+                    or str(profile.get("real_name") or "").strip()
+                    or str(user.get("name") or "").strip()
+                    or uid
+                )
+                cache[uid] = f"{display} ({uid})" if display != uid else uid
+            except Exception:
+                cache[uid] = uid
+        return {uid: cache.get(uid, uid) for uid in user_ids if uid}
 
     async def send(
         self,
@@ -382,6 +408,85 @@ class SlackAdapter:
 
     def channel_manage_actions(self) -> list[str]:
         return ["sync", "list", "enable"]
+
+    def channel_remote_actions(self) -> list[str]:
+        return ["read", "delete", "send"]
+
+    async def fetch_channel_messages(
+        self,
+        agent_id: str,
+        channel_id: str,
+        *,
+        limit: int = 50,
+        before: str | None = None,
+    ) -> tuple[bool, str]:
+        from nls.runtime.channel_remote import format_message_rows
+
+        cfg = self._agent_cfg(agent_id)
+        token = str(cfg.get("bot_token") or "").strip()
+        if not token:
+            return False, "Error: no bot_token configured."
+        limit = min(max(1, int(limit)), 200)
+        payload: dict[str, Any] = {"channel": channel_id, "limit": limit}
+        if before:
+            payload["cursor"] = before
+        try:
+            data = await self._api_post(token, "conversations.history", payload)
+        except Exception as exc:
+            return False, f"Slack fetch failed: {exc}"
+        messages = data.get("messages") or []
+        user_ids = {
+            str(msg.get("user") or "").strip()
+            for msg in messages
+            if msg.get("user")
+        }
+        labels = await self._slack_user_labels(token, agent_id, user_ids)
+        rows: list[dict[str, Any]] = []
+        for msg in messages:
+            uid = str(msg.get("user") or "").strip()
+            username = str(msg.get("username") or "").strip()
+            if uid and uid in labels:
+                author = labels[uid]
+            elif username:
+                author = username if not uid else f"{username} ({uid})"
+            elif uid:
+                author = labels.get(uid, uid)
+            else:
+                author = "?"
+            rows.append({
+                "id": msg.get("ts"),
+                "timestamp": msg.get("ts"),
+                "author": author,
+                "content": msg.get("text") or "",
+            })
+        body = format_message_rows("slack", rows)
+        next_cursor = str(data.get("response_metadata", {}).get("next_cursor") or "").strip()
+        if next_cursor:
+            body += (
+                f"\nMore history available — pass before='{next_cursor}' "
+                "on the next read call."
+            )
+        return True, body
+
+    async def delete_channel_message(
+        self,
+        agent_id: str,
+        channel_id: str,
+        message_id: str,
+    ) -> tuple[bool, str]:
+        cfg = self._agent_cfg(agent_id)
+        token = str(cfg.get("bot_token") or "").strip()
+        if not token:
+            return False, "Error: no bot_token configured."
+        try:
+            await self._api_post(
+                token,
+                "chat.delete",
+                {"channel": channel_id, "ts": message_id},
+            )
+        except Exception as exc:
+            return False, f"Slack delete failed: {exc}"
+        return True, f"Deleted message ts={message_id} in channel {channel_id}."
 
     async def manage_channel(
         self,

@@ -52,6 +52,35 @@ describe('chat-transcript-restore.util', () => {
     expect(restored.find(m => m.content === 'Done.')).toBeTruthy();
   });
 
+  it('does not duplicate assistant prose when agentic events match row content', () => {
+    const finalText = 'Great, the token worked! Your bot is connected.';
+    const restored = restoreChatMessagesFromTranscript([
+      { role: 'user', content: 'token here', timestamp: 1_700_000_000 },
+      {
+        role: 'assistant',
+        content: finalText,
+        metadata: {
+          agentic: true,
+          iterations: 1,
+          tool_calls: 1,
+          events: [{
+            step: 1,
+            prose: finalText,
+            tool_calls: [{
+              name: 'discord_setup',
+              call_id: 'call_abc',
+              arguments: { bot_token: 'x' },
+            }],
+            tool_results: [{ success: true }],
+          }],
+        },
+      },
+    ]);
+
+    expect(restored.filter(m => m.type === 'assistant' && m.content === finalText)).toHaveLength(1);
+    expect(restored.filter(m => m.type === 'tool_progress')).toHaveLength(1);
+  });
+
   it('mergeTranscriptPreservingEphemeral keeps recent status pills', () => {
     const restored = restoreChatMessagesFromTranscript([
       { role: 'user', content: 'Connect discord', timestamp: 1_700_000_000 },
@@ -63,6 +92,50 @@ describe('chat-transcript-restore.util', () => {
       timestamp: now,
     }]);
     expect(merged.some(m => m.content === 'Starting discord setup...')).toBe(true);
+  });
+
+  it('mergeTranscriptPreservingEphemeral skips trailing tool chips when agentic trace restored', () => {
+    const restored = restoreChatMessagesFromTranscript([
+      { role: 'user', content: 'Scan server', timestamp: 1_700_000_000 },
+      {
+        role: 'assistant',
+        content: 'Scan complete.',
+        metadata: {
+          agentic: true,
+          iterations: 1,
+          tool_calls: 1,
+          events: [{
+            step: 1,
+            prose: 'Scan complete.',
+            tool_calls: [{
+              name: 'read',
+              call_id: 'call_live',
+              arguments: { path: 'README.md' },
+            }],
+            tool_results: [{ success: true }],
+          }],
+        },
+      },
+    ]);
+    const liveChip = {
+      type: 'tool_progress' as const,
+      content: 'Reading README.md…',
+      timestamp: new Date(),
+      toolProgress: {
+        toolName: 'read',
+        callId: 'call_live',
+        done: true,
+      },
+    };
+    const merged = mergeTranscriptPreservingEphemeral(
+      restored,
+      [liveChip as any, { type: 'status' as const, content: 'Still working…', timestamp: new Date() }],
+      { skipToolProgress: true },
+    );
+
+    expect(merged.filter(m => m.type === 'tool_progress')).toHaveLength(1);
+    expect(merged[merged.length - 1].type).toBe('status');
+    expect(merged[merged.length - 1].content).toBe('Still working…');
   });
 
   it('filters system injection messages', () => {

@@ -1240,6 +1240,53 @@ def _detect_skill_loader_rewrite_stall(state: "LoopState") -> str | None:
     )
 
 
+def _detect_channel_rest_bash_loop(state: "LoopState") -> str | None:
+    """Nudge when bash repeatedly hits bundled channel REST instead of channel_remote."""
+    from nls.runtime.channel_api_routing import (
+        bash_signature_command,
+        format_channel_remote_stall_nudge,
+        matched_channel_rest_in_commands,
+    )
+
+    sigs = getattr(state, "tool_call_signatures", [])
+    bash_cmds = [
+        bash_signature_command(sig)
+        for sig in sigs[-8:]
+        if sig.startswith("bash:")
+    ]
+    bash_cmds = [cmd for cmd in bash_cmds if cmd.strip()]
+    channel = matched_channel_rest_in_commands(bash_cmds)
+    if not channel:
+        return None
+    logger.info(
+        "[STALL] repeated bash against %s REST (%d hits in recent window)",
+        channel,
+        sum(1 for cmd in bash_cmds if cmd),
+    )
+    return format_channel_remote_stall_nudge(channel)
+
+
+def _detect_duplicate_channel_send(state: "LoopState") -> str | None:
+    """Nudge when the same channel target + message text is sent twice in one loop."""
+    from nls.runtime.channel_send_dedup import (
+        find_duplicate_channel_send,
+        format_duplicate_channel_send_nudge,
+    )
+
+    sigs = getattr(state, "tool_call_signatures", [])
+    history = getattr(state, "tool_history", [])
+    dup = find_duplicate_channel_send(sigs, tool_history=history)
+    if not dup:
+        return None
+    target_id, tool_name = dup
+    logger.info(
+        "[STALL] duplicate channel send detected: tool=%s target=%s",
+        tool_name,
+        target_id,
+    )
+    return format_duplicate_channel_send_nudge(target_id, tool_name)
+
+
 def detect_stall(state: "LoopState", config: "LoopConfig") -> str | None:
     """Detect stall patterns and return a nudge message if stuck.
 
@@ -1251,6 +1298,12 @@ def detect_stall(state: "LoopState", config: "LoopConfig") -> str | None:
     _skill_rewrite = _detect_skill_loader_rewrite_stall(state)
     if _skill_rewrite:
         return _skill_rewrite
+    _channel_rest = _detect_channel_rest_bash_loop(state)
+    if _channel_rest:
+        return _channel_rest
+    _dup_send = _detect_duplicate_channel_send(state)
+    if _dup_send:
+        return _dup_send
     # Pattern 0: exact same tool+args repeated 3+ times (even if successful)
     # Exempt orchestrator monitoring calls (e.g. team(inspect) on same team).
     _MONITORING_TOOL_NAMES = frozenset({

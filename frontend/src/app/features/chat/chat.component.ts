@@ -1401,7 +1401,9 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
           m => m.sessionKey && m.sessionKey !== 'websocket:main',
         );
         const ephemeral = mainMsgs.filter(isEphemeralChatMessage);
-        const merged = mergeTranscriptPreservingEphemeral(restored, ephemeral);
+        const merged = mergeTranscriptPreservingEphemeral(restored, ephemeral, {
+          skipToolProgress: hasAgentic,
+        });
         return [...branch, ...merged];
       });
       this.mainTranscriptRows = Math.max(this.mainTranscriptRows, raw.length);

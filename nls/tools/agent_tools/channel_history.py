@@ -1,8 +1,12 @@
 """channel_history — search ambient group/channel transcripts.
 
-Group and shared-channel messages are logged to ``channel_ambient.jsonl`` even
-when mention policy blocks a reply.  Use this tool to catch up on what was
-said before an @mention or when debugging channel context.
+All bundled channels (Discord, Slack, Telegram, WhatsApp) append to
+``channel_ambient.jsonl`` from the moment the bot is connected and receiving
+traffic — including messages that did NOT trigger a reply.
+
+This is the right tool for catch-up since the bot joined. It does NOT contain
+messages from before the bot was in the channel; for that backfill on Discord
+or Slack use channel_remote(action='read', ...).
 """
 
 from __future__ import annotations
@@ -12,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from nls.runtime.channel_ambient import channel_ambient_stats, query_channel_ambient
+from nls.runtime.channel_remote import ambient_vs_remote_guidance
 
 from .base import ToolResult
 
@@ -55,11 +60,13 @@ class ChannelHistoryTool:
     @property
     def description(self) -> str:
         return (
-            "Search the ambient log of group/shared-channel messages (Telegram, "
-            "Discord, Slack, WhatsApp). Includes messages that did NOT trigger a "
-            "bot reply — use when @mentioned mid-conversation or you need thread "
-            "context. Actions: search, recent, around, stats. Filter by "
-            "session_key and/or channel."
+            "Search the ambient log of shared-channel messages for Discord, Slack, "
+            "Telegram, and WhatsApp. Logging starts when the bot connects — includes "
+            "traffic that did NOT trigger a reply (mention-gated context). "
+            "Actions: search, recent, around, stats. Filter by session_key and/or "
+            "channel. For pre-connect history on Discord/Slack only, use "
+            "channel_remote(action='read', ...). "
+            f"{ambient_vs_remote_guidance()}"
         )
 
     @property

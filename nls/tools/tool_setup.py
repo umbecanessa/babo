@@ -339,6 +339,13 @@ def setup_tools(
     except Exception as exc:
         logger.warning("Agent %s: channel_manage tool init failed: %s", agent_id, exc)
 
+    # Channel remote — read/delete/send via platform APIs
+    try:
+        from .agent_tools.channel_remote import create_channel_remote_tool
+        tools.append(create_channel_remote_tool(agent_id, agent_dir))
+    except Exception as exc:
+        logger.warning("Agent %s: channel_remote tool init failed: %s", agent_id, exc)
+
     # Email ledger — history of sent and received emails
     try:
         from .agent_tools.email_ledger import EmailLedger, EmailHistoryTool
@@ -663,6 +670,7 @@ _TOOL_GROUP_MAP: dict[str, str] = {
     "email": "communication", "whatsapp": "communication",
     "telegram": "communication", "contacts": "communication",
     "email_history": "communication",
+    "channel_remote": "communication",
     "chat_history": "memory",
     "channel_history": "memory",
     "web_search": "research", "web_fetch": "research",

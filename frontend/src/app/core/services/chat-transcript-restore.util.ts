@@ -131,6 +131,40 @@ function stepProse(stepEv: Record<string, unknown>): string {
   return typeof prose === 'string' ? prose.trim() : '';
 }
 
+function normalizedAssistantText(text: string): string {
+  const thought = parseThinking(text);
+  return (thought.response || text).trim();
+}
+
+/** True when persisted agentic events already emit the same assistant prose as row content. */
+function agenticTraceCoversAssistantContent(
+  meta: Record<string, unknown>,
+  content: string,
+): boolean {
+  const trimmed = content.trim();
+  if (!trimmed) return false;
+  const events = meta['events'];
+  if (!Array.isArray(events)) return false;
+  return events.some(ev => {
+    const prose = stepProse(ev as Record<string, unknown>);
+    if (!prose || isChatSystemInjection(prose)) return false;
+    return normalizedAssistantText(prose) === trimmed;
+  });
+}
+
+function toolProgressKey(msg: ChatMessage): string {
+  const tp = msg.toolProgress;
+  const callId = String(tp?.callId || '').trim();
+  const toolName = String(tp?.toolName || '').trim();
+  if (callId) return `${callId}|${toolName}`;
+  return `${toolName}|${(msg.content || '').trim()}`;
+}
+
+export interface MergeEphemeralOptions {
+  /** When transcript rebuild already includes tool chips from agentic metadata.events. */
+  skipToolProgress?: boolean;
+}
+
 /** Live-only rows that REST/WS transcript hydration must not drop. */
 export function isEphemeralChatMessage(msg: ChatMessage): boolean {
   return msg.type === 'status' || msg.type === 'tool_progress';
@@ -140,6 +174,7 @@ export function isEphemeralChatMessage(msg: ChatMessage): boolean {
 export function mergeTranscriptPreservingEphemeral(
   restored: ChatMessage[],
   ephemeral: ChatMessage[],
+  options: MergeEphemeralOptions = {},
 ): ChatMessage[] {
   if (!ephemeral.length) return restored;
 
@@ -150,6 +185,7 @@ export function mergeTranscriptPreservingEphemeral(
     const key = `${m.type}:${(m.content || '').trim()}`;
     if (restoredKeys.has(key)) return false;
     if (m.type === 'status' && !(m.content || '').trim()) return false;
+    if (options.skipToolProgress && m.type === 'tool_progress') return false;
     return true;
   });
   if (!extras.length) return restored;
@@ -158,17 +194,14 @@ export function mergeTranscriptPreservingEphemeral(
   const restoredProgressKeys = new Set(
     restored
       .filter(m => m.type === 'tool_progress')
-      .map(m => {
-        const tp = (m as ChatMessage).toolProgress;
-        return `${tp?.callId || ''}|${tp?.toolName || ''}|${(m.content || '').trim()}`;
-      }),
+      .map(m => toolProgressKey(m as ChatMessage)),
   );
-  const progressExtras = extras.filter(m => {
-    if (m.type !== 'tool_progress') return false;
-    const tp = m.toolProgress;
-    const key = `${tp?.callId || ''}|${tp?.toolName || ''}|${(m.content || '').trim()}`;
-    return !restoredProgressKeys.has(key);
-  });
+  const progressExtras = options.skipToolProgress
+    ? []
+    : extras.filter(m => {
+      if (m.type !== 'tool_progress') return false;
+      return !restoredProgressKeys.has(toolProgressKey(m));
+    });
   const trailing = [...statusExtras, ...progressExtras];
   return trailing.length ? [...restored, ...trailing] : restored;
 }
@@ -302,6 +335,10 @@ export function restoreChatMessagesFromTranscript(
       const text = String(m.content);
       if (isChatSystemInjection(text)) continue;
       const thought = parseThinking(text);
+      const content = (thought.response || text).trim();
+      if (meta['agentic'] && agenticTraceCoversAssistantContent(meta, content)) {
+        continue;
+      }
       const reasoning = (
         (typeof m.reasoning === 'string' && m.reasoning.trim())
         || thought.thinking

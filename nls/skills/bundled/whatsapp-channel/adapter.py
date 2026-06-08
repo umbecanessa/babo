@@ -497,6 +497,9 @@ class WhatsAppAdapter:
     def channel_manage_actions(self) -> list[str]:
         return ["list"]
 
+    def channel_remote_actions(self) -> list[str]:
+        return ["send"]
+
     async def manage_channel(
         self,
         agent_id: str,

@@ -564,6 +564,67 @@ class DiscordAdapter:
     def channel_manage_actions(self) -> list[str]:
         return ["sync", "list", "enable", "grant_bot_access", "squad_readiness"]
 
+    def channel_remote_actions(self) -> list[str]:
+        return ["read", "delete", "send"]
+
+    async def fetch_channel_messages(
+        self,
+        agent_id: str,
+        channel_id: str,
+        *,
+        limit: int = 50,
+        before: str | None = None,
+    ) -> tuple[bool, str]:
+        from nls.runtime.channel_remote import format_discord_message_content, format_message_rows
+
+        cfg = self._agent_cfg(agent_id)
+        token = str(cfg.get("bot_token") or "").strip()
+        if not token:
+            return False, "Error: no bot_token configured."
+        limit = min(max(1, int(limit)), 100)
+        params: dict[str, Any] = {"limit": limit}
+        if before:
+            params["before"] = before
+        try:
+            data = await self._api_get(
+                token,
+                f"/channels/{channel_id}/messages",
+                params=params,
+            )
+        except Exception as exc:
+            return False, f"Discord fetch failed: {exc}"
+        if not isinstance(data, list):
+            return False, f"Unexpected Discord response: {type(data).__name__}"
+        rows: list[dict[str, Any]] = []
+        for msg in data:
+            author = msg.get("author") or {}
+            rows.append({
+                "id": msg.get("id"),
+                "timestamp": msg.get("timestamp"),
+                "author": author.get("username") or author.get("global_name") or "?",
+                "content": format_discord_message_content(msg),
+            })
+        return True, format_message_rows("discord", rows)
+
+    async def delete_channel_message(
+        self,
+        agent_id: str,
+        channel_id: str,
+        message_id: str,
+    ) -> tuple[bool, str]:
+        cfg = self._agent_cfg(agent_id)
+        token = str(cfg.get("bot_token") or "").strip()
+        if not token:
+            return False, "Error: no bot_token configured."
+        try:
+            await self._api_delete(
+                token,
+                f"/channels/{channel_id}/messages/{message_id}",
+            )
+        except Exception as exc:
+            return False, f"Discord delete failed: {exc}"
+        return True, f"Deleted message {message_id} in channel {channel_id}."
+
     async def manage_channel(
         self,
         agent_id: str,
@@ -744,12 +805,28 @@ class DiscordAdapter:
             logger.warning("Discord [%s] NestJS gateway unregister failed: %s", agent_id, exc)
         self.stop_local_gateway(agent_id)
 
-    async def _api_get(self, token: str, path: str) -> dict[str, Any]:
+    async def _api_get(
+        self,
+        token: str,
+        path: str,
+        *,
+        params: dict[str, Any] | None = None,
+    ) -> Any:
         headers = {"Authorization": f"Bot {token}"}
         async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.get(f"{DISCORD_API}{path}", headers=headers)
+            resp = await client.get(
+                f"{DISCORD_API}{path}",
+                headers=headers,
+                params=params or {},
+            )
             resp.raise_for_status()
             return resp.json()
+
+    async def _api_delete(self, token: str, path: str) -> None:
+        headers = {"Authorization": f"Bot {token}"}
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.delete(f"{DISCORD_API}{path}", headers=headers)
+            resp.raise_for_status()
 
     async def register_gateway_relay(self, relay_base_url: str, agent_id: str) -> bool:
         cfg = self._agent_cfg(agent_id)

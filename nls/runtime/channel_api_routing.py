@@ -103,6 +103,19 @@ def command_matches_channel_rest(
     return any(p.search(command) for p in _rest_patterns_for_channel(channel, cfg))
 
 
+def resolve_agent_data_dir(path: str | Path) -> Path | None:
+    """Normalize agent data dir from agent dir or ``…/workspace`` cwd."""
+    if not path:
+        return None
+    try:
+        resolved = Path(path).resolve()
+    except Exception:
+        return None
+    if resolved.name == "workspace" and resolved.parent.is_dir():
+        return resolved.parent
+    return resolved
+
+
 def detect_configured_channel_rest_in_command(
     command: str,
     agent_dir: str,
@@ -111,7 +124,9 @@ def detect_configured_channel_rest_in_command(
     if not command or not agent_dir:
         return None
     try:
-        agent_path = Path(agent_dir).resolve()
+        agent_path = resolve_agent_data_dir(agent_dir)
+        if agent_path is None:
+            return None
         agent_id = agent_path.name
         data_root = data_root_from_agent_dir(agent_path)
     except Exception:
@@ -129,18 +144,61 @@ def detect_configured_channel_rest_in_command(
 def format_channel_rest_bash_hint(channel: str) -> str:
     ch = (channel or "channel").strip().lower()
     return (
-        f"[CHANNEL HINT] {ch} is configured on this agent — prefer "
-        f"channel_manage(channel='{ch}', action=...) for server admin "
-        f"instead of raw curl/API scripts with tokens. "
-        f"channel_inspect(action='get', channel='{ch}') lists scoped IDs. "
-        f"Raw REST is fine for one-off probes when channel_manage has no action."
+        f"[CHANNEL HINT] {ch} is configured — for messages since the bot joined use "
+        f"channel_history(action='recent', ...). For pre-connect backfill on Discord/Slack "
+        f"use channel_remote(channel='{ch}', action='read', ...). "
+        f"Admin: channel_manage(channel='{ch}', action=...). "
+        f"Never bash/curl with tokens. "
+        f"channel_inspect(action='get', channel='{ch}') lists scoped IDs."
     )
 
 
 def format_channel_rest_breadcrumb(channel: str) -> str:
     ch = (channel or "channel").strip().lower()
     return (
-        f"[BREADCRUMB] You used bash against {ch} REST — prefer "
-        f"channel_manage(channel='{ch}', action=...) for admin work. "
-        f"channel_inspect(action='get', channel='{ch}') has scoped IDs."
+        f"[BREADCRUMB] Bash hit {ch} REST — prefer channel_history for ambient context "
+        f"or channel_remote(action='read'|'send'|'delete', ...) on Discord/Slack. "
+        f"channel_manage for admin. channel_inspect(action='get', channel='{ch}') "
+        f"has scoped IDs."
+    )
+
+
+def bash_signature_command(sig: str) -> str:
+    """Extract shell command from a ``bash:{json}`` tool signature."""
+    if not sig or not sig.startswith("bash:"):
+        return ""
+    raw = sig[5:]
+    try:
+        data = json.loads(raw)
+        if isinstance(data, dict):
+            return str(data.get("command") or "")
+    except json.JSONDecodeError:
+        pass
+    return raw
+
+
+def matched_channel_rest_in_commands(commands: list[str]) -> str | None:
+    """Return bundled channel key when *commands* hit that REST surface 2+ times."""
+    if len(commands) < 2:
+        return None
+    for channel, patterns in _COMPILED_BUILTIN.items():
+        hits = sum(
+            1 for cmd in commands
+            if cmd and any(p.search(cmd) for p in patterns)
+        )
+        if hits >= 2:
+            return channel
+    return None
+
+
+def format_channel_remote_stall_nudge(channel: str) -> str:
+    ch = (channel or "channel").strip().lower()
+    return (
+        f"You have called bash against {ch} REST APIs multiple times. "
+        f"Stop using curl/Invoke-RestMethod/python with tokens. "
+        f"For messages since the bot joined: channel_history(action='recent', ...). "
+        f"For pre-connect backfill (Discord/Slack): "
+        f"channel_remote(channel='{ch}', action='read', channel_id=...). "
+        f"Send/delete: channel_remote(action='send'|'delete', ...). "
+        f"channel_inspect(action='get', channel='{ch}') lists scoped IDs."
     )
