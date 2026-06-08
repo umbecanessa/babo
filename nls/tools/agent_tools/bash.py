@@ -1520,6 +1520,12 @@ class BashTool:
                     )
                 except Exception:
                     logger.debug("bash path cache record failed", exc_info=True)
+            _result = self._with_channel_api_hint(
+                _result,
+                command=command,
+                channel_api_hint=_channel_api_hint,
+                channel_api_nudge=_channel_api_nudge,
+            )
             if _server_warn and _result.content:
                 _result = ToolResult(
                     content=_server_warn + _result.content,
@@ -1934,9 +1940,6 @@ class BashTool:
 
         result_text += f"\n\n[CWD: {self._friendly_cwd()}]"
 
-        if _channel_api_hint:
-            result_text += f"\n\n{_channel_api_hint}"
-
         return ToolResult(
             content=result_text,
             is_error=is_error,
@@ -1945,8 +1948,29 @@ class BashTool:
                 "command": command,
                 "truncation": trunc_details if was_truncated else None,
                 "full_output_path": temp_path,
-                **({"channel_api_nudge": _channel_api_nudge} if _channel_api_nudge else {}),
             },
+        )
+
+    def _with_channel_api_hint(
+        self,
+        result: ToolResult,
+        *,
+        command: str,
+        channel_api_hint: str | None,
+        channel_api_nudge: str,
+    ) -> ToolResult:
+        """Append soft channel REST nudge computed in execute() (not _run_command)."""
+        details = dict(result.details or {})
+        details["command"] = command
+        if channel_api_nudge:
+            details["channel_api_nudge"] = channel_api_nudge
+        content = result.content or ""
+        if channel_api_hint:
+            content = f"{content}\n\n{channel_api_hint}"
+        return ToolResult(
+            content=content,
+            is_error=result.is_error,
+            details=details or None,
         )
 
 
