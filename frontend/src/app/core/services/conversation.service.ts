@@ -354,7 +354,7 @@ export class ConversationService {
     guild_name?: string;
     guildName?: string;
   }): string {
-    if key === 'websocket:main') return 'Main chat';
+    if (key === 'websocket:main') return 'Main chat';
     const parts = key.split(':');
     const threadType = parts[1] || '';
     const isGroup = threadType === 'group' || threadType === 'channel';
