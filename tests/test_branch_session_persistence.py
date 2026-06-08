@@ -144,8 +144,8 @@ def test_salvage_agentic_context_routes_branch(tmp_path: Path):
     assert runtime.session_transcripts.get(branch)
 
 
-def test_partial_agentic_transcript_updates_branch_history():
-    runtime = _FakeRuntime(Path("/unused"))
+def test_partial_agentic_transcript_updates_branch_history(tmp_path: Path):
+    runtime = _FakeRuntime(tmp_path)
     branch = "websocket:thread:partial"
     persist_partial_agentic_transcript(
         runtime,

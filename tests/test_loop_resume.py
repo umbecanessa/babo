@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from test_helpers import recent_journal_ts
 from nls.agentic.active_loop_marker import (
     clear_agentic_active,
     count_active_agentic_loops,
@@ -34,9 +35,10 @@ def test_resolve_resume_context_abandons_on_new_task(tmp_path: Path):
     logs = agent_dir / "agentic_logs"
     logs.mkdir(parents=True)
     journal = logs / "loop_journal_a1.jsonl"
+    ts = recent_journal_ts()
     journal.write_text(
         json.dumps({
-            "ts": "2026-06-08T14:02:50+00:00",
+            "ts": ts,
             "iteration": 5,
             "n_messages": 10,
             "messages": [{"role": "user", "content": "run locally"}],
@@ -60,9 +62,10 @@ def test_resolve_resume_context_keeps_journal_on_explicit_resume(tmp_path: Path)
     logs = agent_dir / "agentic_logs"
     logs.mkdir(parents=True)
     journal = logs / "loop_journal_a1.jsonl"
+    ts = recent_journal_ts()
     journal.write_text(
         json.dumps({
-            "ts": "2026-06-08T14:02:50+00:00",
+            "ts": ts,
             "iteration": 5,
             "n_messages": 10,
             "messages": [{"role": "user", "content": "run locally"}],
@@ -75,7 +78,7 @@ def test_resolve_resume_context_keeps_journal_on_explicit_resume(tmp_path: Path)
         agent_id="a1",
         user_input="run locally",
         iteration=5,
-        interrupted_at="2026-06-08T14:02:50+00:00",
+        interrupted_at=ts,
     )
 
     recover, text = resolve_resume_context(
@@ -121,13 +124,14 @@ def test_clear_interrupted_loop_on_success(tmp_path: Path):
     logs = agent_dir / "agentic_logs"
     logs.mkdir(parents=True)
     journal = logs / "loop_journal_a1.jsonl"
-    journal.write_text('{"ts":"2026-06-08T14:02:50+00:00","iteration":3,"messages":[]}\n')
+    ts = recent_journal_ts()
+    journal.write_text(json.dumps({"ts": ts, "iteration": 3, "messages": []}) + "\n")
     save_pending_loop_resume(
         agent_dir,
         agent_id="a1",
         user_input="task",
         iteration=3,
-        interrupted_at="2026-06-08T14:02:50+00:00",
+        interrupted_at=ts,
     )
     mark_agentic_active(agent_dir, agent_id="a1")
 
@@ -141,7 +145,8 @@ def test_abandon_interrupted_loop(tmp_path: Path):
     logs = agent_dir / "agentic_logs"
     logs.mkdir(parents=True)
     journal = logs / "loop_journal_a1.jsonl"
-    journal.write_text('{"ts":"2026-06-08T14:02:50+00:00","iteration":3,"messages":[]}\n')
+    ts = recent_journal_ts()
+    journal.write_text(json.dumps({"ts": ts, "iteration": 3, "messages": []}) + "\n")
     mark_agentic_active(agent_dir, agent_id="a1")
 
     abandon_interrupted_loop(agent_dir, "a1")

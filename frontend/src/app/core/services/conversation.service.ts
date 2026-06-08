@@ -283,15 +283,66 @@ export class ConversationService {
     } catch { /* ignore */ }
   }
 
-  messageBelongsToHome(msg: { sessionKey?: string }, homeKey?: string, agentId?: string): boolean {
+  messageBelongsToHome(
+    msg: { sessionKey?: string; type?: string },
+    homeKey?: string,
+    agentId?: string,
+  ): boolean {
     const home = homeKey || this.defaultHomeKey(agentId);
-    if (home === 'websocket:main') {
-      return !msg.sessionKey || msg.sessionKey === 'websocket:main';
-    }
-    return msg.sessionKey === home;
+    return this.sessionBelongsToThread(msg.sessionKey, home, agentId, { messageType: msg.type });
   }
 
-  messagesForThread<T extends { sessionKey?: string }>(
+  /** Match persisted or live rows to a thread, including promoted Home branch keys. */
+  sessionBelongsToThread(
+    storedKey: string | undefined,
+    threadKey: string,
+    agentId?: string,
+    opts?: { messageType?: string },
+  ): boolean {
+    const home = this.defaultHomeKey(agentId);
+    const target = threadKey || home;
+    const sk = (storedKey || '').trim();
+
+    if (target === home) {
+      if (home === 'websocket:main') {
+        return !sk || sk === 'websocket:main';
+      }
+      if (sk === home) return true;
+      if (sk === 'websocket:main' || !sk) {
+        return this.untaggedBelongsToPromotedHome(opts?.messageType);
+      }
+      return false;
+    }
+    return sk === target;
+  }
+
+  /** Legacy websocket:main / missing tags on live desk traffic for a promoted Home branch. */
+  untaggedBelongsToPromotedHome(messageType?: string): boolean {
+    if (!messageType) return true;
+    return messageType === 'tool_progress'
+      || messageType === 'status'
+      || messageType === 'agentic_start'
+      || messageType === 'agentic_end'
+      || messageType === 'agentic_iteration'
+      || messageType === 'agentic_complete'
+      || messageType === 'turn_thinking'
+      || messageType === 'thinking';
+  }
+
+  /** Normalize WS / live message tags for the active desk thread. */
+  resolveDeskSessionKey(
+    msgSessionKey: string | undefined,
+    currentThread: string,
+    agentId?: string,
+  ): string | undefined {
+    const fromMsg = (msgSessionKey || '').trim();
+    if (fromMsg && fromMsg !== 'websocket:main') return fromMsg;
+    if (currentThread !== 'websocket:main') return currentThread;
+    const home = this.defaultHomeKey(agentId);
+    return home === 'websocket:main' ? undefined : home;
+  }
+
+  messagesForThread<T extends { sessionKey?: string; type?: string }>(
     msgs: T[],
     threadKey: string,
     agentId?: string,
@@ -303,7 +354,7 @@ export class ConversationService {
     return msgs.filter((m) => m.sessionKey === threadKey);
   }
 
-  homeMessages<T extends { sessionKey?: string }>(msgs: T[], agentId?: string): T[] {
+  homeMessages<T extends { sessionKey?: string; type?: string }>(msgs: T[], agentId?: string): T[] {
     const home = this.defaultHomeKey(agentId);
     return msgs.filter((m) => this.messageBelongsToHome(m, home, agentId));
   }

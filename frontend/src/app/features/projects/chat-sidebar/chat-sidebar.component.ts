@@ -652,17 +652,18 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
 
   private loadHistory(sessionKey: string): void {
     if (!this.agentId) return;
+    if (this.agenticActive()) return;
 
-    const isMain = sessionKey === 'websocket:main';
-    if (isMain) {
+    const isHome = this.conversations.isDefaultHome(sessionKey, this.agentId);
+
+    if (isHome) {
       const shared = this.mainTranscript.get(this.agentId);
       if (shared.length > 0) {
-        this.setMessages(structuredClone(shared));
+        const branch = this.conversations.nonHomeMessages(this.messages(), this.agentId);
+        this.messages.set([...branch, ...structuredClone(shared)]);
       }
     } else {
-      this.messages.update((msgs) =>
-        msgs.filter((m) => (m.sessionKey || 'websocket:main') !== sessionKey),
-      );
+      this.messages.update((msgs) => msgs.filter((m) => m.sessionKey !== sessionKey));
     }
 
     this.loadingHistory.set(true);
@@ -675,38 +676,38 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
 
     this.http.get<any>(url).subscribe({
       next: (res) => {
+        if (this.agenticActive()) {
+          this.loadingHistory.set(false);
+          return;
+        }
         const sessionMsgs = Array.isArray(res?.messages) ? res.messages : [];
         const restored = restoreChatMessagesFromTranscript(sessionMsgs, { sessionKey });
-        if (isMain) {
-          const mainMsgs = this.messages().filter(
-            m => !m.sessionKey || m.sessionKey === 'websocket:main',
-          );
-          if (restored.length >= mainMsgs.length || sessionMsgs.length > 0) {
-            this.setMessages(restored);
+        if (isHome) {
+          const homeMsgs = this.conversations.homeMessages(this.messages(), this.agentId);
+          if (restored.length >= homeMsgs.length || sessionMsgs.length > 0) {
+            const branch = this.conversations.nonHomeMessages(this.messages(), this.agentId);
+            this.setMessages([...branch, ...restored]);
           }
           if (transcriptHasAgenticTrace(sessionMsgs)) {
             this.workbench.hydrateFromTranscript(sessionMsgs, {
               force: !this.workbench.snapshotState().entries.length,
+              sessionKey,
             });
           }
           this.syncMainTranscript();
+        } else if (restored.length === 0 && sessionMsgs.length === 0) {
+          this.messages.update((msgs) => msgs.filter((m) => m.sessionKey !== sessionKey));
+          this.workbench.removeEntriesForSession(sessionKey);
         } else {
-          if (restored.length === 0 && sessionMsgs.length === 0) {
-            this.messages.update((msgs) =>
-              msgs.filter((m) => (m.sessionKey || 'websocket:main') !== sessionKey),
-            );
-            this.workbench.removeEntriesForSession(sessionKey);
-          } else {
-            this.messages.update((msgs) => {
-              const keep = msgs.filter((m) => (m.sessionKey || 'websocket:main') !== sessionKey);
-              return [...keep, ...restored];
+          this.messages.update((msgs) => {
+            const keep = msgs.filter((m) => m.sessionKey !== sessionKey);
+            return [...keep, ...restored];
+          });
+          if (transcriptHasAgenticTrace(sessionMsgs)) {
+            this.workbench.hydrateFromTranscript(sessionMsgs, {
+              force: true,
+              sessionKey,
             });
-            if (transcriptHasAgenticTrace(sessionMsgs)) {
-              this.workbench.hydrateFromTranscript(sessionMsgs, {
-                force: true,
-                sessionKey,
-              });
-            }
           }
         }
         this.loadingHistory.set(false);
@@ -718,12 +719,13 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   private matchesActiveThread(sessionKey: string, msg: any): boolean {
-    const thread = this.activeThread();
-    const sk = sessionKey || 'websocket:main';
-    if (thread === 'websocket:main') {
-      return sk === 'websocket:main' || (!msg.session_key && !msg.sessionKey);
-    }
-    return sk === thread;
+    const sk = (msg.session_key || msg.sessionKey || sessionKey || this.activeThread() || '').trim();
+    return this.conversations.sessionBelongsToThread(
+      sk || undefined,
+      this.activeThread(),
+      this.agentId,
+      { messageType: msg.type },
+    );
   }
 
   private subscribeWs(): void {
@@ -740,7 +742,7 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
       this.workbench.recordFromRuntime(msg);
     }
 
-    const sk = msg.session_key || msg.sessionKey || 'websocket:main';
+    const sk = msg.session_key || msg.sessionKey || this.activeThread() || 'websocket:main';
 
     switch (msg.type) {
       case 'turn_triage':
@@ -752,26 +754,30 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
         });
         break;
 
-      case 'history':
-        if (this.activeThread() !== 'websocket:main') return;
+      case 'history': {
+        const home = this.conversations.defaultHomeKey(this.agentId);
+        if (this.activeThread() !== home) return;
         if (this.agenticActive()) return;
         if (Array.isArray(msg.messages) && msg.messages.length > 0) {
-          const restored = restoreChatMessagesFromTranscript(msg.messages);
-          const mainMsgs = this.messages().filter(
-            m => !m.sessionKey || m.sessionKey === 'websocket:main',
-          );
-          if (restored.length > mainMsgs.length) {
-            this.setMessages(restored);
+          const restored = restoreChatMessagesFromTranscript(msg.messages, {
+            sessionKey: home === 'websocket:main' ? undefined : home,
+          });
+          const homeMsgs = this.conversations.homeMessages(this.messages(), this.agentId);
+          if (restored.length > homeMsgs.length) {
+            const branch = this.conversations.nonHomeMessages(this.messages(), this.agentId);
+            this.setMessages([...branch, ...restored]);
           }
           if (transcriptHasAgenticTrace(msg.messages)) {
             this.workbench.hydrateFromTranscript(msg.messages, {
               force: !this.workbench.snapshotState().entries.length,
+              sessionKey: home,
             });
           }
           this.syncMainTranscript();
         }
         this.loadingHistory.set(false);
         break;
+      }
 
       case 'token':
         if (!this.matchesActiveThread(sk, msg)) return;
@@ -802,7 +808,7 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
             content,
             reasoning: thought.thinking || undefined,
             timestamp: new Date(),
-            sessionKey: sk !== 'websocket:main' ? sk : undefined,
+            sessionKey: this.conversations.resolveDeskSessionKey(sk, this.activeThread(), this.agentId),
           }]);
         }
         this.streamingText.set('');
@@ -820,7 +826,7 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
           type: 'assistant',
           content: msg.message || '',
           timestamp: new Date(),
-          sessionKey: sk !== 'websocket:main' ? sk : undefined,
+          sessionKey: this.conversations.resolveDeskSessionKey(sk, this.activeThread(), this.agentId),
         }]);
         this.sending.set(false);
         this.awaitingResponse.set(false);
@@ -842,7 +848,7 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
           type: 'agentic_start' as any,
           content: `Agent starting task (up to ${msg.max_steps || 15} steps)`,
           timestamp: new Date(),
-          sessionKey: sk !== 'websocket:main' ? sk : undefined,
+          sessionKey: this.conversations.resolveDeskSessionKey(sk, this.activeThread(), this.agentId),
         }]);
         break;
       }
@@ -866,7 +872,7 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
           type: 'agentic_iteration' as any,
           content: `Step ${step}: ${toolNames || 'processing'} (${successes}/${results.length} succeeded)`,
           timestamp: new Date(),
-          sessionKey: sk !== 'websocket:main' ? sk : undefined,
+          sessionKey: this.conversations.resolveDeskSessionKey(sk, this.activeThread(), this.agentId),
           agentic: {
             step,
             maxSteps: msg.max_steps || this.agenticMaxSteps(),
@@ -899,7 +905,7 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
           type: 'status',
           content: interruptText,
           timestamp: new Date(),
-          sessionKey: sk !== 'websocket:main' ? sk : undefined,
+          sessionKey: this.conversations.resolveDeskSessionKey(sk, this.activeThread(), this.agentId),
         }]);
         break;
       }
@@ -918,7 +924,7 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
             content: thought.response || remainingText,
             reasoning: thought.thinking || undefined,
             timestamp: new Date(),
-            sessionKey: sk !== 'websocket:main' ? sk : undefined,
+            sessionKey: this.conversations.resolveDeskSessionKey(sk, this.activeThread(), this.agentId),
           }]);
         }
         this.agenticActive.set(false);
@@ -939,7 +945,7 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
           type: 'agentic_complete' as any,
           content: agenticAbortLabel(aborted, msg.abort_reason || msg.exit_reason, false),
           timestamp: new Date(),
-          sessionKey: sk !== 'websocket:main' ? sk : undefined,
+          sessionKey: this.conversations.resolveDeskSessionKey(sk, this.activeThread(), this.agentId),
           agenticComplete: {
             totalSteps,
             totalToolCalls,
@@ -958,7 +964,7 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
             content: thought.response || msg.final_response,
             reasoning: thought.thinking || undefined,
             timestamp: new Date(),
-            sessionKey: sk !== 'websocket:main' ? sk : undefined,
+            sessionKey: this.conversations.resolveDeskSessionKey(sk, this.activeThread(), this.agentId),
           }]);
         }
         break;

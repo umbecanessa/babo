@@ -9,6 +9,7 @@ import {
 } from '../../features/chat/orchestration-ui.util';
 import { enrichWorkspaceRelativePath } from '../../features/projects/workspace/workspace-path.util';
 import { AgentWorkspaceContextService } from './agent-workspace-context.service';
+import { ConversationService } from './conversation.service';
 import { RunViewService } from './run-view.service';
 import {
   cleanToolResultPreview,
@@ -101,6 +102,7 @@ function surfaceFromRuntimeMsg(msg: any): string | undefined {
 @Injectable({ providedIn: 'root' })
 export class ChatWorkbenchService {
   private readonly workspaceCtx = inject(AgentWorkspaceContextService);
+  private readonly conversations = inject(ConversationService);
   private readonly orchProfiles = inject(AgentOrchestrationProfileService);
   private readonly runView = inject(RunViewService);
   private readonly _agentId = signal<string>('');
@@ -118,10 +120,10 @@ export class ChatWorkbenchService {
     let list = filterWorkbenchEntries(this.entries(), this.density());
     if (!this.showAllThreads()) {
       const key = this._activeSessionKey();
-      list = list.filter((e) => {
-        const sk = e.sessionKey || 'websocket:main';
-        return sk === key;
-      });
+      const agentId = this._agentId();
+      list = list.filter((e) =>
+        this.conversations.sessionBelongsToThread(e.sessionKey, key, agentId),
+      );
     }
     return list;
   });
@@ -154,6 +156,16 @@ export class ChatWorkbenchService {
     return (title || '').replace(/^\[Sub(?:\s+#\d+)?\]\s*/i, '').trim();
   }
 
+  /** Map legacy websocket:main tags to the active branch when Home was promoted. */
+  private resolveRuntimeSessionKey(msg: any): string {
+    const raw = String(msg?.session_key || msg?.sessionKey || '').trim();
+    const active = this._activeSessionKey() || 'websocket:main';
+    if ((!raw || raw === 'websocket:main') && active !== 'websocket:main') {
+      return active;
+    }
+    return raw || active || 'websocket:main';
+  }
+
   bindAgent(agentId: string): void {
     if (this._agentId() === agentId) return;
     this._agentId.set(agentId);
@@ -176,8 +188,9 @@ export class ChatWorkbenchService {
 
   removeEntriesForSession(sessionKey: string): void {
     if (!sessionKey) return;
+    const agentId = this._agentId();
     this.entries.update((list) =>
-      list.filter((e) => (e.sessionKey || 'websocket:main') !== sessionKey),
+      list.filter((e) => !this.conversations.sessionBelongsToThread(e.sessionKey, sessionKey, agentId)),
     );
   }
 
@@ -247,7 +260,10 @@ export class ChatWorkbenchService {
   hydrateFromTranscript(rows: unknown[], opts?: { force?: boolean; sessionKey?: string }): void {
     if (!rows?.length) return;
     const sessionKey = opts?.sessionKey || this._activeSessionKey();
-    if (!opts?.force && this.entries().some((e) => (e.sessionKey || 'websocket:main') === sessionKey)) {
+    const agentId = this._agentId();
+    if (!opts?.force && this.entries().some((e) =>
+      this.conversations.sessionBelongsToThread(e.sessionKey, sessionKey, agentId),
+    )) {
       return;
     }
 
@@ -272,7 +288,9 @@ export class ChatWorkbenchService {
     }));
 
     this.entries.update((list) => {
-      const other = list.filter((e) => (e.sessionKey || 'websocket:main') !== sessionKey);
+      const other = list.filter((e) =>
+        !this.conversations.sessionBelongsToThread(e.sessionKey, sessionKey, agentId),
+      );
       return [...other, ...entries].slice(-MAX_ENTRIES);
     });
   }
@@ -501,7 +519,7 @@ export class ChatWorkbenchService {
   recordFromRuntime(msg: any): void {
     if (!msg) return;
     const t = msg.type;
-    const sessionKey = msg.session_key || msg.sessionKey || this._activeSessionKey() || 'websocket:main';
+    const sessionKey = this.resolveRuntimeSessionKey(msg);
     const sessionFields = { sessionKey };
     const isSubAgent = msg.sub_agent === true;
     const dlgNum = delegateNumberFromMessage(msg);

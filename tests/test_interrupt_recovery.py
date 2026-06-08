@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from test_helpers import recent_journal_ts
 from nls.agentic.interrupt_recovery import (
     format_interrupted_loop_status,
     loop_journal_path,
@@ -20,7 +21,7 @@ def test_read_interrupted_loop_from_journal(tmp_path: Path):
     journal = logs / "loop_journal_agent-1.jsonl"
     journal.write_text(
         json.dumps({
-            "ts": "2026-06-08T14:02:50Z",
+            "ts": recent_journal_ts(),
             "iteration": 19,
             "n_messages": 63,
             "messages": [],

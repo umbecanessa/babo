@@ -695,6 +695,15 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     return threadKey;
   }
 
+  /** Tag live desk messages with the active thread (including promoted Home branches). */
+  private deskSessionKey(msgSessionKey?: string): string | undefined {
+    return this.conversations.resolveDeskSessionKey(
+      msgSessionKey,
+      this.currentThread(),
+      this.agentId,
+    );
+  }
+
   sendMessage() {
     const text = this.inputText.trim();
     const attachments = this.pendingAttachments();
@@ -1773,7 +1782,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
             reasoning: reasoning || undefined,
             timestamp: new Date(),
             nls: msg.nls,
-            sessionKey: sk !== 'websocket:main' ? sk : undefined,
+            sessionKey: this.deskSessionKey(sk),
           }]);
         }
         this.streamingText.set('');
@@ -2129,6 +2138,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
           type: 'agentic_start' as any,
           content: `Agent starting task (up to ${msg.max_steps || 15} steps)`,
           timestamp: new Date(),
+          sessionKey: this.deskSessionKey(msg.session_key),
         }]);
         this.panels.onAgenticStart();
         this.workbench.openPanel();
@@ -2719,6 +2729,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
                 iteration: msg.iteration || 0,
               },
               timestamp: new Date(),
+              sessionKey: this.deskSessionKey(msg.session_key),
             }];
           });
         } else if (acc.name === 'bash') {
@@ -2745,6 +2756,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
                   iteration: msg.iteration || 0,
                 },
                 timestamp: new Date(),
+                sessionKey: this.deskSessionKey(msg.session_key),
               }];
             });
           }
@@ -2965,6 +2977,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
             thinking: reasoning,
             thinkingIteration: msg.iteration || 0,
             timestamp: new Date(),
+            sessionKey: this.deskSessionKey(msg.session_key),
           }]);
         }
 
@@ -3002,6 +3015,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
               iteration: msg.iteration || 0,
             },
             timestamp: new Date(),
+            sessionKey: this.deskSessionKey(msg.session_key),
           }];
         });
 
@@ -3892,6 +3906,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
     this.http.get<any>(url).subscribe({
       next: (res) => {
+        if (this.agenticActive()) return;
         const ambient = Array.isArray(res?.ambient_timeline) ? res.ambient_timeline : [];
         const sessionMsgs = Array.isArray(res?.messages) ? res.messages : [];
         if (!ambient.length && !sessionMsgs.length) {
