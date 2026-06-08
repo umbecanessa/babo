@@ -61,7 +61,6 @@ import { ConversationNavComponent } from './conversation-nav/conversation-nav.co
 import { ConversationBreadcrumbComponent } from './conversation-breadcrumb/conversation-breadcrumb.component';
 import { ChatInboxComponent } from './chat-inbox/chat-inbox.component';
 import { ConversationContextComponent } from './conversation-context/conversation-context.component';
-
 export { agenticAbortLabel } from './orchestration-ui.util';
 
 @Component({
@@ -3780,25 +3779,12 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     }
   }
 
-  renameThread(key: string): void {
-    if (!this.conversations.isWebsocketBranch(key)) return;
-    const current = this.conversations.threads().find((t) => t.key === key);
-    const next = window.prompt('Rename branch', current?.label || 'Branch');
-    if (!next?.trim()) return;
-    this.conversations.renameBranch(key, next.trim());
-    if (this.agentId) {
-      this.api.renameSession(this.agentId, key, next.trim()).subscribe({ error: () => {} });
-    }
+  onBranchRenamed(event: { key: string; label: string }): void {
+    if (!this.agentId) return;
+    this.api.renameSession(this.agentId, event.key, event.label).subscribe({ error: () => {} });
   }
 
-  deleteThread(key: string): void {
-    if (!this.conversations.isWebsocketBranch(key)) return;
-    if (this.conversations.isDefaultHome(key)) {
-      window.alert('Cannot delete the current Home thread. Reset Home to start fresh, or set another thread as Home first.');
-      return;
-    }
-    const current = this.conversations.threads().find((t) => t.key === key);
-    if (!window.confirm(`Delete branch "${current?.label || key}" and its history?`)) return;
+  performDeleteThread(key: string): void {
     this.conversations.removeBranch(key);
     this.messages.update((msgs) => msgs.filter((m) => m.sessionKey !== key));
     this.workbench.removeEntriesForSession(key);
@@ -3810,17 +3796,8 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     }
   }
 
-  promoteToHome(key: string): void {
-    if (!this.agentId || !key) return;
-    if (key === this.conversations.defaultHomeKey(this.agentId)) return;
-    const label = this.conversations.displayLabel(
-      this.conversations.threads().find((t) => t.key === key)
-        || { key, label: key, channel: 'websocket' },
-      this.agentId,
-    );
-    if (!window.confirm(`Set "${label}" as Home? Opening this agent will start here. Chat history stays on each thread — nothing is moved.`)) {
-      return;
-    }
+  performPromoteToHome(key: string): void {
+    if (!this.agentId) return;
     this.api.setDefaultHomeSession(this.agentId, key).subscribe({
       next: () => {
         this.conversations.setDefaultHomeForAgent(this.agentId, key);
@@ -3830,14 +3807,8 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     });
   }
 
-  resetHome(): void {
+  performResetHome(): void {
     if (!this.agentId) return;
-    if (!window.confirm(
-      'Start a fresh Home thread?\n\n'
-      + 'A new branch is created and set as Home. Your current Home stays in the list as a branch. '
-      + 'Agent knowledge (facts, memory) is unchanged.',
-    )) return;
-
     const id = Date.now().toString(36);
     const key = `websocket:thread:${id}`;
     const count = this.conversations.threads().filter((t) => this.conversations.isWebsocketBranch(t.key)).length;

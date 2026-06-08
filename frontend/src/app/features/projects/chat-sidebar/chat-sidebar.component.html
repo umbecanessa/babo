@@ -1,11 +1,24 @@
 <div class="chat-sidebar">
   <div class="sidebar-header">
     <div class="thread-picker">
-      <select class="thread-select" [ngModel]="activeThread()" (ngModelChange)="selectThread($event)">
-        @for (thread of websocketThreads(); track thread.key) {
-          <option [value]="thread.key">{{ conversations.displayLabel(thread, agentId) }}</option>
-        }
-      </select>
+      @if (renamingBranch()) {
+        <input
+          class="thread-rename-input"
+          type="text"
+          [ngModel]="renameDraft()"
+          (ngModelChange)="updateRenameDraft($event)"
+          (keydown)="onRenameKeydown($event)"
+          (blur)="onRenameBlur()"
+          spellcheck="false"
+          autofocus
+        />
+      } @else {
+        <select class="thread-select" [ngModel]="activeThread()" (ngModelChange)="selectThread($event)">
+          @for (thread of websocketThreads(); track thread.key) {
+            <option [value]="thread.key">{{ conversations.displayLabel(thread, agentId) }}</option>
+          }
+        </select>
+      }
       @if (showThreadMenu()) {
         <button
           type="button"
@@ -31,3 +44,15 @@
     <button class="icon-btn" type="button" title="New branch" (click)="createNewBranch()">+</button>
     <button class="close-btn" (click)="close.emit()" title="Close">&times;</button>
   </div>
+
+  @if (threadConfirm(); as confirm) {
+    <app-confirm-dialog
+      [title]="confirm.title"
+      [message]="confirm.message"
+      [confirmLabel]="confirm.confirmLabel"
+      [variant]="confirm.variant"
+      (confirmed)="executeThreadConfirm()"
+      (cancelled)="cancelThreadConfirm()"
+    />
+  }
+</div>

@@ -89,6 +89,21 @@
   white-space: nowrap;
 }
 
+.conv-nav-rename-input {
+  flex: 1;
+  min-width: 0;
+  padding: 2px 6px;
+  margin: -2px 0;
+  border: 1px solid var(--accent-primary);
+  border-radius: 4px;
+  background: var(--modal-bg, var(--bg-secondary));
+  color: var(--text-primary);
+  font-size: inherit;
+  font-family: inherit;
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent-primary-glow);
+}
+
 .conv-nav-badge {
   font-size: 0.65rem;
   font-weight: 700;
@@ -164,6 +179,10 @@
   &.inbox {
     color: var(--accent-warning, #f59e0b);
   }
+}
+
+.conv-nav-item--renaming {
+  cursor: text;
 }
 
 .conv-nav-row {

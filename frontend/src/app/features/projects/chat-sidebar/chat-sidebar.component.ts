@@ -27,6 +27,8 @@ import { ConversationService } from '../../../core/services/conversation.service
 import { ChatAttachmentService } from '../../../core/services/chat-attachment.service';
 import { VoiceRecorderService } from '../../../core/services/voice-recorder.service';
 import { ToastService } from '../../../shared/toast/toast.service';
+import { ConfirmDialogComponent } from '../../../shared/confirm-dialog/confirm-dialog.component';
+import { ThreadConfirmRequest } from '../../../shared/thread-dialog/thread-dialog.types';
 import { composerDestination } from '../../../core/services/composer-destination.util';
 import { isFolderAttachment } from '../../../core/utils/chat-drop.util';
 import { parseThinking } from '../../../shared/signal-utils';
@@ -50,6 +52,7 @@ import { agenticAbortLabel } from '../../chat/orchestration-ui.util';
     MessageListComponent,
     ChatModelPickerComponent,
     ChatOrchestrationProfilePickerComponent,
+    ConfirmDialogComponent,
   ],
   templateUrl: './chat-sidebar.component.html',
   styleUrl: './chat-sidebar.component.scss',
@@ -119,6 +122,9 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
   });
 
   branchMenuOpen = signal(false);
+  renamingBranch = signal(false);
+  renameDraft = signal('');
+  threadConfirm = signal<ThreadConfirmRequest | null>(null);
 
   private wsSub?: Subscription;
   private prevAgentId = '';
@@ -181,24 +187,128 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
     if (!this.conversations.isWebsocketBranch(key)) return;
     this.branchMenuOpen.set(false);
     const current = this.conversations.threads().find((t) => t.key === key);
-    const next = window.prompt('Rename branch', current?.label || 'Branch');
-    if (!next?.trim()) return;
-    this.conversations.renameBranch(key, next.trim());
-    if (this.agentId) {
-      this.api.renameSession(this.agentId, key, next.trim()).subscribe({ error: () => {} });
+    this.renameDraft.set(current?.label || 'Branch');
+    this.renamingBranch.set(true);
+  }
+
+  updateRenameDraft(value: string): void {
+    this.renameDraft.set(value);
+  }
+
+  onRenameKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      this.commitRename();
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      this.cancelRename();
     }
+  }
+
+  onRenameBlur(): void {
+    queueMicrotask(() => {
+      if (!this.renamingBranch()) return;
+      this.commitRename();
+    });
+  }
+
+  private commitRename(): void {
+    const key = this.activeThread();
+    const trimmed = this.renameDraft().trim();
+    this.renamingBranch.set(false);
+    if (!trimmed || !this.conversations.isWebsocketBranch(key)) return;
+    this.conversations.renameBranch(key, trimmed);
+    if (this.agentId) {
+      this.api.renameSession(this.agentId, key, trimmed).subscribe({ error: () => {} });
+    }
+  }
+
+  cancelRename(): void {
+    this.renamingBranch.set(false);
+    this.renameDraft.set('');
   }
 
   deleteActiveBranch(): void {
     const key = this.activeThread();
     if (!this.conversations.isWebsocketBranch(key)) return;
     if (this.conversations.isDefaultHome(key, this.agentId)) {
-      window.alert('Cannot delete the current Home thread. Reset Home or set another thread as Home first.');
+      this.toast.show(
+        'Cannot delete the current Home thread. Reset Home or set another thread as Home first.',
+        'error',
+      );
       return;
     }
     this.branchMenuOpen.set(false);
     const current = this.conversations.threads().find((t) => t.key === key);
-    if (!window.confirm(`Delete branch "${current?.label || key}" and its history?`)) return;
+    this.threadConfirm.set({
+      title: 'Delete branch',
+      message: `Delete branch "${current?.label || key}" and its history?`,
+      confirmLabel: 'Delete',
+      variant: 'danger',
+      action: 'delete_branch',
+      sessionKey: key,
+    });
+  }
+
+  promoteToHome(): void {
+    const key = this.activeThread();
+    if (!this.agentId || !key || this.conversations.isDefaultHome(key, this.agentId)) return;
+    this.branchMenuOpen.set(false);
+    const label = this.conversations.displayLabel(
+      this.conversations.threads().find((t) => t.key === key)
+        || { key, label: key, channel: 'websocket' },
+      this.agentId,
+    );
+    this.threadConfirm.set({
+      title: 'Set as Home',
+      message:
+        `Set "${label}" as Home? Opening this agent will start here. `
+        + 'Chat history stays on each thread — nothing is moved.',
+      confirmLabel: 'Set as Home',
+      variant: 'default',
+      action: 'promote_home',
+      sessionKey: key,
+    });
+  }
+
+  resetHome(): void {
+    if (!this.agentId) return;
+    this.branchMenuOpen.set(false);
+    this.threadConfirm.set({
+      title: 'Reset Home',
+      message:
+        'Start a fresh Home thread?\n\n'
+        + 'A new branch is created and set as Home. Your current Home stays in the list as a branch. '
+        + 'Agent knowledge (facts, memory) is unchanged.',
+      confirmLabel: 'Reset Home',
+      variant: 'default',
+      action: 'reset_home',
+      sessionKey: '',
+    });
+  }
+
+  executeThreadConfirm(): void {
+    const req = this.threadConfirm();
+    if (!req) return;
+    this.threadConfirm.set(null);
+    switch (req.action) {
+      case 'delete_branch':
+        this.performDeleteBranch(req.sessionKey);
+        break;
+      case 'promote_home':
+        this.performPromoteToHome(req.sessionKey);
+        break;
+      case 'reset_home':
+        this.performResetHome();
+        break;
+    }
+  }
+
+  cancelThreadConfirm(): void {
+    this.threadConfirm.set(null);
+  }
+
+  private performDeleteBranch(key: string): void {
     this.conversations.removeBranch(key);
     this.messages.update((msgs) => msgs.filter((m) => m.sessionKey !== key));
     this.workbench.removeEntriesForSession(key);
@@ -208,26 +318,19 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
     this.selectThread(this.conversations.defaultHomeKey(this.agentId));
   }
 
-  promoteToHome(): void {
-    const key = this.activeThread();
-    if (!this.agentId || !key || this.conversations.isDefaultHome(key, this.agentId)) return;
-    const label = this.conversations.displayLabel(
-      this.conversations.threads().find((t) => t.key === key)
-        || { key, label: key, channel: 'websocket' },
-      this.agentId,
-    );
-    if (!window.confirm(`Set "${label}" as Home?`)) return;
+  private performPromoteToHome(key: string): void {
+    if (!this.agentId) return;
     this.api.setDefaultHomeSession(this.agentId, key).subscribe({
-      next: () => this.conversations.setDefaultHomeForAgent(this.agentId, key),
+      next: () => {
+        this.conversations.setDefaultHomeForAgent(this.agentId, key);
+        this.selectThread(key);
+      },
       error: () => {},
     });
   }
 
-  resetHome(): void {
+  private performResetHome(): void {
     if (!this.agentId) return;
-    if (!window.confirm(
-      'Start a fresh Home thread? Current Home stays in the list. Agent knowledge is unchanged.',
-    )) return;
     const id = Date.now().toString(36);
     const key = `websocket:thread:${id}`;
     const count = this.websocketThreads().filter((t) => this.conversations.isWebsocketBranch(t.key)).length;

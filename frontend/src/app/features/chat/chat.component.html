@@ -243,12 +243,13 @@
         class="conv-nav-desktop"
         [currentKey]="currentThread()"
         [collapsed]="panels.navRail() === 'collapsed'"
+        [agentId]="agentId"
         (selectThread)="switchThread($event)"
         (newBranch)="createNewThread()"
-        (renameBranch)="renameThread($event)"
-        (deleteBranch)="deleteThread($event)"
-        (promoteToHome)="promoteToHome($event)"
-        (resetHome)="resetHome()"
+        (branchRenamed)="onBranchRenamed($event)"
+        (deleteBranchConfirmed)="performDeleteThread($event)"
+        (promoteToHomeConfirmed)="performPromoteToHome($event)"
+        (resetHomeConfirmed)="performResetHome()"
         (openInbox)="openInboxFromNav()"
       />
 
@@ -546,12 +547,13 @@
       <app-conversation-nav
         [currentKey]="currentThread()"
         [collapsed]="false"
+        [agentId]="agentId"
         (selectThread)="switchThread($event); closeMobileConvNav()"
         (newBranch)="createNewThread(); closeMobileConvNav()"
-        (renameBranch)="renameThread($event)"
-        (deleteBranch)="deleteThread($event)"
-        (promoteToHome)="promoteToHome($event)"
-        (resetHome)="resetHome()"
+        (branchRenamed)="onBranchRenamed($event)"
+        (deleteBranchConfirmed)="performDeleteThread($event)"
+        (promoteToHomeConfirmed)="performPromoteToHome($event)"
+        (resetHomeConfirmed)="performResetHome()"
         (openInbox)="openInboxFromNav(); closeMobileConvNav(); openBottomSheet(); setMobileSheetTab('inbox')"
       />
     </aside>

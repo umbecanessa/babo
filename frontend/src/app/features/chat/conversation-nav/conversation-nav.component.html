@@ -14,20 +14,40 @@
           <div class="conv-nav-group-header">{{ group.label }}</div>
           @for (t of group.threads; track t.key) {
             <div class="conv-nav-row" [class.active]="isActive(t.key)">
-              <button
-                type="button"
-                class="conv-nav-item"
-                [class.active]="isActive(t.key)"
-                [class.is-home]="conversations.isDefaultHome(t.key)"
-                [attr.data-channel]="t.channel"
-                (click)="onSelect(t.key); closeBranchMenu()"
-              >
-                <span class="conv-nav-dot" [attr.data-channel]="t.channel"></span>
-                <span class="conv-nav-label">{{ conversations.displayLabel(t) }}</span>
-                @if (unreadCount(t)) {
-                  <span class="conv-nav-unread"></span>
-                }
-              </button>
+              @if (isRenaming(t.key)) {
+                <div
+                  class="conv-nav-item conv-nav-item--renaming"
+                  [class.active]="isActive(t.key)"
+                  [class.is-home]="conversations.isDefaultHome(t.key, agentId)"
+                >
+                  <span class="conv-nav-dot" [attr.data-channel]="t.channel"></span>
+                  <input
+                    class="conv-nav-rename-input"
+                    type="text"
+                    [ngModel]="renameDraft"
+                    (ngModelChange)="updateRenameDraft($event)"
+                    (keydown)="onRenameKeydown($event, t.key)"
+                    (blur)="onRenameBlur(t.key)"
+                    spellcheck="false"
+                    autofocus
+                  />
+                </div>
+              } @else {
+                <button
+                  type="button"
+                  class="conv-nav-item"
+                  [class.active]="isActive(t.key)"
+                  [class.is-home]="conversations.isDefaultHome(t.key, agentId)"
+                  [attr.data-channel]="t.channel"
+                  (click)="onSelect(t.key); closeBranchMenu()"
+                >
+                  <span class="conv-nav-dot" [attr.data-channel]="t.channel"></span>
+                  <span class="conv-nav-label">{{ conversations.displayLabel(t, agentId) }}</span>
+                  @if (unreadCount(t)) {
+                    <span class="conv-nav-unread"></span>
+                  }
+                </button>
+              }
               <button
                 type="button"
                 class="conv-nav-branch-menu"
@@ -36,7 +56,7 @@
               >⋯</button>
               @if (branchMenuKey === t.key) {
                 <div class="conv-nav-branch-actions">
-                  @if (conversations.isDefaultHome(t.key)) {
+                  @if (conversations.isDefaultHome(t.key, agentId)) {
                     <button type="button" (click)="onResetHome($event)">Reset Home…</button>
                   } @else {
                     <button type="button" (click)="onPromoteToHome(t.key, $event)">Set as Home</button>
@@ -74,3 +94,14 @@
     }
   }
 </nav>
+
+@if (confirmDialog(); as confirm) {
+  <app-confirm-dialog
+    [title]="confirm.title"
+    [message]="confirm.message"
+    [confirmLabel]="confirm.confirmLabel"
+    [variant]="confirm.variant"
+    (confirmed)="executeConfirm()"
+    (cancelled)="cancelConfirm()"
+  />
+}
