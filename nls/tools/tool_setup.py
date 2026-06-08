@@ -207,6 +207,9 @@ def setup_tools(
                 _scwd.path = pd_abs
                 if _bt is not None and hasattr(_bt, "_cwd"):
                     _bt._cwd = pd_abs
+                    _bt._project_venv_bin = None
+                    if hasattr(_bt, "_project_venv_root"):
+                        _bt._project_venv_root = None
                 logger.info("Orchestrator CWD switched to %s", pd_abs)
             plan_tool.set_cwd_switch_fn(_switch_cwd)
             # Reset CWD to workspace root when a plan completes, so that

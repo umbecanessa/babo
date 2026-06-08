@@ -653,6 +653,35 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
         break;
       }
 
+      case 'loop_interrupted': {
+        this.awaitingResponse.set(false);
+        this.agenticActive.set(false);
+        this.agenticStep.set(0);
+        const interruptText =
+          msg.content
+          || `Previous task was interrupted at step ${msg.iteration ?? '?'}. Use Continue to resume.`;
+        const resumeToken = String(msg.resume_token || msg.interrupted_at || '');
+        const agentKey = this.agentId || sk;
+        const storageKey = `loop_interrupt_seen_${agentKey}_${resumeToken}`;
+        if (resumeToken && sessionStorage.getItem(storageKey)) {
+          break;
+        }
+        if (resumeToken) {
+          sessionStorage.setItem(storageKey, '1');
+        }
+        this.appendMessages([{
+          type: 'status',
+          content: interruptText,
+          timestamp: new Date(),
+          sessionKey: sk !== 'websocket:main' ? sk : undefined,
+        }]);
+        break;
+      }
+
+      case 'loop_interrupt_dismissed': {
+        break;
+      }
+
       case 'agentic_complete': {
         if (msg.sub_agent === true || msg.autonomous) break;
         const remainingText = this.streamingText();

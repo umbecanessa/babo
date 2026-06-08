@@ -142,6 +142,11 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
   agenticActive = signal(false);
   agenticStep = signal(0);
   agenticMaxSteps = signal(0);
+  loopInterruptBanner = signal<{
+    content: string;
+    resumeToken: string;
+    iteration?: number;
+  } | null>(null);
   activityStatus = signal('');
   projectProcesses = signal<ProjectProcess[]>([]);
   projectProcessesOpen = signal(false);
@@ -494,6 +499,20 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       },
       error: () => void this.refreshProjectProcesses(),
     });
+  }
+
+  resumeInterruptedTask(): void {
+    const banner = this.loopInterruptBanner();
+    this.loopInterruptBanner.set(null);
+    if (!this.ws.resumeInterruptedLoop()) {
+      this.loopInterruptBanner.set(banner);
+    }
+  }
+
+  dismissInterruptedTask(): void {
+    const banner = this.loopInterruptBanner();
+    this.loopInterruptBanner.set(null);
+    this.ws.dismissInterruptedLoop(banner?.resumeToken);
   }
 
   projectProcessKindLabel(kind: string): string {
@@ -1758,6 +1777,35 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         }
         break;
 
+      case 'loop_interrupted': {
+        this.clearAwaitingResponse();
+        if (this.agenticActive()) {
+          this.clearStaleAgenticUi('runtime_interrupt');
+        }
+        const interruptText =
+          msg.content
+          || `Previous task was interrupted at step ${msg.iteration ?? '?'}. Use Continue to resume.`;
+        const resumeToken = String(msg.resume_token || msg.interrupted_at || '');
+        const storageKey = `loop_interrupt_seen_${this.agentId}_${resumeToken}`;
+        if (resumeToken && sessionStorage.getItem(storageKey)) {
+          break;
+        }
+        if (resumeToken) {
+          sessionStorage.setItem(storageKey, '1');
+        }
+        this.loopInterruptBanner.set({
+          content: interruptText,
+          resumeToken,
+          iteration: msg.iteration,
+        });
+        break;
+      }
+
+      case 'loop_interrupt_dismissed': {
+        this.loopInterruptBanner.set(null);
+        break;
+      }
+
       case 'status': {
         // Only show a chat status bubble for meaningful transitions
         // (not the initial "alive" connect status)
@@ -2020,6 +2068,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       }
 
       case 'agentic_start': {
+        this.loopInterruptBanner.set(null);
         if (msg.orchestration_profile) {
           this.orchProfiles.noteTriageProfile(this.agentId, {
             profile: msg.orchestration_profile as string,
@@ -2196,6 +2245,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
       case 'agentic_complete': {
         if (msg.sub_agent === true) break;
+        this.loopInterruptBanner.set(null);
 
         if (msg.autonomous) {
           this.backgroundTaskActive.set(false);

@@ -48,6 +48,28 @@ async def health(request: Request) -> dict:
         except Exception:
             pass
 
+    agentic_loops_ws = 0
+    cm = getattr(app.state, "connection_manager", None)
+    if cm is not None:
+        try:
+            for aid in cm.connected_agents():
+                if cm.agentic_running(aid):
+                    agentic_loops_ws += 1
+        except Exception:
+            pass
+
+    agentic_loops_disk = 0
+    settings = getattr(app.state, "settings", None)
+    if settings is not None:
+        try:
+            from nls.agentic.active_loop_marker import count_active_agentic_loops
+
+            agentic_loops_disk = count_active_agentic_loops(settings.agents_dir)
+        except Exception:
+            pass
+
+    agentic_loops_active = max(agentic_loops_ws, agentic_loops_disk)
+
     return {
         "status": "healthy" if model_status["loaded"] else "loading",
         "model": model_status,
@@ -55,6 +77,8 @@ async def health(request: Request) -> dict:
         "consciousness": consciousness_status,
         "agents": agent_overview,
         "agent_energy": agent_energy,
+        "agentic_loops_active": agentic_loops_active,
+        "agentic_running": agentic_loops_active > 0,
     }
 
 

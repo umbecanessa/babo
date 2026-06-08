@@ -224,6 +224,20 @@
       </div>
     }
 
+    @if (loopInterruptBanner(); as interrupt) {
+      <div class="connection-banner loop-interrupt-banner">
+        <span>{{ interrupt.content }}</span>
+        <div class="loop-interrupt-actions">
+          <button type="button" class="loop-interrupt-btn primary" (click)="resumeInterruptedTask()">
+            Continue
+          </button>
+          <button type="button" class="loop-interrupt-btn" (click)="dismissInterruptedTask()">
+            Dismiss
+          </button>
+        </div>
+      </div>
+    }
+
     <div class="chat-workspace" [class.nav-collapsed]="panels.navRail() === 'collapsed'">
       <app-conversation-nav
         class="conv-nav-desktop"

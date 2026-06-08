@@ -98,6 +98,7 @@ export interface ChatMessage {
     | 'agentic_start'
     | 'turn_triage'
     | 'agentic_iteration'
+    | 'loop_interrupted'
     | 'agentic_complete'
     | 'activity_status'
     | 'tool_output_chunk'
@@ -435,6 +436,16 @@ export class WebSocketService {
 
   sendAbort(): void {
     this.sendCommand('abort');
+  }
+
+  resumeInterruptedLoop(sessionKey = 'websocket:main'): boolean {
+    return this.sendPayload({ type: 'loop_resume', session_key: sessionKey });
+  }
+
+  dismissInterruptedLoop(resumeToken?: string): boolean {
+    return this.sendCommand('dismiss_interrupted_loop', {
+      resume_token: resumeToken || '',
+    });
   }
 
   /**

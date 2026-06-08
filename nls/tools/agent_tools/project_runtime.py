@@ -710,6 +710,250 @@ def parse_pip_requirements_ref(package: str) -> str | None:
     return None
 
 
+_RUNTIME_ONLY_ROOT_PACKAGES = frozenset({"anthropic", "openai"})
+
+
+def list_nested_python_package_dirs(
+    workspace_root: str,
+    *,
+    max_depth: int = 2,
+) -> list[Path]:
+    """Subdirectories under *workspace_root* with their own Python manifests."""
+    workspace = Path(workspace_root).resolve()
+    found: set[Path] = set()
+    for filename in ("requirements.txt", "pyproject.toml", "setup.py", "Pipfile"):
+        for path in discover_files_under(workspace, filename, max_depth=max_depth):
+            parent = path.parent.resolve()
+            if parent != workspace:
+                found.add(parent)
+    return sorted(found, key=lambda p: (len(p.relative_to(workspace).parts), str(p)))
+
+
+def _path_is_under(parent: Path, child: Path) -> bool:
+    try:
+        child.resolve().relative_to(parent.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def resolve_nearest_nested_python_package(
+    cwd: str,
+    scope_root: str,
+) -> Path | None:
+    """Pick the nested Python package closest to *cwd* within *scope_root*."""
+    scope = Path(scope_root).resolve()
+    cwd_path = Path(cwd).resolve()
+    nested = list_nested_python_package_dirs(str(scope))
+    if not nested:
+        return None
+    if len(nested) == 1:
+        return nested[0]
+
+    inside = [
+        p for p in nested
+        if cwd_path == p.resolve() or _path_is_under(p, cwd_path)
+    ]
+    if len(inside) == 1:
+        return inside[0]
+
+    if cwd_path == scope:
+        return None
+
+    # cwd between scope and packages (e.g. monorepo/apps/foo without manifest)
+    descendants = [
+        p for p in nested if _path_is_under(cwd_path, p)
+    ]
+    if len(descendants) == 1:
+        return descendants[0]
+    return None
+
+
+def format_ambiguous_venv_hint(scope_root: str) -> str:
+    nested = list_nested_python_package_dirs(scope_root)
+    names = ", ".join(p.name for p in nested[:6])
+    return (
+        f"Multiple Python packages ({names}). "
+        "cd into one package folder or pass project_install(install_dir='<folder>')."
+    )
+
+
+def root_requirements_is_runtime_only(requirements_path: Path) -> bool:
+    """True when root requirements.txt only lists agent-runtime SDK deps."""
+    try:
+        lines = [
+            line.strip()
+            for line in requirements_path.read_text(encoding="utf-8", errors="replace").splitlines()
+            if line.strip() and not line.strip().startswith("#")
+        ]
+    except OSError:
+        return False
+    if not lines or len(lines) > 3:
+        return False
+    for line in lines:
+        base = line.split("[")[0].split("==")[0].split(">=")[0].strip().lower()
+        if base not in _RUNTIME_ONLY_ROOT_PACKAGES:
+            return False
+    return True
+
+
+def resolve_effective_venv_root(
+    cwd: str,
+    workspace_root: str,
+    *,
+    plan_project_dir: str | None = None,
+    install_dir: str | None = None,
+) -> str | None:
+    """Directory that should own ``.venv`` for the current working directory."""
+    if install_dir:
+        project_root = resolve_project_root(
+            cwd,
+            workspace_root,
+            plan_project_dir=plan_project_dir,
+        ) or workspace_root
+        return resolve_venv_project_root(
+            project_root,
+            install_dir=install_dir,
+            cwd=cwd,
+        )
+
+    cwd_path = Path(cwd).resolve()
+    stop = plan_install_boundary(workspace_root, plan_project_dir)
+    stop_path = stop.resolve()
+
+    nested = list_nested_python_package_dirs(str(stop_path))
+    nearest = resolve_nearest_nested_python_package(cwd, str(stop_path))
+    if nearest is not None and nearest.resolve() != stop_path:
+        return str(nearest)
+
+    owner: Path | None = None
+    current = cwd_path
+    while True:
+        has_py = (current / "requirements.txt").is_file() or any(
+            (current / m).is_file()
+            for m in _PYTHON_MARKERS
+            if m != "requirements.txt"
+        )
+        if has_py:
+            owner = current
+            break
+        if current == stop_path or current.parent == current:
+            break
+        try:
+            current.relative_to(stop_path)
+        except ValueError:
+            break
+        current = current.parent
+
+    if owner is None:
+        return resolve_project_root(
+            cwd,
+            workspace_root,
+            plan_project_dir=plan_project_dir,
+        )
+
+    at_monorepo_root = owner.resolve() == stop_path
+    if at_monorepo_root and nested:
+        req = owner / "requirements.txt"
+        if len(nested) == 1:
+            return str(nested[0])
+        if req.is_file() and root_requirements_is_runtime_only(req):
+            if nearest is not None:
+                return str(nearest)
+            return None
+        if len(nested) > 1:
+            logger.info(
+                "[project_runtime] Ambiguous monorepo venv at root; "
+                "nested packages: %s",
+                ", ".join(p.name for p in nested[:4]),
+            )
+            return None
+    return str(owner)
+
+
+def resolve_guardrail_workspace(
+    cwd: str,
+    workspace_root: str,
+    *,
+    plan_project_dir: str | None = None,
+) -> str:
+    """Monorepo/project root for dual-.venv guardrails (not the agent home)."""
+    ws_path = Path(workspace_root).resolve()
+    cwd_path = Path(cwd).resolve()
+    plan_dir = (plan_project_dir or "").strip().strip("/\\")
+    if plan_dir:
+        planned = (ws_path / plan_dir).resolve()
+        try:
+            planned.relative_to(ws_path)
+            cwd_path.relative_to(planned)
+            return str(planned)
+        except ValueError:
+            pass
+
+    parent = cwd_path.parent
+    if parent != cwd_path:
+        nested = list_nested_python_package_dirs(str(parent))
+        if nested and cwd_path in nested:
+            return str(parent.resolve())
+
+    project_root = resolve_project_root(
+        cwd,
+        workspace_root,
+        plan_project_dir=plan_project_dir,
+    )
+    if project_root:
+        return str(Path(project_root).resolve())
+    return str(plan_install_boundary(workspace_root, plan_project_dir).resolve())
+
+
+def dual_venv_conflict_message(
+    workspace_root: str,
+    *,
+    target_venv_root: str,
+) -> str | None:
+    """Return a guardrail error when multiple ``.venv`` trees would conflict."""
+    workspace = Path(workspace_root).resolve()
+    target = Path(target_venv_root).resolve()
+    nested = list_nested_python_package_dirs(str(workspace))
+    if not nested:
+        return None
+
+    root_venv = workspace / ".venv"
+    nested_with_venv = [p for p in nested if (p / ".venv").is_dir()]
+
+    if root_venv.is_dir() and nested_with_venv:
+        nested_names = ", ".join(f"{p.name}/.venv" for p in nested_with_venv[:3])
+        return (
+            "Dual .venv conflict: repo root `.venv` and nested "
+            f"{nested_names}. Use ONE venv per Python package — remove the "
+            "extra `.venv` and install with "
+            f"project_install(install_dir='{nested_with_venv[0].name}')."
+        )
+
+    if target == workspace and nested:
+        names = ", ".join(p.name for p in nested[:4])
+        return (
+            f"Do not create `.venv` at the monorepo root when Python packages "
+            f"live in {names}. Use project_install(install_dir='<folder>') "
+            f"or cd into that folder first."
+        )
+    return None
+
+
+def check_venv_location_allowed(
+    venv_root: str,
+    workspace_root: str,
+) -> str | None:
+    """Block new venv creation at the wrong monorepo level."""
+    venv_dir = Path(venv_root).resolve() / ".venv"
+    if venv_dir.is_dir():
+        return None
+    return dual_venv_conflict_message(
+        workspace_root,
+        target_venv_root=venv_root,
+    )
+
+
 def _venv_paths(project_root: str) -> tuple[Path, Path, Path]:
     venv_dir = Path(project_root) / ".venv"
     bin_dir = venv_dir / ("Scripts" if _IS_WINDOWS else "bin")
@@ -717,7 +961,11 @@ def _venv_paths(project_root: str) -> tuple[Path, Path, Path]:
     return venv_dir, bin_dir, python_exe
 
 
-def ensure_project_venv(project_root: str) -> tuple[str | None, str | None]:
+def ensure_project_venv(
+    project_root: str,
+    *,
+    workspace_root: str | None = None,
+) -> tuple[str | None, str | None]:
     """Ensure ``project_root/.venv`` exists.
 
     Returns ``(bin_dir, python_exe)`` as strings, or ``(None, None)`` on failure.
@@ -729,6 +977,12 @@ def ensure_project_venv(project_root: str) -> tuple[str | None, str | None]:
 
     if python_exe.exists():
         return str(bin_dir), str(python_exe)
+
+    ws = workspace_root or project_root
+    blocked = check_venv_location_allowed(project_root, ws)
+    if blocked:
+        logger.warning("[project_runtime] Blocked venv creation: %s", blocked)
+        return None, None
 
     try:
         logger.info("[project_runtime] Creating project venv: %s", venv_dir)

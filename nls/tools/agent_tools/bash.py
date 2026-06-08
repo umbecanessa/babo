@@ -449,6 +449,7 @@ class BashTool:
         self._detached_records: list[_DetachedProcessRecord] = []
         # Per-project venv cache: None = not resolved yet, "" = failed
         self._project_venv_bin: str | None = None
+        self._project_venv_root: str | None = None
         self._plan_project_dir_fn: Callable[[], str] | None = None
         self._plan_blocks_server_install_fn: Callable[[], bool] | None = None
         self._isolated_env = self._build_isolated_env(cwd)
@@ -580,6 +581,16 @@ class BashTool:
             plan_project_dir=self._plan_project_dir() or None,
         )
 
+    def _sync_cwd_from_shared(self) -> None:
+        """Keep bash CWD aligned with SharedCWD and invalidate stale venv cache."""
+        if self._shared_cwd is None:
+            return
+        new_cwd = str(self._shared_cwd)
+        if new_cwd != self._cwd:
+            self._cwd = new_cwd
+            self._project_venv_bin = None
+            self._project_venv_root = None
+
     def _ensure_project_venv(self) -> str | None:
         """Lazily create a ``.venv`` in the project directory.
 
@@ -587,23 +598,48 @@ class BashTool:
         elsewhere), or ``None`` on failure.  Result is cached so
         subsequent calls are instant.
         """
-        if self._project_venv_bin is not None:
-            return self._project_venv_bin or None  # "" means failed
+        self._sync_cwd_from_shared()
 
-        project_root = self._resolve_project_root()
-        if not project_root:
+        from .project_runtime import (
+            ensure_project_venv,
+            resolve_effective_venv_root,
+            resolve_guardrail_workspace,
+        )
+
+        plan_dir = self._plan_project_dir() or None
+        guardrail_ws = resolve_guardrail_workspace(
+            self._cwd,
+            self._workspace_root,
+            plan_project_dir=plan_dir,
+        )
+        venv_root = resolve_effective_venv_root(
+            self._cwd,
+            self._workspace_root,
+            plan_project_dir=plan_dir,
+        )
+        if not venv_root:
             self._project_venv_bin = ""
+            self._project_venv_root = None
             return None
 
-        from .project_runtime import ensure_project_venv
+        if (
+            self._project_venv_bin is not None
+            and self._project_venv_root == venv_root
+        ):
+            return self._project_venv_bin or None  # "" means failed
 
-        bin_dir, _python_exe = ensure_project_venv(project_root)
+        bin_dir, _python_exe = ensure_project_venv(
+            venv_root,
+            workspace_root=guardrail_ws,
+        )
         if bin_dir:
             self._project_venv_bin = bin_dir
+            self._project_venv_root = venv_root
             logger.info("[BASH] Project venv ready: %s", bin_dir)
             return bin_dir
 
         self._project_venv_bin = ""
+        self._project_venv_root = venv_root
         return None
 
     _PYTHON_INVOCATION_RE = re.compile(
@@ -726,11 +762,24 @@ class BashTool:
 
     def _venv_context_suffix(self) -> str:
         """Clarify which .venv applies when monorepo has nested layouts."""
+        self._sync_cwd_from_shared()
         try:
+            from .project_runtime import resolve_guardrail_workspace
+
+            if self._project_venv_bin and self._project_venv_root:
+                venv_dir = Path(self._project_venv_root) / ".venv"
+                if venv_dir.is_dir():
+                    return f"\n[venv: {venv_dir}]"
             cwd = Path(self._cwd).resolve()
-            ws = Path(self._workspace_root).resolve()
+            guardrail_ws = Path(
+                resolve_guardrail_workspace(
+                    self._cwd,
+                    self._workspace_root,
+                    plan_project_dir=self._plan_project_dir() or None,
+                ),
+            ).resolve()
             cwd_venv = cwd / ".venv"
-            root_venv = ws / ".venv"
+            root_venv = guardrail_ws / ".venv"
             if cwd_venv.is_dir() and (cwd_venv / "Scripts" / "python.exe").exists():
                 py = cwd_venv / "Scripts" / "python.exe"
             elif cwd_venv.is_dir() and (cwd_venv / "bin" / "python").exists():
@@ -739,7 +788,7 @@ class BashTool:
                 py = None
             if py is not None:
                 return f"\n[venv: {cwd_venv}]"
-            if root_venv.is_dir() and cwd != ws:
+            if root_venv.is_dir() and cwd != guardrail_ws:
                 return (
                     f"\n[venv: no .venv in {cwd.name}/ — root has {root_venv}; "
                     f"use project_install(install_dir='{cwd.name}') for app deps]"
@@ -1311,17 +1360,24 @@ class BashTool:
             except Exception:
                 pass
 
-        # 3. Project venv: if _cwd changed (delegate cloning), the venv
-        #    may not have been resolved yet.  Refresh PATH accordingly.
+        # 3. Project venv: refresh PATH when CWD / venv root changes.
         _proj_venv = self._ensure_project_venv()
-        if _proj_venv and _proj_venv not in self._isolated_env.get("PATH", ""):
-            self._isolated_env["PATH"] = (
-                _proj_venv + os.pathsep
-                + self._isolated_env.get("PATH", "")
-            )
-            self._isolated_env["VIRTUAL_ENV"] = str(
-                Path(_proj_venv).parent
-            )
+        if _proj_venv:
+            path = self._isolated_env.get("PATH", "")
+            cleaned: list[str] = []
+            for segment in path.split(os.pathsep):
+                if not segment:
+                    continue
+                norm = segment.replace("\\", "/").lower()
+                if segment != _proj_venv and (
+                    "/.venv/" in norm
+                    or norm.endswith("/.venv/scripts")
+                    or norm.endswith("/.venv/bin")
+                ):
+                    continue
+                cleaned.append(segment)
+            self._isolated_env["PATH"] = _proj_venv + os.pathsep + os.pathsep.join(cleaned)
+            self._isolated_env["VIRTUAL_ENV"] = str(Path(_proj_venv).parent)
 
     async def _try_install_redirect(
         self,
@@ -1424,6 +1480,7 @@ class BashTool:
         params: dict[str, Any],
         signal: asyncio.Event | None = None,
     ) -> ToolResult:
+        self._sync_cwd_from_shared()
         command = self._fix_quotes(params.get("command", "").strip())
         command = self._fix_powershell(command)
         command = self._normalize_curl(command)
@@ -1876,6 +1933,7 @@ class BashTool:
                     self._shared_cwd.path = guarded_cwd
                 if guarded_cwd != old_cwd:
                     self._project_venv_bin = None
+                    self._project_venv_root = None
                     logger.info(
                         "Bash CWD changed: %s -> %s", old_cwd, guarded_cwd,
                     )
@@ -2010,6 +2068,26 @@ class BashTool:
                 )
 
         result_text += f"\n\n[CWD: {self._friendly_cwd()}]{self._venv_context_suffix()}"
+        if self._project_venv_bin == "" and self._project_venv_root:
+            from .project_runtime import (
+                check_venv_location_allowed,
+                dual_venv_conflict_message,
+                resolve_guardrail_workspace,
+            )
+            scope = resolve_guardrail_workspace(
+                self._cwd,
+                self._workspace_root,
+                plan_project_dir=self._plan_project_dir() or None,
+            )
+            blocked = (
+                check_venv_location_allowed(self._project_venv_root, scope)
+                or dual_venv_conflict_message(
+                    scope,
+                    target_venv_root=self._project_venv_root,
+                )
+            )
+            if blocked:
+                result_text += f"\n[VENV BLOCKED] {blocked}"
 
         return ToolResult(
             content=result_text,

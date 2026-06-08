@@ -1055,6 +1055,24 @@ async def run_loop(
     _journal = _journal_path(config)
     _journal_cleanup(config)
 
+    _agent_dir = None
+    if config.session_log_dir:
+        from pathlib import Path as _Path
+
+        _agent_dir = _Path(config.session_log_dir).parent
+    if _agent_dir is not None:
+        try:
+            from nls.agentic.active_loop_marker import mark_agentic_active
+
+            mark_agentic_active(
+                _agent_dir,
+                agent_id=config.agent_id or "",
+                loop_id=state.loop_id,
+                user_input_preview=user_input,
+            )
+        except Exception:
+            pass
+
     # Crash recovery: if a journal exists from a previous crash, restore
     recovered_ctx = _journal_recover(_journal)
     if recovered_ctx:
@@ -5781,9 +5799,6 @@ async def run_loop(
         except Exception:
             pass
 
-    # Clean loop completion — remove the crash-recovery journal
-    _journal_delete(_journal)
-
     if (
         not _is_delegate_loop
         and _plan_tool is not None
@@ -5834,6 +5849,27 @@ async def run_loop(
     result.context_messages = context
     result.loop_start_idx = _loop_start_idx
     result.deferred_actions = _deferred_actions
+
+    # Clean loop completion — remove crash-recovery artifacts
+    if _agent_dir is not None:
+        try:
+            if result.aborted:
+                from nls.agentic.active_loop_marker import clear_agentic_active
+
+                clear_agentic_active(_agent_dir)
+            else:
+                from nls.agentic.interrupt_recovery import (
+                    clear_interrupted_loop_on_success,
+                )
+
+                clear_interrupted_loop_on_success(
+                    _agent_dir,
+                    config.agent_id or "",
+                )
+        except Exception:
+            _journal_delete(_journal)
+    else:
+        _journal_delete(_journal)
 
     await emit(on_event, AgentEvent(
         EventType.AGENT_END,

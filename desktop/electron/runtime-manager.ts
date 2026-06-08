@@ -29,6 +29,9 @@ const STARTUP_TIMEOUT = 180_000;
 const LEASE_HEARTBEAT_INTERVAL = 60_000;
 const AUTO_RESTART_DELAY_MS = 3_000;
 const MAX_AUTO_RESTARTS = 5;
+const AGENTIC_RESTART_DEFER_MS = 120_000;
+const AGENTIC_RESTART_POLL_MS = 2_000;
+const AGENTIC_MARKER_MAX_AGE_MS = 600_000;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -68,7 +71,8 @@ export class RuntimeManager {
   private activeLeaseAgents: string[] = [];
   private _stoppingIntentionally = false;
   private _autoRestartAttempts = 0;
-  private shouldAutoRestart: () => boolean = () => true;
+  private _deferRestartTimer: ReturnType<typeof setTimeout> | null = null;
+  shouldAutoRestart: () => boolean = () => true;
 
   constructor(
     private config: ConfigManager,
@@ -365,6 +369,7 @@ export class RuntimeManager {
                 if (data.agent_energy && typeof data.agent_energy === 'object') {
                   this._agentEnergy = data.agent_energy;
                 }
+                this._agenticLoopsActive = Number(data.agentic_loops_active ?? 0);
               } catch {
                 // Non-critical
               }
@@ -383,10 +388,101 @@ export class RuntimeManager {
     });
   }
 
+  private _agenticLoopsActive = 0;
+
+  private checkAgenticActive(port: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      const req = http.get(
+        `http://127.0.0.1:${port}/health`,
+        { timeout: 3_000 },
+        (res) => {
+          if (res.statusCode !== 200) {
+            resolve(false);
+            return;
+          }
+          let body = '';
+          res.on('data', (chunk) => { body += chunk; });
+          res.on('end', () => {
+            try {
+              const data = JSON.parse(body);
+              resolve(Boolean(data.agentic_running || (data.agentic_loops_active ?? 0) > 0));
+            } catch {
+              resolve(false);
+            }
+          });
+        },
+      );
+      req.on('error', () => resolve(false));
+      req.on('timeout', () => {
+        req.destroy();
+        resolve(false);
+      });
+    });
+  }
+
+  private countAgenticMarkersOnDisk(): number {
+    try {
+      const agentsDir = path.join(this.config.getDataDir(), 'agents');
+      if (!fs.existsSync(agentsDir)) {
+        return 0;
+      }
+      const now = Date.now();
+      let count = 0;
+      for (const agentId of fs.readdirSync(agentsDir)) {
+        const markerPath = path.join(agentsDir, agentId, '.agentic_active.json');
+        if (!fs.existsSync(markerPath)) {
+          continue;
+        }
+        try {
+          const raw = fs.readFileSync(markerPath, 'utf-8');
+          const payload = JSON.parse(raw);
+          const started = Date.parse(payload.started_at || '');
+          if (!Number.isFinite(started) || now - started > AGENTIC_MARKER_MAX_AGE_MS) {
+            continue;
+          }
+          count += 1;
+        } catch {
+          // ignore corrupt marker
+        }
+      }
+      return count;
+    } catch {
+      return 0;
+    }
+  }
+
+  private async waitForAgenticIdle(port: number, maxWaitMs: number): Promise<boolean> {
+    const start = Date.now();
+    while (Date.now() - start < maxWaitMs) {
+      const diskActive = this.countAgenticMarkersOnDisk();
+      if (diskActive > 0) {
+        await this.sleep(AGENTIC_RESTART_POLL_MS);
+        continue;
+      }
+      const liveActive = await this.checkAgenticActive(port);
+      if (!liveActive) {
+        return true;
+      }
+      await this.sleep(AGENTIC_RESTART_POLL_MS);
+    }
+    return false;
+  }
+
   private startHealthCheck(port: number): void {
     this.healthTimer = setInterval(async () => {
       const healthy = await this.checkHealth(port);
       if (!healthy && this._running) {
+        if (this.process) {
+          const agenticActive = await this.checkAgenticActive(port);
+          const diskActive = this.countAgenticMarkersOnDisk();
+          if (agenticActive || diskActive > 0) {
+            this.broadcastLog(
+              'system',
+              'Health check failed but an agent task is still running — deferring restart',
+            );
+            return;
+          }
+        }
         this._running = false;
         this._lastError = 'Health check failed';
         this.broadcastStatus();
@@ -427,7 +523,21 @@ export class RuntimeManager {
       `${reason} — auto-restarting in ${AUTO_RESTART_DELAY_MS / 1000}s (attempt ${attempt})`,
     );
 
-    setTimeout(() => {
+    setTimeout(async () => {
+      if (this.process || this._stoppingIntentionally || !this.shouldAutoRestart()) {
+        return;
+      }
+      const cfg = this.config.get();
+      const diskActive = this.countAgenticMarkersOnDisk();
+      if (diskActive > 0) {
+        this.broadcastLog(
+          'system',
+          `Waiting for ${diskActive} in-flight agent task(s) before auto-restart...`,
+        );
+        await this.waitForAgenticIdle(cfg.runtimePort, AGENTIC_RESTART_DEFER_MS);
+      } else {
+        await this.waitForAgenticIdle(cfg.runtimePort, 5_000);
+      }
       if (this.process || this._stoppingIntentionally || !this.shouldAutoRestart()) {
         return;
       }

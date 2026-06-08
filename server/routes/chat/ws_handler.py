@@ -185,6 +185,49 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
 
         logger.info("WebSocket connected: agent %s", agent_id)
 
+        try:
+            from nls.agentic.interrupt_recovery import (
+                format_interrupted_loop_status,
+                read_interrupted_loop,
+                should_notify_loop_interrupted,
+                mark_loop_interrupt_notified,
+                sync_pending_from_journal,
+            )
+
+            sync_pending_from_journal(runtime.agent_dir, agent_id)
+            _interrupted = read_interrupted_loop(runtime.agent_dir, agent_id)
+            if (
+                _interrupted
+                and not getattr(websocket.state, "agentic_running", False)
+                and should_notify_loop_interrupted(
+                    runtime.agent_dir,
+                    str(_interrupted.get("resume_token") or _interrupted.get("interrupted_at") or ""),
+                )
+            ):
+                _token = str(
+                    _interrupted.get("resume_token")
+                    or _interrupted.get("interrupted_at")
+                    or ""
+                )
+                await websocket.send_json({
+                    "type": "loop_interrupted",
+                    "agent_id": agent_id,
+                    "iteration": _interrupted.get("iteration"),
+                    "interrupted_at": _interrupted.get("interrupted_at"),
+                    "resume_token": _token,
+                    "last_task_preview": _interrupted.get("last_task_preview"),
+                    "recoverable": True,
+                    "can_continue": True,
+                    "content": format_interrupted_loop_status(_interrupted),
+                })
+                mark_loop_interrupt_notified(runtime.agent_dir, _token)
+        except Exception:
+            logger.debug(
+                "Agent %s: interrupted loop probe failed",
+                agent_id,
+                exc_info=True,
+            )
+
         # Check for recently-approved skill reviews
         try:
             _data_dir = getattr(
@@ -372,11 +415,39 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
 
             if msg.get("type") == "command":
                 command = msg.get("command", "")
-                await _handle_command(
-                    command, websocket, runtime, agent_id, app,
-                    history, data=msg,
-                )
-                continue
+                if command == "dismiss_interrupted_loop":
+                    from nls.agentic.interrupt_recovery import (
+                        abandon_interrupted_loop,
+                        mark_loop_interrupt_dismissed,
+                    )
+
+                    _token = str(msg.get("resume_token") or "")
+                    abandon_interrupted_loop(runtime.agent_dir, agent_id)
+                    mark_loop_interrupt_dismissed(runtime.agent_dir, _token)
+                    await websocket.send_json({
+                        "type": "loop_interrupt_dismissed",
+                        "agent_id": agent_id,
+                    })
+                    continue
+                if command == "continue_interrupted_loop":
+                    msg = {
+                        "type": "loop_resume",
+                        "session_key": msg.get("session_key", "websocket:main"),
+                        "content": msg.get("content", ""),
+                    }
+                else:
+                    await _handle_command(
+                        command, websocket, runtime, agent_id, app,
+                        history, data=msg,
+                    )
+                    continue
+
+            if msg.get("type") == "loop_resume":
+                msg = dict(msg)
+                msg["type"] = "message"
+                if not (msg.get("content") or "").strip():
+                    msg["content"] = "continue"
+                msg["_explicit_loop_resume"] = True
 
             if msg.get("type") == "user_answer":
                 answer = msg.get("content", "").strip()
@@ -563,6 +634,28 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                 source="message",
             ):
                 continue
+
+            try:
+                from nls.agentic.interrupt_recovery import resolve_resume_context
+
+                _explicit_resume = bool(msg.get("_explicit_loop_resume"))
+                _should_recover, user_input = resolve_resume_context(
+                    runtime.agent_dir,
+                    agent_id,
+                    user_input,
+                    explicit_resume=_explicit_resume,
+                )
+                if _should_recover:
+                    logger.info(
+                        "Agent %s: resuming interrupted loop from journal",
+                        agent_id,
+                    )
+            except Exception:
+                logger.debug(
+                    "Agent %s: loop resume resolution failed",
+                    agent_id,
+                    exc_info=True,
+                )
 
             _request_model = runtime.resolve_orchestrator_model(
                 (msg.get("model") or "").strip() or None
@@ -2061,6 +2154,36 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                         initial_thinking=_pending.get("initial_thinking") or None,
                         attachments=list(_pending.get("attachments") or []) or None,
                     )
+                    try:
+                        from nls.agentic.interrupt_recovery import (
+                            read_interrupted_loop,
+                            save_pending_loop_resume,
+                        )
+
+                        _intr = read_interrupted_loop(runtime.agent_dir, agent_id)
+                        if _intr:
+                            save_pending_loop_resume(
+                                runtime.agent_dir,
+                                agent_id=agent_id,
+                                user_input=str(
+                                    _pending.get("user_content_raw")
+                                    or _pending.get("user_input")
+                                    or ""
+                                ),
+                                iteration=int(_intr.get("iteration") or 0),
+                                interrupted_at=str(
+                                    _intr.get("interrupted_at") or ""
+                                ),
+                                journal_path=str(
+                                    _intr.get("journal_path") or ""
+                                ),
+                            )
+                    except Exception:
+                        logger.debug(
+                            "Agent %s: pending loop resume save failed",
+                            agent_id,
+                            exc_info=True,
+                        )
                     logger.info(
                         "Agent %s: persisted partial agentic transcript "
                         "on disconnect (events=%d)",

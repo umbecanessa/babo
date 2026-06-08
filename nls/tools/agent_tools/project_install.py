@@ -34,6 +34,10 @@ from .project_runtime import (
     resolve_project_root,
     resolve_python_requirements_path,
     resolve_venv_project_root,
+    resolve_effective_venv_root,
+    dual_venv_conflict_message,
+    check_venv_location_allowed,
+    resolve_guardrail_workspace,
     scaffold_requirements_line,
     split_pip_package_args,
 )
@@ -94,6 +98,13 @@ class ProjectInstallTool:
             return (self._plan_project_dir_fn() or "").strip()
         except Exception:
             return ""
+
+    def _guardrail_workspace(self) -> str:
+        return resolve_guardrail_workspace(
+            self._effective_cwd,
+            self._workspace_root,
+            plan_project_dir=self._plan_project_dir() or None,
+        )
 
     @property
     def _effective_cwd(self) -> str:
@@ -249,6 +260,12 @@ class ProjectInstallTool:
             except OSError:
                 pass
 
+        guardrail_ws = resolve_guardrail_workspace(
+            effective_cwd,
+            self._workspace_root,
+            plan_project_dir=plan_dir or None,
+        )
+
         _rt_kw = dict(
             cwd=effective_cwd,
             install_dir=install_dir or None,
@@ -295,11 +312,24 @@ class ProjectInstallTool:
             )
 
         if ecosystem == "python":
-            venv_root = resolve_venv_project_root(
-                project_root,
+            venv_root = resolve_effective_venv_root(
+                effective_cwd,
+                self._workspace_root,
+                plan_project_dir=plan_dir or None,
                 install_dir=install_dir or None,
-                cwd=effective_cwd,
             )
+            if not venv_root:
+                venv_root = resolve_venv_project_root(
+                    project_root,
+                    install_dir=install_dir or None,
+                    cwd=effective_cwd,
+                )
+            conflict = dual_venv_conflict_message(
+                guardrail_ws,
+                target_venv_root=venv_root,
+            )
+            if conflict:
+                return ToolResult(content=f"Error: {conflict}", is_error=True)
             scaffolded = scaffold_requirements_line(Path(venv_root), package)
             req_path, req_err = resolve_python_requirements_path(
                 project_root,
@@ -309,6 +339,16 @@ class ProjectInstallTool:
                 workspace_root=self._workspace_root,
                 plan_project_dir=plan_dir or None,
             )
+            if (
+                not package
+                and not requirements_file
+                and not install_dir
+                and venv_root
+            ):
+                venv_req = Path(venv_root) / "requirements.txt"
+                if venv_req.is_file():
+                    req_path = venv_req
+                    req_err = None
             if req_err and not package:
                 order_hint = format_scaffold_before_install_hint(
                     self._workspace_root,
@@ -404,12 +444,24 @@ class ProjectInstallTool:
                 is_error=True,
             )
 
-        bin_dir, python_exe = ensure_project_venv(venv_root)
+        scope = self._guardrail_workspace()
+        bin_dir, python_exe = ensure_project_venv(
+            venv_root,
+            workspace_root=scope,
+        )
         if not python_exe:
+            blocked = (
+                check_venv_location_allowed(venv_root, scope)
+                or dual_venv_conflict_message(
+                    scope,
+                    target_venv_root=venv_root,
+                )
+            )
             return ToolResult(
                 content=(
                     f"Error: Could not create or find project venv under "
                     f"{venv_root}/.venv"
+                    + (f"\n{blocked}" if blocked else "")
                 ),
                 is_error=True,
             )
@@ -511,12 +563,24 @@ class ProjectInstallTool:
         venv_root: str | None = None,
     ) -> ToolResult:
         venv_root = venv_root or project_root
-        bin_dir, python_exe = ensure_project_venv(venv_root)
+        scope = self._guardrail_workspace()
+        bin_dir, python_exe = ensure_project_venv(
+            venv_root,
+            workspace_root=scope,
+        )
         if not python_exe:
+            blocked = (
+                check_venv_location_allowed(venv_root, scope)
+                or dual_venv_conflict_message(
+                    scope,
+                    target_venv_root=venv_root,
+                )
+            )
             return ToolResult(
                 content=(
                     f"Error: Could not create or find project venv under "
                     f"{venv_root}/.venv"
+                    + (f"\n{blocked}" if blocked else "")
                 ),
                 is_error=True,
             )

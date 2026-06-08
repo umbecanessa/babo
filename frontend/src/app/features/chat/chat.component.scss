@@ -703,6 +703,34 @@
     color: var(--text-primary);
     border-bottom-color: var(--text-muted);
   }
+
+  &.loop-interrupt-banner {
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 12px;
+    text-align: left;
+  }
+}
+
+.loop-interrupt-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.loop-interrupt-btn {
+  border: 1px solid rgba(234, 179, 8, 0.35);
+  background: transparent;
+  color: inherit;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 0.78rem;
+  cursor: pointer;
+
+  &.primary {
+    background: rgba(234, 179, 8, 0.18);
+    font-weight: 600;
+  }
 }
 
 .connection-spinner {
