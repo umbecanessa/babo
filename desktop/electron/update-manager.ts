@@ -12,6 +12,7 @@
 import { autoUpdater, UpdateInfo, ProgressInfo } from 'electron-updater';
 import { BrowserWindow, app } from 'electron';
 import * as http from 'http';
+import * as https from 'https';
 import log from 'electron-log';
 
 import { RuntimeManager } from './runtime-manager';
@@ -26,6 +27,13 @@ const CHECK_INTERVAL_MS = 4 * 3600_000; // then every 4 hours
 const IDLE_GRACE_MS = 30 * 60_000;      // 30 min before unattended auto-update
 const SAFE_POLL_MS = 60_000;            // poll /admin/safe-to-update every 60 s
 const FORCE_UPDATE_MS = 6 * 3600_000;   // hard cap: force after 6 h
+const UPDATE_CHECK_RETRIES = 3;
+const UPDATE_CHECK_RETRY_MS = 2_000;
+
+function isRetryableUpdateError(message: string | undefined): boolean {
+  if (!message) return false;
+  return /504|502|503|Gateway Time-out|ETIMEDOUT|ECONNRESET|socket hang up/i.test(message);
+}
 
 // ---------------------------------------------------------------------------
 // Types
@@ -93,17 +101,6 @@ export class UpdateManager {
     autoUpdater.logger = log;
     (autoUpdater.logger as any).transports.file.level = 'debug';
 
-    // Use latest-release latest.yml (GitHub atom/API tag resolution is flaky for NSIS).
-    const owner = process.env.GH_RELEASE_OWNER || 'umbecanessa';
-    const repo = process.env.GH_RELEASE_REPO || 'babo';
-    const feedUrl = `https://github.com/${owner}/${repo}/releases/latest/download`;
-    autoUpdater.setFeedURL({
-      provider: 'generic',
-      url: feedUrl,
-    });
-
-    log.info('[UpdateManager] feed URL:', feedUrl);
-
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;
     autoUpdater.allowPrerelease = false;
@@ -128,8 +125,37 @@ export class UpdateManager {
     try {
       this.setState('checking');
       log.info('[UpdateManager] checking for updates …');
-      const result = await autoUpdater.checkForUpdates();
-      log.info('[UpdateManager] check result:', JSON.stringify(result?.updateInfo?.version));
+
+      let lastError: Error | null = null;
+      for (let attempt = 1; attempt <= UPDATE_CHECK_RETRIES; attempt++) {
+        try {
+          const feedUrl = await this.resolveFeedUrl();
+          autoUpdater.setFeedURL({
+            provider: 'generic',
+            url: feedUrl,
+          });
+          log.info('[UpdateManager] feed URL:', feedUrl);
+
+          const result = await autoUpdater.checkForUpdates();
+          log.info('[UpdateManager] check result:', JSON.stringify(result?.updateInfo?.version));
+          return this.getStatus();
+        } catch (err: any) {
+          lastError = err instanceof Error ? err : new Error(String(err));
+          const retryable = isRetryableUpdateError(lastError.message);
+          if (retryable && attempt < UPDATE_CHECK_RETRIES) {
+            const delay = UPDATE_CHECK_RETRY_MS * attempt;
+            log.warn(
+              `[UpdateManager] check failed (attempt ${attempt}/${UPDATE_CHECK_RETRIES}), retrying in ${delay}ms:`,
+              lastError.message,
+            );
+            await this.sleep(delay);
+            continue;
+          }
+          throw lastError;
+        }
+      }
+
+      throw lastError ?? new Error('Update check failed');
     } catch (err: any) {
       log.error('[UpdateManager] check error:', err);
       this.setState('error');
@@ -198,6 +224,74 @@ export class UpdateManager {
 
   dispose(): void {
     this.clearTimers();
+  }
+
+  // ─── Release feed resolution ────────────────────────────────────
+
+  /**
+   * GitHub's /releases/latest/download/ redirect often 504s under load.
+   * Resolve the tag via the REST API, then pin the generic feed to that release.
+   */
+  private async resolveFeedUrl(): Promise<string> {
+    const owner = process.env.GH_RELEASE_OWNER || 'umbecanessa';
+    const repo = process.env.GH_RELEASE_REPO || 'babo';
+    const fallback = `https://github.com/${owner}/${repo}/releases/latest/download`;
+
+    try {
+      const tag = await this.fetchLatestReleaseTag(owner, repo);
+      if (tag) {
+        return `https://github.com/${owner}/${repo}/releases/download/${encodeURIComponent(tag)}`;
+      }
+    } catch (err: any) {
+      log.warn(
+        '[UpdateManager] GitHub API tag resolution failed — falling back to /latest/download:',
+        err?.message ?? err,
+      );
+    }
+
+    return fallback;
+  }
+
+  private fetchLatestReleaseTag(owner: string, repo: string): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const req = https.get(
+        `https://api.github.com/repos/${owner}/${repo}/releases/latest`,
+        {
+          timeout: 15_000,
+          headers: {
+            Accept: 'application/vnd.github+json',
+            'User-Agent': 'Babo-Desktop-Updater',
+          },
+        },
+        (res) => {
+          if (res.statusCode !== 200) {
+            reject(new Error(`GitHub releases API ${res.statusCode}`));
+            res.resume();
+            return;
+          }
+
+          let body = '';
+          res.on('data', (chunk) => { body += chunk; });
+          res.on('end', () => {
+            try {
+              const data = JSON.parse(body) as { tag_name?: string };
+              if (!data.tag_name) {
+                reject(new Error('GitHub releases API returned no tag_name'));
+                return;
+              }
+              resolve(data.tag_name);
+            } catch (err) {
+              reject(err);
+            }
+          });
+        },
+      );
+      req.on('error', reject);
+      req.on('timeout', () => {
+        req.destroy();
+        reject(new Error('GitHub releases API timed out'));
+      });
+    });
   }
 
   // ─── Auto-updater event wiring ─────────────────────────────────
