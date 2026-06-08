@@ -81,7 +81,10 @@ async def test_refresh_prose_verdict_force_runs_for_tool_accompanying_text():
 
     assert state.last_prose_verdict == "should_continue"
     assert state.prose_show_to_user is False
-    assert prose_turn_end_extra(state) == {"hold_prose": True}
+    assert prose_turn_end_extra(state) == {
+        "hold_prose": True,
+        "active_mode": "executing",
+    }
 
 
 def test_prose_turn_end_extra_flags_held_and_duplicate():
@@ -90,7 +93,10 @@ def test_prose_turn_end_extra_flags_held_and_duplicate():
     state.last_prose_verdict = "should_continue"
     state.prose_show_to_user = False
     assert prose_hold_from_stream(state) is True
-    assert prose_turn_end_extra(state) == {"hold_prose": True}
+    assert prose_turn_end_extra(state) == {
+        "hold_prose": True,
+        "active_mode": "executing",
+    }
 
     state.last_prose_verdict = "duplicate"
     assert prose_hold_from_stream(state) is True
@@ -98,7 +104,7 @@ def test_prose_turn_end_extra_flags_held_and_duplicate():
     state.prose_show_to_user = True
     state.last_prose_verdict = "deliverable_done"
     assert prose_hold_from_stream(state) is False
-    assert prose_turn_end_extra(state) == {}
+    assert prose_turn_end_extra(state) == {"active_mode": "executing"}
 
 
 @pytest.mark.asyncio

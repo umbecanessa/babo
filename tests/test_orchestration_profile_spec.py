@@ -74,7 +74,7 @@ def test_orchestrated_hides_conversational_only_domains():
     assert not behavioral_domain_visible_for_profile(
         "answer_in_prose", "orchestrated",
     )
-    assert behavioral_domain_visible_for_profile(
+    assert not behavioral_domain_visible_for_profile(
         "solo_plan_workflow", "orchestrated",
     )
 
