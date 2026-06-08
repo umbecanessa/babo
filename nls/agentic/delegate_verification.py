@@ -18,7 +18,8 @@ LOCAL_VERIFICATION_ENV_CONTENT = (
 )
 
 
-def format_project_directory_block(project_dir: str) -> str:    """CWD rules when the delegate workspace is already inside project_dir."""
+def format_project_directory_block(project_dir: str) -> str:
+    """CWD rules when the delegate workspace is already inside project_dir."""
     if not project_dir:
         return ""
     return (
