@@ -67,6 +67,8 @@ export interface WorkbenchEntry {
   chips?: ActivityChip[];
   /** External surface (discord, telegram, …) when work originated from a channel. */
   surface?: string;
+  /** Chat branch / session that produced this entry. */
+  sessionKey?: string;
 }
 
 const MAX_ENTRIES = 250;
@@ -102,16 +104,27 @@ export class ChatWorkbenchService {
   private readonly orchProfiles = inject(AgentOrchestrationProfileService);
   private readonly runView = inject(RunViewService);
   private readonly _agentId = signal<string>('');
+  private readonly _activeSessionKey = signal<string>('websocket:main');
+  /** When true, workbench shows entries from every branch. */
+  readonly showAllThreads = signal(false);
 
   readonly panelOpen = signal(false);
   readonly entries = signal<WorkbenchEntry[]>([]);
   readonly density = signal<WorkbenchDensity>('focused');
 
-  readonly entryCount = computed(() => this.entries().length);
+  readonly entryCount = computed(() => this.filteredEntries().length);
 
-  readonly filteredEntries = computed(() =>
-    filterWorkbenchEntries(this.entries(), this.density()),
-  );
+  readonly filteredEntries = computed(() => {
+    let list = filterWorkbenchEntries(this.entries(), this.density());
+    if (!this.showAllThreads()) {
+      const key = this._activeSessionKey();
+      list = list.filter((e) => {
+        const sk = e.sessionKey || 'websocket:main';
+        return sk === key;
+      });
+    }
+    return list;
+  });
 
   private _streamOutputKey: string | null = null;
   private _streamLane: WorkbenchLane = 'chat';
@@ -144,6 +157,8 @@ export class ChatWorkbenchService {
   bindAgent(agentId: string): void {
     if (this._agentId() === agentId) return;
     this._agentId.set(agentId);
+    this._activeSessionKey.set('websocket:main');
+    this.showAllThreads.set(false);
     this.entries.set([]);
     this._resetStreamScratch();
     this._lastAgentMode = 'planning';
@@ -153,6 +168,21 @@ export class ChatWorkbenchService {
     this._modeSwitchFromByCallId.clear();
     this._pendingStepGroup = null;
     this._runSeq = 0;
+  }
+
+  setActiveSessionKey(sessionKey: string): void {
+    this._activeSessionKey.set(sessionKey || 'websocket:main');
+  }
+
+  removeEntriesForSession(sessionKey: string): void {
+    if (!sessionKey) return;
+    this.entries.update((list) =>
+      list.filter((e) => (e.sessionKey || 'websocket:main') !== sessionKey),
+    );
+  }
+
+  toggleShowAllThreads(): void {
+    this.showAllThreads.update((v) => !v);
   }
 
   openPanel(): void {
@@ -214,9 +244,12 @@ export class ChatWorkbenchService {
   }
 
   /** Populate workbench from persisted chat transcript agentic metadata. */
-  hydrateFromTranscript(rows: unknown[], opts?: { force?: boolean }): void {
+  hydrateFromTranscript(rows: unknown[], opts?: { force?: boolean; sessionKey?: string }): void {
     if (!rows?.length) return;
-    if (!opts?.force && this.entries().length > 0) return;
+    const sessionKey = opts?.sessionKey || this._activeSessionKey();
+    if (!opts?.force && this.entries().some((e) => (e.sessionKey || 'websocket:main') === sessionKey)) {
+      return;
+    }
 
     const restored = buildWorkbenchRestoreEntries(rows);
     if (!restored.length) return;
@@ -235,9 +268,13 @@ export class ChatWorkbenchService {
       filePaths: row.filePaths,
       filePath: row.filePaths?.[0],
       mode: row.mode,
+      sessionKey,
     }));
 
-    this.restoreState(true, entries);
+    this.entries.update((list) => {
+      const other = list.filter((e) => (e.sessionKey || 'websocket:main') !== sessionKey);
+      return [...other, ...entries].slice(-MAX_ENTRIES);
+    });
   }
 
   snapshotState(): { open: boolean; entries: WorkbenchEntry[]; density: WorkbenchDensity } {
@@ -464,12 +501,14 @@ export class ChatWorkbenchService {
   recordFromRuntime(msg: any): void {
     if (!msg) return;
     const t = msg.type;
+    const sessionKey = msg.session_key || msg.sessionKey || this._activeSessionKey() || 'websocket:main';
+    const sessionFields = { sessionKey };
     const isSubAgent = msg.sub_agent === true;
     const dlgNum = delegateNumberFromMessage(msg);
     const lane: WorkbenchLane = msg.autonomous === true ? 'background' : 'chat';
     const corrNs = isSubAgent ? `sa${dlgNum || 0}-` : '';
     const surface = surfaceFromRuntimeMsg(msg);
-    const surfaceFields = surface ? { surface } : {};
+    const ctxFields = { ...sessionFields, ...(surface ? { surface } : {}) };
 
     switch (t) {
       case 'agentic_start':
@@ -491,7 +530,7 @@ export class ChatWorkbenchService {
             : `Up to ${msg.max_steps || 15} steps`,
           status: 'running',
           toolLabel: 'Task',
-          ...surfaceFields,
+          ...ctxFields,
         });
         break;
 
@@ -510,7 +549,7 @@ export class ChatWorkbenchService {
             subtitle: bgSubtitle,
             status: 'running',
             toolLabel: 'Task',
-            ...surfaceFields,
+            ...ctxFields,
           });
           break;
         }
@@ -535,7 +574,7 @@ export class ChatWorkbenchService {
             status: 'ok',
             toolLabel: 'Step',
             delegateNumber: dlgNum,
-            ...surfaceFields,
+            ...ctxFields,
           });
         }
         for (const tc of toolCalls) {
@@ -556,7 +595,7 @@ export class ChatWorkbenchService {
           subtitle: question.slice(0, 200) || 'Agent needs input to continue',
           status: 'running',
           toolLabel: 'Input',
-          ...surfaceFields,
+          ...ctxFields,
         });
         break;
       }
@@ -572,7 +611,7 @@ export class ChatWorkbenchService {
           subtitle: question.slice(0, 200) || 'Reply 10, 20, 40, or stop',
           status: 'running',
           toolLabel: 'Budget',
-          ...surfaceFields,
+          ...ctxFields,
         });
         break;
       }
@@ -588,7 +627,7 @@ export class ChatWorkbenchService {
             subtitle: `+${msg.extra_iterations || 0} steps (max ${msg.max_iterations || '?'})`,
             status: 'ok',
             toolLabel: 'Budget',
-            ...surfaceFields,
+            ...ctxFields,
           });
         } else {
           this._removeEntry(`${corrNs}budget-extended`);
@@ -1141,6 +1180,7 @@ export class ChatWorkbenchService {
     const row: WorkbenchEntry = {
       id: newId(),
       ts: Date.now(),
+      sessionKey: partial.sessionKey ?? this._activeSessionKey(),
       ...partial,
       lane: partial.lane ?? 'chat',
     };

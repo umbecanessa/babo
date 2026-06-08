@@ -53,8 +53,11 @@ from .history import (
     _salvage_agentic_context,
     _save_agentic_history_v2,
     _strip_internal_blocks,
+    branch_session_metadata,
     persist_partial_agentic_transcript,
     record_visible_chat_turn,
+    persist_conversation_turn,
+    is_main_chat_session,
 )
 
 logger = logging.getLogger(__name__)
@@ -559,9 +562,12 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                         history.insert(0, {"role": "system", "content": fact_ctx})
                 else:
                     history = runtime.load_session_history(
-                        session_key=session_key, max_turns=40,
+                        session_key=session_key, max_turns=200,
                     )
             websocket.state.session_key = session_key
+            _bl = msg.get("branch_label") or msg.get("session_label")
+            if _bl:
+                websocket.state.branch_label = str(_bl).strip()
 
             # File attachments
             attachments = msg.get("attachments") or []
@@ -982,9 +988,11 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                         history.append({"role": "assistant", "content": _stopped})
                     if len(history) > 40:
                         history = history[-40:]
-                    runtime.save_conversation_history(history)
-                    record_visible_chat_turn(
+                    _sk_abort = getattr(websocket.state, "session_key", "websocket:main")
+                    persist_conversation_turn(
                         runtime,
+                        _sk_abort,
+                        history,
                         user=user_content_raw or None,
                         assistant=_stopped if _stopped != "Stopped." else None,
                         reasoning=_initial_thinking or None,
@@ -1100,9 +1108,11 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                     history.append(_regen_asst)
                     if len(history) > 40:
                         history = history[-40:]
-                    runtime.save_conversation_history(history)
-                    record_visible_chat_turn(
+                    _sk_regen = getattr(websocket.state, "session_key", "websocket:main")
+                    persist_conversation_turn(
                         runtime,
+                        _sk_regen,
+                        history,
                         user=user_content_raw or None,
                         assistant=regen_response,
                         reasoning=_regen_reasoning or None,
@@ -1269,9 +1279,11 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                     history.append(_regen2_asst)
                     if len(history) > 40:
                         history = history[-40:]
-                    runtime.save_conversation_history(history)
-                    record_visible_chat_turn(
+                    _sk_regen2 = getattr(websocket.state, "session_key", "websocket:main")
+                    persist_conversation_turn(
                         runtime,
+                        _sk_regen2,
+                        history,
                         user=user_content_raw or None,
                         assistant=regen_response,
                         reasoning=_regen2_thinking or None,
@@ -1593,7 +1605,6 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                         )
                         if len(history) > 40:
                             history = history[-40:]
-                        runtime.save_conversation_history(history)
                         from .helpers import (
                             _build_agentic_metadata,
                             _merge_transcript_event_prose,
@@ -1608,13 +1619,23 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                                 _transcript_meta.get("events") or [],
                                 _eager_events,
                             )
-                        record_visible_chat_turn(
+                        _sk_agentic = getattr(
+                            websocket.state, "session_key", "websocket:main",
+                        )
+                        _branch_meta = branch_session_metadata(
+                            _sk_agentic,
+                            label=getattr(websocket.state, "branch_label", None),
+                        )
+                        persist_conversation_turn(
                             runtime,
+                            _sk_agentic,
+                            history,
                             user=_strip_internal_blocks(user_content_raw),
                             assistant=_agentic_final_text or None,
                             reasoning=_initial_thinking or None,
                             metadata=_transcript_meta,
                             attachments=attachments or None,
+                            session_metadata=_branch_meta,
                         )
                         _pending = getattr(
                             websocket.state, "_pending_agentic_transcript", None,
@@ -1776,6 +1797,9 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                             _salvage_agentic_context(
                                 history, _shared_ctx,
                                 user_input, runtime, agent_id,
+                                session_key=getattr(
+                                    websocket.state, "session_key", "websocket:main",
+                                ),
                             )
                             raise
                         logger.error(
@@ -1785,6 +1809,9 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                         _salvage_agentic_context(
                             history, _shared_ctx,
                             user_input, runtime, agent_id,
+                            session_key=getattr(
+                                websocket.state, "session_key", "websocket:main",
+                            ),
                         )
                         error_hormones = {}
                         if runtime.hypothalamus is not None:
@@ -1961,16 +1988,18 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                 if len(history) > 40:
                     history = history[-40:]
 
-                if _sk and _sk != "websocket:main":
-                    runtime.save_session_history(history, session_key=_sk)
-                else:
-                    runtime.save_conversation_history(history)
-                record_visible_chat_turn(
+                persist_conversation_turn(
                     runtime,
+                    _sk or "websocket:main",
+                    history,
                     user=user_content_raw or None,
                     assistant=_final_resp,
                     reasoning=_reasoning or None,
                     attachments=attachments or None,
+                    session_metadata=branch_session_metadata(
+                        _sk,
+                        label=getattr(websocket.state, "branch_label", None),
+                    ),
                 )
 
                 if result_dict.get("sleep_request"):
@@ -2101,9 +2130,11 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                 history.append(_simple_asst)
                 if len(history) > 40:
                     history = history[-40:]
-                runtime.save_conversation_history(history)
-                record_visible_chat_turn(
+                _sk_simple = getattr(websocket.state, "session_key", "websocket:main")
+                persist_conversation_turn(
                     runtime,
+                    _sk_simple,
+                    history,
                     user=user_content_raw or None,
                     assistant=result_dict.get("response", full_response),
                     reasoning=_reasoning or None,
@@ -2153,6 +2184,9 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                         eager_events=list(_pending.get("eager_events") or []),
                         initial_thinking=_pending.get("initial_thinking") or None,
                         attachments=list(_pending.get("attachments") or []) or None,
+                        session_key=getattr(
+                            websocket.state, "session_key", "websocket:main",
+                        ),
                     )
                     try:
                         from nls.agentic.interrupt_recovery import (
@@ -2206,7 +2240,21 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                 _persist = [
                     m for m in history if m.get("role") != "system"
                 ]
-                runtime.save_conversation_history(_persist)
+                _sk_finally = getattr(
+                    websocket.state, "session_key", "websocket:main",
+                )
+                if is_main_chat_session(_sk_finally):
+                    runtime.save_conversation_history(_persist)
+                else:
+                    runtime.save_session_history(
+                        _persist,
+                        session_key=_sk_finally,
+                        max_turns=200,
+                        metadata=branch_session_metadata(
+                            _sk_finally,
+                            label=getattr(websocket.state, "branch_label", None),
+                        ),
+                    )
                 runtime.save_state()
             except (OSError, FileNotFoundError):
                 logger.info(
@@ -2722,12 +2770,25 @@ async def _dispatch_agentic_event(
                 "content": data.get("final_response", ""),
                 "metadata": _eager_meta,
             })
-            runtime.save_conversation_history(_eager_hist)
+            _sk_eager = getattr(websocket.state, "session_key", "websocket:main")
+            persist_conversation_turn(
+                runtime,
+                _sk_eager,
+                _eager_hist,
+                user=user_input,
+                assistant=data.get("final_response", ""),
+                metadata=_eager_meta,
+                session_metadata=branch_session_metadata(
+                    _sk_eager,
+                    label=getattr(websocket.state, "branch_label", None),
+                ),
+            )
             logger.info(
                 "Agent %s: eager history save on "
-                "agent_end (len=%d, events=%d)",
+                "agent_end (len=%d, events=%d, session=%s)",
                 agent_id, len(_eager_hist),
                 len(eager_events),
+                _sk_eager,
             )
         except Exception as _es:
             logger.warning(

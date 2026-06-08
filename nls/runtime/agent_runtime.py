@@ -5382,6 +5382,60 @@ class AgentRuntime:
             attachments=attachments,
         )
 
+    def record_session_turn(
+        self,
+        *,
+        session_key: str,
+        user: str | None = None,
+        assistant: str | None = None,
+        reasoning: str | None = None,
+        metadata: dict | None = None,
+        attachments: list | None = None,
+    ) -> None:
+        from nls.runtime.session import append_session_transcript_turn
+        append_session_transcript_turn(
+            self.agent_dir,
+            session_key,
+            user=user,
+            assistant=assistant,
+            reasoning=reasoning,
+            metadata=metadata,
+            attachments=attachments,
+        )
+
+    def load_session_transcript(
+        self,
+        session_key: str,
+        *,
+        max_turns: int = 200,
+    ) -> list[dict]:
+        from nls.runtime.session import load_session_transcript
+        limit = None if max_turns <= 0 else max_turns * 2
+        return load_session_transcript(
+            self.agent_dir,
+            session_key,
+            limit=limit,
+        )
+
+    def delete_session_thread(self, session_key: str) -> bool:
+        if self.channel_registry is None:
+            return False
+        try:
+            return self.channel_registry.session_router.delete_session(session_key)
+        except Exception:
+            return False
+
+    def update_session_label(self, session_key: str, label: str) -> bool:
+        if self.channel_registry is None:
+            return False
+        try:
+            return self.channel_registry.session_router.update_session_meta(
+                session_key,
+                label=label.strip(),
+            )
+        except Exception:
+            return False
+
     def load_autonomous_history(self, max_turns: int = 10) -> list[dict]:
         from nls.runtime.session import load_autonomous_history
         return load_autonomous_history(self.agent_dir, max_turns)

@@ -123,11 +123,19 @@ async def get_session_history(agent_id: str, session_key: str, request: Request)
             return {"messages": []}
         return _build_delegate_thread(runtime, delegate_num)
     else:
-        history = await asyncio.to_thread(
-            runtime.load_session_history,
-            session_key=session_key,
-            max_turns=40,
+        ui_history = await asyncio.to_thread(
+            runtime.load_session_transcript,
+            session_key,
+            max_turns=200,
         )
+        if ui_history:
+            history = ui_history
+        else:
+            history = await asyncio.to_thread(
+                runtime.load_session_history,
+                session_key=session_key,
+                max_turns=200,
+            )
 
     chat_msgs = [m for m in history if m.get("role") in ("user", "assistant")]
 
@@ -144,6 +152,39 @@ async def get_session_history(agent_id: str, session_key: str, request: Request)
         logger.debug("ambient timeline load failed for %s", session_key, exc_info=True)
 
     return {"messages": chat_msgs, "ambient_timeline": ambient_timeline}
+
+
+@router.patch("/sessions/{agent_id}/{session_key:path}")
+async def patch_session(agent_id: str, session_key: str, request: Request):
+    """Update branch metadata (e.g. label)."""
+    if session_key == "websocket:main":
+        return JSONResponse({"ok": False, "error": "cannot rename main session"}, status_code=400)
+
+    body = await request.json()
+    label = str(body.get("label") or "").strip()
+    if not label:
+        return JSONResponse({"ok": False, "error": "label required"}, status_code=400)
+
+    runtime = request.app.state.agent_manager.get_runtime(agent_id)
+    if runtime is None:
+        return JSONResponse({"ok": False, "error": "agent not loaded"}, status_code=404)
+
+    ok = await asyncio.to_thread(runtime.update_session_label, session_key, label)
+    return {"ok": ok, "session_key": session_key, "label": label}
+
+
+@router.delete("/sessions/{agent_id}/{session_key:path}")
+async def delete_session(agent_id: str, session_key: str, request: Request):
+    """Delete a branch or channel session history."""
+    if session_key == "websocket:main":
+        return JSONResponse({"ok": False, "error": "cannot delete main session"}, status_code=400)
+
+    runtime = request.app.state.agent_manager.get_runtime(agent_id)
+    if runtime is None:
+        return JSONResponse({"ok": False, "error": "agent not loaded"}, status_code=404)
+
+    ok = await asyncio.to_thread(runtime.delete_session_thread, session_key)
+    return {"ok": ok, "session_key": session_key}
 
 
 def _build_team_thread(runtime, team_id: str) -> dict:

@@ -16,6 +16,10 @@ export class ConversationNavComponent {
   @Output() selectThread = new EventEmitter<string>();
   @Output() newBranch = new EventEmitter<void>();
   @Output() openInbox = new EventEmitter<void>();
+  @Output() renameBranch = new EventEmitter<string>();
+  @Output() deleteBranch = new EventEmitter<string>();
+
+  branchMenuKey: string | null = null;
 
   readonly conversations = inject(ConversationService);
   readonly panels = inject(ChatPanelService);
@@ -30,5 +34,30 @@ export class ConversationNavComponent {
 
   unreadCount(t: ConversationThread): boolean {
     return !!t.unread;
+  }
+
+  isBranch(t: ConversationThread): boolean {
+    return t.channel === 'websocket' && t.key !== 'websocket:main';
+  }
+
+  toggleBranchMenu(event: MouseEvent, key: string): void {
+    event.stopPropagation();
+    this.branchMenuKey = this.branchMenuKey === key ? null : key;
+  }
+
+  closeBranchMenu(): void {
+    this.branchMenuKey = null;
+  }
+
+  onRenameBranch(key: string, event: MouseEvent): void {
+    event.stopPropagation();
+    this.branchMenuKey = null;
+    this.renameBranch.emit(key);
+  }
+
+  onDeleteBranch(key: string, event: MouseEvent): void {
+    event.stopPropagation();
+    this.branchMenuKey = null;
+    this.deleteBranch.emit(key);
   }
 }

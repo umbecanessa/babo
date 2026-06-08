@@ -245,6 +245,8 @@
         [collapsed]="panels.navRail() === 'collapsed'"
         (selectThread)="switchThread($event)"
         (newBranch)="createNewThread()"
+        (renameBranch)="renameThread($event)"
+        (deleteBranch)="deleteThread($event)"
         (openInbox)="openInboxFromNav()"
       />
 
@@ -544,6 +546,8 @@
         [collapsed]="false"
         (selectThread)="switchThread($event); closeMobileConvNav()"
         (newBranch)="createNewThread(); closeMobileConvNav()"
+        (renameBranch)="renameThread($event)"
+        (deleteBranch)="deleteThread($event)"
         (openInbox)="openInboxFromNav(); closeMobileConvNav(); openBottomSheet(); setMobileSheetTab('inbox')"
       />
     </aside>

@@ -24,19 +24,35 @@
           <div class="conv-nav-group-header">{{ group.label }}</div>
           @for (t of group.threads; track t.key) {
             @if (t.key !== 'websocket:main' || group.channel === 'websocket') {
-              <button
-                type="button"
-                class="conv-nav-item"
-                [class.active]="isActive(t.key)"
-                [attr.data-channel]="t.channel"
-                (click)="onSelect(t.key)"
-              >
-                <span class="conv-nav-dot" [attr.data-channel]="t.channel"></span>
-                <span class="conv-nav-label">{{ t.label }}</span>
-                @if (unreadCount(t)) {
-                  <span class="conv-nav-unread"></span>
+              <div class="conv-nav-row" [class.active]="isActive(t.key)">
+                <button
+                  type="button"
+                  class="conv-nav-item"
+                  [class.active]="isActive(t.key)"
+                  [attr.data-channel]="t.channel"
+                  (click)="onSelect(t.key); closeBranchMenu()"
+                >
+                  <span class="conv-nav-dot" [attr.data-channel]="t.channel"></span>
+                  <span class="conv-nav-label">{{ t.label }}</span>
+                  @if (unreadCount(t)) {
+                    <span class="conv-nav-unread"></span>
+                  }
+                </button>
+                @if (isBranch(t)) {
+                  <button
+                    type="button"
+                    class="conv-nav-branch-menu"
+                    title="Branch options"
+                    (click)="toggleBranchMenu($event, t.key)"
+                  >⋯</button>
                 }
-              </button>
+                @if (branchMenuKey === t.key) {
+                  <div class="conv-nav-branch-actions">
+                    <button type="button" (click)="onRenameBranch(t.key, $event)">Rename</button>
+                    <button type="button" class="danger" (click)="onDeleteBranch(t.key, $event)">Delete</button>
+                  </div>
+                }
+              </div>
             }
           }
         </div>

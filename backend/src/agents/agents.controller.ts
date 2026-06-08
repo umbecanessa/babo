@@ -1,4 +1,4 @@
-import { BadRequestException, Controller, Get, Post, Delete, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
+import { BadRequestException, Controller, Get, Post, Delete, Patch, Body, Param, Query, UseGuards, Request } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { AgentsService } from './agents.service';
 import { ChannelsService } from '../channels/channels.service';
@@ -188,6 +188,36 @@ export class AgentsController {
   ) {
     const runtimeId = await this.agents.getRuntimeAgentId(req.user.userId, id);
     return this.agents.proxyRuntime(runtimeId, `/sessions/${runtimeId}/${encodeURIComponent(sessionKey)}`);
+  }
+
+  @Patch(':id/sessions/:sessionKey')
+  async patchSession(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Param('sessionKey') sessionKey: string,
+    @Body() body: { label?: string },
+  ) {
+    const runtimeId = await this.agents.getRuntimeAgentId(req.user.userId, id);
+    return this.agents.proxyRuntime(
+      runtimeId,
+      `/sessions/${runtimeId}/${encodeURIComponent(sessionKey)}`,
+      'PATCH',
+      body,
+    );
+  }
+
+  @Delete(':id/sessions/:sessionKey')
+  async deleteSession(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Param('sessionKey') sessionKey: string,
+  ) {
+    const runtimeId = await this.agents.getRuntimeAgentId(req.user.userId, id);
+    return this.agents.proxyRuntime(
+      runtimeId,
+      `/sessions/${runtimeId}/${encodeURIComponent(sessionKey)}`,
+      'DELETE',
+    );
   }
 
   // =================================================================

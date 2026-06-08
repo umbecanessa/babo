@@ -393,8 +393,13 @@ export class AgentsService {
   }
 
   /** Generic runtime proxy (for browser clients going through NestJS). */
-  async proxyRuntime(runtimeId: string, path: string): Promise<any> {
-    return this.fetchRuntime(path);
+  async proxyRuntime(
+    runtimeId: string,
+    path: string,
+    method: string = 'GET',
+    body?: any,
+  ): Promise<any> {
+    return this.fetchRuntime(path, method, body);
   }
 
   /** Internal (service-to-service) soul-package creation — no user ownership check. */

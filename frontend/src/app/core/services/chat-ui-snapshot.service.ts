@@ -38,6 +38,8 @@ export interface ChatUiSnapshot {
   workbenchDensity?: WorkbenchDensity;
   /** Desktop Neural State sidebar */
   sidebarOpen?: boolean;
+  /** Active conversation branch */
+  currentThread?: string;
 }
 
 @Injectable({ providedIn: 'root' })

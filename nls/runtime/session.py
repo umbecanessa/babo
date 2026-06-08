@@ -330,23 +330,45 @@ def query_chat_transcript(
     return indexed, total
 
 
-def append_chat_transcript_turn(
-    agent_dir: Path,
+def session_ui_transcript_path(agent_dir: Path, session_key: str) -> Path:
+    """Per-branch UI transcript (tool chips / agentic metadata)."""
+    from nls.runtime.channels import _session_filename
+
+    stem = _session_filename(session_key).removesuffix(".json")
+    return agent_dir / "sessions" / f"{stem}_ui.jsonl"
+
+
+def _read_last_message_at(path: Path) -> dict[str, Any] | None:
+    if not path.is_file():
+        return None
+    last: dict[str, Any] | None = None
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    try:
+                        last = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+    except OSError:
+        return None
+    return last
+
+
+def _append_transcript_turn_at(
+    path: Path,
     *,
+    last: dict[str, Any] | None,
     user: str | None = None,
     assistant: str | None = None,
     reasoning: str | None = None,
     metadata: dict | None = None,
     attachments: list | None = None,
 ) -> None:
-    """Append one visible chat turn to the append-only transcript log."""
     user_text = (user or "").strip()
     asst_text = (assistant or "").strip()
     if not user_text and not asst_text and not metadata:
         return
-
-    path = _ensure_transcript_jsonl(agent_dir)
-    last = _read_last_transcript_message(agent_dir)
 
     if user_text:
         if not (
@@ -378,6 +400,91 @@ def append_chat_transcript_turn(
         if metadata:
             entry["metadata"] = metadata
         _append_jsonl_message(path, entry)
+
+
+def append_chat_transcript_turn(
+    agent_dir: Path,
+    *,
+    user: str | None = None,
+    assistant: str | None = None,
+    reasoning: str | None = None,
+    metadata: dict | None = None,
+    attachments: list | None = None,
+) -> None:
+    """Append one visible chat turn to the append-only transcript log."""
+    path = _ensure_transcript_jsonl(agent_dir)
+    _append_transcript_turn_at(
+        path,
+        last=_read_last_transcript_message(agent_dir),
+        user=user,
+        assistant=assistant,
+        reasoning=reasoning,
+        metadata=metadata,
+        attachments=attachments,
+    )
+
+
+def append_session_transcript_turn(
+    agent_dir: Path,
+    session_key: str,
+    *,
+    user: str | None = None,
+    assistant: str | None = None,
+    reasoning: str | None = None,
+    metadata: dict | None = None,
+    attachments: list | None = None,
+) -> None:
+    """Append a UI transcript row for a non-main chat branch."""
+    sk = (session_key or "").strip()
+    if not sk or sk == "websocket:main":
+        append_chat_transcript_turn(
+            agent_dir,
+            user=user,
+            assistant=assistant,
+            reasoning=reasoning,
+            metadata=metadata,
+            attachments=attachments,
+        )
+        return
+
+    path = session_ui_transcript_path(agent_dir, sk)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if not path.is_file():
+        path.write_text("", encoding="utf-8")
+    _append_transcript_turn_at(
+        path,
+        last=_read_last_message_at(path),
+        user=user,
+        assistant=assistant,
+        reasoning=reasoning,
+        metadata=metadata,
+        attachments=attachments,
+    )
+
+
+def load_session_transcript(
+    agent_dir: Path,
+    session_key: str,
+    *,
+    limit: int | None = None,
+) -> list[dict[str, Any]]:
+    """Load branch UI transcript rows for chat restore."""
+    path = session_ui_transcript_path(agent_dir, session_key)
+    if not path.is_file():
+        return []
+    messages = _read_jsonl_messages(path)
+    if limit is not None and limit > 0:
+        messages = messages[-limit:]
+    return messages
+
+
+def delete_session_transcript(agent_dir: Path, session_key: str) -> None:
+    path = session_ui_transcript_path(agent_dir, session_key)
+    try:
+        if path.is_file():
+            path.unlink()
+    except OSError:
+        logger.debug("delete_session_transcript failed for %s", session_key, exc_info=True)
 
 
 def chat_transcript_stats(agent_dir: Path) -> dict[str, Any]:

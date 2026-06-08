@@ -137,7 +137,9 @@ export class ConversationService {
       if (r.key === 'websocket:main') continue;
       byKey.set(r.key, r);
     }
-    this._threads.set(Array.from(byKey.values()));
+    this._threads.set(
+      this.applyBranchLabels(agentId, Array.from(byKey.values())),
+    );
     if (!sameAgent) {
       this._inbox.set([]);
     }
@@ -203,7 +205,65 @@ export class ConversationService {
   addBranch(label: string, key: string): ConversationThread {
     const thread: ConversationThread = { key, label, channel: 'websocket' };
     this.upsertThread(thread);
+    if (this._activeAgentId) {
+      this.saveBranchLabel(this._activeAgentId, key, label);
+    }
     return thread;
+  }
+
+  renameBranch(key: string, label: string): void {
+    const trimmed = label.trim();
+    if (!trimmed) return;
+    this._threads.update((list) =>
+      list.map((t) => (t.key === key ? { ...t, label: trimmed } : t)),
+    );
+    if (this._activeAgentId) {
+      this.saveBranchLabel(this._activeAgentId, key, trimmed);
+    }
+  }
+
+  removeBranch(key: string): void {
+    this._threads.update((list) => list.filter((t) => t.key !== key));
+    if (this._activeAgentId) {
+      this.removeBranchLabel(this._activeAgentId, key);
+    }
+  }
+
+  isWebsocketBranch(key: string): boolean {
+    return key.startsWith('websocket:thread:');
+  }
+
+  private branchLabelsKey(agentId: string): string {
+    return `babo:branch-labels:${agentId}`;
+  }
+
+  loadBranchLabels(agentId: string): Record<string, string> {
+    try {
+      return JSON.parse(localStorage.getItem(this.branchLabelsKey(agentId)) || '{}');
+    } catch {
+      return {};
+    }
+  }
+
+  saveBranchLabel(agentId: string, key: string, label: string): void {
+    const all = this.loadBranchLabels(agentId);
+    all[key] = label;
+    localStorage.setItem(this.branchLabelsKey(agentId), JSON.stringify(all));
+  }
+
+  removeBranchLabel(agentId: string, key: string): void {
+    const all = this.loadBranchLabels(agentId);
+    delete all[key];
+    localStorage.setItem(this.branchLabelsKey(agentId), JSON.stringify(all));
+  }
+
+  applyBranchLabels(agentId: string, threads: ConversationThread[]): ConversationThread[] {
+    const labels = this.loadBranchLabels(agentId);
+    return threads.map((t) => {
+      if (t.key === 'websocket:main') return t;
+      const stored = labels[t.key] || t.label;
+      return stored !== t.label ? { ...t, label: stored } : t;
+    });
   }
 
   labelFromSessionKey(key: string, channel: string, meta?: {

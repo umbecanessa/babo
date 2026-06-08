@@ -392,10 +392,14 @@ export class WebSocketService {
     model?: string,
     orchestrationProfile?: string,
     modelRoute?: 'local' | 'cloud',
+    branchLabel?: string,
   ): void {
     const payload: any = { type: 'message', content };
     if (sessionKey && sessionKey !== 'websocket:main') {
       payload.session_key = sessionKey;
+    }
+    if (branchLabel?.trim()) {
+      payload.branch_label = branchLabel.trim();
     }
     if (model) {
       payload.model = model;

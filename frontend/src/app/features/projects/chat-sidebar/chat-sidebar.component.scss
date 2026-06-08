@@ -55,8 +55,18 @@
   color: var(--text-muted);
 }
 
+.thread-picker {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
 .thread-select {
   flex: 1;
+  min-width: 0;
   padding: 5px 10px;
   border-radius: 6px;
   border: 1px solid var(--overlay-3);
@@ -67,6 +77,55 @@
   cursor: pointer;
 
   option { background: var(--bg-secondary); color: var(--text-primary); }
+}
+
+.branch-menu-btn {
+  flex: 0 0 auto;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  line-height: 1;
+
+  &:hover {
+    background: var(--overlay-2);
+    color: var(--text-primary);
+  }
+}
+
+.branch-actions {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  min-width: 120px;
+  background: var(--glass-bg, #1a1a1a);
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+
+  button {
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    text-align: left;
+    padding: 8px 12px;
+    font-size: 12px;
+    cursor: pointer;
+
+    &:hover {
+      background: var(--overlay-2);
+    }
+
+    &.danger {
+      color: var(--accent-danger, #ef4444);
+    }
+  }
 }
 
 .close-btn {

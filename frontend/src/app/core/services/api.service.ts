@@ -889,6 +889,22 @@ export class ApiService {
     return this.http.get(url);
   }
 
+  renameSession(agentId: string, sessionKey: string, label: string): Observable<any> {
+    const encoded = encodeURIComponent(sessionKey);
+    const url = this.platform.isElectron
+      ? `${this.RUNTIME}/sessions/${agentId}/${encoded}`
+      : `${this.API}/agents/${agentId}/sessions/${encoded}`;
+    return this.http.patch(url, { label });
+  }
+
+  deleteSession(agentId: string, sessionKey: string): Observable<any> {
+    const encoded = encodeURIComponent(sessionKey);
+    const url = this.platform.isElectron
+      ? `${this.RUNTIME}/sessions/${agentId}/${encoded}`
+      : `${this.API}/agents/${agentId}/sessions/${encoded}`;
+    return this.http.delete(url);
+  }
+
   // ─── Visual Cortex ──────────────────────────────────────────────
   getVisualCortexBuffer(agentId: string, opts?: { channel?: string; limit?: number }): Observable<any> {
     let params = new HttpParams();

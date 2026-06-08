@@ -209,6 +209,20 @@ class SessionRouter:
             logger.warning("Session %s: load failed: %s", session_key, exc)
             return []
 
+    @staticmethod
+    def _normalize_session_message(msg: dict[str, Any]) -> dict[str, Any] | None:
+        role = msg.get("role")
+        if role not in ("user", "assistant"):
+            return None
+        row: dict[str, Any] = {
+            "role": role,
+            "content": msg.get("content") or "",
+        }
+        for key in ("reasoning", "metadata", "pre_agentic_reasoning", "timestamp"):
+            if msg.get(key) is not None:
+                row[key] = msg[key]
+        return row
+
     def save_history(
         self,
         session_key: str,
@@ -218,8 +232,8 @@ class SessionRouter:
     ) -> None:
         """Persist conversation history for *session_key*."""
         conversation = [
-            msg for msg in history
-            if msg.get("role") in ("user", "assistant")
+            row for msg in history
+            if (row := self._normalize_session_message(msg)) is not None
         ]
         if len(conversation) > max_turns * 2:
             conversation = conversation[-(max_turns * 2):]
@@ -242,7 +256,7 @@ class SessionRouter:
         if metadata:
             for k in (
                 "channel", "sender", "subject", "reply_target", "channel_name",
-                "guild_name",
+                "guild_name", "label",
             ):
                 if k in metadata:
                     entry[k] = metadata[k]
@@ -252,18 +266,40 @@ class SessionRouter:
         self._index[session_key] = entry
         self._save_index()
 
+    def update_session_meta(
+        self,
+        session_key: str,
+        **fields: Any,
+    ) -> bool:
+        """Update index metadata (e.g. branch label)."""
+        if not fields:
+            return False
+        entry = dict(self._index.get(session_key) or {})
+        entry.update(fields)
+        self._index[session_key] = entry
+        self._save_index()
+        return True
+
     def list_sessions(self) -> dict[str, dict[str, Any]]:
         """Return the session index (key -> metadata)."""
         return dict(self._index)
 
     def delete_session(self, session_key: str) -> bool:
+        deleted = False
         path = self._history_path(session_key)
         if path.exists():
             path.unlink()
-        removed = self._index.pop(session_key, None) is not None
-        if removed:
+            deleted = True
+        ui_path = self._sessions_dir / (
+            _session_filename(session_key).replace(".json", "") + "_ui.jsonl"
+        )
+        if ui_path.exists():
+            ui_path.unlink()
+            deleted = True
+        if self._index.pop(session_key, None) is not None:
             self._save_index()
-        return removed
+            deleted = True
+        return deleted
 
 
 # ---------------------------------------------------------------------------

@@ -609,6 +609,10 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         this.panels.openRight('live');
       }
     }
+    if (snap.currentThread) {
+      this.currentThread.set(snap.currentThread);
+      this.workbench.setActiveSessionKey(snap.currentThread);
+    }
   }
 
   /** Prefer shared main-thread transcript when Projects sidebar was active. */
@@ -678,6 +682,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       workbenchEntries: this.workbench.snapshotState().entries,
       workbenchDensity: this.workbench.snapshotState().density,
       sidebarOpen: this.panels.rightDockOpen(),
+      currentThread: this.currentThread(),
     });
   }
 
@@ -698,6 +703,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
     const threadKey = this.currentThread();
     const dest = this.composerDest();
+    const branchLabel = this.conversations.threads().find(t => t.key === threadKey)?.label;
     const surfaceSend =
       dest.mode === 'surface'
       && !this.agenticActive()
@@ -741,9 +747,9 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
     // If the agent is waiting for a budget decision or ask_user answer, route as user_answer
     if (this.budgetPromptPending()) {
-      this.ws.send({ type: 'user_answer', content: text, session_key: threadKey });
+      this.ws.send({ type: 'user_answer', content: text, session_key: threadKey, ...(branchLabel ? { branch_label: branchLabel } : {}) });
     } else if (this.askUserPending()) {
-      this.ws.send({ type: 'user_answer', content: text, session_key: threadKey });
+      this.ws.send({ type: 'user_answer', content: text, session_key: threadKey, ...(branchLabel ? { branch_label: branchLabel } : {}) });
       this.askUserPending.set(false);
     } else {
       const model = this.agentModels.modelForOutgoingMessage();
@@ -755,12 +761,13 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
           content: text || 'Please examine the attached files.',
           attachments,
           session_key: threadKey,
+          ...(branchLabel ? { branch_label: branchLabel } : {}),
           ...(model ? { model } : {}),
           ...(modelRoute ? { model_route: modelRoute } : {}),
           ...(orchProfile ? { orchestration_profile: orchProfile } : {}),
         });
       } else {
-        this.ws.sendMessage(text, threadKey, model, orchProfile, modelRoute);
+        this.ws.sendMessage(text, threadKey, model, orchProfile, modelRoute, branchLabel);
       }
     }
 
@@ -3736,6 +3743,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
   switchThread(key: string): void {
     this.currentThread.set(key);
+    this.workbench.setActiveSessionKey(key);
     this.conversations.markThreadRead(key);
     this.syncInboxBadge();
     const meta = this.conversations.threads().find(t => t.key === key);
@@ -3751,6 +3759,35 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     const label = `Branch ${count}`;
     this.conversations.addBranch(label, key);
     this.switchThread(key);
+    if (this.agentId) {
+      this.api.renameSession(this.agentId, key, label).subscribe({ error: () => {} });
+    }
+  }
+
+  renameThread(key: string): void {
+    if (!this.conversations.isWebsocketBranch(key)) return;
+    const current = this.conversations.threads().find((t) => t.key === key);
+    const next = window.prompt('Rename branch', current?.label || 'Branch');
+    if (!next?.trim()) return;
+    this.conversations.renameBranch(key, next.trim());
+    if (this.agentId) {
+      this.api.renameSession(this.agentId, key, next.trim()).subscribe({ error: () => {} });
+    }
+  }
+
+  deleteThread(key: string): void {
+    if (!this.conversations.isWebsocketBranch(key)) return;
+    const current = this.conversations.threads().find((t) => t.key === key);
+    if (!window.confirm(`Delete branch "${current?.label || key}" and its history?`)) return;
+    this.conversations.removeBranch(key);
+    this.messages.update((msgs) => msgs.filter((m) => m.sessionKey !== key));
+    this.workbench.removeEntriesForSession(key);
+    if (this.agentId) {
+      this.api.deleteSession(this.agentId, key).subscribe({ error: () => {} });
+    }
+    if (this.currentThread() === key) {
+      this.switchThread('websocket:main');
+    }
   }
 
   /** Restore thread list from the runtime's persisted session index. */
@@ -3774,7 +3811,8 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
           const channelName = meta?.channel_name || meta?.channelName || '';
           const guildName = meta?.guild_name || meta?.guildName || '';
           const flags = this.conversations.threadFlagsFromKey(key);
-          const label = this.conversations.labelFromSessionKey(key, channel, {
+          const label = meta?.label
+            || this.conversations.labelFromSessionKey(key, channel, {
             sender, subject, channel_name: channelName, guild_name: guildName,
           });
           restored.push({
@@ -3785,6 +3823,10 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
           });
         }
         this.conversations.resetThreadsForAgent(this.agentId, restored);
+        const labels = this.conversations.loadBranchLabels(this.agentId);
+        for (const [key, label] of Object.entries(labels)) {
+          this.conversations.renameBranch(key, label);
+        }
         const current = this.currentThread();
         if (!this.conversations.threads().some((t) => t.key === current)) {
           this.currentThread.set('websocket:main');
@@ -3809,7 +3851,13 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       next: (res) => {
         const ambient = Array.isArray(res?.ambient_timeline) ? res.ambient_timeline : [];
         const sessionMsgs = Array.isArray(res?.messages) ? res.messages : [];
-        if (!ambient.length && !sessionMsgs.length) return;
+        if (!ambient.length && !sessionMsgs.length) {
+          if (!isChannel) {
+            this.messages.update(msgs => msgs.filter(m => m.sessionKey !== sessionKey));
+            this.workbench.removeEntriesForSession(sessionKey);
+          }
+          return;
+        }
 
         let restored: ChatMessage[];
         if (isChannel && ambient.length > 0) {
@@ -3852,14 +3900,23 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
         this.messages.update(msgs => {
           const other = msgs.filter(m => m.sessionKey !== sessionKey);
-          const existing = msgs.filter(m => m.sessionKey === sessionKey);
-          // Server history is authoritative for channel threads (ambient or session-backed).
           if (isChannel && restored.length > 0) {
             return [...other, ...restored];
           }
+          if (!isChannel) {
+            return [...other, ...restored];
+          }
+          const existing = msgs.filter(m => m.sessionKey === sessionKey);
           if (existing.length > 0) return msgs;
           return [...other, ...restored];
         });
+
+        if (!isChannel && transcriptHasAgenticTrace(sessionMsgs)) {
+          this.workbench.hydrateFromTranscript(sessionMsgs, {
+            force: true,
+            sessionKey,
+          });
+        }
       },
       error: () => {},
     });

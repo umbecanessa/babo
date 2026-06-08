@@ -13,6 +13,7 @@ import {
   ElementRef,
   ViewChild,
   effect,
+  HostListener,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -107,6 +108,12 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
     });
   });
 
+  readonly isActiveBranch = computed(() =>
+    this.conversations.isWebsocketBranch(this.activeThread()),
+  );
+
+  branchMenuOpen = signal(false);
+
   private wsSub?: Subscription;
   private prevAgentId = '';
   private _agenticStepEvents: Array<{
@@ -145,18 +152,62 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
     this.wsSub?.unsubscribe();
   }
 
+  @HostListener('document:click')
+  closeBranchMenu(): void {
+    this.branchMenuOpen.set(false);
+  }
+
+  toggleBranchMenu(event: MouseEvent): void {
+    event.stopPropagation();
+    this.branchMenuOpen.update((open) => !open);
+  }
+
   selectThread(key: string): void {
+    this.branchMenuOpen.set(false);
     this.activeThread.set(key);
+    this.workbench.setActiveSessionKey(key);
     this.conversations.markThreadRead(key);
     this.loadHistory(key);
+  }
+
+  renameActiveBranch(): void {
+    const key = this.activeThread();
+    if (!this.conversations.isWebsocketBranch(key)) return;
+    this.branchMenuOpen.set(false);
+    const current = this.conversations.threads().find((t) => t.key === key);
+    const next = window.prompt('Rename branch', current?.label || 'Branch');
+    if (!next?.trim()) return;
+    this.conversations.renameBranch(key, next.trim());
+    if (this.agentId) {
+      this.api.renameSession(this.agentId, key, next.trim()).subscribe({ error: () => {} });
+    }
+  }
+
+  deleteActiveBranch(): void {
+    const key = this.activeThread();
+    if (!this.conversations.isWebsocketBranch(key)) return;
+    this.branchMenuOpen.set(false);
+    const current = this.conversations.threads().find((t) => t.key === key);
+    if (!window.confirm(`Delete branch "${current?.label || key}" and its history?`)) return;
+    this.conversations.removeBranch(key);
+    this.messages.update((msgs) => msgs.filter((m) => m.sessionKey !== key));
+    this.workbench.removeEntriesForSession(key);
+    if (this.agentId) {
+      this.api.deleteSession(this.agentId, key).subscribe({ error: () => {} });
+    }
+    this.selectThread('websocket:main');
   }
 
   createNewBranch(): void {
     const id = Date.now().toString(36);
     const key = `websocket:thread:${id}`;
     const count = this.websocketThreads().filter((t) => t.key !== 'websocket:main').length;
-    this.conversations.addBranch(`Branch ${count + 1}`, key);
+    const label = `Branch ${count + 1}`;
+    this.conversations.addBranch(label, key);
     this.selectThread(key);
+    if (this.agentId) {
+      this.api.renameSession(this.agentId, key, label).subscribe({ error: () => {} });
+    }
   }
 
   send(): void {
@@ -174,6 +225,7 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
     }
 
     const threadKey = this.activeThread();
+    const branchLabel = this.conversations.threads().find((t) => t.key === threadKey)?.label;
 
     this.appendMessages([{
       type: 'user',
@@ -199,12 +251,13 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
         content: msg || 'Please examine the attached files.',
         attachments,
         session_key: threadKey,
+        ...(branchLabel ? { branch_label: branchLabel } : {}),
         ...(model ? { model } : {}),
         ...(modelRoute ? { model_route: modelRoute } : {}),
         ...(orchProfile ? { orchestration_profile: orchProfile } : {}),
       });
     } else {
-      this.ws.sendMessage(msg, threadKey, model, orchProfile, modelRoute);
+      this.ws.sendMessage(msg, threadKey, model, orchProfile, modelRoute, branchLabel);
     }
   }
 
@@ -478,10 +531,23 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
           }
           this.syncMainTranscript();
         } else {
-          this.messages.update((msgs) => {
-            const keep = msgs.filter((m) => (m.sessionKey || 'websocket:main') !== sessionKey);
-            return [...keep, ...restored];
-          });
+          if (restored.length === 0 && sessionMsgs.length === 0) {
+            this.messages.update((msgs) =>
+              msgs.filter((m) => (m.sessionKey || 'websocket:main') !== sessionKey),
+            );
+            this.workbench.removeEntriesForSession(sessionKey);
+          } else {
+            this.messages.update((msgs) => {
+              const keep = msgs.filter((m) => (m.sessionKey || 'websocket:main') !== sessionKey);
+              return [...keep, ...restored];
+            });
+            if (transcriptHasAgenticTrace(sessionMsgs)) {
+              this.workbench.hydrateFromTranscript(sessionMsgs, {
+                force: true,
+                sessionKey,
+              });
+            }
+          }
         }
         this.loadingHistory.set(false);
       },

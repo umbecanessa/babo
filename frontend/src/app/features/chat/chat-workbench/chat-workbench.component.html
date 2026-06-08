@@ -10,6 +10,10 @@
         <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
       </svg>
     </button>
+    <button type="button" class="wb-density" (click)="workbench.toggleShowAllThreads()"
+      [title]="workbench.showAllThreads() ? 'Showing all branches' : 'Showing current branch only'">
+      {{ workbench.showAllThreads() ? 'All branches' : 'This branch' }}
+    </button>
     <button type="button" class="wb-density" (click)="cycleDensity()" [title]="'View: ' + densityLabel()">
       {{ densityLabel() }}
     </button>

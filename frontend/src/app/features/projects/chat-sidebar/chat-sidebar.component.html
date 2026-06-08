@@ -1,10 +1,26 @@
 <div class="chat-sidebar">
   <div class="sidebar-header">
-    <select class="thread-select" [ngModel]="activeThread()" (ngModelChange)="selectThread($event)">
-      @for (thread of websocketThreads(); track thread.key) {
-        <option [value]="thread.key">{{ thread.label }}</option>
+    <div class="thread-picker">
+      <select class="thread-select" [ngModel]="activeThread()" (ngModelChange)="selectThread($event)">
+        @for (thread of websocketThreads(); track thread.key) {
+          <option [value]="thread.key">{{ thread.label }}</option>
+        }
+      </select>
+      @if (isActiveBranch()) {
+        <button
+          type="button"
+          class="branch-menu-btn"
+          title="Branch options"
+          (click)="toggleBranchMenu($event)"
+        >⋯</button>
+        @if (branchMenuOpen()) {
+          <div class="branch-actions" (click)="$event.stopPropagation()">
+            <button type="button" (click)="renameActiveBranch()">Rename</button>
+            <button type="button" class="danger" (click)="deleteActiveBranch()">Delete</button>
+          </div>
+        }
       }
-    </select>
+    </div>
     <button class="icon-btn" type="button" title="New branch" (click)="createNewBranch()">+</button>
     <button class="close-btn" (click)="close.emit()" title="Close">&times;</button>
   </div>

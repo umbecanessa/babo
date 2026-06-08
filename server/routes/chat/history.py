@@ -46,6 +46,21 @@ def _strip_internal_blocks(text: str) -> str:
     return _SKILL_ONBOARDING_RE.sub("", text)
 
 
+def branch_session_metadata(
+    session_key: str | None,
+    *,
+    label: str | None = None,
+) -> dict | None:
+    """Metadata persisted alongside branch session history."""
+    sk = (session_key or "websocket:main").strip()
+    if is_main_chat_session(sk):
+        return None
+    meta: dict = {"channel": "websocket"}
+    if label and str(label).strip():
+        meta["label"] = str(label).strip()
+    return meta
+
+
 def record_visible_chat_turn(
     runtime,
     *,
@@ -54,8 +69,25 @@ def record_visible_chat_turn(
     reasoning: str | None = None,
     metadata: dict | None = None,
     attachments: list | None = None,
+    session_key: str | None = None,
 ) -> None:
     """Persist a user-visible turn for UI transcript restore."""
+    sk = (session_key or "websocket:main").strip()
+    if sk != "websocket:main":
+        record = getattr(runtime, "record_session_turn", None)
+        if callable(record):
+            try:
+                record(
+                    session_key=sk,
+                    user=_strip_internal_blocks(user) if user else None,
+                    assistant=assistant,
+                    reasoning=reasoning,
+                    metadata=metadata,
+                    attachments=attachments,
+                )
+                return
+            except Exception:
+                logger.debug("record_session_turn failed", exc_info=True)
     record = getattr(runtime, "record_chat_turn", None)
     if not callable(record):
         return
@@ -71,6 +103,58 @@ def record_visible_chat_turn(
         logger.debug("record_visible_chat_turn failed", exc_info=True)
 
 
+def is_main_chat_session(session_key: str | None) -> bool:
+    return (session_key or "websocket:main").strip() == "websocket:main"
+
+
+def persist_conversation_turn(
+    runtime,
+    session_key: str | None,
+    history: list[dict],
+    *,
+    user: str | None = None,
+    assistant: str | None = None,
+    reasoning: str | None = None,
+    metadata: dict | None = None,
+    attachments: list | None = None,
+    session_metadata: dict | None = None,
+    max_history: int = 40,
+) -> None:
+    """Save model history + UI transcript for main or branch threads."""
+    sk = (session_key or "websocket:main").strip()
+    trimmed = history[-max_history:] if len(history) > max_history else history
+    if is_main_chat_session(sk):
+        runtime.save_conversation_history(trimmed)
+        record_visible_chat_turn(
+            runtime,
+            user=user,
+            assistant=assistant,
+            reasoning=reasoning,
+            metadata=metadata,
+            attachments=attachments,
+            session_key=sk,
+        )
+        return
+
+    meta = dict(session_metadata or {})
+    meta.setdefault("channel", "websocket")
+    runtime.save_session_history(
+        trimmed,
+        session_key=sk,
+        max_turns=200,
+        metadata=meta or None,
+    )
+    record_visible_chat_turn(
+        runtime,
+        user=user,
+        assistant=assistant,
+        reasoning=reasoning,
+        metadata=metadata,
+        attachments=attachments,
+        session_key=sk,
+    )
+
+
 def persist_partial_agentic_transcript(
     runtime,
     *,
@@ -80,6 +164,7 @@ def persist_partial_agentic_transcript(
     aborted: bool = True,
     abort_reason: str = "Connection closed during task",
     attachments: list | None = None,
+    session_key: str | None = None,
 ) -> None:
     """Save in-progress agentic trace when the client disconnects mid-loop."""
     user_text = _strip_internal_blocks(user_input)
@@ -106,7 +191,35 @@ def persist_partial_agentic_transcript(
         reasoning=initial_thinking or None,
         metadata=metadata,
         attachments=attachments or None,
+        session_key=session_key,
     )
+    sk = (session_key or "websocket:main").strip()
+    if is_main_chat_session(sk) or not user_text.strip():
+        return
+    load = getattr(runtime, "load_session_history", None)
+    save = getattr(runtime, "save_session_history", None)
+    if not callable(load) or not callable(save):
+        return
+    try:
+        history = list(load(session_key=sk, max_turns=200) or [])
+        history.append({"role": "user", "content": user_text})
+        if metadata:
+            history.append({
+                "role": "assistant",
+                "content": (
+                    "[Task interrupted — partial progress saved. "
+                    "Continue from here on the next message.]"
+                ),
+                "metadata": metadata,
+            })
+        save(
+            history,
+            session_key=sk,
+            max_turns=200,
+            metadata=branch_session_metadata(sk),
+        )
+    except Exception:
+        logger.debug("partial agentic session history save failed", exc_info=True)
 
 
 def _save_agentic_history(
@@ -184,6 +297,8 @@ def _salvage_agentic_context(
     user_input: str,
     runtime,
     agent_id: str,
+    *,
+    session_key: str | None = None,
 ) -> None:
     """Best-effort salvage of agentic context on crash."""
     if not shared_context:
@@ -233,11 +348,20 @@ def _salvage_agentic_context(
         history[:] = history[-40:]
 
     try:
-        runtime.save_conversation_history(history)
+        sk = (session_key or "websocket:main").strip()
+        meta = branch_session_metadata(sk) if not is_main_chat_session(sk) else None
+        persist_conversation_turn(
+            runtime,
+            sk,
+            history,
+            user=_strip_internal_blocks(user_input),
+            assistant=history[-1].get("content") if history else None,
+            session_metadata=meta,
+        )
         logger.info(
             "Agent %s: crash salvage saved %d history entries "
-            "(%d context msgs recovered)",
-            agent_id, len(history), len(loop_msgs),
+            "(%d context msgs recovered, session=%s)",
+            agent_id, len(history), len(loop_msgs), sk,
         )
     except Exception as exc:
         logger.warning(
