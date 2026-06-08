@@ -272,7 +272,13 @@ def resolve_python_requirements_path(
         return None, f"requirements_file '{requirements_file}' not found under {root}."
 
     if install_dir:
-        target = (root / install_dir.strip("/\\")).resolve()
+        target = Path(
+            resolve_venv_project_root(
+                str(root),
+                install_dir=install_dir,
+                cwd=str(cwd_path),
+            ),
+        )
         req = target / "requirements.txt"
         if req.is_file():
             return req, None
@@ -511,12 +517,29 @@ def resolve_venv_project_root(
     project_root: str,
     *,
     install_dir: str | None = None,
+    cwd: str | None = None,
 ) -> str:
     """Directory that owns ``.venv`` for this install (may differ from monorepo root)."""
     if not install_dir:
         return project_root
     root = Path(project_root).resolve()
-    return str((root / install_dir.strip("/\\")).resolve())
+    rel = install_dir.strip("/\\")
+    leaf = Path(rel).name
+    if root.name == leaf:
+        return str(root)
+    if cwd:
+        cw = Path(cwd).resolve()
+        target = (root / rel).resolve()
+        if cw == target:
+            return str(cw)
+        try:
+            cw.relative_to(root)
+        except ValueError:
+            pass
+        else:
+            if cw.name == leaf:
+                return str(cw)
+    return str((root / rel).resolve())
 
 
 def scaffold_requirements_line(project_dir: Path, package: str) -> Path | None:

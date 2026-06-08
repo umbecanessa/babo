@@ -142,6 +142,12 @@ class ChannelInspectTool:
                         is_error=True,
                     )
                 active_only = bool(params.get("active_only"))
+                from nls.runtime.channel_agent_config import agent_channel_is_configured
+                from nls.runtime.channel_inspect import _gateway_live, _resolve_adapter
+
+                configured = agent_channel_is_configured(data_root, inspect_id, channel)
+                adapter = _resolve_adapter(channel)
+                gateway_live = _gateway_live(adapter, inspect_id)
                 return ToolResult(
                     content=inspect_channel(
                         data_root,
@@ -149,6 +155,12 @@ class ChannelInspectTool:
                         channel,
                         active_only=active_only,
                     ),
+                    details={
+                        "action": "get",
+                        "channel": channel,
+                        "configured": configured,
+                        "gateway_live": gateway_live,
+                    },
                 )
             return ToolResult(
                 content=f"Unknown action '{action}'. Use list, get, or squad_readiness.",

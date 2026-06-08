@@ -1,15 +1,16 @@
 import { ChatMessage, MessageAttachment } from './websocket.service';
 import { parseThinking } from '../../shared/signal-utils';
-import { agenticAbortLabel } from '../../features/chat/orchestration-ui.util';
 import { toolWorkbenchTitle } from './workbench-labels.util';
 import {
   collectFilePaths,
+  fileDisplayName,
   formatIterationToolSummary,
   normalizeToolArguments,
   planWorkbenchPresentation,
   teamWorkbenchPresentation,
   type ActivityChip,
 } from './activity-format.util';
+import { resolveToolDisplayOutcome, toolDoneLabel } from './workbench-tool-outcome.util';
 
 const SYSTEM_INJECTION_PATTERNS = [
   '[REMEMBERED',
@@ -130,101 +131,147 @@ function stepProse(stepEv: Record<string, unknown>): string {
   return typeof prose === 'string' ? prose.trim() : '';
 }
 
-function appendAgenticTrace(
+/** Live-only rows that REST/WS transcript hydration must not drop. */
+export function isEphemeralChatMessage(msg: ChatMessage): boolean {
+  return msg.type === 'status' || msg.type === 'tool_progress';
+}
+
+/** Keep ephemeral UI rows when replacing chat with persisted transcript. */
+export function mergeTranscriptPreservingEphemeral(
+  restored: ChatMessage[],
+  ephemeral: ChatMessage[],
+): ChatMessage[] {
+  if (!ephemeral.length) return restored;
+
+  const restoredKeys = new Set(
+    restored.map(m => `${m.type}:${(m.content || '').trim()}`),
+  );
+  const extras = ephemeral.filter(m => {
+    const key = `${m.type}:${(m.content || '').trim()}`;
+    if (restoredKeys.has(key)) return false;
+    if (m.type === 'status' && !(m.content || '').trim()) return false;
+    return true;
+  });
+  if (!extras.length) return restored;
+
+  const statusExtras = extras.filter(m => m.type === 'status');
+  const restoredProgressKeys = new Set(
+    restored
+      .filter(m => m.type === 'tool_progress')
+      .map(m => {
+        const tp = (m as ChatMessage).toolProgress;
+        return `${tp?.callId || ''}|${tp?.toolName || ''}|${(m.content || '').trim()}`;
+      }),
+  );
+  const progressExtras = extras.filter(m => {
+    if (m.type !== 'tool_progress') return false;
+    const tp = m.toolProgress;
+    const key = `${tp?.callId || ''}|${tp?.toolName || ''}|${(m.content || '').trim()}`;
+    return !restoredProgressKeys.has(key);
+  });
+  const trailing = [...statusExtras, ...progressExtras];
+  return trailing.length ? [...restored, ...trailing] : restored;
+}
+
+function appendAgenticChatFromTrace(
   restored: ChatMessage[],
   meta: Record<string, unknown>,
   sessionKey?: string,
 ): void {
-  const iterations = meta['iterations'] as number | undefined;
-  const toolCalls = meta['tool_calls'] as number | undefined;
-  restored.push({
-    type: 'agentic_start' as any,
-    content: `Agent ran autonomous task (${iterations || 0} steps, ${toolCalls || 0} tool calls)`,
-    timestamp: new Date(),
-    ...(sessionKey ? { sessionKey } : {}),
-  });
-
   const events = meta['events'];
-  if (Array.isArray(events)) {
-    for (const ev of events) {
-      const stepEv = ev as Record<string, unknown>;
-      const prose = stepProse(stepEv);
-      if (prose && !isChatSystemInjection(prose)) {
-        const thought = parseThinking(prose);
+  if (!Array.isArray(events)) return;
+
+  const seenProse = new Set(
+    restored
+      .filter(m => m.type === 'assistant')
+      .map(m => (m.content || '').trim())
+      .filter(Boolean),
+  );
+
+  const sorted = [...events].sort(
+    (a, b) => Number((a as Record<string, unknown>)['step'] || 0)
+      - Number((b as Record<string, unknown>)['step'] || 0),
+  );
+
+  for (const ev of sorted) {
+    const stepEv = ev as Record<string, unknown>;
+    const step = Number(stepEv['step'] || 0);
+    const prose = stepProse(stepEv);
+    if (prose && !isChatSystemInjection(prose)) {
+      const thought = parseThinking(prose);
+      const content = (thought.response || prose).trim();
+      if (content && !seenProse.has(content)) {
+        seenProse.add(content);
         restored.push({
           type: 'assistant',
-          content: thought.response || prose,
+          content,
           reasoning: thought.thinking || undefined,
           timestamp: new Date(),
+          agenticStep: step,
           ...(sessionKey ? { sessionKey } : {}),
         });
       }
-
-      const toolCallsList = (stepEv['tool_calls'] || []) as Array<Record<string, unknown>>;
-      const results = (stepEv['tool_results'] || []) as Array<Record<string, unknown>>;
-      const summary = formatIterationToolSummary(
-        toolCallsList.map(tc => ({
-          name: String(tc['name'] || tc['tool_name'] || 'tool'),
-          call_id: String(tc['call_id'] || ''),
-          arguments: normalizeToolArguments(tc['arguments'] ?? {}),
-        })),
-        results.map(r => ({ success: r['success'] !== false })),
-        new Map(),
-        '',
-      );
-      const successes = results.filter(r => r['success'] !== false).length;
-      restored.push({
-        type: 'agentic_iteration' as any,
-        content: summary
-          ? `Step ${stepEv['step']}: ${summary}`
-          : `Step ${stepEv['step']}: processing (${successes}/${results.length} succeeded)`,
-        timestamp: new Date(),
-        sessionKey,
-        agentic: {
-          step: stepEv['step'] as number,
-          maxSteps: iterations || 0,
-          toolCalls: stepEv['tool_calls'] || [],
-          toolResults: results,
-          hormones: stepEv['hormones'] || {},
-          durationMs: (stepEv['duration_ms'] || stepEv['durationMs'] || 0) as number,
-        },
-      } as any);
     }
-  }
 
-  const restoredEvents = (Array.isArray(events) ? events : []).map((ev: unknown) => {
-    const stepEv = ev as Record<string, unknown>;
     const tcList = (stepEv['tool_calls'] || []) as Array<Record<string, unknown>>;
     const trList = (stepEv['tool_results'] || []) as Array<Record<string, unknown>>;
-    return {
-      step: stepEv['step'],
-      toolCalls: tcList.map(tc => ({ name: String(tc['name'] || 'tool') })),
-      toolResults: trList.map(tr => ({ success: tr['success'] !== false })),
-      durationMs: (stepEv['duration_ms'] || stepEv['durationMs'] || 0) as number,
-    };
-  });
+    tcList.forEach((tc, idx) => {
+      const toolName = String(tc['name'] || tc['tool_name'] || 'tool');
+      const callId = String(tc['call_id'] || `restored-${step}-${idx}`);
+      const args = normalizeToolArguments(tc['arguments'] ?? {});
+      const tr = trList[idx] || {};
+      const preview = String(tr['result_preview'] || tr['preview'] || '');
+      const outcome = resolveToolDisplayOutcome(
+        tr['success'] === false,
+        preview,
+        toolName,
+      );
+      const filePaths = collectFilePaths(toolName, args, preview);
+      let label = toolDoneLabel(toolName, outcome);
+      if (toolName === 'bash') {
+        const cmd = String(args['command'] || '').trim();
+        label = cmd ? `$ ${cmd}` : label;
+      } else if (
+        toolName === 'write'
+        || toolName === 'write_file'
+        || toolName === 'create_file'
+        || toolName === 'read'
+        || toolName === 'read_file'
+        || toolName === 'edit'
+      ) {
+        const paths = filePaths.length ? filePaths : collectFilePaths(toolName, args);
+        const name = paths[0] ? fileDisplayName(paths[0]) : 'file';
+        if (toolName === 'edit') {
+          label = outcome === 'error' ? 'Edit failed' : 'File edited';
+        } else if (toolName === 'read' || toolName === 'read_file') {
+          label = outcome === 'error' ? 'Failed to read file' : 'File read';
+        } else {
+          label = outcome === 'error' ? 'Failed to write file' : 'File written';
+        }
+        if (paths[0] && toolName !== 'bash') {
+          label = `${label}: ${name}`;
+        }
+      }
 
-  const aborted = Boolean(meta['aborted']);
-  const abortReason = String(meta['abort_reason'] || '');
-  const autonomous = Boolean(meta['autonomous']);
-
-  restored.push({
-    type: 'agentic_complete' as any,
-    content: aborted
-      ? agenticAbortLabel(true, abortReason, autonomous)
-      : 'Task complete',
-    timestamp: new Date(),
-    sessionKey,
-    agenticComplete: {
-      totalSteps: iterations || 0,
-      totalToolCalls: toolCalls || 0,
-      aborted,
-      abortReason,
-      durationMs: 0,
-      hormones: {},
-      events: restoredEvents,
-    },
-  } as any);
+      restored.push({
+        type: 'tool_progress' as any,
+        content: label,
+        timestamp: new Date(),
+        ...(sessionKey ? { sessionKey } : {}),
+        toolProgress: {
+          toolName,
+          callId,
+          arguments: args,
+          done: true,
+          isError: outcome === 'error',
+          isWarning: outcome === 'warn',
+          resultPreview: preview || undefined,
+          iteration: step,
+          ...(filePaths.length ? { filePaths } : {}),
+        },
+      } as any);
+    });
+  }
 }
 
 /** Rebuild Chat UI messages from server transcript rows (WS history or REST). */
@@ -243,7 +290,7 @@ export function restoreChatMessagesFromTranscript(
     const ts = timestampFromRow(m);
 
     if (isAssistant && meta['agentic']) {
-      appendAgenticTrace(restored, meta, sessionKey);
+      appendAgenticChatFromTrace(restored, meta, sessionKey);
       const planSteps = meta['plan_steps'];
       if (Array.isArray(planSteps) && planSteps.length > 0) {
         options.onPlanHydrate?.(meta);

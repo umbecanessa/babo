@@ -285,17 +285,12 @@ async def should_complete(
     _last_text = getattr(state, "_last_iter_text", "") or ""
     from nls.agentic.orchestration_profile_spec import (
         evaluate_plan_artifact_complete,
-        evaluate_plan_step_started_complete,
         get_profile_spec,
     )
     _spec = get_profile_spec(_profile)
 
     if evaluate_plan_artifact_complete(state, hooks):
         logger.info("[EVAL] -> COMPLETE (plan deliverables verified)")
-        return True
-
-    if evaluate_plan_step_started_complete(state, hooks):
-        logger.info("[EVAL] -> COMPLETE (plan created + step in progress + summary)")
         return True
 
     if (

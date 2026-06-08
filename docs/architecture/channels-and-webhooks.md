@@ -223,6 +223,20 @@ Prevents accidental sends to arbitrary IDs. Legacy JSON `discord` / `slack` tool
 
 ---
 
+## Channel REST API routing (agent guidance)
+
+When an agent runs `bash` against a vendor REST URL and that **channel is configured** on the agent, Babo adds **soft** steering (not a block):
+
+- Result suffix: `[CHANNEL HINT]` — prefer `channel_manage(channel='…', action=…)` and `channel_inspect(action='get')`
+- Loop breadcrumb after `channel_inspect(get)` when gateway is live, or after a matching `bash` call
+- Cryptex tools ring + solo static hints on `bash` / `channel_inspect`
+
+Detection is **channel-agnostic**: bundled channels use built-in host patterns; custom `*-channel` skills can declare `rest_api_hosts` in per-agent config. See [Add a channel integration — Step 8](../extension/add-channel-integration.md#step-8-per-agent-config--rest-api-routing).
+
+Module: `nls/runtime/channel_api_routing.py`.
+
+---
+
 ## Email special case
 
 - **Activate:** `POST /api/channels/email/activate/:agentId` (JWT) — creates alias

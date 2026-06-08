@@ -121,7 +121,7 @@ Uses `ProjectService` + runtime APIs for plan/team state. Legacy IDE/files/timel
 
 **Multi-agent:** opening several agents keeps separate WebSocket sessions so parallel benchmark runs do not cross-stream events.
 
-**Transcript sync (shipped v1.1+):** Home chat history is shared between `/chat/:agentId` and the Projects chat sidebar via `ChatMainTranscriptService`. Agentic tool traces restore on reload (`chat-transcript-restore.util.ts`); partial in-progress agentic turns persist on disconnect (`server/routes/chat/history.py`, `ws_handler.py`).
+**Transcript sync (shipped v1.1+):** Home chat history is shared between `/chat/:agentId` and the Projects chat sidebar via `ChatMainTranscriptService`. On reload, `chat-transcript-restore.util.ts` rebuilds user/assistant rows, **tool_progress chips** from agentic transcript metadata, and preserves ephemeral status rows during REST hydration; partial in-progress agentic turns persist on disconnect (`server/routes/chat/history.py`, `ws_handler.py`).
 
 **Orchestration composer chip:** one control in the composer shows orchestration **depth** (profile) and live **mode** (planning / delegating / executing). Profile picker reflects **per-agent floored overrides** when an active team plan requires `orchestrated`. Mode label updates only after a successful `switch_mode` (not on failed attempts).
 

@@ -19,6 +19,19 @@ Each turn cycles through:
 
 The loop stops when the evaluator marks the task complete, you abort, or guard conditions trigger (e.g. repeated failures).
 
+### Solo profile completion (`solo_structured`)
+
+Solo agents exit the loop when deliverables are real — not when a plan step is merely **in progress** or when prose + a single file write appear without finished steps.
+
+| Gate | Behavior |
+|------|----------|
+| **`complete_on_plan_artifacts`** | Plan step output files exist on disk, or all steps are `done`/`skipped` |
+| **`complete_on_plan_step_started`** | **Off** for solo — was removed from the evaluator path (redundant with artifact completion and caused early exit after planning) |
+| **Active plan check** | Runs before implicit prose delivery — status updates do not finish the run while steps remain open |
+| **`task_complete` tool** | Explicit finish signal for setup/instruction flows |
+
+Orchestration profiles: `nls/agentic/orchestration_profile_spec.py` · evaluator: `nls/agentic/evaluator.py`.
+
 ---
 
 ## Agent modes

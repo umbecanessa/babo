@@ -5,11 +5,14 @@ from __future__ import annotations
 from nls.agentic.orchestration_profile_spec import (
     apply_tool_deny,
     behavioral_domain_visible_for_profile,
+    evaluate_plan_artifact_complete,
+    evaluate_plan_step_started_complete,
     get_profile_spec,
     is_solo_execution_profile,
     normalize_profile,
     should_auto_mark_delegatable,
 )
+from nls.agentic.types import LoopState
 from nls.agentic.profile_guard_policy import (
     em_pre_delegate_blocks_enabled,
     normalize_goals_for_profile,
@@ -126,3 +129,63 @@ def test_instruction_tech_stack_domain_gated_by_plan():
     assert not spec.instruction_domain_visible(
         "plan_requirements", has_active_plan=False,
     )
+
+
+class _FakeStep:
+    def __init__(self, status: str, output_files: list[str] | None = None):
+        self.status = status
+        self.output_files = output_files or []
+
+
+class _FakePlan:
+    def __init__(self, steps: list[_FakeStep], project_dir: str = ""):
+        self.steps = steps
+        self.project_dir = project_dir
+
+
+class _FakeStore:
+    def __init__(self, plan: _FakePlan | None):
+        self._plan = plan
+
+    def find_active(self):
+        return self._plan
+
+
+class _FakePlanTool:
+    def __init__(self, plan: _FakePlan | None, workspace: str):
+        self._workspace = workspace
+        self._store = _FakeStore(plan)
+
+    def get_store(self):
+        return self._store
+
+
+class _FakeHooks:
+    def __init__(self, plan_tool: _FakePlanTool):
+        self._cached_plan_tool = plan_tool
+
+
+def test_plan_step_started_disabled_for_solo():
+    spec = get_profile_spec("solo_structured")
+    assert spec.complete_on_plan_step_started is False
+
+
+def test_plan_step_started_does_not_complete_on_in_progress():
+    state = LoopState(user_input="reorganize discord")
+    state.orchestration_profile = "solo_structured"
+    state.consecutive_text_only = 1
+    state._last_iter_text = "x" * 100
+    plan = _FakePlan([_FakeStep("in_progress"), _FakeStep("pending")])
+    hooks = _FakeHooks(_FakePlanTool(plan, "/tmp/ws"))
+    assert evaluate_plan_step_started_complete(state, hooks) is False
+
+
+def test_plan_artifact_does_not_complete_on_prose_and_writes_only():
+    state = LoopState(user_input="reorganize discord")
+    state.orchestration_profile = "solo_structured"
+    state.consecutive_text_only = 1
+    state._last_iter_text = "x" * 100
+    state.files_written = ["discord_reorganize.py"]
+    plan = _FakePlan([_FakeStep("in_progress"), _FakeStep("pending")])
+    hooks = _FakeHooks(_FakePlanTool(plan, "/tmp/ws"))
+    assert evaluate_plan_artifact_complete(state, hooks) is False

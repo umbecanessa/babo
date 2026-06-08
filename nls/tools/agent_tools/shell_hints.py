@@ -36,6 +36,27 @@ _CD_INTO_CWD_NAME = re.compile(
 )
 
 
+def configured_channel_api_bash_hint(
+    command: str,
+    agent_dir: str,
+) -> str | None:
+    """Soft nudge when bash hits a configured channel REST API (any channel)."""
+    if not command or not agent_dir:
+        return None
+    try:
+        from nls.runtime.channel_api_routing import (
+            detect_configured_channel_rest_in_command,
+            format_channel_rest_bash_hint,
+        )
+
+        channel = detect_configured_channel_rest_in_command(command, agent_dir)
+        if channel:
+            return format_channel_rest_bash_hint(channel)
+    except Exception:
+        return None
+    return None
+
+
 def preflight_bash_command(command: str, cwd: str) -> str | None:
     """Return a pre-flight block message for known-bad command patterns."""
     if not command or not cwd:

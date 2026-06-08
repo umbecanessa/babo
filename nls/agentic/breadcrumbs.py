@@ -327,6 +327,38 @@ def _render_plan_notify(ctx: BreadcrumbContext) -> str:
     )
 
 
+def _render_channel_inspect_admin(ctx: BreadcrumbContext) -> str:
+    channel = str(ctx.result_details.get("channel") or "channel").strip().lower()
+    from nls.runtime.channel_api_routing import format_channel_rest_breadcrumb
+
+    return format_channel_rest_breadcrumb(channel)
+
+
+def _render_bash_channel_api_nudge(ctx: BreadcrumbContext) -> str:
+    channel = str(ctx.result_details.get("channel_api_nudge") or "channel").strip().lower()
+    from nls.runtime.channel_api_routing import format_channel_rest_breadcrumb
+
+    return format_channel_rest_breadcrumb(channel)
+
+
+def _channel_inspect_ready_for_admin(ctx: BreadcrumbContext) -> bool:
+    if ctx.is_error:
+        return False
+    if str(ctx.result_details.get("action") or "") != "get":
+        return False
+    channel = str(ctx.result_details.get("channel") or "").strip().lower()
+    if not channel:
+        return False
+    return bool(
+        ctx.result_details.get("configured")
+        and ctx.result_details.get("gateway_live")
+    )
+
+
+def _bash_channel_api_nudge(ctx: BreadcrumbContext) -> bool:
+    return bool(ctx.result_details.get("channel_api_nudge"))
+
+
 def _render_accept_partial_advance(ctx: BreadcrumbContext) -> str:
     pid = ctx.result_details.get("plan_id", "???")
     return (
@@ -784,6 +816,20 @@ DEFAULT_RULES: list[BreadcrumbRule] = [
         requires_tools=frozenset({"team"}),
         render=_render_fix_deps_team,
     ),
+    # channel_inspect(get) on live discord/slack → prefer channel_manage
+    BreadcrumbRule(
+        trigger=("channel_inspect", "get"),
+        requires_tools=frozenset({"channel_manage"}),
+        condition=_channel_inspect_ready_for_admin,
+        render=_render_channel_inspect_admin,
+    ),
+    # bash hit configured channel REST → nudge channel_manage
+    BreadcrumbRule(
+        trigger=("bash", "*"),
+        requires_tools=frozenset({"channel_manage"}),
+        condition=_bash_channel_api_nudge,
+        render=_render_bash_channel_api_nudge,
+    ),
 ]
 
 
@@ -824,6 +870,15 @@ _TOOL_STATIC_HINTS_SOLO: dict[str, str] = {
         "\n\nWORKFLOW: After the first write() to a path, use edit() for "
         "targeted changes. To fully rewrite again, delete_file(path=...) first, "
         "then write()."
+    ),
+    "channel_inspect": (
+        "\n\nWORKFLOW: When a channel shows configured + gateway live, use "
+        "channel_manage(channel=..., action=...) for server admin — not raw curl "
+        "or scripts with vendor tokens."
+    ),
+    "bash": (
+        "\n\nWORKFLOW: When a channel integration is configured, prefer channel_manage "
+        "over curl to that vendor's REST API for admin work."
     ),
     "web_fetch": (
         "\n\nWORKFLOW: Use fetched content directly — cite real URLs. "

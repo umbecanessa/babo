@@ -54,7 +54,7 @@ import { ChatPanelService } from '../../core/services/chat-panel.service';
 import { ConversationService, ConversationThread } from '../../core/services/conversation.service';
 import { composerDestination } from '../../core/services/composer-destination.util';
 import { ChatMainTranscriptService } from '../../core/services/chat-main-transcript.service';
-import { restoreChatMessagesFromTranscript, isChatSystemInjection, transcriptHasAgenticTrace } from '../../core/services/chat-transcript-restore.util';
+import { restoreChatMessagesFromTranscript, isChatSystemInjection, transcriptHasAgenticTrace, mergeTranscriptPreservingEphemeral, isEphemeralChatMessage } from '../../core/services/chat-transcript-restore.util';
 import { ChatLeftDockComponent } from './chat-left-dock/chat-left-dock.component';
 import { ChatRightDockComponent } from './chat-right-dock/chat-right-dock.component';
 import { ConversationNavComponent } from './conversation-nav/conversation-nav.component';
@@ -1400,7 +1400,9 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         const branch = msgs.filter(
           m => m.sessionKey && m.sessionKey !== 'websocket:main',
         );
-        return [...branch, ...restored];
+        const ephemeral = mainMsgs.filter(isEphemeralChatMessage);
+        const merged = mergeTranscriptPreservingEphemeral(restored, ephemeral);
+        return [...branch, ...merged];
       });
       this.mainTranscriptRows = Math.max(this.mainTranscriptRows, raw.length);
       this.mainTranscriptLoaded = true;

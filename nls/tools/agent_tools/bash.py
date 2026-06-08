@@ -606,6 +606,28 @@ class BashTool:
         self._project_venv_bin = ""
         return None
 
+    _PYTHON_INVOCATION_RE = re.compile(
+        r"(^|[;&|]\s*|\s)(python3|python|py)(?=(\s|$))",
+        re.IGNORECASE,
+    )
+
+    def _rewrite_project_python(self, command: str) -> str:
+        """Route python/python3/py to the project venv interpreter when available."""
+        if not command or not self._PYTHON_INVOCATION_RE.search(command):
+            return command
+        bin_dir = self._ensure_project_venv()
+        if not bin_dir:
+            return command
+        python_exe = Path(bin_dir) / ("python.exe" if os.name == "nt" else "python")
+        if not python_exe.is_file():
+            return command
+        exe = f'"{python_exe}"' if " " in str(python_exe) else str(python_exe)
+
+        def _repl(match: re.Match[str]) -> str:
+            return f"{match.group(1)}{exe}"
+
+        return self._PYTHON_INVOCATION_RE.sub(_repl, command)
+
     def _build_isolated_env(self, cwd: str) -> dict[str, str]:
         """Build an environment that isolates the agent from the host user.
 
@@ -1364,6 +1386,7 @@ class BashTool:
         command = self._fix_powershell(command)
         command = self._normalize_curl(command)
         self._refresh_env()
+        command = self._rewrite_project_python(command)
         timeout = params.get("timeout", self._default_timeout)
         if timeout is not None:
             try:
@@ -1381,6 +1404,24 @@ class BashTool:
         _preflight = preflight_bash_command(command, self._cwd)
         if _preflight:
             return ToolResult(content=_preflight, is_error=True)
+
+        _channel_api_nudge = ""
+        try:
+            from nls.runtime.channel_api_routing import (
+                detect_configured_channel_rest_in_command,
+                format_channel_rest_bash_hint,
+            )
+
+            _channel_api_nudge = detect_configured_channel_rest_in_command(
+                command, self._workspace_root,
+            ) or ""
+        except Exception:
+            _channel_api_nudge = ""
+        _channel_api_hint = (
+            format_channel_rest_bash_hint(_channel_api_nudge)
+            if _channel_api_nudge
+            else None
+        )
 
         # Block dangerous commands
         for pattern in self._blocked:
@@ -1893,13 +1934,18 @@ class BashTool:
 
         result_text += f"\n\n[CWD: {self._friendly_cwd()}]"
 
+        if _channel_api_hint:
+            result_text += f"\n\n{_channel_api_hint}"
+
         return ToolResult(
             content=result_text,
             is_error=is_error,
             details={
                 "exit_code": exit_code,
+                "command": command,
                 "truncation": trunc_details if was_truncated else None,
                 "full_output_path": temp_path,
+                **({"channel_api_nudge": _channel_api_nudge} if _channel_api_nudge else {}),
             },
         )
 

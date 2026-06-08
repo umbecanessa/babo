@@ -37,13 +37,25 @@ def data_root_from_agent_dir(agent_dir: str | Path) -> Path:
     return Path(agent_dir).parent.parent
 
 
+def resolve_channel_skill_dir(channel: str) -> str | None:
+    """Skill package folder for a channel key (bundled or custom ``*-channel``)."""
+    ch = (channel or "").strip().lower()
+    if not ch:
+        return None
+    if ch in _CHANNEL_SKILL_DIRS:
+        return _CHANNEL_SKILL_DIRS[ch]
+    if ch.endswith("-channel"):
+        return ch
+    return f"{ch}-channel"
+
+
 def load_agent_channel_config(
     data_root: Path,
     agent_id: str,
     channel: str,
 ) -> dict[str, Any] | None:
     """Load per-agent channel config only (never global config.json credentials)."""
-    skill_dir = _CHANNEL_SKILL_DIRS.get(channel)
+    skill_dir = resolve_channel_skill_dir(channel)
     if not skill_dir:
         return None
     path = data_root / "skills" / skill_dir / "agents" / f"{agent_id}.json"
@@ -79,4 +91,8 @@ def agent_channel_is_configured(
             cfg.get("enabled")
             and str(cfg.get("bot_token", "")).strip()
         )
-    return False
+    return bool(
+        cfg.get("enabled")
+        or cfg.get("configured")
+        or any(str(cfg.get(k) or "").strip() for k in CHANNEL_CREDENTIAL_KEYS)
+    )

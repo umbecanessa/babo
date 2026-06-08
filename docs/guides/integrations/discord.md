@@ -162,6 +162,8 @@ Member inbound respects `require_mention` and Babo channel scope. Squad peer pin
 
 **Never** pass bot tokens through bash or Python — use `channel_manage`, `squad`, and `discord_send` only.
 
+When Discord is configured, `bash` against `discord.com/api` still runs but adds a soft **`[CHANNEL HINT]`** (and may inject a loop breadcrumb) steering to `channel_manage` — same pattern applies to Slack and custom channels via `rest_api_hosts` in agent config. See [Add a channel integration](../../extension/add-channel-integration.md#step-8-per-agent-config--rest-api-routing).
+
 See [Job, Trust & Squads](../job-trust-and-squads.md#discord-multi-face-squads).
 
 ---

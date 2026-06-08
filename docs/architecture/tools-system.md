@@ -138,6 +138,10 @@ See [Platform shell on Windows](platform-shell-and-windows.md).
 
 `bash()` auto-routes `pip install` and `npm/pnpm/yarn install` to the appropriate tool. During an active plan with a locked tech stack, `server_install` is blocked unless `for_agent_runtime=True` — rules in `nls/tools/agent_tools/install_policy.py`.
 
+**Project venv:** `bash()` prepends the project `.venv` to `PATH` and rewrites `python` / `python3` / `py` to that interpreter (avoids Windows Store `python3` stubs). **`project_install(install_dir=…)`** resolves the venv folder without double-nesting when the shell CWD is already inside the target subfolder (`resolve_venv_project_root()` in `project_runtime.py`).
+
+**Configured channels:** soft `[CHANNEL HINT]` when bash hits a linked channel’s REST API — see [Channels & webhooks — REST routing](channels-and-webhooks.md#channel-rest-api-routing-agent-guidance).
+
 ---
 
 ## Guardrails registry

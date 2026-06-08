@@ -142,9 +142,12 @@ Conversations are grouped into **sessions** with titles. History persists across
 **Transcript restore (v1.2+):** On reload, Babo rebuilds:
 
 - User messages with **attachment cards** (images, files)
-- Agentic traces with per-iteration **mid-loop prose** (assistant updates during long runs)
-- Tool cards with expanded metadata (plan steps, team actions)
-- Workbench summaries linked to agentic events
+- Agentic **mid-loop prose** (assistant updates during long runs)
+- **Tool progress chips** (`tool_progress`) from persisted agentic `metadata.events` — read/write/bash/plan cards, not empty `agentic_*` wrapper rows
+- Ephemeral **status pills** (e.g. “Starting discord setup…”) preserved across REST transcript hydration
+- Workbench summaries linked to the same agentic events
+
+Implementation: `frontend/src/app/core/services/chat-transcript-restore.util.ts` · merge on hydrate: `mergeTranscriptPreservingEphemeral()` in `chat.component.ts`.
 
 Disconnect mid-run preserves partial progress server-side; reconnect continues streaming where possible.
 

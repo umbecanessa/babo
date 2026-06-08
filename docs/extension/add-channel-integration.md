@@ -159,6 +159,70 @@ Never expose raw credentials in tool results — read tokens server-side from sa
 
 ---
 
+## Step 8: Per-agent config & REST API routing
+
+Each agent stores channel credentials under:
+
+```text
+data/skills/{skill-dir}/agents/{runtimeAgentId}.json
+```
+
+Bundled skills use keys from `nls/runtime/channel_policy_profiles.py` (`discord` → `discord-channel`, etc.). **Custom skills** use the same layout: folder `{name}-channel`, channel key `{name}` (see `resolve_channel_skill_dir()` in `nls/runtime/channel_agent_config.py`).
+
+### Minimum for a custom channel author
+
+| Requirement | Detail |
+|-------------|--------|
+| Skill package | `data/skills/myplatform-channel/` (or bundled under `nls/skills/bundled/`) |
+| Per-agent config | `agents/{runtimeAgentId}.json` with `"enabled": true` and your credential fields |
+| Admin surface | `manage_channel` on the adapter **or** `register_channel_manage_handler("myplatform", …)` |
+| Optional REST hints | `"rest_api_hosts": ["api.myplatform.com/v1"]` in agent config (see below) |
+
+No code changes to Babo core are required for discovery — configured custom channels appear in `channel_inspect(action='list')` once the skill is loaded and agent config exists.
+
+### `rest_api_hosts` (optional)
+
+When agents might call your vendor REST API via `bash`/`curl`, declare matchable hosts in per-agent config so Babo can nudge toward `channel_manage` instead of raw scripts:
+
+```json
+{
+  "enabled": true,
+  "bot_token": "...",
+  "rest_api_hosts": [
+    "api.myplatform.com/v1",
+    "re:api\\.myplatform\\.com/.+"
+  ]
+}
+```
+
+- Plain strings are substring-matched (case-insensitive).
+- Prefix with `re:` for a regex pattern.
+
+Built-in patterns (no config needed) cover common vendors — see `nls/runtime/channel_api_routing.py`:
+
+| Channel key | Default REST match |
+|-------------|-------------------|
+| `discord` | `discord.com/api` |
+| `slack` | `slack.com/api` |
+| `telegram` | `api.telegram.org` |
+| `whatsapp` | `graph.facebook.com/.../whatsapp` |
+
+### Agent guidance (soft — not blocked)
+
+When a configured channel’s REST surface appears in a `bash` command:
+
+1. **Soft suffix** on the tool result — `[CHANNEL HINT]` steering to `channel_manage` / `channel_inspect`
+2. **Post-tool breadcrumb** — `[BREADCRUMB]` on the next loop turn
+3. **Cryptex / static tool hints** — `bash`, `channel_inspect`, and tools ring text
+
+Raw REST is still allowed when `channel_manage` has no matching action (probes, edge cases). There is **no hard preflight block**.
+
+Implementation: `nls/runtime/channel_api_routing.py` · wired from `bash.py`, `shell_hints.py`, `nls/agentic/breadcrumbs.py`.
+
+Register bundled profiles in `CHANNEL_POLICY_PROFILES` when shipping a first-party channel; custom skills only need the skill folder + agent JSON + optional `rest_api_hosts`.
+
+---
+
 ## Step 10: Legacy tool deprecation
 
 If replacing a JSON tool in `nls/config/tools/`, filter it in `server/routes/admin.py` `get_agent_tools` when the bundled skill is enabled.

@@ -120,8 +120,8 @@ Tools below are in the **agentic loop** schema (`nls/tools/agent_tools/`). They 
 | Category | Tools |
 |----------|-------|
 | **Files** | `read`, `write`, `edit`, `grep`, `glob`, `list_dir`, `move_file` |
-| **Shell** | `bash` (PowerShell 7 on Windows — see [Platform shell](../architecture/platform-shell-and-windows.md)) |
-| **Dependencies** | `project_install`, `server_install` (pip/npm routing; plan-aware) |
+| **Shell** | `bash` (PowerShell 7 on Windows — see [Platform shell](../architecture/platform-shell-and-windows.md)); rewrites `python`/`python3` to the project `.venv` when present |
+| **Dependencies** | `project_install`, `server_install` (pip/npm routing; plan-aware; `install_dir` avoids double-nesting when CWD is already the target folder) |
 | **Web** | `browser`, `web_search`, `web_fetch` |
 | **Code** | `semantic_search` |
 | **Comms** | `contacts`, `email_history` (+ channel skill send tools when enabled) |
@@ -142,7 +142,7 @@ Tools below are in the **agentic loop** schema (`nls/tools/agent_tools/`). They 
 | Tool | Notes |
 |------|-------|
 | **`set_job`** | Solo agents on Home only — persist owner-confirmed Job charter after `ask_user()` |
-| **`channel_manage`** | Channel-agnostic admin (sync scope, inspect config, grant access) |
+| **`channel_manage`** | Channel-agnostic admin (sync scope, inspect config, grant access) — **preferred over raw vendor REST/curl** when the channel is configured |
 | **`channel_inspect`** | Read-only channel/skill status (squad lead may pass `target_agent_id`) |
 | **`channel_history`** | Read session + ambient history for a channel thread |
 | **`chat_history`** | Search prior Home chat sessions for context |
@@ -162,6 +162,8 @@ When an agent is a **squad lead** or member, additional tools apply:
 See [Job, Trust & Squads](job-trust-and-squads.md).
 
 Channel skills add send tools (e.g. `whatsapp_send`, `discord_send`, `slack_send`, Gmail read/write).
+
+**Configured channel + bash:** if a `bash` command hits a vendor REST URL for a channel this agent has linked, the result includes a soft `[CHANNEL HINT]` (and may trigger a loop breadcrumb) pointing at `channel_manage` — not a hard block. Custom channel authors declare match hosts via `rest_api_hosts` in per-agent skill config; see [Add a channel integration](../extension/add-channel-integration.md#step-8-per-agent-config--rest-api-routing).
 
 ### Inner-loop JSON registry (not agentic loop)
 

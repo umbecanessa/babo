@@ -4,10 +4,11 @@ import {
   buildWorkbenchRestoreEntries,
   transcriptHasAgenticTrace,
   parseTranscriptUserContent,
+  mergeTranscriptPreservingEphemeral,
 } from './chat-transcript-restore.util';
 
 describe('chat-transcript-restore.util', () => {
-  it('expands agentic metadata into trace messages', () => {
+  it('restores agentic tool chips and prose without empty agentic rows', () => {
     const restored = restoreChatMessagesFromTranscript([
       {
         role: 'user',
@@ -26,8 +27,13 @@ describe('chat-transcript-restore.util', () => {
           events: [
             {
               step: 1,
-              tool_calls: [{ name: 'read' }],
-              tool_results: [{ success: true }],
+              prose: 'Working on step 1.',
+              tool_calls: [{
+                name: 'read',
+                call_id: 'call_1',
+                arguments: { path: 'src/app.ts' },
+              }],
+              tool_results: [{ success: true, result_preview: 'file contents' }],
               duration_ms: 100,
             },
           ],
@@ -36,11 +42,27 @@ describe('chat-transcript-restore.util', () => {
     ]);
 
     const types = restored.map(m => m.type);
-    expect(types).toContain('agentic_start');
-    expect(types).toContain('agentic_iteration');
-    expect(types).toContain('agentic_complete');
+    expect(types).not.toContain('agentic_start');
+    expect(types).not.toContain('agentic_iteration');
+    expect(types).not.toContain('agentic_complete');
+    expect(types).toContain('tool_progress');
     expect(types).toContain('assistant');
-    expect(restored.find(m => m.type === 'assistant')?.content).toBe('Done.');
+    expect(restored.filter(m => m.type === 'assistant').length).toBe(2);
+    expect(restored.find(m => m.type === 'tool_progress')?.toolProgress?.toolName).toBe('read');
+    expect(restored.find(m => m.content === 'Done.')).toBeTruthy();
+  });
+
+  it('mergeTranscriptPreservingEphemeral keeps recent status pills', () => {
+    const restored = restoreChatMessagesFromTranscript([
+      { role: 'user', content: 'Connect discord', timestamp: 1_700_000_000 },
+    ]);
+    const now = new Date();
+    const merged = mergeTranscriptPreservingEphemeral(restored, [{
+      type: 'status',
+      content: 'Starting discord setup...',
+      timestamp: now,
+    }]);
+    expect(merged.some(m => m.content === 'Starting discord setup...')).toBe(true);
   });
 
   it('filters system injection messages', () => {

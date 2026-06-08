@@ -232,7 +232,7 @@ def _spec_solo_structured() -> ProfileOrchestrationSpec:
         complete_on_prose=False,
         complete_on_implicit_delivery=True,
         complete_on_plan_artifacts=True,
-        complete_on_plan_step_started=True,
+        complete_on_plan_step_started=False,
     )
 
 
@@ -457,14 +457,6 @@ def evaluate_plan_artifact_complete(
                     if not any(p.is_file() for p in candidates):
                         return False
             return True
-        if (
-            spec.profile == "solo_structured"
-            and plan.steps
-            and written
-            and state.consecutive_text_only >= 1
-            and len(last_text) > 80
-        ):
-            return True
     except Exception:
         return False
     return False
@@ -474,7 +466,7 @@ def evaluate_plan_step_started_complete(
     state: "LoopState",
     hooks: Any | None,
 ) -> bool:
-    """True when plan exists, a step is in_progress, and prose was delivered."""
+    """True when every plan step is done/skipped and prose was delivered."""
     if not get_profile_spec(
         getattr(state, "orchestration_profile", None),
     ).complete_on_plan_step_started:
@@ -493,7 +485,10 @@ def evaluate_plan_step_started_complete(
         plan = plan_tool.get_store().find_active()
         if plan is None:
             return False
-        in_progress = [s for s in plan.steps if s.status == "in_progress"]
-        return bool(in_progress)
+        if not plan.steps:
+            return False
+        if any(s.status in ("pending", "in_progress") for s in plan.steps):
+            return False
+        return all(s.status in ("done", "skipped") for s in plan.steps)
     except Exception:
         return False

@@ -297,6 +297,7 @@ class ProjectInstallTool:
             venv_root = resolve_venv_project_root(
                 project_root,
                 install_dir=install_dir or None,
+                cwd=effective_cwd,
             )
             scaffolded = scaffold_requirements_line(Path(venv_root), package)
             req_path, req_err = resolve_python_requirements_path(
