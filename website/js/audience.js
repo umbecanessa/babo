@@ -1,6 +1,8 @@
 /** Landing copy per audience — ?audience=innovator|everyday (default: innovator) */
 const BABO_DOWNLOAD_URL = "download/";
 const BABO_RELEASES_URL = BABO_DOWNLOAD_URL;
+const BABO_DISCORD_URL = "https://discord.gg/daCKzkv4z2";
+const BABO_GITHUB_URL = "https://github.com/umbecanessa/babo";
 
 window.BABO_AUDIENCE = {
   innovator: {
@@ -18,25 +20,35 @@ window.BABO_AUDIENCE = {
       title: "Stop paying",
       titleGradient: "per thought.",
       lead:
-        "An <strong>extensible agent platform</strong> on your hardware — Ollama, vLLM, GX10. Native skills, channels, and tools plug in; persistent memory and orchestration so agents <strong>drift less</strong> and <strong>burn fewer tokens</strong>.",
-      ctaPrimary: { href: "https://github.com/umbecanessa/babo", label: "Star on GitHub" },
-      ctaSecondary: { href: BABO_DOWNLOAD_URL, label: "Download" },
-      meta: "MIT · Local-first · BYOK or Babo Cloud for the boring parts",
+        "Frontier models charge per token. Chat UIs forget everything. Claude Code needs a terminal.<br><br><strong>Babo</strong> is an always-on agent on your hardware — memory, Telegram, Discord, agent squads — without the meter running.",
+      ctaPrimary: { href: BABO_DOWNLOAD_URL, label: "Download Babo" },
+      ctaSecondary: { href: BABO_DISCORD_URL, label: "Join Discord", variant: "discord" },
+      metaHtml:
+        'MIT · Local-first · <a href="' +
+        BABO_GITHUB_URL +
+        '" target="_blank" rel="noopener noreferrer">GitHub</a> · Babo Cloud optional',
+      visual: {
+        src: "assets/screenshots/chat.png",
+        alt: "Babo agent chat and workbench",
+      },
     },
-    punchesLabel: "Why builders switch",
-    punchesTitle: "Agent stack, not chat UI",
+    punchesLabel: "Why Babo",
+    punchesTitle: "Problem → solution → outcome",
     punches: [
       {
-        title: "Local inference, predictable cost",
-        text: "90% of work doesn’t need frontier pricing. Your box, your LAN GPU, your bill — not a meter that runs while you sleep.",
+        step: "The problem",
+        title: "Tokens, amnesia, terminal walls",
+        text: "Cloud AI bills add up. Every chat starts from zero. Real agent stacks hide behind CLIs most people won't touch.",
       },
       {
-        title: "Persistent — less drift, less replay",
-        text: "Plans, Kanban, memory, sleep. The agent remembers the job instead of re-processing your life story every turn.",
+        step: "The solution",
+        title: "Always-on agent on your machine",
+        text: "Babo stays running — local models, persistent memory, real channels. Like Home Assistant, but for AI agents.",
       },
       {
-        title: "Extend it — plug-in capabilities",
-        text: "Ship native NLS skills, agent tools, and new channels in Python. MCP and ClawHub install community packages; crystallize the ones you rely on. A platform, not a frozen app.",
+        step: "What you get",
+        title: "Build, extend, ship",
+        text: "Ollama today. Telegram & Discord wired in. Agent squads and Kanban. MIT — fork it, add Python skills, own the stack.",
       },
     ],
     productLead: "Real early-access UI — chat, board, integrations, brain.",
@@ -205,25 +217,33 @@ window.BABO_AUDIENCE = {
       title: "Assign it work.",
       titleGradient: "Go live your life.",
       lead:
-        "You already pay for AI subscriptions. Babo is the next step — <strong>one agent</strong> on your computer that remembers you, connects to <strong>Gmail, Google, and messages</strong>, and picks up tasks from a board. Setup walks you through it. No command line. Ever.",
-      ctaPrimary: { href: BABO_DOWNLOAD_URL, label: "Download Babo" },
-      ctaSecondary: { href: "#product", label: "See it work" },
-      meta: "Private · On your machine · Guided connect for email & channels",
+        "You pay for ChatGPT every month — and it forgets you tomorrow. Same context, re-explained. Same tabs, babysat.<br><br><strong>Babo</strong> is one agent on your computer that remembers you, connects to Gmail & WhatsApp, and picks up tasks while you live your life. No terminal.",
+      ctaPrimary: { href: BABO_DOWNLOAD_URL, label: "Download free" },
+      ctaSecondary: { href: BABO_DISCORD_URL, label: "Join Discord", variant: "discord" },
+      metaHtml:
+        'Private · On your machine · <a href="#product">See screenshots</a> · Guided setup',
+      visual: {
+        src: "assets/screenshots/tools.png",
+        alt: "Babo connected to Gmail, Telegram, and messaging apps",
+      },
     },
-    punchesLabel: "More than a chat window",
-    punchesTitle: "What ChatGPT doesn’t do",
+    punchesLabel: "Beyond ChatGPT",
+    punchesTitle: "Problem → solution → outcome",
     punches: [
       {
-        title: "Drop tasks — it picks them up",
-        text: "A Kanban board linked to real work. Not another thread you have to re-explain tomorrow morning.",
+        step: "The problem",
+        title: "Another tab that forgets you",
+        text: "Subscriptions add up. Every morning you re-explain context. ChatGPT doesn't run your week — it waits for the next prompt.",
       },
       {
-        title: "Your PA channels, one brain",
-        text: "Gmail, Calendar, WhatsApp, Telegram — connect in-app. Answer and coordinate from one place with guardrails built in.",
+        step: "The solution",
+        title: "One agent that stays on",
+        text: "Babo lives on your computer — remembers people and projects, connects to the apps you already use, works from a task board.",
       },
       {
-        title: "Lives on your computer",
-        text: "Your data stays local. You’re not paste-sharing life into a browser tab that forgets you overnight.",
+        step: "What you get",
+        title: "Your week, handled",
+        text: "Drop tasks on Kanban — Babo picks them up. Gmail, Calendar, WhatsApp in one brain. Setup wizard, no command line.",
       },
     ],
     productLead: "The actual app — not mockups.",
