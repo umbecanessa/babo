@@ -887,21 +887,37 @@ section[id] {
 
 .hero-line {
   display: block;
+  width: fit-content;
+  max-width: 100%;
   font-family: var(--font-display);
   font-size: clamp(2.75rem, 7vw, 5rem);
   font-weight: 700;
-  line-height: 0.98;
+  line-height: 1.05;
   letter-spacing: -0.048em;
   color: var(--text-primary);
 }
 
+.hero-headline-center .hero-line {
+  margin-inline: auto;
+}
+
 .hero-line-accent {
-  background: var(--gradient-hero);
+  background-image: var(--gradient-hero);
   background-size: 200% auto;
+  background-repeat: no-repeat;
   -webkit-background-clip: text;
   background-clip: text;
+  -webkit-text-fill-color: transparent;
   color: transparent;
   animation: gradientShift 8s ease infinite;
+}
+
+@supports not ((-webkit-background-clip: text) or (background-clip: text)) {
+  .hero-line-accent {
+    background: none;
+    -webkit-text-fill-color: unset;
+    color: var(--accent-secondary);
+  }
 }
 
 @keyframes gradientShift {
@@ -973,6 +989,7 @@ section[id] {
   text-decoration: underline;
   text-decoration-color: color-mix(in srgb, var(--accent-primary) 40%, transparent);
   text-underline-offset: 0.15em;
+  font-family: var(--font-sans);
 }
 
 .hero-meta a:hover {
@@ -2401,8 +2418,12 @@ code {
 
 /* ── Audience skins ── */
 body[data-audience="everyday"] .hero-line-accent {
-  background: linear-gradient(135deg, #14b8a6 0%, #7c5bf5 50%, #14b8a6 100%);
+  background-image: linear-gradient(135deg, #14b8a6 0%, #7c5bf5 50%, #14b8a6 100%);
   background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
 }
 
 body[data-audience="everyday"] .btn-primary {
