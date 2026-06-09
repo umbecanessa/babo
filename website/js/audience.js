@@ -20,17 +20,28 @@ window.BABO_AUDIENCE = {
       title: "Stop paying",
       titleGradient: "per thought.",
       lead:
-        "Frontier models charge per token. Chat UIs forget everything. Claude Code needs a terminal.<br><br><strong>Babo</strong> is an always-on agent on your hardware — memory, Telegram, Discord, agent squads — without the meter running.",
-      ctaPrimary: { href: BABO_DOWNLOAD_URL, label: "Download Babo" },
+        "Frontier models charge per token. Chat UIs forget everything. Real agent stacks hide behind a terminal.<br><br><strong>Babo</strong> is an always-on agent on your hardware — memory, channels, agent squads — without the meter running.",
+      ctaPrimary: { href: BABO_GITHUB_URL, label: "Star on GitHub", variant: "github" },
       ctaSecondary: { href: BABO_DISCORD_URL, label: "Join Discord", variant: "discord" },
       metaHtml:
-        'MIT · Local-first · <a href="' +
-        BABO_GITHUB_URL +
-        '" target="_blank" rel="noopener noreferrer">GitHub</a> · Babo Cloud optional',
+        '<a href="' +
+        BABO_DOWNLOAD_URL +
+        '">Download</a> · MIT · Local-first · Ollama · Babo Cloud optional',
       visual: {
         src: "assets/screenshots/chat.png",
         alt: "Babo agent chat and workbench",
       },
+      chips: ["Always on", "Ollama", "MIT"],
+    },
+    trust: [
+      { type: "github-stars", prefix: "★", suffix: " GitHub stars" },
+      { type: "text", value: "MIT license" },
+      { type: "text", value: "Local-first" },
+      { type: "text", value: "Early access" },
+    ],
+    sticky: {
+      primary: { href: BABO_GITHUB_URL, label: "GitHub", variant: "github" },
+      secondary: { href: BABO_DISCORD_URL, label: "Discord", variant: "discord" },
     },
     punchesLabel: "Why Babo",
     punchesTitle: "Problem → solution → outcome",
@@ -226,6 +237,17 @@ window.BABO_AUDIENCE = {
         src: "assets/screenshots/tools.png",
         alt: "Babo connected to Gmail, Telegram, and messaging apps",
       },
+      chips: ["No terminal", "Gmail & WhatsApp", "Private"],
+    },
+    trust: [
+      { type: "text", value: "Free download" },
+      { type: "text", value: "No terminal" },
+      { type: "text", value: "Private · on your PC" },
+      { type: "text", value: "Early access" },
+    ],
+    sticky: {
+      primary: { href: BABO_DOWNLOAD_URL, label: "Download" },
+      secondary: { href: BABO_DISCORD_URL, label: "Discord", variant: "discord" },
     },
     punchesLabel: "Beyond ChatGPT",
     punchesTitle: "Problem → solution → outcome",

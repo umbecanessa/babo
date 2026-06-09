@@ -21,11 +21,18 @@
   const DISCORD_ICON =
     '<svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor" width="18" height="18" aria-hidden="true"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>';
 
+  const GITHUB_ICON =
+    '<svg class="btn-icon" viewBox="0 0 24 24" fill="currentColor" width="18" height="18" aria-hidden="true"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>';
+
   function applyHeroCta(el, cta, primary) {
     if (!el || !cta) return;
     applyLink(el, cta.href);
-    el.classList.remove("btn-primary", "btn-glow", "btn-ghost", "btn-discord");
-    if (primary) {
+    el.classList.remove("btn-primary", "btn-glow", "btn-ghost", "btn-discord", "btn-github");
+    if (cta.variant === "github") {
+      el.classList.add("btn-github");
+      if (primary) el.classList.add("btn-glow");
+      el.innerHTML = GITHUB_ICON + `<span>${cta.label}</span>`;
+    } else if (primary) {
       el.classList.add("btn-primary", "btn-glow");
       el.textContent = cta.label;
     } else if (cta.variant === "discord") {
@@ -34,6 +41,44 @@
     } else {
       el.classList.add("btn-ghost");
       el.textContent = cta.label;
+    }
+  }
+
+  function applyStickyCta(el, cta) {
+    if (!el || !cta) return;
+    applyLink(el, cta.href);
+    el.classList.remove("btn-primary", "btn-discord", "btn-github");
+    if (cta.variant === "github") {
+      el.classList.add("btn-github");
+      el.textContent = cta.label;
+    } else if (cta.variant === "discord") {
+      el.classList.add("btn-discord");
+      el.textContent = cta.label;
+    } else {
+      el.classList.add("btn-primary");
+      el.textContent = cta.label;
+    }
+  }
+
+  function formatStarCount(n) {
+    if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "k";
+    return String(n);
+  }
+
+  async function hydrateGitHubStars() {
+    const targets = document.querySelectorAll("[data-github-stars]");
+    if (!targets.length) return;
+    try {
+      const res = await fetch("https://api.github.com/repos/umbecanessa/babo");
+      if (!res.ok) return;
+      const data = await res.json();
+      if (typeof data.stargazers_count !== "number") return;
+      const label = formatStarCount(data.stargazers_count);
+      targets.forEach((el) => {
+        el.textContent = label;
+      });
+    } catch {
+      /* ignore */
     }
   }
 
@@ -101,6 +146,33 @@
       else if (copy.hero.meta) metaEl.textContent = copy.hero.meta;
     }
 
+    const trustEl = document.getElementById("hero-trust");
+    if (trustEl) {
+      if (copy.trust && copy.trust.length) {
+        trustEl.innerHTML = copy.trust
+          .map((item) => {
+            if (item.type === "github-stars") {
+              return `<li class="hero-trust-item hero-trust-stars"><span>${item.prefix || "★"}</span> <strong data-github-stars>—</strong><span>${item.suffix || ""}</span></li>`;
+            }
+            return `<li class="hero-trust-item">${item.value}</li>`;
+          })
+          .join("");
+        trustEl.hidden = false;
+      } else {
+        trustEl.innerHTML = "";
+        trustEl.hidden = true;
+      }
+    }
+
+    const chipsEl = document.getElementById("hero-float-chips");
+    if (chipsEl && copy.hero.chips) {
+      chipsEl.innerHTML = copy.hero.chips
+        .map((text, i) => `<span class="hero-float-chip hero-float-chip-${i + 1}">${text}</span>`)
+        .join("");
+    } else if (chipsEl) {
+      chipsEl.innerHTML = "";
+    }
+
     const heroImg = document.getElementById("hero-product-img");
     if (heroImg && copy.hero.visual) {
       heroImg.src = copy.hero.visual.src;
@@ -110,16 +182,12 @@
     const stickyDownload = document.getElementById("sticky-cta-download");
     const stickyDiscord = document.getElementById("sticky-cta-discord");
     const stickyLabel = document.getElementById("sticky-cta-label");
-    if (stickyDownload && copy.hero.ctaPrimary) {
-      applyLink(stickyDownload, copy.hero.ctaPrimary.href);
-      stickyDownload.textContent = copy.hero.ctaPrimary.label;
-    }
-    if (stickyDiscord && copy.hero.ctaSecondary?.variant === "discord") {
-      applyLink(stickyDiscord, copy.hero.ctaSecondary.href);
-      stickyDiscord.textContent = "Discord";
-    }
+    const stickyPrimary = copy.sticky?.primary || copy.hero.ctaPrimary;
+    const stickySecondary = copy.sticky?.secondary || copy.hero.ctaSecondary;
+    applyStickyCta(stickyDownload, stickyPrimary);
+    applyStickyCta(stickyDiscord, stickySecondary);
     if (stickyLabel) {
-      stickyLabel.textContent = id === "everyday" ? "Babo — beyond ChatGPT" : "Babo — local agent runtime";
+      stickyLabel.textContent = id === "everyday" ? "Babo — beyond ChatGPT" : "Babo — open-source agent OS";
     }
 
     const integratesLabel = document.getElementById("integrates-label");
@@ -148,9 +216,13 @@
     if (punchGrid) {
       punchGrid.innerHTML = copy.punches
         .map(
-          (p) => `
-        <article class="punch-card">
-          <div class="punch-body">
+          (p, i) => `
+        <article class="punch-timeline-item reveal">
+          <div class="punch-timeline-rail" aria-hidden="true">
+            <span class="punch-timeline-num">${String(i + 1).padStart(2, "0")}</span>
+            ${i < copy.punches.length - 1 ? '<span class="punch-timeline-line"></span>' : ""}
+          </div>
+          <div class="punch-timeline-body">
             ${p.step ? `<p class="punch-step">${p.step}</p>` : ""}
             <h3>${p.title}</h3>
             <p>${p.text}</p>
@@ -352,6 +424,7 @@
 
   const audienceId = resolveAudience();
   applyAudience(audienceId);
+  hydrateGitHubStars();
 
   function observeReveals() {
     const els = document.querySelectorAll(".reveal:not(.is-visible)");
@@ -373,9 +446,8 @@
     els.forEach((el) => io.observe(el));
   }
 
-  document.querySelectorAll("#punch-grid .punch-card").forEach((card, i) => {
-    card.classList.add("reveal");
-    card.style.transitionDelay = `${0.08 + i * 0.1}s`;
+  document.querySelectorAll("#punch-grid .punch-timeline-item").forEach((card, i) => {
+    card.style.transitionDelay = `${0.08 + i * 0.12}s`;
   });
   const platformPanel = document.querySelector("#platform .platform-panel");
   const driftPanel = document.querySelector("#drift .drift-panel");
