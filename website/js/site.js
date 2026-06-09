@@ -165,9 +165,12 @@
     }
 
     const chipsEl = document.getElementById("hero-float-chips");
-    if (chipsEl && copy.hero.chips) {
+    if (chipsEl && copy.hero.chips?.length) {
       chipsEl.innerHTML = copy.hero.chips
-        .map((text, i) => `<span class="hero-float-chip hero-float-chip-${i + 1}">${text}</span>`)
+        .map(
+          (chip) =>
+            `<span class="hero-float-chip hero-float-chip-${chip.pos || "tl"}">${typeof chip === "string" ? chip : chip.label}</span>`
+        )
         .join("");
     } else if (chipsEl) {
       chipsEl.innerHTML = "";

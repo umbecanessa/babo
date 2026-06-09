@@ -23,20 +23,19 @@ window.BABO_AUDIENCE = {
         "Frontier models charge per token. Chat UIs forget everything. Real agent stacks hide behind a terminal.<br><br><strong>Babo</strong> is an always-on agent on your hardware — memory, channels, agent squads — without the meter running.",
       ctaPrimary: { href: BABO_GITHUB_URL, label: "Star on GitHub", variant: "github" },
       ctaSecondary: { href: BABO_DISCORD_URL, label: "Join Discord", variant: "discord" },
-      metaHtml:
-        '<a href="' +
-        BABO_DOWNLOAD_URL +
-        '">Download</a> · MIT · Local-first · Ollama · Babo Cloud optional',
+      metaHtml: '<a href="' + BABO_DOWNLOAD_URL + '">Download desktop app</a> · Ollama · Babo Cloud optional',
       visual: {
         src: "assets/screenshots/chat.png",
         alt: "Babo agent chat and workbench",
       },
-      chips: ["Always on", "Ollama", "MIT"],
+      chips: [
+        { label: "Always on", pos: "tl" },
+        { label: "Ollama", pos: "br" },
+      ],
     },
     trust: [
-      { type: "github-stars", prefix: "★", suffix: " GitHub stars" },
-      { type: "text", value: "MIT license" },
-      { type: "text", value: "Local-first" },
+      { type: "github-stars", prefix: "★", suffix: " stars" },
+      { type: "text", value: "MIT · Local-first" },
       { type: "text", value: "Early access" },
     ],
     sticky: {
@@ -237,11 +236,13 @@ window.BABO_AUDIENCE = {
         src: "assets/screenshots/tools.png",
         alt: "Babo connected to Gmail, Telegram, and messaging apps",
       },
-      chips: ["No terminal", "Gmail & WhatsApp", "Private"],
+      chips: [
+        { label: "No terminal", pos: "tl" },
+        { label: "Gmail & WhatsApp", pos: "br" },
+      ],
     },
     trust: [
       { type: "text", value: "Free download" },
-      { type: "text", value: "No terminal" },
       { type: "text", value: "Private · on your PC" },
       { type: "text", value: "Early access" },
     ],
