@@ -211,7 +211,7 @@
     applyStickyCta(stickyDownload, stickyPrimary);
     applyStickyCta(stickyDiscord, stickySecondary);
     if (stickyLabel) {
-      stickyLabel.textContent = id === "everyday" ? "Babo — beyond ChatGPT" : "Babo — open-source agent OS";
+      stickyLabel.textContent = id === "everyday" ? "Babo — personal AI agent" : "Babo — open-source agent OS";
     }
 
     const integratesLabel = document.getElementById("integrates-label");
@@ -579,19 +579,19 @@
     window.addEventListener("scroll", onScroll, { passive: true });
   }
 
-  /* Hero product frame tilt */
+  /* Hero product tilt — whole card moves together */
   const tiltEl = document.querySelector("[data-tilt]");
   if (tiltEl && window.matchMedia("(hover: hover) and (pointer: fine)").matches) {
-    const frame = tiltEl.querySelector(".hero-product-frame");
-    if (frame) {
+    const product = tiltEl.querySelector(".hero-product");
+    if (product) {
       tiltEl.addEventListener("mousemove", (e) => {
         const r = tiltEl.getBoundingClientRect();
         const x = (e.clientX - r.left) / r.width - 0.5;
         const y = (e.clientY - r.top) / r.height - 0.5;
-        frame.style.transform = `rotateY(${x * 8}deg) rotateX(${-y * 6}deg)`;
+        product.style.transform = `rotateY(${x * 5}deg) rotateX(${-y * 4}deg)`;
       });
       tiltEl.addEventListener("mouseleave", () => {
-        frame.style.transform = "";
+        product.style.transform = "";
       });
     }
   }

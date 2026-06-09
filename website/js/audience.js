@@ -215,58 +215,57 @@ window.BABO_AUDIENCE = {
   everyday: {
     id: "everyday",
     meta: {
-      title: "Babo — Beyond ChatGPT. One agent for your life.",
+      title: "Babo — Your personal AI agent. On your computer.",
       description:
-        "Personal AI on your computer: tasks, Gmail, Google, WhatsApp. Guided setup, no terminal. Early access.",
+        "A real AI agent on your PC — talk on WhatsApp, connect Gmail, assign tasks. Personal assistant power without the engineer setup.",
     },
     badges: [
-      { text: "Early access", type: "soft" },
-      { text: "No terminal required", type: "soft" },
+      { text: "Personal AI agent", type: "soft" },
+      { text: "WhatsApp · Gmail · Chat", type: "soft" },
     ],
     hero: {
-      title: "Assign it work.",
-      titleGradient: "Go live your life.",
+      title: "Your personal agent.",
+      titleGradient: "On your computer.",
       lead:
-        "You pay for ChatGPT every month — it forgets you tomorrow.<br><strong>Babo</strong> is one agent on your computer that remembers you, connects to Gmail & WhatsApp, and picks up tasks while you live your life.",
+        "<strong>Babo</strong> is a real AI agent that runs locally — talk to it on WhatsApp, connect Gmail, assign tasks, and let it work while you live. It reads, writes, codes when needed, and remembers you. No terminal. No engineering degree.",
       ctaPrimary: { href: BABO_DOWNLOAD_URL, label: "Download free" },
       ctaSecondary: { href: BABO_DISCORD_URL, label: "Join Discord", variant: "discord" },
-      metaHtml:
-        'Private · On your machine · <a href="#product">See screenshots</a> · Guided setup',
+      metaHtml: '<a href="#product">See how it works</a> · Guided setup · Private on your machine',
       visual: {
         src: "assets/screenshots/tools.png",
-        alt: "Babo connected to Gmail, Telegram, and messaging apps",
+        alt: "Babo connected to Gmail, WhatsApp, and messaging apps",
       },
       chips: [
-        { label: "No terminal", pos: "tl" },
-        { label: "Gmail & WhatsApp", pos: "br" },
+        { label: "WhatsApp", pos: "tl" },
+        { label: "On your PC", pos: "br" },
       ],
     },
     trust: [
       { type: "text", value: "Free download" },
-      { type: "text", value: "Private · on your PC" },
-      { type: "text", value: "Early access" },
+      { type: "text", value: "Talk on WhatsApp" },
+      { type: "text", value: "Private · local" },
     ],
     sticky: {
       primary: { href: BABO_DOWNLOAD_URL, label: "Download" },
       secondary: { href: BABO_DISCORD_URL, label: "Discord", variant: "discord" },
     },
-    punchesLabel: "Beyond ChatGPT",
-    punchesTitle: "Problem → solution → outcome",
+    punchesLabel: "Real agent power",
+    punchesTitle: "Personal assistant · without the complexity",
     punches: [
       {
-        step: "The problem",
-        title: "Another tab that forgets you",
-        text: "Subscriptions add up. Every morning you re-explain context. ChatGPT doesn't run your week — it waits for the next prompt.",
+        step: "What it is",
+        title: "An agent on your computer",
+        text: "Not a browser tab — Babo stays running on your machine, remembers you, and connects to the apps you already use.",
       },
       {
-        step: "The solution",
-        title: "One agent that stays on",
-        text: "Babo lives on your computer — remembers people and projects, connects to the apps you already use, works from a task board.",
+        step: "How you use it",
+        title: "Talk to it anywhere",
+        text: "WhatsApp, chat, email — assign tasks in plain language. Babo reads context, picks up work, and reports back.",
       },
       {
         step: "What you get",
-        title: "Your week, handled",
-        text: "Drop tasks on Kanban — Babo picks them up. Gmail, Calendar, WhatsApp in one brain. Setup wizard, no command line.",
+        title: "A PA that can actually do things",
+        text: "Kanban tasks, Gmail, Calendar, code when needed — real agent capabilities with a setup wizard, not a command line.",
       },
     ],
     productLead: "The actual app — not mockups.",
@@ -285,9 +284,9 @@ window.BABO_AUDIENCE = {
       cta: { href: "manifesto/", label: "Read the manifesto" },
     },
     capabilities: {
-      label: "More than ChatGPT",
-      title: "One app for your week",
-      lead: "Private on your machine · guided setup · no terminal for everyday use.",
+      label: "Your personal agent",
+      title: "One app for your whole life",
+      lead: "Talk on WhatsApp · connect Gmail · assign tasks · private on your machine.",
       items: [
         {
           title: "Talk & delegate",
