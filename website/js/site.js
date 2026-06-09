@@ -147,6 +147,7 @@
     }
 
     const trustEl = document.getElementById("hero-trust");
+    const trustWrap = document.getElementById("hero-trust-wrap");
     if (trustEl) {
       if (copy.trust && copy.trust.length) {
         trustEl.innerHTML = copy.trust
@@ -154,14 +155,34 @@
             if (item.type === "github-stars") {
               return `<li class="hero-trust-item hero-trust-stars"><span>${item.prefix || "★"}</span> <strong data-github-stars>—</strong><span>${item.suffix || ""}</span></li>`;
             }
+            if (item.type === "link") {
+              return `<li class="hero-trust-item hero-trust-link"><a href="${item.href}">${item.value}</a></li>`;
+            }
             return `<li class="hero-trust-item">${item.value}</li>`;
           })
           .join("");
-        trustEl.hidden = false;
+        if (trustWrap) trustWrap.hidden = false;
       } else {
         trustEl.innerHTML = "";
-        trustEl.hidden = true;
+        if (trustWrap) trustWrap.hidden = true;
       }
+    }
+
+    const heroLogos = document.getElementById("hero-logo-strip");
+    const heroLogoLabel = document.getElementById("hero-logo-label");
+    if (heroLogoLabel) heroLogoLabel.textContent = copy.integratesLabel || "Works with";
+    if (heroLogos && copy.integrations) {
+      heroLogos.innerHTML = copy.integrations
+        .map(
+          (item) => `
+        <li>
+          <span class="hero-logo-item" title="${item.name}">
+            <img src="assets/integrations/${item.id}.svg" alt="" width="22" height="22" loading="lazy" />
+            <span>${item.name}</span>
+          </span>
+        </li>`
+        )
+        .join("");
     }
 
     const chipsEl = document.getElementById("hero-float-chips");
@@ -195,6 +216,8 @@
 
     const integratesLabel = document.getElementById("integrates-label");
     const integratesLogos = document.getElementById("integrates-logos");
+    const integratesStrip = document.getElementById("integrates-strip");
+    if (integratesStrip) integratesStrip.hidden = true;
     if (integratesLabel) integratesLabel.textContent = copy.integratesLabel || "Works with";
     if (integratesLogos && copy.integrations) {
       integratesLogos.innerHTML = copy.integrations

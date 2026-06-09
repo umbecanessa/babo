@@ -20,7 +20,7 @@ window.BABO_AUDIENCE = {
       title: "Stop paying",
       titleGradient: "per thought.",
       lead:
-        "Frontier models charge per token. Chat UIs forget everything. Real agent stacks hide behind a terminal.<br><br><strong>Babo</strong> is an always-on agent on your hardware — memory, channels, agent squads — without the meter running.",
+        "Frontier models charge per token. Chat UIs forget everything.<br><strong>Babo</strong> is an always-on agent on your hardware — memory, channels, agent squads — no meter running.",
       ctaPrimary: { href: BABO_GITHUB_URL, label: "Star on GitHub", variant: "github" },
       ctaSecondary: { href: BABO_DISCORD_URL, label: "Join Discord", variant: "discord" },
       metaHtml: '<a href="' + BABO_DOWNLOAD_URL + '">Download desktop app</a> · Ollama · Babo Cloud optional',
@@ -227,7 +227,7 @@ window.BABO_AUDIENCE = {
       title: "Assign it work.",
       titleGradient: "Go live your life.",
       lead:
-        "You pay for ChatGPT every month — and it forgets you tomorrow. Same context, re-explained. Same tabs, babysat.<br><br><strong>Babo</strong> is one agent on your computer that remembers you, connects to Gmail & WhatsApp, and picks up tasks while you live your life. No terminal.",
+        "You pay for ChatGPT every month — it forgets you tomorrow.<br><strong>Babo</strong> is one agent on your computer that remembers you, connects to Gmail & WhatsApp, and picks up tasks while you live your life.",
       ctaPrimary: { href: BABO_DOWNLOAD_URL, label: "Download free" },
       ctaSecondary: { href: BABO_DISCORD_URL, label: "Join Discord", variant: "discord" },
       metaHtml:
