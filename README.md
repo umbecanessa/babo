@@ -22,6 +22,8 @@ Babo is a full-stack agent platform: a desktop app, web UI, and self-hostable ba
 
 Connect any OpenAI-compatible model (OpenRouter, Ollama, local vLLM, LAN server, Babo Cloud hybrid routing, etc.) and run Babo on your machine or your own server.
 
+**Audiences:** [Builders](https://babo.agency/) (OSS, self-host) vs [Everyone](https://babo.agency/?audience=everyday) (personal AI, no terminal). See [docs/audiences.md](docs/audiences.md) and [PRODUCT.md](PRODUCT.md).
+
 > **Not just a chat UI** — Babo is an **extensible agent platform**: native skills, agent tools, and channels you can add in code (MCP, ClawHub, crystallize). Memory, board, and teams survive sessions. See the [manifesto](https://babo.agency/manifesto/) and [extension guide](https://babo.agency/extension/).
 
 ---

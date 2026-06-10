@@ -7,17 +7,20 @@ Early-access homepage overlaid on the docs build for **https://babo.agency/**.
 | `/` | `website/index.html` (marketing landing) |
 | `/getting-started/…`, `/guides/…`, etc. | MkDocs from `docs/` |
 
-## Audiences (query param)
+## Audiences
 
-| URL | Audience |
-|-----|----------|
-| `/` | **Innovators** (default) |
-| `/?audience=everyday` | **Early adopters** |
-| `/?audience=home` | Alias for `everyday` |
+Documented in [PRODUCT.md](../PRODUCT.md), [docs/audiences.md](../docs/audiences.md), and implemented in `js/audience.js`.
 
-Also accepts `utm_content=everyday` or `innovator`. Choice persists in `sessionStorage` (`babo_audience`).
+| Audience | Site label | URL | Who |
+|----------|------------|-----|-----|
+| **Innovators** (default) | Builders | `/` | Self-hosters, OSS contributors, agent-stack builders |
+| **Early adopters** | Everyone | `/?audience=everyday` | Personal AI agent users (no terminal) |
 
-Copy lives in `js/audience.js`. Theme tokens match `frontend/src/styles.scss` (`babo_theme` in localStorage).
+Also accepts `?audience=home` (alias for everyday) and `utm_content=innovator|everyday`. Choice persists in `sessionStorage` (`babo_audience`). The nav **Builders / Everyone** toggle switches copy without a full reload.
+
+## Design tokens
+
+Marketing tokens: `css/tokens.css`. Product UI: `frontend/src/styles.scss`. Both follow [DESIGN.md](../DESIGN.md) (copper-on-slate, Bricolage Grotesk + Source Sans 3). Theme preference: `babo_theme` in `localStorage`.
 
 ## Local preview
 

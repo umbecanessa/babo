@@ -31,24 +31,24 @@ export async function languageExtension(
 
 const baboDarkHighlight = HighlightStyle.define([
   { tag: tags.comment, color: '#6f7591', fontStyle: 'italic' },
-  { tag: tags.string, color: '#14b8a6' },
-  { tag: tags.keyword, color: '#c084fc' },
+  { tag: tags.string, color: '#2a7a72' },
+  { tag: tags.keyword, color: '#c97a3d' },
   { tag: tags.number, color: '#e5a520' },
-  { tag: tags.typeName, color: '#7c5bf5' },
-  { tag: tags.function(tags.variableName), color: '#a5b4fc' },
+  { tag: tags.typeName, color: '#b85c1a' },
+  { tag: tags.function(tags.variableName), color: '#d4a574' },
   { tag: tags.variableName, color: '#e8eaf2' },
-  { tag: tags.propertyName, color: '#c4b5fd' },
+  { tag: tags.propertyName, color: '#c97a3d' },
 ]);
 
 const baboLightHighlight = HighlightStyle.define([
   { tag: tags.comment, color: '#8b90a8', fontStyle: 'italic' },
-  { tag: tags.string, color: '#0d9488' },
-  { tag: tags.keyword, color: '#7c3aed' },
+  { tag: tags.string, color: '#2a7a72' },
+  { tag: tags.keyword, color: '#9a4a12' },
   { tag: tags.number, color: '#b45309' },
-  { tag: tags.typeName, color: '#6d28d9' },
-  { tag: tags.function(tags.variableName), color: '#5b21b6' },
-  { tag: tags.variableName, color: '#1a1d2e' },
-  { tag: tags.propertyName, color: '#6d28d9' },
+  { tag: tags.typeName, color: '#b85c1a' },
+  { tag: tags.function(tags.variableName), color: '#8a3d0f' },
+  { tag: tags.variableName, color: '#12182a' },
+  { tag: tags.propertyName, color: '#9a4a12' },
 ]);
 
 /** Editor chrome + Lezer colors aligned with the former Monaco babo themes. */
@@ -58,8 +58,8 @@ export function baboTheme(dark: boolean): Extension {
       {
         '&': {
           height: '100%',
-          backgroundColor: dark ? '#15171f' : '#e4e7f2',
-          color: dark ? '#e8eaf2' : '#1a1d2e',
+          backgroundColor: dark ? '#0f1219' : '#e2e7ef',
+          color: dark ? '#e8eaf2' : '#12182a',
         },
         '.cm-scroller': {
           overflow: 'auto',
@@ -69,12 +69,12 @@ export function baboTheme(dark: boolean): Extension {
           lineHeight: '1.54',
         },
         '.cm-content': {
-          caretColor: '#7c5bf5',
+          caretColor: '#b85c1a',
           padding: '12px 0',
         },
-        '.cm-cursor, .cm-dropCursor': { borderLeftColor: '#7c5bf5' },
+        '.cm-cursor, .cm-dropCursor': { borderLeftColor: '#b85c1a' },
         '&.cm-focused .cm-selectionBackground, .cm-selectionBackground': {
-          backgroundColor: dark ? '#7c5bf544' : '#7c5bf533',
+          backgroundColor: dark ? '#b85c1a44' : '#b85c1a33',
         },
         '.cm-activeLine': {
           backgroundColor: dark ? '#ffffff08' : '#00000006',

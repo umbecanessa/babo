@@ -214,25 +214,6 @@
       stickyLabel.textContent = id === "everyday" ? "Babo — personal AI agent" : "Babo — open-source agent OS";
     }
 
-    const integratesLabel = document.getElementById("integrates-label");
-    const integratesLogos = document.getElementById("integrates-logos");
-    const integratesStrip = document.getElementById("integrates-strip");
-    if (integratesStrip) integratesStrip.hidden = true;
-    if (integratesLabel) integratesLabel.textContent = copy.integratesLabel || "Works with";
-    if (integratesLogos && copy.integrations) {
-      integratesLogos.innerHTML = copy.integrations
-        .map(
-          (item) => `
-        <li>
-          <span class="integrates-item" title="${item.name}">
-            <img src="assets/integrations/${item.id}.svg" alt="${item.name}" width="28" height="28" loading="lazy" />
-            <span class="integrates-name">${item.name}</span>
-          </span>
-        </li>`
-        )
-        .join("");
-    }
-
     const punchesLabel = document.getElementById("punches-label");
     const punchesTitle = document.getElementById("punches-title");
     if (punchesLabel) punchesLabel.textContent = copy.punchesLabel;
@@ -274,6 +255,16 @@
       if (copy.captions[key]) el.textContent = copy.captions[key];
     });
 
+    if (copy.captions) {
+      Object.entries(copy.captions).forEach(([key, text]) => {
+        const panel = document.querySelector(`.showcase-panel[data-panel="${key}"]`);
+        if (!panel) return;
+        panel.querySelectorAll(".screen-viewport img").forEach((img) => {
+          if (!img.alt) img.alt = text;
+        });
+      });
+    }
+
     const manifestoLabel = document.getElementById("manifesto-teaser-label");
     const quoteEl = document.getElementById("manifesto-quote");
     const snippetEl = document.getElementById("manifesto-snippet");
@@ -297,8 +288,8 @@
       if (capGrid && copy.capabilities.items) {
         capGrid.innerHTML = copy.capabilities.items
           .map(
-            (item) => `
-        <article class="cap-card glass">
+            (item, i) => `
+        <article class="cap-card${i === 0 ? " cap-card-featured" : i < 3 ? " cap-card-spotlight" : ""}">
           <h3>${item.title}</h3>
           <p class="cap-tags">${item.tags}</p>
           <p class="cap-text">${item.text}</p>
@@ -448,8 +439,35 @@
     });
   }
 
+  function switchAudience(id) {
+    if (id !== "innovator" && id !== "everyday") return;
+    try {
+      sessionStorage.setItem(AUDIENCE_KEY, id);
+    } catch {
+      /* ignore */
+    }
+    applyAudience(id);
+    document.body.dataset.audience = id;
+    document.querySelectorAll(".audience-btn").forEach((btn) => {
+      const active = btn.dataset.audience === id;
+      btn.classList.toggle("is-active", active);
+      btn.setAttribute("aria-pressed", active ? "true" : "false");
+    });
+    const url = new URL(window.location.href);
+    if (id === "innovator") url.searchParams.delete("audience");
+    else url.searchParams.set("audience", id);
+    history.replaceState(null, "", url);
+  }
+
   const audienceId = resolveAudience();
+  document.body.dataset.audience = audienceId;
   applyAudience(audienceId);
+  document.querySelectorAll(".audience-btn").forEach((btn) => {
+    const active = btn.dataset.audience === audienceId;
+    btn.classList.toggle("is-active", active);
+    btn.setAttribute("aria-pressed", active ? "true" : "false");
+    btn.addEventListener("click", () => switchAudience(btn.dataset.audience));
+  });
   hydrateGitHubStars();
 
   function observeReveals() {
@@ -513,7 +531,7 @@
     document.documentElement.setAttribute("data-theme", mode);
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) {
-      meta.setAttribute("content", effectiveTheme(mode) === "dark" ? "#0c0d14" : "#eef0f7");
+      meta.setAttribute("content", effectiveTheme(mode) === "dark" ? "#080a0f" : "#eef1f5");
     }
     const tip = document.getElementById("theme-toggle");
     if (tip) {
@@ -622,6 +640,7 @@
       const active = btn.dataset.tab === tabId;
       btn.classList.toggle("is-active", active);
       btn.setAttribute("aria-selected", active ? "true" : "false");
+      btn.tabIndex = active ? 0 : -1;
     });
     panels.forEach((panel) => {
       const active = panel.dataset.panel === tabId;
@@ -630,15 +649,43 @@
     });
   }
 
-  mainTabs.forEach((btn) => {
+  mainTabs.forEach((btn, index) => {
     btn.addEventListener("click", () => setMainTab(btn.dataset.tab));
+    btn.addEventListener("keydown", (e) => {
+      let next = -1;
+      if (e.key === "ArrowRight") next = (index + 1) % mainTabs.length;
+      else if (e.key === "ArrowLeft") next = (index - 1 + mainTabs.length) % mainTabs.length;
+      else if (e.key === "Home") next = 0;
+      else if (e.key === "End") next = mainTabs.length - 1;
+      if (next < 0) return;
+      e.preventDefault();
+      const target = mainTabs[next];
+      setMainTab(target.dataset.tab);
+      target.focus();
+    });
   });
 
-  showcase.querySelectorAll(".showcase-panel").forEach((panel) => {
+  setMainTab(showcase.querySelector(".showcase-tab.is-active")?.dataset.tab || "chat");
+
+  function wireShowcaseSubtabs(panel) {
     const subtabs = panel.querySelectorAll(".showcase-subtab");
     if (!subtabs.length) return;
+    const panelId = panel.dataset.panel;
     const viewport = panel.querySelector(".screen-viewport-showcase");
     const images = panel.querySelectorAll(".screen-viewport img[data-subpanel], img[data-subpanel]");
+
+    subtabs.forEach((btn) => {
+      const subId = btn.dataset.subtab;
+      const tabDomId = `subtab-${panelId}-${subId}`;
+      const img = panel.querySelector(`img[data-subpanel="${subId}"]`);
+      btn.id = tabDomId;
+      btn.setAttribute("role", "tab");
+      if (img) {
+        const imgDomId = `subpanel-${panelId}-${subId}`;
+        img.id = imgDomId;
+        btn.setAttribute("aria-controls", imgDomId);
+      }
+    });
 
     function syncPortraitMode(activeId) {
       if (!viewport) return;
@@ -663,22 +710,36 @@
 
     const initial = panel.querySelector(".showcase-subtab.is-active")?.dataset.subtab;
     if (initial) syncPortraitMode(initial);
-  });
+  }
+
+  showcase.querySelectorAll(".showcase-panel").forEach(wireShowcaseSubtabs);
 
   /* Fullscreen lightbox for showcase screenshots */
   const lightbox = document.getElementById("screenshot-lightbox");
   if (lightbox) {
-    const lbImg = lightbox.querySelector(".lightbox-img");
+    const lbSlot = lightbox.querySelector("#lightbox-img-slot");
+    let lbImg = lbSlot?.querySelector(".lightbox-img");
     const lbStage = lightbox.querySelector(".lightbox-stage");
     const lbBackdrop = lightbox.querySelector(".lightbox-backdrop");
     const lbClose = lightbox.querySelector(".lightbox-close");
     let lastFocus = null;
 
+    function ensureLightboxImg() {
+      if (lbImg) return lbImg;
+      if (!lbSlot) return null;
+      lbImg = document.createElement("img");
+      lbImg.className = "lightbox-img";
+      lbSlot.appendChild(lbImg);
+      return lbImg;
+    }
+
     function openLightbox(img) {
       if (!img || img.hidden) return;
+      const target = ensureLightboxImg();
+      if (!target) return;
       lastFocus = document.activeElement;
-      lbImg.src = img.currentSrc || img.src;
-      lbImg.alt = img.alt || "Enlarged product screenshot";
+      target.src = img.currentSrc || img.src;
+      target.alt = img.alt || "Enlarged product screenshot";
       lbStage.classList.toggle("is-portrait", img.hasAttribute("data-portrait"));
       lightbox.hidden = false;
       lightbox.setAttribute("aria-hidden", "false");
@@ -693,7 +754,11 @@
       lightbox.hidden = true;
       lightbox.setAttribute("aria-hidden", "true");
       document.body.classList.remove("lightbox-open");
-      lbImg.removeAttribute("src");
+      if (lbImg) {
+        lbImg.removeAttribute("src");
+        lbImg.remove();
+        lbImg = null;
+      }
       if (lastFocus && typeof lastFocus.focus === "function") lastFocus.focus();
     }
 

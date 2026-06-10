@@ -2,14 +2,19 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Babo — Local agent runtime</title>
-  <meta name="description" content="Extensible open-source agent platform — native skills, channels, memory, and orchestration on your machine." />
-  <meta name="theme-color" content="#0c0d14" />
+  <meta name="description" content="Extensible open-source agent platform with native skills, channels, memory, and orchestration on your machine." />
+  <!-- Audiences: Builders (innovators, default) and Everyone (everyday, ?audience=everyday). See docs/audiences.md -->
+  <meta name="theme-color" content="#080a0f" />
   <link rel="icon" href="assets/favicon.png" type="image/png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&family=JetBrains+Mono:wght@400;500&family=Source+Sans+3:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet" />
+  <style>
+    body { font-family: "Source Sans 3", system-ui, sans-serif; }
+    .hero-line, .section-title { font-family: "Bricolage Grotesque", system-ui, sans-serif; }
+  </style>
   <script>
     (function () {
       var t = "dark";
@@ -24,19 +29,24 @@
   <link rel="stylesheet" href="css/site.css" />
 </head>
 <body data-audience="innovator">
-  <div class="mesh mesh-a" aria-hidden="true"></div>
-  <div class="noise" aria-hidden="true"></div>
-  <div class="grid-bg" aria-hidden="true"></div>
+  <a class="skip-link" href="#top">Skip to content</a>
+  <noscript>
+    <p class="noscript-banner">JavaScript personalizes copy for <strong>Builders</strong> vs <strong>Everyone</strong>. You can still <a href="download/">download Babo</a> or read the <a href="getting-started/installation/">install guide</a>.</p>
+  </noscript>
 
   <header class="site-nav" role="banner">
     <div class="wrap">
       <a class="brand" href="#top">
         <span class="brand-orb" aria-hidden="true"><span class="brand-orb-core"></span><span class="brand-orb-ring"></span></span>
-        <img src="assets/babo.png" alt="" width="28" height="28" />
+        <img src="assets/babo.png" alt="Babo logo" width="28" height="28" />
         <span>Babo</span>
       </a>
       <div class="nav-end">
         <button class="nav-toggle" type="button" aria-label="Open menu" aria-expanded="false">☰</button>
+        <div class="audience-switch" role="group" aria-label="Choose your audience">
+          <button type="button" class="audience-btn is-active" data-audience="innovator" aria-pressed="true">Builders</button>
+          <button type="button" class="audience-btn" data-audience="everyday" aria-pressed="false">Everyone</button>
+        </div>
         <ul class="nav-links">
           <li><a href="manifesto/">Manifesto</a></li>
           <li><a href="#punches">Why Babo</a></li>
@@ -46,7 +56,7 @@
           <li><a href="#download">Get Babo</a></li>
           <li><a class="nav-docs" href="getting-started/installation/">Docs</a></li>
         </ul>
-        <a class="nav-discord" href="https://discord.gg/daCKzkv4z2" target="_blank" rel="noopener noreferrer" aria-label="Join us on Discord" title="Join us on Discord">
+        <a class="nav-discord" href="https://discord.gg/daCKzkv4z2" target="_blank" rel="noopener noreferrer" aria-label="Join us on Discord" title="Join us on Discord"><span class="visually-hidden">Discord</span>
           <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18" aria-hidden="true"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/></svg>
         </a>
         <button type="button" class="theme-toggle-btn" id="theme-toggle" aria-label="Cycle theme" title="Cycle theme">
@@ -67,12 +77,15 @@
       <div class="hero-spotlight" aria-hidden="true"></div>
       <div class="wrap hero-stage-inner">
         <div class="hero-copy reveal">
-          <div class="badge-row hero-badges-center" id="hero-badges"></div>
+          <div class="badge-row hero-badges-center" id="hero-badges">
+            <span class="badge badge-soft">Early access · Open source</span>
+            <span class="badge badge-alive"><span class="alive-dot" aria-hidden="true"></span> Always conscious</span>
+          </div>
           <h1 class="hero-headline hero-headline-center">
             <span class="hero-line" id="hero-title">Stop paying</span>
             <span class="hero-line hero-line-accent" id="hero-title-gradient">per thought.</span>
           </h1>
-          <p class="hero-lead hero-lead-center" id="hero-lead"></p>
+          <p class="hero-lead hero-lead-center" id="hero-lead">Frontier models charge per token. Chat UIs forget everything. <strong>Babo</strong> is an always-on agent on your hardware with memory, channels, and agent squads. No meter running.</p>
           <div class="hero-cta hero-cta-center">
             <a class="btn btn-github btn-glow" id="hero-cta-primary" href="https://github.com/umbecanessa/babo" target="_blank" rel="noopener noreferrer">Star on GitHub</a>
             <a class="btn btn-discord" id="hero-cta-secondary" href="https://discord.gg/daCKzkv4z2" target="_blank" rel="noopener noreferrer">
@@ -83,7 +96,7 @@
           <div class="hero-trust-bar reveal reveal-delay-1" id="hero-trust-wrap">
             <ul class="hero-trust" id="hero-trust" aria-label="Trust signals"></ul>
           </div>
-          <p class="hero-meta hero-meta-center" id="hero-meta"></p>
+          <p class="hero-meta hero-meta-center" id="hero-meta"><a href="download/">Download desktop app</a> · Ollama · Babo Cloud optional</p>
         </div>
 
         <div class="hero-stage-visual reveal reveal-delay-2" data-tilt>
@@ -114,21 +127,156 @@
       </div>
     </section>
 
-    <section id="capabilities" class="section-capabilities">
+    <section id="product" class="product-section">
       <div class="wrap">
         <header class="section-head reveal">
-          <p class="section-label" id="capabilities-label">One agent platform</p>
-          <h2 class="section-title" id="capabilities-title">Built for work, not just chat</h2>
-          <p class="section-lead section-lead-tight" id="capabilities-lead"></p>
+          <p class="section-label">See it</p>
+          <h2 class="section-title">The real product</h2>
+          <p class="section-lead section-lead-tight" id="product-lead">Real early-access UI: chat, board, integrations, and brain views.</p>
         </header>
-        <div class="capabilities-grid reveal" id="capabilities-grid"></div>
-        <div class="quickstart-bar glass reveal" id="quickstart-bar" hidden>
-          <div class="quickstart-bar-head">
-            <p class="quickstart-bar-label" id="quickstart-label">Quick start</p>
-            <p class="quickstart-bar-hint" id="quickstart-hint"></p>
+
+        <div class="showcase reveal" data-showcase>
+          <div class="showcase-tabs" role="tablist" aria-label="Product screenshots">
+            <button type="button" class="showcase-tab is-active" id="tab-chat" role="tab" aria-selected="true" aria-controls="panel-chat" data-tab="chat">Chat</button>
+            <button type="button" class="showcase-tab" id="tab-projects" role="tab" aria-selected="false" aria-controls="panel-projects" data-tab="projects">Projects</button>
+            <button type="button" class="showcase-tab" id="tab-memory" role="tab" aria-selected="false" aria-controls="panel-memory" data-tab="memory">Memory</button>
+            <button type="button" class="showcase-tab" id="tab-tools" role="tab" aria-selected="false" aria-controls="panel-tools" data-tab="tools">Tools</button>
+            <button type="button" class="showcase-tab" id="tab-brain" role="tab" aria-selected="false" aria-controls="panel-brain" data-tab="brain">Brain</button>
           </div>
-          <div class="quickstart-bar-commands" id="quickstart-commands"></div>
+          <p class="showcase-zoom-hint">Tap or click screenshot to view full size</p>
+
+          <div class="showcase-panels">
+            <figure class="showcase-panel is-active" id="panel-chat" data-panel="chat" role="tabpanel" aria-labelledby="tab-chat">
+              <div class="showcase-frame">
+                <div class="showcase-window">
+                  <div class="showcase-chrome" aria-hidden="true">
+                    <span class="device-dot"></span><span class="device-dot"></span><span class="device-dot"></span>
+                    <span class="showcase-chrome-title">Babo</span>
+                  </div>
+                  <div class="screen-viewport screen-viewport-showcase">
+                    <img src="assets/screenshots/chat.png" alt="Babo agent chat and workbench" loading="lazy" />
+                  </div>
+                </div>
+              </div>
+              <figcaption data-caption="chat">Agentic chat, workbench, live state.</figcaption>
+            </figure>
+
+            <figure class="showcase-panel" id="panel-projects" data-panel="projects" role="tabpanel" aria-labelledby="tab-projects" hidden>
+              <div class="showcase-frame">
+                <div class="showcase-subtabs" role="tablist" aria-label="Projects views">
+                  <button type="button" class="showcase-subtab is-active" data-subtab="overview" aria-selected="true">Teams</button>
+                  <button type="button" class="showcase-subtab" data-subtab="board" aria-selected="false">Board</button>
+                </div>
+                <div class="showcase-window">
+                  <div class="showcase-chrome" aria-hidden="true">
+                    <span class="device-dot"></span><span class="device-dot"></span><span class="device-dot"></span>
+                    <span class="showcase-chrome-title">Projects</span>
+                  </div>
+                  <div class="screen-viewport screen-viewport-showcase">
+                    <img src="assets/screenshots/projects-timeline.png" alt="Babo projects teams timeline view" data-subpanel="overview" loading="lazy" />
+                    <img src="assets/screenshots/projects-board.png" alt="Babo projects Kanban board" data-subpanel="board" hidden loading="lazy" />
+                  </div>
+                </div>
+              </div>
+              <figcaption data-caption="projects">Teams panel, status board, sub-agent waves.</figcaption>
+            </figure>
+
+            <figure class="showcase-panel" id="panel-memory" data-panel="memory" role="tabpanel" aria-labelledby="tab-memory" hidden>
+              <div class="showcase-frame">
+                <div class="showcase-subtabs" role="tablist" aria-label="Memory views">
+                  <button type="button" class="showcase-subtab is-active" data-subtab="cryptex" aria-selected="true">Cryptex</button>
+                  <button type="button" class="showcase-subtab" data-subtab="overview" aria-selected="false">Overview</button>
+                </div>
+                <div class="showcase-window">
+                  <div class="showcase-chrome" aria-hidden="true">
+                    <span class="device-dot"></span><span class="device-dot"></span><span class="device-dot"></span>
+                    <span class="showcase-chrome-title">Memory</span>
+                  </div>
+                  <div class="screen-viewport screen-viewport-showcase is-portrait">
+                    <img src="assets/screenshots/memory-cryptex.png" alt="Memory cryptex view" data-subpanel="cryptex" data-portrait loading="lazy" />
+                    <img src="assets/screenshots/memory-overview.png" alt="Babo memory overview" data-subpanel="overview" hidden loading="lazy" />
+                  </div>
+                </div>
+              </div>
+              <figcaption data-caption="memory">Memory rings and durable facts.</figcaption>
+            </figure>
+
+            <figure class="showcase-panel" id="panel-tools" data-panel="tools" role="tabpanel" aria-labelledby="tab-tools" hidden>
+              <div class="showcase-frame">
+                <div class="showcase-window">
+                  <div class="showcase-chrome" aria-hidden="true">
+                    <span class="device-dot"></span><span class="device-dot"></span><span class="device-dot"></span>
+                    <span class="showcase-chrome-title">Tools</span>
+                  </div>
+                  <div class="screen-viewport screen-viewport-showcase">
+                    <img src="assets/screenshots/tools.png" alt="Babo integrations and tools panel" loading="lazy" />
+                  </div>
+                </div>
+              </div>
+              <figcaption data-caption="tools">Google, WhatsApp, Discord, Slack, MCP, ClawHub.</figcaption>
+            </figure>
+
+            <figure class="showcase-panel" id="panel-brain" data-panel="brain" role="tabpanel" aria-labelledby="tab-brain" hidden>
+              <div class="showcase-frame">
+                <div class="showcase-subtabs" role="tablist" aria-label="Brain views">
+                  <button type="button" class="showcase-subtab is-active" data-subtab="overview" aria-selected="true">Overview</button>
+                  <button type="button" class="showcase-subtab" data-subtab="visual" aria-selected="false">Vision</button>
+                </div>
+                <div class="showcase-window">
+                  <div class="showcase-chrome" aria-hidden="true">
+                    <span class="device-dot"></span><span class="device-dot"></span><span class="device-dot"></span>
+                    <span class="showcase-chrome-title">Brain</span>
+                  </div>
+                  <div class="screen-viewport screen-viewport-showcase">
+                    <img src="assets/screenshots/brain.png" alt="Babo brain and agent state overview" data-subpanel="overview" loading="lazy" />
+                    <img src="assets/screenshots/brain-visual.png" alt="Babo visual cortex view" data-subpanel="visual" hidden loading="lazy" />
+                  </div>
+                </div>
+              </div>
+              <figcaption data-caption="brain">Hormones, network, visual cortex.</figcaption>
+            </figure>
+          </div>
         </div>
+      </div>
+    </section>
+
+    <section id="download" class="section-download section-download-early">
+      <div class="wrap">
+        <header class="section-head reveal">
+          <p class="section-label">Get Babo</p>
+          <h2 class="section-title" id="download-title">Run it yourself</h2>
+          <p class="section-lead section-lead-tight" id="download-lead">Download the desktop app from GitHub Releases, or self-host and fork the repo.</p>
+        </header>
+        <div class="download-grid reveal">
+          <article class="download-card glass download-card-primary">
+            <h3>Desktop</h3>
+            <p>Windows, macOS, or Linux with wizard-guided setup after install.</p>
+            <div class="download-card-actions">
+              <a class="btn btn-primary" href="download/">Download latest release</a>
+              <a class="btn btn-ghost" href="getting-started/installation/">Install guide</a>
+            </div>
+          </article>
+          <article class="download-card glass">
+            <h3>Self-host</h3>
+            <p>Your Postgres, NestJS API, and Python runtime. Access Babo from the web UI or desktop.</p>
+            <a class="btn btn-ghost" href="configuration/self-hosting/">Self-hosting guide</a>
+          </article>
+          <article class="download-card glass">
+            <h3>Source</h3>
+            <p>MIT license. Fork and extend.</p>
+            <a class="btn btn-ghost" href="https://github.com/umbecanessa/babo">GitHub</a>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="punches" class="section-punches">
+      <div class="wrap">
+        <header class="section-head reveal">
+          <p class="section-label" id="punches-label">Why builders switch</p>
+          <h2 class="section-title" id="punches-title">Agent stack, not chat UI</h2>
+        </header>
+        <div class="punch-timeline" id="punch-grid"></div>
       </div>
     </section>
 
@@ -146,21 +294,6 @@
       </div>
     </section>
 
-    <section id="punches" class="section-punches">
-      <div class="wrap">
-        <header class="section-head reveal">
-          <p class="section-label" id="punches-label">Why builders switch</p>
-          <h2 class="section-title" id="punches-title">Agent stack, not chat UI</h2>
-        </header>
-        <div class="punch-timeline" id="punch-grid"></div>
-
-        <div class="integrates integrates-section reveal" id="integrates-strip">
-          <p class="integrates-label" id="integrates-label">Works with</p>
-          <ul class="integrates-logos" id="integrates-logos"></ul>
-        </div>
-      </div>
-    </section>
-
     <section id="drift" class="drift-strip hidden">
       <div class="wrap">
         <div class="drift-panel glass">
@@ -170,115 +303,20 @@
       </div>
     </section>
 
-    <section id="product" class="product-section">
+    <section id="capabilities" class="section-capabilities">
       <div class="wrap">
         <header class="section-head reveal">
-          <p class="section-label">See it</p>
-          <h2 class="section-title">The real product</h2>
-          <p class="section-lead section-lead-tight" id="product-lead"></p>
+          <p class="section-label section-label-featured" id="capabilities-label">One agent platform</p>
+          <h2 class="section-title" id="capabilities-title">Built for work, not just chat</h2>
+          <p class="section-lead section-lead-tight" id="capabilities-lead">MIT, local-first, no telemetry. An extensible agent platform for memory, channels, and programmatic skills you can add.</p>
         </header>
-
-        <div class="showcase reveal" data-showcase>
-          <div class="showcase-tabs" role="tablist" aria-label="Product screenshots">
-            <button type="button" class="showcase-tab is-active" role="tab" aria-selected="true" data-tab="chat">Chat</button>
-            <button type="button" class="showcase-tab" role="tab" aria-selected="false" data-tab="projects">Projects</button>
-            <button type="button" class="showcase-tab" role="tab" aria-selected="false" data-tab="memory">Memory</button>
-            <button type="button" class="showcase-tab" role="tab" aria-selected="false" data-tab="tools">Tools</button>
-            <button type="button" class="showcase-tab" role="tab" aria-selected="false" data-tab="brain">Brain</button>
+        <div class="capabilities-grid reveal" id="capabilities-grid"></div>
+        <div class="quickstart-bar glass reveal" id="quickstart-bar" hidden>
+          <div class="quickstart-bar-head">
+            <p class="quickstart-bar-label" id="quickstart-label">Quick start</p>
+            <p class="quickstart-bar-hint" id="quickstart-hint"></p>
           </div>
-          <p class="showcase-zoom-hint">Tap or click screenshot to view full size</p>
-
-          <div class="showcase-panels">
-            <figure class="showcase-panel is-active" data-panel="chat" role="tabpanel">
-              <div class="showcase-frame">
-                <div class="showcase-window">
-                  <div class="showcase-chrome" aria-hidden="true">
-                    <span class="device-dot"></span><span class="device-dot"></span><span class="device-dot"></span>
-                    <span class="showcase-chrome-title">Babo</span>
-                  </div>
-                  <div class="screen-viewport screen-viewport-showcase">
-                    <img src="assets/screenshots/chat.png" alt="" loading="lazy" />
-                  </div>
-                </div>
-              </div>
-              <figcaption data-caption="chat"></figcaption>
-            </figure>
-
-            <figure class="showcase-panel" data-panel="projects" role="tabpanel" hidden>
-              <div class="showcase-frame">
-                <div class="showcase-subtabs" role="tablist">
-                  <button type="button" class="showcase-subtab is-active" data-subtab="overview" aria-selected="true">Teams</button>
-                  <button type="button" class="showcase-subtab" data-subtab="board" aria-selected="false">Board</button>
-                </div>
-                <div class="showcase-window">
-                  <div class="showcase-chrome" aria-hidden="true">
-                    <span class="device-dot"></span><span class="device-dot"></span><span class="device-dot"></span>
-                    <span class="showcase-chrome-title">Projects</span>
-                  </div>
-                  <div class="screen-viewport screen-viewport-showcase">
-                    <img src="assets/screenshots/projects-timeline.png" alt="" data-subpanel="overview" loading="lazy" />
-                    <img src="assets/screenshots/projects-board.png" alt="" data-subpanel="board" hidden loading="lazy" />
-                  </div>
-                </div>
-              </div>
-              <figcaption data-caption="projects"></figcaption>
-            </figure>
-
-            <figure class="showcase-panel" data-panel="memory" role="tabpanel" hidden>
-              <div class="showcase-frame">
-                <div class="showcase-subtabs" role="tablist">
-                  <button type="button" class="showcase-subtab is-active" data-subtab="cryptex" aria-selected="true">Cryptex</button>
-                  <button type="button" class="showcase-subtab" data-subtab="overview" aria-selected="false">Overview</button>
-                </div>
-                <div class="showcase-window">
-                  <div class="showcase-chrome" aria-hidden="true">
-                    <span class="device-dot"></span><span class="device-dot"></span><span class="device-dot"></span>
-                    <span class="showcase-chrome-title">Memory</span>
-                  </div>
-                  <div class="screen-viewport screen-viewport-showcase is-portrait">
-                    <img src="assets/screenshots/memory-cryptex.png" alt="Memory cryptex view" data-subpanel="cryptex" data-portrait loading="lazy" />
-                    <img src="assets/screenshots/memory-overview.png" alt="" data-subpanel="overview" hidden loading="lazy" />
-                  </div>
-                </div>
-              </div>
-              <figcaption data-caption="memory"></figcaption>
-            </figure>
-
-            <figure class="showcase-panel" data-panel="tools" role="tabpanel" hidden>
-              <div class="showcase-frame">
-                <div class="showcase-window">
-                  <div class="showcase-chrome" aria-hidden="true">
-                    <span class="device-dot"></span><span class="device-dot"></span><span class="device-dot"></span>
-                    <span class="showcase-chrome-title">Tools</span>
-                  </div>
-                  <div class="screen-viewport screen-viewport-showcase">
-                    <img src="assets/screenshots/tools.png" alt="" loading="lazy" />
-                  </div>
-                </div>
-              </div>
-              <figcaption data-caption="tools"></figcaption>
-            </figure>
-
-            <figure class="showcase-panel" data-panel="brain" role="tabpanel" hidden>
-              <div class="showcase-frame">
-                <div class="showcase-subtabs" role="tablist">
-                  <button type="button" class="showcase-subtab is-active" data-subtab="overview" aria-selected="true">Overview</button>
-                  <button type="button" class="showcase-subtab" data-subtab="visual" aria-selected="false">Vision</button>
-                </div>
-                <div class="showcase-window">
-                  <div class="showcase-chrome" aria-hidden="true">
-                    <span class="device-dot"></span><span class="device-dot"></span><span class="device-dot"></span>
-                    <span class="showcase-chrome-title">Brain</span>
-                  </div>
-                  <div class="screen-viewport screen-viewport-showcase">
-                    <img src="assets/screenshots/brain.png" alt="" data-subpanel="overview" loading="lazy" />
-                    <img src="assets/screenshots/brain-visual.png" alt="" data-subpanel="visual" hidden loading="lazy" />
-                  </div>
-                </div>
-              </div>
-              <figcaption data-caption="brain"></figcaption>
-            </figure>
-          </div>
+          <div class="quickstart-bar-commands" id="quickstart-commands"></div>
         </div>
       </div>
     </section>
@@ -295,42 +333,12 @@
       </div>
     </section>
 
-    <section id="download" class="section-download">
-      <div class="wrap">
-        <header class="section-head reveal">
-          <p class="section-label">Get Babo</p>
-          <h2 class="section-title" id="download-title">Run it yourself</h2>
-          <p class="section-lead section-lead-tight" id="download-lead"></p>
-        </header>
-        <div class="download-grid reveal">
-          <article class="download-card glass">
-            <h3>Desktop</h3>
-            <p>Windows, macOS, or Linux — wizard-guided setup after install.</p>
-            <div class="download-card-actions">
-              <a class="btn btn-primary" href="download/">Download latest release</a>
-              <a class="btn btn-ghost" href="getting-started/installation/">Install guide</a>
-            </div>
-          </article>
-          <article class="download-card glass">
-            <h3>Self-host</h3>
-            <p>Your Postgres, NestJS API, and Python runtime — access Babo from the web UI or desktop.</p>
-            <a class="btn btn-ghost" href="configuration/self-hosting/">Self-hosting guide</a>
-          </article>
-          <article class="download-card glass">
-            <h3>Source</h3>
-            <p>MIT — fork and extend.</p>
-            <a class="btn btn-ghost" href="https://github.com/umbecanessa/babo">GitHub</a>
-          </article>
-        </div>
-      </div>
-    </section>
-
     <section id="manifesto" class="manifesto-teaser">
       <div class="wrap">
         <div class="manifesto-teaser-panel glass reveal">
           <div class="manifesto-teaser-copy">
             <p class="section-label" id="manifesto-teaser-label">Manifesto</p>
-            <p class="manifesto-teaser-quote" id="manifesto-quote"></p>
+            <p class="manifesto-teaser-quote" id="manifesto-quote">LLMs are infrastructure, like electricity. They should run in your home and office, not only in a vendor’s meter.</p>
             <p class="manifesto-teaser-snippet" id="manifesto-snippet"></p>
           </div>
           <div class="manifesto-teaser-action">
@@ -361,7 +369,7 @@
 
   <footer class="site-footer">
     <div class="wrap footer-inner">
-      <p class="footer-copy">© <span id="year"></span> Babo · MIT · Open source</p>
+      <p class="footer-copy">© <span id="year"></span> Babo · MIT · Open source · <span class="footer-audience">For <strong>Builders</strong> or <strong>Everyone</strong> — use the nav toggle or <a href="?audience=everyday">/?audience=everyday</a></span></p>
       <ul class="footer-links">
         <li><a href="legal/privacy-policy/">Privacy</a></li>
         <li><a href="getting-started/installation/">Docs</a></li>
@@ -375,7 +383,7 @@
     <button type="button" class="lightbox-close" aria-label="Close">×</button>
     <div class="lightbox-backdrop" tabindex="-1"></div>
     <div class="lightbox-stage">
-      <img class="lightbox-img" alt="" />
+      <div class="lightbox-img-slot" id="lightbox-img-slot"></div>
     </div>
     <p class="lightbox-hint">Esc or tap outside to close</p>
   </div>

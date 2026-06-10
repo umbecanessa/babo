@@ -4,6 +4,8 @@ Welcome to the Babo docs. Babo is a persistent AI agent platform with long-term 
 
 **Mission & vision:** [The Babo manifesto](manifesto.md) — local agents, honest economics, and the long-term bet.
 
+**Homepage audiences:** [Innovators vs everyday users](audiences.md) — how babo.agency tailors copy and CTAs.
+
 **Download desktop app:** [GitHub Releases](https://github.com/umbecanessa/babo/releases) — **Windows and macOS** installers from CI; Linux builds from source (`npm run dist:linux`).
 
 New users: [download the latest release](https://github.com/umbecanessa/babo/releases), then follow [Installation](getting-started/installation.md) and [Quickstart](getting-started/quickstart.md).

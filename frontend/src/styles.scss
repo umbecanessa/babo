@@ -11,13 +11,13 @@
   --glass-border-strong: rgba(255, 255, 255, 0.80);
   --glass-blur: 20px;
 
-  --bg-primary: #eef0f7;
-  --bg-secondary: #e4e7f2;
-  --bg-surface: rgba(255, 255, 255, 0.60);
+  --bg-primary: #eef1f5;
+  --bg-secondary: #e2e7ef;
+  --bg-surface: rgba(255, 255, 255, 0.92);
 
-  --text-primary: #1a1d2e;
-  --text-secondary: #4a4f6a;
-  --text-muted: #5e6378;
+  --text-primary: #12182a;
+  --text-secondary: #3d465c;
+  --text-muted: #5a6178;
 
   --overlay-1: rgba(0, 0, 0, 0.02);
   --overlay-2: rgba(0, 0, 0, 0.04);
@@ -25,21 +25,21 @@
   --overlay-4: rgba(0, 0, 0, 0.08);
   --overlay-5: rgba(0, 0, 0, 0.18);
 
-  --accent-primary: #7c5bf5;
-  --accent-primary-glow: rgba(124, 91, 245, 0.20);
+  --accent-primary: #b85c1a;
+  --accent-primary-glow: rgba(184, 92, 26, 0.22);
   /* Tinted surfaces: readable text on purple wash (not purple-on-purple) */
   --accent-tint-bg: color-mix(in srgb, var(--accent-primary) 12%, var(--glass-bg));
   --accent-tint-border: color-mix(in srgb, var(--accent-primary) 28%, var(--glass-border));
   --on-accent-tint: var(--text-primary);
   --on-accent-tint-muted: var(--text-secondary);
-  --accent-secondary: #14b8a6;
-  --accent-secondary-glow: rgba(20, 184, 166, 0.20);
-  --accent-success: #14b8a6;
-  --accent-success-glow: rgba(20, 184, 166, 0.20);
+  --accent-secondary: #2a7a72;
+  --accent-secondary-glow: rgba(42, 122, 114, 0.22);
+  --accent-success: #2a7a72;
+  --accent-success-glow: rgba(42, 122, 114, 0.28);
   --accent-warn: #e5a520;
   --accent-warn-glow: rgba(229, 165, 32, 0.15);
   --accent-danger: #c0392b;
-  --accent-cyan: #14b8a6;
+  --accent-cyan: #2a7a72;
   --accent-cyan-glow: rgba(20, 184, 166, 0.20);
   --accent-gold: #e5a520;
   --accent-gold-glow: rgba(229, 165, 32, 0.15);
@@ -85,7 +85,8 @@
     0 16px 48px rgba(0, 0, 0, 0.42),
     0 0 0 1px color-mix(in srgb, var(--glass-border-strong) 65%, transparent);
 
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-display: 'Bricolage Grotesque', 'Segoe UI', system-ui, sans-serif;
+  --font-sans: 'Source Sans 3', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
 
   // Legacy Babo aliases (components still using older token names)
@@ -107,8 +108,8 @@
   --glass-border: rgba(255, 255, 255, 0.08);
   --glass-border-strong: rgba(255, 255, 255, 0.18);
 
-  --bg-primary: #0c0d14;
-  --bg-secondary: #15171f;
+  --bg-primary: #080a0f;
+  --bg-secondary: #0f1219;
   --bg-surface: rgba(20, 22, 32, 0.65);
 
   --text-primary: #e8eaf2;
