@@ -439,35 +439,9 @@
     });
   }
 
-  function switchAudience(id) {
-    if (id !== "innovator" && id !== "everyday") return;
-    try {
-      sessionStorage.setItem(AUDIENCE_KEY, id);
-    } catch {
-      /* ignore */
-    }
-    applyAudience(id);
-    document.body.dataset.audience = id;
-    document.querySelectorAll(".audience-btn").forEach((btn) => {
-      const active = btn.dataset.audience === id;
-      btn.classList.toggle("is-active", active);
-      btn.setAttribute("aria-pressed", active ? "true" : "false");
-    });
-    const url = new URL(window.location.href);
-    if (id === "innovator") url.searchParams.delete("audience");
-    else url.searchParams.set("audience", id);
-    history.replaceState(null, "", url);
-  }
-
   const audienceId = resolveAudience();
   document.body.dataset.audience = audienceId;
   applyAudience(audienceId);
-  document.querySelectorAll(".audience-btn").forEach((btn) => {
-    const active = btn.dataset.audience === audienceId;
-    btn.classList.toggle("is-active", active);
-    btn.setAttribute("aria-pressed", active ? "true" : "false");
-    btn.addEventListener("click", () => switchAudience(btn.dataset.audience));
-  });
   hydrateGitHubStars();
 
   function observeReveals() {

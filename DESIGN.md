@@ -37,7 +37,7 @@ Copy switches in `website/js/audience.js`; **design** should reinforce who we're
 | **Builders** (`innovator`) | Violet-dominant mesh, purple gradient headline, GitHub CTA glow, extension/platform emphasis |
 | **Everyone** (`everyday`) | Teal-warm mesh, teal→violet headline gradient, teal primary buttons, download card glow |
 
-Toggle: nav **Builders / Everyone** + `?audience=everyday`. See [docs/audiences.md](docs/audiences.md).
+Audience lanes via `?audience=everyday` and `sessionStorage`. See [docs/audiences.md](docs/audiences.md).
 
 ## Components
 

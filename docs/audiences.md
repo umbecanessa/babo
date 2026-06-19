@@ -26,7 +26,6 @@ The public homepage at [babo.agency](https://babo.agency/) serves **two audience
 
 | Mechanism | Detail |
 |-----------|--------|
-| Site UI | **Builders** / **Everyone** toggle in the homepage nav |
 | Query param | `audience=everyday` or `utm_content=everyday` |
 | Persistence | `sessionStorage` key `babo_audience` |
 | Copy source | [`website/js/audience.js`](https://github.com/umbecanessa/babo/blob/main/website/js/audience.js) |

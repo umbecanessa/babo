@@ -16,7 +16,7 @@ Documented in [PRODUCT.md](../PRODUCT.md), [docs/audiences.md](../docs/audiences
 | **Innovators** (default) | Builders | `/` | Self-hosters, OSS contributors, agent-stack builders |
 | **Early adopters** | Everyone | `/?audience=everyday` | Personal AI agent users (no terminal) |
 
-Also accepts `?audience=home` (alias for everyday) and `utm_content=innovator|everyday`. Choice persists in `sessionStorage` (`babo_audience`). The nav **Builders / Everyone** toggle switches copy without a full reload.
+Also accepts `?audience=home` (alias for everyday) and `utm_content=innovator|everyday`. Choice persists in `sessionStorage` (`babo_audience`).
 
 ## Design tokens
 
