@@ -41,17 +41,17 @@ Three words: **local, capable, honest.**
 
 ## Anti-references
 
-- Purple-to-teal gradient mesh “AI agent startup” landing pages
-- Inter / Space Grotesk default stacks with glassmorphism cards
-- Gradient headline text and uppercase eyebrow on every section
+- Generic Impeccable/skill palette swaps that ignore our actual product UI
+- Flat marketing sites that don't use the app's glass + mesh system
+- Interchangeable AI-agent copy with no audience lane
 - Chat-wrapper UIs that forget everything and meter every token
-- Generic “hero metric + three identical feature cards” templates
+- Generic hero-metric + three identical feature-card templates
 
 ## Design Principles
 
 1. **Show the real product** — screenshots and UI chrome, not abstract illustrations.
 2. **Local-first is the story** — economics and privacy are features, not footnotes.
-3. **Audience-aware copy** — same product, different entry path (builder vs everyone).
+3. **Audience-aware design** — Builders get violet/GitHub lane; Everyone gets teal/download lane (mesh, accents, CTAs — not copy-only).
 4. **Proof before pitch** — product section and download before long capability grids.
 5. **Accessible by default** — WCAG AA contrast, keyboard nav, no zoom blocking.
 

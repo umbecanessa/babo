@@ -531,7 +531,7 @@
     document.documentElement.setAttribute("data-theme", mode);
     const meta = document.querySelector('meta[name="theme-color"]');
     if (meta) {
-      meta.setAttribute("content", effectiveTheme(mode) === "dark" ? "#080a0f" : "#eef1f5");
+      meta.setAttribute("content", effectiveTheme(mode) === "dark" ? "#06070d" : "#eef0f7");
     }
     const tip = document.getElementById("theme-toggle");
     if (tip) {

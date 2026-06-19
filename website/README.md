@@ -20,7 +20,7 @@ Also accepts `?audience=home` (alias for everyday) and `utm_content=innovator|ev
 
 ## Design tokens
 
-Marketing tokens: `css/tokens.css`. Product UI: `frontend/src/styles.scss`. Both follow [DESIGN.md](../DESIGN.md) (copper-on-slate, Bricolage Grotesk + Source Sans 3). Theme preference: `babo_theme` in `localStorage`.
+Marketing tokens: `css/tokens.css`. Product UI: `frontend/src/styles.scss`. Both follow [DESIGN.md](../DESIGN.md) (glassmorphic violet/teal mesh, Inter + Space Grotesk). Theme preference: `babo_theme` in `localStorage`.
 
 ## Local preview
 

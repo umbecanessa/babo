@@ -27,6 +27,94 @@ body {
   touch-action: pan-y;
 }
 
+/* ── Ambient layers (match app mesh) ── */
+.mesh {
+  position: fixed;
+  inset: -30%;
+  z-index: 0;
+  pointer-events: none;
+  will-change: transform;
+  filter: blur(40px);
+}
+
+.mesh-a {
+  background:
+    radial-gradient(ellipse at 12% 30%, rgba(124, 91, 245, 0.12) 0%, transparent 50%),
+    radial-gradient(ellipse at 85% 20%, rgba(20, 184, 166, 0.09) 0%, transparent 48%),
+    radial-gradient(ellipse at 50% 90%, rgba(244, 114, 182, 0.05) 0%, transparent 45%);
+  animation: meshShift 42s ease-in-out infinite;
+}
+
+.mesh-b {
+  background:
+    radial-gradient(ellipse at 72% 55%, rgba(124, 91, 245, 0.12) 0%, transparent 52%),
+    radial-gradient(ellipse at 25% 12%, rgba(20, 184, 166, 0.10) 0%, transparent 48%);
+  animation: meshDrift 58s ease-in-out infinite;
+}
+
+:root[data-theme="dark"] .mesh-a {
+  background:
+    radial-gradient(ellipse at 12% 30%, rgba(124, 91, 245, 0.22) 0%, transparent 52%),
+    radial-gradient(ellipse at 85% 20%, rgba(20, 184, 166, 0.14) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 90%, rgba(244, 114, 182, 0.06) 0%, transparent 48%);
+}
+
+:root[data-theme="dark"] .mesh-b {
+  background:
+    radial-gradient(ellipse at 72% 55%, rgba(124, 91, 245, 0.24) 0%, transparent 52%),
+    radial-gradient(ellipse at 25% 12%, rgba(20, 184, 166, 0.18) 0%, transparent 48%);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="system"] .mesh-a {
+    background:
+      radial-gradient(ellipse at 12% 30%, rgba(124, 91, 245, 0.22) 0%, transparent 52%),
+      radial-gradient(ellipse at 85% 20%, rgba(20, 184, 166, 0.14) 0%, transparent 50%),
+      radial-gradient(ellipse at 50% 90%, rgba(244, 114, 182, 0.06) 0%, transparent 48%);
+  }
+  :root[data-theme="system"] .mesh-b {
+    background:
+      radial-gradient(ellipse at 72% 55%, rgba(124, 91, 245, 0.24) 0%, transparent 52%),
+      radial-gradient(ellipse at 25% 12%, rgba(20, 184, 166, 0.18) 0%, transparent 48%);
+  }
+  :root[data-theme="system"] .noise { opacity: 0.055; }
+}
+
+.noise {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.018;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 180px;
+}
+
+.grid-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.45;
+  background-image:
+    linear-gradient(var(--overlay-2) 1px, transparent 1px),
+    linear-gradient(90deg, var(--overlay-2) 1px, transparent 1px);
+  background-size: 64px 64px;
+  mask-image: radial-gradient(ellipse 70% 55% at 50% 0%, black 15%, transparent 65%);
+  -webkit-mask-image: radial-gradient(ellipse 70% 55% at 50% 0%, black 15%, transparent 65%);
+}
+
+@keyframes meshShift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  33% { transform: translate3d(8%, -6%, 0) scale(1.08); }
+  66% { transform: translate3d(-6%, 5%, 0) scale(1.04); }
+}
+
+@keyframes meshDrift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(-7%, 8%, 0) scale(1.06); }
+}
+
 .skip-link {
   position: absolute;
   top: 0.75rem;
@@ -89,9 +177,7 @@ body {
 }
 
 .audience-btn.is-active {
-  color: var(--text-primary);
-  background: var(--bg-surface);
-  box-shadow: 0 1px 3px rgba(18, 24, 38, 0.08);
+  font-weight: 700;
 }
 
 :focus {
@@ -115,9 +201,10 @@ main {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .marquee { animation: none !important; }
+  .mesh-a, .mesh-b, .marquee { animation: none !important; }
   .reveal { opacity: 1 !important; transform: none !important; }
   .hero-product { transition: none !important; }
+  .hero-line-accent { animation: none !important; }
 }
 
 main, .site-nav, .site-footer { position: relative; z-index: 1; }
@@ -135,7 +222,9 @@ a:hover {
 /* ── Surface utilities ── */
 .glass,
 .glass-panel {
-  background: var(--bg-surface);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-glass);
@@ -206,7 +295,9 @@ section[id] {
   max-width: min(1180px, calc(100% - 2rem));
   margin-inline: auto;
   padding: 0.45rem 0.65rem 0.45rem 0.85rem;
-  background: var(--bg-surface);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-pill);
   box-shadow: var(--shadow-glass);
@@ -880,7 +971,27 @@ section[id] {
 }
 
 .hero-line-accent {
-  color: var(--accent-primary);
+  background-image: var(--gradient-hero);
+  background-size: 200% auto;
+  background-repeat: no-repeat;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: gradientShift 8s ease infinite;
+}
+
+@supports not ((-webkit-background-clip: text) or (background-clip: text)) {
+  .hero-line-accent {
+    background: none;
+    -webkit-text-fill-color: unset;
+    color: var(--accent-primary);
+  }
+}
+
+@keyframes gradientShift {
+  0%, 100% { background-position: 0% center; }
+  50% { background-position: 100% center; }
 }
 
 .hero-lead {
@@ -1923,9 +2034,11 @@ body.lightbox-open {
 .cap-card {
   padding: 1.25rem 1.15rem;
   border-radius: var(--radius-lg);
-  background: var(--bg-surface);
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
   border: 1px solid var(--glass-border);
-  box-shadow: none;
+  box-shadow: var(--shadow-glass);
   transition: border-color 0.2s, background 0.2s;
 }
 
@@ -2207,6 +2320,8 @@ a.quickstart-cmd-value:hover {
   text-align: center;
   border-radius: var(--radius-lg);
   background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
   border: 1px solid var(--glass-border);
   box-shadow: var(--shadow-glass);
   transition: background 0.2s, border-color 0.2s;
@@ -2351,13 +2466,38 @@ code {
   border: 0;
 }
 
-/* ── Audience skins ── */
+/* ── Audience skins — visual lanes, not just copy ── */
+body[data-audience="innovator"] .mesh-a {
+  background:
+    radial-gradient(ellipse at 15% 35%, rgba(124, 91, 245, 0.16) 0%, transparent 52%),
+    radial-gradient(ellipse at 82% 22%, rgba(20, 184, 166, 0.08) 0%, transparent 48%),
+    radial-gradient(ellipse at 50% 88%, rgba(244, 114, 182, 0.04) 0%, transparent 45%);
+}
+
+body[data-audience="everyday"] .mesh-a {
+  background:
+    radial-gradient(ellipse at 18% 32%, rgba(20, 184, 166, 0.16) 0%, transparent 52%),
+    radial-gradient(ellipse at 78% 24%, rgba(124, 91, 245, 0.10) 0%, transparent 48%),
+    radial-gradient(ellipse at 52% 90%, rgba(229, 165, 32, 0.06) 0%, transparent 45%);
+}
+
+body[data-audience="everyday"] .mesh-b {
+  background:
+    radial-gradient(ellipse at 68% 58%, rgba(20, 184, 166, 0.18) 0%, transparent 52%),
+    radial-gradient(ellipse at 28% 14%, rgba(124, 91, 245, 0.10) 0%, transparent 48%);
+}
+
 body[data-audience="everyday"] .hero-line-accent {
-  color: var(--accent-secondary);
+  background-image: linear-gradient(135deg, #14b8a6 0%, #7c5bf5 50%, #14b8a6 100%);
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
 }
 
 body[data-audience="everyday"] .btn-primary {
-  background: color-mix(in srgb, var(--accent-secondary) 82%, #0c0d14);
+  background: color-mix(in srgb, var(--accent-secondary) 88%, #0c0d14);
   box-shadow: 0 2px 12px var(--accent-secondary-glow);
 }
 
@@ -2365,8 +2505,36 @@ body[data-audience="everyday"] .btn-primary:hover {
   box-shadow: 0 4px 18px var(--accent-secondary-glow);
 }
 
-body[data-audience="everyday"] .hero-trust-item {
-  color: var(--text-secondary);
+body[data-audience="everyday"] .download-card-primary {
+  background: color-mix(in srgb, var(--accent-secondary) 14%, var(--glass-bg));
+  border-color: color-mix(in srgb, var(--accent-secondary) 32%, var(--glass-border));
+  box-shadow: var(--shadow-glass), 0 0 48px var(--accent-secondary-glow);
+}
+
+body[data-audience="innovator"] .download-card-primary {
+  background: var(--accent-tint-bg);
+  border-color: var(--accent-tint-border);
+  box-shadow: var(--shadow-glass), var(--shadow-glow);
+}
+
+body[data-audience="innovator"] .btn-github {
+  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.12), 0 0 24px var(--accent-primary-glow);
+}
+
+body[data-audience="everyday"] .section-download-early .section-title {
+  color: color-mix(in srgb, var(--accent-secondary) 70%, var(--text-primary));
+}
+
+.audience-btn.is-active[data-audience="innovator"] {
+  color: var(--accent-primary);
+  background: var(--accent-tint-bg);
+  border: 1px solid var(--accent-tint-border);
+}
+
+.audience-btn.is-active[data-audience="everyday"] {
+  color: var(--accent-secondary);
+  background: color-mix(in srgb, var(--accent-secondary) 14%, var(--glass-bg));
+  border: 1px solid color-mix(in srgb, var(--accent-secondary) 30%, var(--glass-border));
 }
 
 /* ── Sticky mobile CTA ── */
