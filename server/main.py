@@ -282,6 +282,9 @@ async def lifespan(app: FastAPI):
 
     logger.warning("SHUTDOWN_TRACE lifespan teardown: %s", format_initiator_summary())
     logger.info("Shutting down Babo server...")
+
+    from server.services.agent_pty_pool import get_agent_pty_pool
+
     _sq_cb = getattr(app.state, "squad_checkback_scheduler", None)
     if _sq_cb is not None:
         await _sq_cb.stop()
@@ -297,6 +300,11 @@ async def lifespan(app: FastAPI):
             logger.info("Shut down agent %s", agent_id)
         except Exception as exc:
             logger.warning("Failed to shut down agent %s: %s", agent_id, exc)
+
+    try:
+        await get_agent_pty_pool().close_all()
+    except Exception as exc:
+        logger.debug("PTY pool shutdown: %s", exc)
 
     await model_manager.async_unload()
     logger.info("Babo server shutdown complete")

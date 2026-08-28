@@ -46,6 +46,41 @@ from .server_install import _BLOCKED_PACKAGES, _CLI_NOT_PYTHON
 logger = logging.getLogger(__name__)
 
 _IS_WINDOWS = sys.platform == "win32"
+
+
+def _subprocess_run_kwargs(*, cwd: str, timeout: int) -> dict[str, Any]:
+    """Isolated subprocess kwargs for pip/npm (separate process group on Windows)."""
+    kw: dict[str, Any] = {
+        "capture_output": True,
+        "text": True,
+        "timeout": timeout,
+        "cwd": cwd,
+    }
+    if _IS_WINDOWS:
+        kw["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+    return kw
+
+
+def _ps_quote(value: str) -> str:
+    return '"' + value.replace('"', '`"') + '"'
+
+
+def _argv_to_shell_command(argv: list[str]) -> str:
+    if _IS_WINDOWS:
+        return "& " + " ".join(_ps_quote(arg) for arg in argv)
+    import shlex
+
+    return " ".join(shlex.quote(arg) for arg in argv)
+
+
+class _InstallProc:
+    __slots__ = ("returncode", "stdout", "stderr")
+
+    def __init__(self, returncode: int, stdout: str, stderr: str = "") -> None:
+        self.returncode = returncode
+        self.stdout = stdout
+        self.stderr = stderr
+
 _MAX_INSTALL_DIAG_LINES = 24
 _MAX_INSTALL_DIAG_CHARS = 4000
 
@@ -81,10 +116,12 @@ class ProjectInstallTool:
         self,
         cwd: str,
         shared_cwd: object | None = None,
+        agent_id: str = "",
     ) -> None:
         self._cwd = cwd
         self._workspace_root = cwd
         self._shared_cwd = shared_cwd
+        self._agent_id = (agent_id or "").strip()
         self._plan_project_dir_fn: Callable[[], str] | None = None
 
     def set_plan_project_dir_fn(self, fn: Callable[[], str] | None) -> None:
@@ -104,6 +141,96 @@ class ProjectInstallTool:
             self._effective_cwd,
             self._workspace_root,
             plan_project_dir=self._plan_project_dir() or None,
+        )
+
+    def _build_shell_env(self, cwd: str, *, venv_bin: str | None = None) -> dict[str, str]:
+        from .shell_env import build_agent_shell_env
+
+        return build_agent_shell_env(
+            self._workspace_root,
+            cwd,
+            venv_bin=venv_bin,
+        )
+
+    async def _run_install_command(
+        self,
+        argv: list[str],
+        cwd: str,
+        timeout: int,
+        *,
+        venv_bin: str | None = None,
+    ) -> _InstallProc | None:
+        """Run in the agent PTY when available (Cursor-style). Returns None for subprocess fallback."""
+        if not self._agent_id:
+            return None
+
+        from server.services.agent_pty_pool import get_agent_pty_pool
+        from server.services.pty_session import strip_ansi
+        from server.services.pty_workspace import normalize_pty_workspace
+
+        try:
+            from server.config import get_settings
+
+            agents_dir = get_settings().agents_dir
+        except Exception:
+            agents_dir = None
+
+        workspace = normalize_pty_workspace(
+            self._agent_id,
+            self._workspace_root,
+            agents_dir=agents_dir,
+        )
+        pool = get_agent_pty_pool()
+        session = await pool.get_session(
+            agent_id=self._agent_id,
+            workspace=workspace,
+            env=self._build_shell_env(cwd, venv_bin=venv_bin),
+            cwd=cwd,
+        )
+        try:
+            result = await session.run_command(
+                _argv_to_shell_command(argv),
+                timeout=float(timeout),
+            )
+        except asyncio.TimeoutError:
+            raise subprocess.TimeoutExpired(argv, timeout) from None
+
+        if result.timed_out:
+            raise subprocess.TimeoutExpired(argv, timeout)
+
+        output = strip_ansi(result.output)
+        exit_code = result.exit_code if result.exit_code is not None else 1
+        return _InstallProc(exit_code, output)
+
+    async def _run_install_subprocess(
+        self,
+        argv: list[str],
+        *,
+        cwd: str,
+        timeout: int,
+        venv_bin: str | None = None,
+    ) -> _InstallProc:
+        proc = await self._run_install_command(
+            argv,
+            cwd,
+            timeout,
+            venv_bin=venv_bin,
+        )
+        if proc is not None:
+            return proc
+
+        completed = await asyncio.get_event_loop().run_in_executor(
+            None,
+            lambda: subprocess.run(
+                argv,
+                env=self._build_shell_env(cwd, venv_bin=venv_bin),
+                **_subprocess_run_kwargs(cwd=cwd, timeout=timeout),
+            ),
+        )
+        return _InstallProc(
+            completed.returncode,
+            completed.stdout or "",
+            completed.stderr or "",
         )
 
     @property
@@ -480,15 +607,11 @@ class ProjectInstallTool:
         )
 
         try:
-            proc = await asyncio.get_event_loop().run_in_executor(
-                None,
-                lambda: subprocess.run(
-                    [python_exe, "-m", "pip", "install", *pip_args],
-                    capture_output=True,
-                    text=True,
-                    timeout=180,
-                    cwd=project_root,
-                ),
+            proc = await self._run_install_subprocess(
+                [python_exe, "-m", "pip", "install", *pip_args],
+                cwd=project_root,
+                timeout=180,
+                venv_bin=bin_dir,
             )
         except subprocess.TimeoutExpired:
             return ToolResult(
@@ -526,15 +649,11 @@ class ProjectInstallTool:
         if base_name.replace("-", "_").isidentifier() or base_name.isidentifier():
             mod = base_name.replace("-", "_")
             try:
-                vproc = await asyncio.get_event_loop().run_in_executor(
-                    None,
-                    lambda: subprocess.run(
-                        [python_exe, "-c", f"import {mod}; print(getattr({mod}, '__version__', 'ok'))"],
-                        capture_output=True,
-                        text=True,
-                        timeout=30,
-                        cwd=project_root,
-                    ),
+                vproc = await self._run_install_subprocess(
+                    [python_exe, "-c", f"import {mod}; print(getattr({mod}, '__version__', 'ok'))"],
+                    cwd=project_root,
+                    timeout=30,
+                    venv_bin=bin_dir,
                 )
                 if vproc.returncode == 0:
                     verify = (
@@ -598,15 +717,11 @@ class ProjectInstallTool:
         )
 
         try:
-            proc = await asyncio.get_event_loop().run_in_executor(
-                None,
-                lambda: subprocess.run(
-                    [python_exe, "-m", "pip", "install", "-r", str(req)],
-                    capture_output=True,
-                    text=True,
-                    timeout=300,
-                    cwd=project_root,
-                ),
+            proc = await self._run_install_subprocess(
+                [python_exe, "-m", "pip", "install", "-r", str(req)],
+                cwd=project_root,
+                timeout=300,
+                venv_bin=bin_dir,
             )
         except subprocess.TimeoutExpired:
             return ToolResult(
@@ -707,15 +822,10 @@ class ProjectInstallTool:
         logger.info("project_install: %s in %s", " ".join(cmd), node_root)
 
         try:
-            proc = await asyncio.get_event_loop().run_in_executor(
-                None,
-                lambda: subprocess.run(
-                    cmd,
-                    capture_output=True,
-                    text=True,
-                    timeout=300,
-                    cwd=node_root,
-                ),
+            proc = await self._run_install_subprocess(
+                cmd,
+                cwd=node_root,
+                timeout=300,
             )
         except subprocess.TimeoutExpired:
             return ToolResult(
@@ -754,5 +864,6 @@ class ProjectInstallTool:
 def create_project_install_tool(
     cwd: str,
     shared_cwd: object | None = None,
+    agent_id: str = "",
 ) -> ProjectInstallTool:
-    return ProjectInstallTool(cwd, shared_cwd=shared_cwd)
+    return ProjectInstallTool(cwd, shared_cwd=shared_cwd, agent_id=agent_id)

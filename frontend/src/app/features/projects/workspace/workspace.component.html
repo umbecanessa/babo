@@ -1,57 +1,147 @@
 <div class="workspace" [class.shell-open]="shellOpen()">
+
   <div class="workspace-main">
+
     <aside class="explorer-pane" [style.width.px]="explorerWidth()">
+
     <app-workspace-explorer
+
       [rootPath]="rootPath()"
+
       [activePath]="activePath()"
+
       [shellOpen]="shellOpen()"
+
       [busy]="uploading()"
+
       (fileOpen)="openFile($event)"
+
       (uploadFiles)="triggerFileUpload()"
+
       (uploadFolder)="triggerFolderUpload()"
+
       (toggleShell)="toggleShell()"
+
       (fileDeleted)="onFileDeleted($event)"
+
       (fileRenamed)="onFileRenamed($event)"
+
     />
+
     </aside>
 
+
+
     <div
+
       class="split-handle"
+
       (mousedown)="onResizeStart($event)"
+
       title="Drag to resize"
+
     ></div>
 
+
+
     <section class="editor-pane">
+
       <app-workspace-editor
+
         [tabs]="tabs()"
+
         [activePath]="activePath()"
+
         [shellOpen]="shellOpen()"
+
         (tabSelect)="selectTab($event)"
+
         (tabClose)="closeTab($event)"
+
         (save)="saveTab($event)"
+
       />
+
     </section>
+
   </div>
 
-  @if (shellOpen()) {
-    <div class="shell-pane">
-      <app-workspace-terminal [cwd]="rootPath()" (closed)="shellOpen.set(false)" />
+
+
+  @if (terminalTabsList().length > 0) {
+    <div class="shell-pane" [hidden]="!shellOpen()">
+      <div class="shell-tab-bar">
+        @for (tab of terminalTabsList(); track tab.id) {
+          <button
+            type="button"
+            class="shell-tab"
+            [class.active]="tab.id === activeTerminalTabId()"
+            (click)="selectTerminalTab(tab.id)"
+          >
+            {{ tab.label }}
+            <span
+              class="shell-tab-close"
+              (click)="closeTerminalTab(tab.id); $event.stopPropagation()"
+              title="Close terminal"
+            >&times;</span>
+          </button>
+        }
+        <button
+          type="button"
+          class="shell-tab shell-tab-add"
+          title="New terminal"
+          (click)="addTerminalTab()"
+        >
+          +
+        </button>
+      </div>
+
+      @for (tab of terminalTabsList(); track tab.id) {
+        <app-workspace-terminal
+          [class.shell-tab-hidden]="tab.id !== activeTerminalTabId()"
+          [cwd]="rootPath()"
+          [agentId]="agentIdSignal()"
+          [workspacePath]="rootPath()"
+          [mirrorAgent]="tab.kind === 'agent'"
+          [title]="tab.label"
+          (closed)="closeTerminalTab(tab.id)"
+        />
+      }
     </div>
   }
 
+
+
   <input
+
     #fileUploadInput
+
     type="file"
+
     multiple
+
     hidden
+
     (change)="onFilesSelected($event)"
+
   />
+
   <input
+
     #folderUploadInput
+
     type="file"
+
     multiple
+
     hidden
+
     webkitdirectory
+
     (change)="onFilesSelected($event)"
+
   />
+
 </div>
+
+

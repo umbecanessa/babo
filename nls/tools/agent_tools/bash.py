@@ -17,8 +17,10 @@ Output handling:
     - curl commands get ``-f -sS`` by default (HTTP errors fail; no progress
       meter). Pass ``-v``, ``-#``, or ``--progress-bar`` for verbose output.
 
-Ported from pi-mono's bash tool with cross-platform adaptations for NLS
-(supports both Linux/macOS and Windows via subprocess).
+Ported from pi-mono's bash tool with cross-platform adaptations for NLS.
+Agent commands run in a persistent PTY shell (ConPTY / POSIX PTY) so dev
+servers and installs are isolated from the Babo runtime — same model as
+Cursor integrated terminals.
 """
 
 from __future__ import annotations
@@ -242,12 +244,30 @@ _PYTHON_CHILD_PID_RE = re.compile(
     r"(?:^|\n)\s*(?:INFO|DEBUG)?:?\s*Started server process \[(\d+)\]",
     re.IGNORECASE,
 )
+_UVICORN_RELOADER_PID_RE = re.compile(
+    r"Started reloader process \[(\d+)\]",
+    re.IGNORECASE,
+)
 
 
 def _process_is_alive(pid: int) -> bool:
     """Return True if *pid* still exists (best-effort, cross-platform)."""
     if not pid or pid <= 0:
         return False
+    if _IS_WINDOWS:
+        try:
+            import psutil
+
+            return psutil.pid_exists(pid)
+        except ImportError:
+            import ctypes
+
+            access = 0x1000  # PROCESS_QUERY_LIMITED_INFORMATION
+            handle = ctypes.windll.kernel32.OpenProcess(access, False, int(pid))
+            if handle:
+                ctypes.windll.kernel32.CloseHandle(handle)
+                return True
+            return False
     try:
         os.kill(pid, 0)
     except ProcessLookupError:
@@ -263,7 +283,7 @@ def _extract_tracked_pid(output: str, wrapper_pid: int) -> int:
     """Prefer the real server child PID when logs expose it (Windows/npm)."""
     if not output:
         return wrapper_pid
-    for pat in (_NODE_CHILD_PID_RE, _PYTHON_CHILD_PID_RE):
+    for pat in (_NODE_CHILD_PID_RE, _PYTHON_CHILD_PID_RE, _UVICORN_RELOADER_PID_RE):
         match = pat.search(output)
         if match:
             try:
@@ -277,7 +297,7 @@ def _extract_tracked_pid(output: str, wrapper_pid: int) -> int:
 
 @dataclass
 class _DetachedProcessRecord:
-    proc: asyncio.subprocess.Process
+    proc: asyncio.subprocess.Process | None
     command: str
     cwd: str
     kind: str
@@ -434,8 +454,10 @@ class BashTool:
         on_output: Any | None = None,
         shared_cwd: Any | None = None,
         file_state_cache: object | None = None,
+        agent_id: str = "",
     ) -> None:
         self._cwd = cwd
+        self._agent_id = (agent_id or "").strip()
         self._workspace_root = cwd
         self._shared_cwd = shared_cwd
         self._file_state_cache = file_state_cache
@@ -447,6 +469,7 @@ class BashTool:
         self._on_processes_changed: Any | None = None
         # Processes detached after daemon/interactive detection.
         self._detached_records: list[_DetachedProcessRecord] = []
+        self._pty_shell_pid = 0
         # Per-project venv cache: None = not resolved yet, "" = failed
         self._project_venv_bin: str | None = None
         self._project_venv_root: str | None = None
@@ -488,9 +511,6 @@ class BashTool:
         pid = rec.display_pid
         if not pid:
             return False
-        if rec.proc.returncode is None:
-            return _process_is_alive(pid)
-        # Wrapper exited (npm.cmd on Windows) but node child may still serve.
         return _process_is_alive(pid)
 
     def _reap_finished_procs(self) -> None:
@@ -513,13 +533,15 @@ class BashTool:
 
     async def _register_detached(
         self,
-        proc: asyncio.subprocess.Process,
+        proc: asyncio.subprocess.Process | None,
         command: str,
         output: str,
         kind: str,
+        *,
+        tracked_pid: int = 0,
     ) -> None:
         resolved_kind, label = _infer_process_label(command, output, kind)
-        wrapper_pid = proc.pid or 0
+        wrapper_pid = tracked_pid or (proc.pid if proc else 0) or 0
         tracked_pid = _extract_tracked_pid(output, wrapper_pid)
         self._detached_records.append(_DetachedProcessRecord(
             proc=proc,
@@ -535,6 +557,7 @@ class BashTool:
     def list_detached_processes(self) -> list[dict[str, Any]]:
         """Return live detached project processes for UI / API."""
         self._reap_finished_procs()
+        self._reconcile_workspace_servers()
         return [
             {
                 "pid": rec.display_pid,
@@ -548,12 +571,79 @@ class BashTool:
             if self._record_is_alive(rec) and rec.display_pid
         ]
 
+    def _reconcile_workspace_servers(self) -> None:
+        """Adopt listening dev servers under the workspace missed by detach tracking."""
+        try:
+            import psutil
+        except ImportError:
+            return
+
+        ws = Path(self._workspace_root).resolve()
+        ws_token = ws.as_posix().lower()
+        known = {
+            rec.display_pid
+            for rec in self._detached_records
+            if rec.display_pid
+        }
+        protected = self._nls_pids()
+
+        for conn in psutil.net_connections(kind="inet"):
+            if conn.status != psutil.CONN_LISTEN or not conn.laddr or not conn.pid:
+                continue
+            pid = int(conn.pid)
+            if pid in known or pid in protected:
+                continue
+            try:
+                proc = psutil.Process(pid)
+                cmdline = " ".join(proc.cmdline())
+            except (psutil.Error, OSError):
+                continue
+            if not cmdline:
+                continue
+            cmd_lower = cmdline.lower()
+            if not any(
+                token in cmd_lower
+                for token in (
+                    "uvicorn", "vite", "webpack", "flask", "django",
+                    "gunicorn", "npm", "node", "next", "runserver",
+                )
+            ):
+                continue
+            in_workspace = ws_token in cmd_lower
+            if not in_workspace:
+                try:
+                    cwd = Path(proc.cwd()).resolve()
+                    in_workspace = ws in cwd.parents or cwd == ws
+                except (psutil.Error, OSError):
+                    in_workspace = False
+            if not in_workspace:
+                continue
+            port = getattr(conn.laddr, "port", None)
+            kind, label = _infer_process_label(cmdline, cmdline, "server")
+            if port and f":{port}" not in label:
+                label = f"{label} :{port}" if label else f"Port :{port}"
+            self._detached_records.append(_DetachedProcessRecord(
+                proc=None,
+                command=cmdline[:500],
+                cwd=str(ws),
+                kind=kind,
+                label=label or f"Port :{port or '?'}",
+                tracked_pid=pid,
+            ))
+            known.add(pid)
+
     async def kill_detached(self, pid: int) -> bool:
         """Kill a tracked detached process by PID. Returns True if found."""
         self._reap_finished_procs()
         for idx, rec in enumerate(self._detached_records):
             if rec.display_pid != pid:
                 continue
+            if rec.display_pid == self._pty_shell_pid:
+                logger.warning(
+                    "Refusing to kill agent PTY shell pid=%s via kill_detached",
+                    pid,
+                )
+                return False
             _kill_process_tree(rec.display_pid)
             self._detached_records.pop(idx)
             await self._notify_processes_changed()
@@ -568,7 +658,7 @@ class BashTool:
         """
         self._reap_finished_procs()
         for rec in self._detached_records:
-            if rec.display_pid:
+            if rec.display_pid and rec.display_pid != self._pty_shell_pid:
                 _kill_process_tree(rec.display_pid)
         self._detached_records.clear()
 
@@ -665,77 +755,14 @@ class BashTool:
         return self._PYTHON_INVOCATION_RE.sub(_repl, command)
 
     def _build_isolated_env(self, cwd: str) -> dict[str, str]:
-        """Build an environment that isolates the agent from the host user.
+        """Build an environment that isolates the agent from the host user."""
+        from .shell_env import build_agent_shell_env
 
-        Overrides HOME, git config, and gh CLI config so the agent
-        operates with its own identity and credentials without
-        polluting or reading the host user's configuration.
-
-        The agent's project venv (if available) is prepended to PATH
-        so ``python`` and ``pip`` resolve to the project's isolated
-        interpreter — never the NLS server's runtime.
-        """
-        env = {**os.environ}
-        agent_home = str(Path(cwd).resolve())
-
-        _proj_venv = self._ensure_project_venv()
-        if _proj_venv:
-            env["PATH"] = _proj_venv + os.pathsep + env.get("PATH", "")
-            env["VIRTUAL_ENV"] = str(Path(_proj_venv).parent)
-
-        # Git: use agent-local config instead of the host user's
-        env["GIT_CONFIG_GLOBAL"] = str(Path(agent_home) / ".gitconfig")
-        env["GIT_CONFIG_NOSYSTEM"] = "1"
-        env["GIT_TERMINAL_PROMPT"] = "0"
-
-        # GitHub CLI: use agent-local config
-        gh_config = Path(agent_home) / ".config" / "gh"
-        env["GH_CONFIG_DIR"] = str(gh_config)
-
-        # Always configure the git credential helper so git clone/push
-        # can authenticate via gh CLI token once the agent logs in.
-        _ensure_gh_credential_helper(Path(agent_home) / ".gitconfig")
-
-        # If the agent has already authenticated with `gh auth login`,
-        # read the stored token and expose it as GH_TOKEN / GITHUB_TOKEN
-        # so that both `gh` CLI and `git` HTTPS operations work.
-        # Otherwise, clear host tokens to maintain isolation.
-        gh_hosts = gh_config / "hosts.yml"
-        if gh_hosts.exists():
-            token = _read_gh_token(gh_hosts)
-            if token:
-                env["GH_TOKEN"] = token
-                env["GITHUB_TOKEN"] = token
-            for key in ["GITHUB_ENTERPRISE_TOKEN"]:
-                env.pop(key, None)
-        else:
-            for key in ["GITHUB_TOKEN", "GH_TOKEN", "GITHUB_ENTERPRISE_TOKEN"]:
-                env.pop(key, None)
-
-        # macOS: ensure common package manager paths are available.
-        # Non-interactive shells (subprocess) don't source .zshrc/.zprofile,
-        # so Homebrew and MacPorts paths may be missing.
-        if sys.platform == "darwin":
-            extra_paths = [
-                "/opt/homebrew/bin",
-                "/opt/homebrew/sbin",
-                "/usr/local/bin",
-            ]
-            current = env.get("PATH", "")
-            for p in reversed(extra_paths):
-                if os.path.isdir(p) and p not in current:
-                    env["PATH"] = p + os.pathsep + env["PATH"]
-
-        # XDG dirs: redirect config/data to agent workspace
-        env["XDG_CONFIG_HOME"] = str(Path(agent_home) / ".config")
-        env["XDG_DATA_HOME"] = str(Path(agent_home) / ".local" / "share")
-
-        # Windows: force UTF-8 for Python subprocesses (avoids cp1252 mojibake).
-        if sys.platform == "win32":
-            env["PYTHONUTF8"] = "1"
-            env["PYTHONIOENCODING"] = "utf-8"
-
-        return env
+        return build_agent_shell_env(
+            self._workspace_root,
+            cwd,
+            venv_bin=self._ensure_project_venv(),
+        )
 
     def _friendly_cwd(self) -> str:
         """Return a short CWD display relative to the workspace root."""
@@ -1572,8 +1599,10 @@ class BashTool:
 
         if self._is_self_destructive(command):
             daemon_pids = [
-                str(rec.proc.pid) for rec in self._detached_records
-                if rec.proc.returncode is None and rec.proc.pid
+                str(rec.display_pid) for rec in self._detached_records
+                if rec.display_pid
+                and rec.display_pid != self._pty_shell_pid
+                and self._record_is_alive(rec)
             ]
             hint = ""
             if daemon_pids:
@@ -1692,13 +1721,352 @@ class BashTool:
 
     _CWD_SENTINEL = "__NLS_CWD__"
 
+    async def _run_command_via_pty(
+        self,
+        command: str,
+        timeout: int | None,
+        signal_event: asyncio.Event | None,
+    ) -> ToolResult:
+        """Run a command in the agent's persistent PTY shell (Cursor-style)."""
+        from server.services.agent_pty_pool import get_agent_pty_pool
+        from server.services.pty_session import strip_ansi
+
+        pool = get_agent_pty_pool()
+        from server.services.pty_workspace import normalize_pty_workspace
+
+        try:
+            from server.config import get_settings
+
+            agents_dir = get_settings().agents_dir
+        except Exception:
+            agents_dir = None
+        workspace = normalize_pty_workspace(
+            self._agent_id, self._workspace_root, agents_dir=agents_dir,
+        )
+        session = await pool.get_session(
+            agent_id=self._agent_id,
+            workspace=workspace,
+            env=self._isolated_env,
+            cwd=self._cwd,
+        )
+        if session.shell_pid:
+            self._pty_shell_pid = session.shell_pid
+
+        last_plain = ""
+        last_line_count = 0
+
+        async def _on_chunk(plain: str) -> str | None:
+            nonlocal last_plain, last_line_count
+            last_plain = plain
+            if self._on_output:
+                lines = plain.splitlines()
+                for line in lines[last_line_count:]:
+                    try:
+                        await self._on_output(line + "\n")
+                    except Exception:
+                        pass
+                last_line_count = len(lines)
+            for pat in _INTERACTIVE_PATTERNS:
+                if pat.search(plain):
+                    logger.info(
+                        "Interactive prompt detected: %s",
+                        plain.strip()[-120:],
+                    )
+                    return "interactive"
+            for pat in _DAEMON_PATTERNS:
+                if pat.search(plain):
+                    logger.info(
+                        "Daemon/server started detected: %s",
+                        plain.strip()[-120:],
+                    )
+                    return "daemon"
+            return None
+
+        pty_result = await session.run_command(
+            command,
+            timeout=float(timeout) if timeout else None,
+            abort_event=signal_event,
+            on_chunk=_on_chunk,
+        )
+
+        if pty_result.aborted:
+            try:
+                await session.write("\x03")
+            except Exception:
+                pass
+
+        text = pty_result.output
+        timed_out = pty_result.timed_out
+        aborted = pty_result.aborted
+        early = pty_result.early_reason
+        shell_pid = pty_result.shell_pid or 0
+
+        if early == "interactive":
+            await asyncio.sleep(3)
+            partial = strip_ansi(text)
+            return ToolResult(
+                content=(
+                    "[INTERACTIVE PROMPT DETECTED — command is waiting "
+                    "for user action]\n\n"
+                    f"The command printed:\n{partial}\n\n"
+                    "The command is still running in the agent PTY shell "
+                    "and will complete once the external action is done."
+                ),
+                is_error=False,
+                details={"exit_code": None, "interactive": True, "pty": True},
+            )
+
+        if early == "daemon" or (
+            timed_out
+            and timeout
+            and self._is_server_launch(command)
+            and _process_is_alive(
+                _extract_tracked_pid(strip_ansi(text), shell_pid) or shell_pid
+            )
+        ):
+            await asyncio.sleep(3 if early == "daemon" else 0)
+            partial = strip_ansi(text)
+            from nls.platform_shell import looks_like_python_runtime_crash
+
+            if looks_like_python_runtime_crash(partial, command=command):
+                try:
+                    await session.write("\x03")
+                except Exception:
+                    pass
+                return ToolResult(
+                    content=(
+                        partial
+                        + "\n\n[ERROR] Server process crashed during startup "
+                        "(see traceback above)."
+                    ),
+                    is_error=True,
+                    details={"startup_crash": True, "pty": True},
+                )
+            tracked = _extract_tracked_pid(partial, 0)
+            if tracked and tracked != shell_pid:
+                await self._register_detached(
+                    None, command, partial, "server", tracked_pid=tracked,
+                )
+                pid_hint = tracked
+            else:
+                pid_hint = "unknown (see output)"
+            return ToolResult(
+                content=(
+                    "[SERVER/DAEMON STARTED — running in agent PTY "
+                    f"(pid: {pid_hint})]\n\n"
+                    f"The command printed:\n{partial}\n\n"
+                    "The server is running in the agent terminal session. "
+                    "Do NOT run the same start command again."
+                ),
+                is_error=False,
+                details={
+                    "exit_code": None,
+                    "daemon": True,
+                    "pid": tracked if tracked and tracked != shell_pid else None,
+                    "pty": True,
+                    "timed_out": timed_out,
+                },
+            )
+
+        return self._build_command_result(
+            command,
+            text,
+            exit_code=pty_result.exit_code,
+            timed_out=timed_out,
+            aborted=aborted,
+            timeout=timeout,
+        )
+
+    def _build_command_result(
+        self,
+        command: str,
+        text: str,
+        *,
+        exit_code: int | None,
+        timed_out: bool,
+        aborted: bool,
+        timeout: int | None,
+    ) -> ToolResult:
+        """Parse sentinels, truncate output, and build the bash ToolResult."""
+        from server.services.pty_session import MARKER_CWD, MARKER_EXIT
+
+        _sentinel_re = re.compile(
+            rf'{re.escape(MARKER_CWD)}(.+?){re.escape(MARKER_CWD)}'
+        )
+        _exit_re = re.compile(
+            rf"{re.escape(MARKER_EXIT)}(\d+)",
+            re.MULTILINE,
+        )
+        _cwd_m = _sentinel_re.search(text)
+        if _cwd_m:
+            new_cwd = _cwd_m.group(1).strip()
+            if new_cwd and Path(new_cwd).is_dir():
+                old_cwd = self._cwd
+                guarded_cwd = _guard_bash_cwd_change(old_cwd, new_cwd)
+                self._cwd = guarded_cwd
+                if self._shared_cwd is not None:
+                    self._shared_cwd.path = guarded_cwd
+                if guarded_cwd != old_cwd:
+                    self._project_venv_bin = None
+                    self._project_venv_root = None
+                    logger.info("Bash CWD changed: %s -> %s", old_cwd, guarded_cwd)
+            text = _sentinel_re.sub("", text)
+        text = _exit_re.sub("", text).rstrip("\n")
+
+        if _CURL_BIN_RE.search(command):
+            text = self._strip_curl_progress(text)
+
+        truncated_text, was_truncated, trunc_details = truncate_tail(
+            text, self._max_lines, self._max_bytes,
+        )
+
+        temp_path = None
+        if was_truncated:
+            try:
+                fd, temp_path = tempfile.mkstemp(prefix="nls-bash-", suffix=".log")
+                with os.fdopen(fd, "w", encoding="utf-8") as f:
+                    f.write(text)
+            except Exception:
+                temp_path = None
+
+        result_text = truncated_text if truncated_text else "(no output)"
+
+        if was_truncated and temp_path:
+            start_line = trunc_details.get("total_lines", 0) - trunc_details.get("output_lines", 0) + 1
+            end_line = trunc_details.get("total_lines", 0)
+            result_text += (
+                f"\n\n[Showing lines {start_line}-{end_line} of "
+                f"{trunc_details.get('total_lines', '?')}. "
+                f"Full output: {temp_path}]"
+            )
+
+        if aborted:
+            result_text += "\n\nCommand aborted."
+            return ToolResult(
+                content=result_text,
+                is_error=True,
+                details={
+                    "exit_code": exit_code,
+                    "aborted": True,
+                    "pty": bool(self._agent_id),
+                    "truncation": trunc_details if was_truncated else None,
+                    "full_output_path": temp_path,
+                },
+            )
+
+        if timed_out:
+            result_text += f"\n\nCommand timed out after {timeout} seconds."
+            _has_meaningful_output = len(text.strip()) > 20
+            if _has_meaningful_output:
+                result_text += (
+                    " The command produced output before the timeout — "
+                    "it may still be running in the agent PTY shell."
+                )
+            return ToolResult(
+                content=result_text,
+                is_error=not _has_meaningful_output,
+                details={
+                    "exit_code": exit_code,
+                    "timed_out": True,
+                    "timeout": timeout,
+                    "pty": bool(self._agent_id),
+                    "truncation": trunc_details if was_truncated else None,
+                    "full_output_path": temp_path,
+                },
+            )
+
+        is_error = exit_code is not None and exit_code != 0
+        if is_error:
+            result_text += f"\n\nCommand exited with code {exit_code}."
+            if exit_code == 22 and _CURL_BIN_RE.search(command):
+                result_text += (
+                    "\n(curl: HTTP 4xx/5xx response — fix auth, URL, or "
+                    "payload before retrying the same request.)"
+                )
+            _path_hint = self._suggest_path_fix(truncated_text, command)
+            if _path_hint:
+                result_text += f"\n{_path_hint}"
+            _shell_hints = format_shell_error_hints(truncated_text, command, self._cwd)
+            if _shell_hints:
+                result_text += f"\n{_shell_hints}"
+
+        if not is_error and truncated_text and _GH_BIN_RE.search(command):
+            _gh_lower = truncated_text.lower()
+            if any(p in _gh_lower for p in (
+                "gh auth login",
+                "to get started with github cli",
+                "not logged in",
+                "authentication failed",
+            )):
+                is_error = True
+                result_text += format_gh_auth_required_hint()
+
+        if not is_error and truncated_text:
+            if looks_like_shell_command_failure(truncated_text, command):
+                is_error = True
+                _api_hints = format_shell_error_hints(truncated_text, command, self._cwd)
+                if _api_hints:
+                    result_text += f"\n{_api_hints}"
+
+        if not is_error and truncated_text:
+            _lower = truncated_text.lower()
+            if any(kw in _lower for kw in (
+                "deprecat", "warning:", "warn:", "deprecated",
+                "flag --", "has been deprecated",
+            )):
+                result_text += (
+                    "\n\n(Note: command succeeded (exit code 0) despite "
+                    "the deprecation/warning message above.)"
+                )
+
+        result_text += f"\n\n[CWD: {self._friendly_cwd()}]{self._venv_context_suffix()}"
+        if self._project_venv_bin == "" and self._project_venv_root:
+            from .project_runtime import (
+                check_venv_location_allowed,
+                dual_venv_conflict_message,
+                resolve_guardrail_workspace,
+            )
+            scope = resolve_guardrail_workspace(
+                self._cwd,
+                self._workspace_root,
+                plan_project_dir=self._plan_project_dir() or None,
+            )
+            blocked = (
+                check_venv_location_allowed(self._project_venv_root, scope)
+                or dual_venv_conflict_message(
+                    scope,
+                    target_venv_root=self._project_venv_root,
+                )
+            )
+            if blocked:
+                result_text += f"\n[VENV BLOCKED] {blocked}"
+
+        return ToolResult(
+            content=result_text,
+            is_error=is_error,
+            details={
+                "exit_code": exit_code,
+                "command": command,
+                "pty": bool(self._agent_id),
+                "truncation": trunc_details if was_truncated else None,
+                "full_output_path": temp_path,
+            },
+        )
+
     async def _run_command(
         self,
         command: str,
         timeout: int | None,
         signal_event: asyncio.Event | None,
     ) -> ToolResult:
-        """Run a command via asyncio subprocess with line-by-line streaming."""
+        """Run a command via the agent PTY shell or legacy subprocess."""
+        if self._agent_id and os.environ.get("BABO_BASH_LEGACY", "").lower() not in (
+            "1", "true", "yes",
+        ):
+            return await self._run_command_via_pty(command, timeout, signal_event)
+
+        # Legacy subprocess path (tests / BABO_BASH_LEGACY=1 only).
+        # Production agents always use the PTY shell via _run_command_via_pty.
 
         # Append a hidden pwd sentinel so we can track CWD changes.
         # The sentinel line is stripped from the output before returning.
@@ -1890,6 +2258,48 @@ class BashTool:
                     pass
             else:
                 timed_out = True
+                partial_on_timeout = b"".join(output_chunks).decode(
+                    "utf-8", errors="replace",
+                )
+                if (
+                    timeout
+                    and self._is_server_launch(command)
+                    and _process_is_alive(proc.pid or 0)
+                ):
+                    read_task.cancel()
+                    try:
+                        await read_task
+                    except (asyncio.CancelledError, Exception):
+                        pass
+                    for task in pending:
+                        task.cancel()
+                        try:
+                            await task
+                        except (asyncio.CancelledError, Exception):
+                            pass
+                    self._reap_finished_procs()
+                    await self._register_detached(
+                        proc, command, partial_on_timeout, "server",
+                    )
+                    tracked = _extract_tracked_pid(
+                        partial_on_timeout, proc.pid or 0,
+                    )
+                    return ToolResult(
+                        content=(
+                            "[SERVER/DAEMON STARTED — process detached to "
+                            f"background (pid: {tracked})]\n\n"
+                            f"The command printed:\n{partial_on_timeout}\n\n"
+                            "The server is still running after the wait "
+                            "window elapsed."
+                        ),
+                        is_error=False,
+                        details={
+                            "exit_code": None,
+                            "daemon": True,
+                            "pid": tracked,
+                            "timed_out": True,
+                        },
+                    )
                 _kill_process_tree(proc.pid)
                 read_task.cancel()
                 try:
@@ -1916,188 +2326,13 @@ class BashTool:
         output = b"".join(output_chunks)
         text = output.decode("utf-8", errors="replace")
 
-        # Parse and strip the CWD sentinel, then update shared CWD.
-        _sentinel_re = re.compile(
-            rf'{re.escape(self._CWD_SENTINEL)}'
-            rf'(.+?)'
-            rf'{re.escape(self._CWD_SENTINEL)}'
-        )
-        _cwd_m = _sentinel_re.search(text)
-        if _cwd_m:
-            new_cwd = _cwd_m.group(1).strip()
-            if new_cwd and Path(new_cwd).is_dir():
-                old_cwd = self._cwd
-                guarded_cwd = _guard_bash_cwd_change(old_cwd, new_cwd)
-                self._cwd = guarded_cwd
-                if self._shared_cwd is not None:
-                    self._shared_cwd.path = guarded_cwd
-                if guarded_cwd != old_cwd:
-                    self._project_venv_bin = None
-                    self._project_venv_root = None
-                    logger.info(
-                        "Bash CWD changed: %s -> %s", old_cwd, guarded_cwd,
-                    )
-                elif new_cwd != old_cwd:
-                    logger.warning(
-                        "Bash CWD change blocked (double-nest): %s -> %s",
-                        old_cwd, new_cwd,
-                    )
-            text = _sentinel_re.sub("", text).rstrip("\n")
-
-        if _CURL_BIN_RE.search(command):
-            text = self._strip_curl_progress(text)
-
-        truncated_text, was_truncated, trunc_details = truncate_tail(
-            text, self._max_lines, self._max_bytes,
-        )
-
-        temp_path = None
-        if was_truncated:
-            try:
-                fd, temp_path = tempfile.mkstemp(
-                    prefix="nls-bash-", suffix=".log",
-                )
-                with os.fdopen(fd, "w", encoding="utf-8") as f:
-                    f.write(text)
-            except Exception:
-                temp_path = None
-
-        result_text = truncated_text if truncated_text else "(no output)"
-
-        if was_truncated and temp_path:
-            start_line = trunc_details.get(
-                "total_lines", 0,
-            ) - trunc_details.get("output_lines", 0) + 1
-            end_line = trunc_details.get("total_lines", 0)
-            result_text += (
-                f"\n\n[Showing lines {start_line}-{end_line} of "
-                f"{trunc_details.get('total_lines', '?')}. "
-                f"Full output: {temp_path}]"
-            )
-
-        exit_code = proc.returncode
-
-        if aborted:
-            result_text += "\n\nCommand aborted."
-            return ToolResult(
-                content=result_text,
-                is_error=True,
-                details={
-                    "exit_code": exit_code,
-                    "aborted": True,
-                    "truncation": trunc_details if was_truncated else None,
-                    "full_output_path": temp_path,
-                },
-            )
-
-        if timed_out:
-            result_text += f"\n\nCommand timed out after {timeout} seconds."
-            _has_meaningful_output = len(text.strip()) > 20
-            _is_hard_error = not _has_meaningful_output
-            if _has_meaningful_output:
-                result_text += (
-                    " The command produced output before the timeout — "
-                    "it may be a long-running process. Consider running "
-                    "it without piping so daemon detection can work, or "
-                    "use a background launch method."
-                )
-            return ToolResult(
-                content=result_text,
-                is_error=_is_hard_error,
-                details={
-                    "exit_code": exit_code,
-                    "timed_out": True,
-                    "timeout": timeout,
-                    "partial_output": _has_meaningful_output,
-                    "truncation": trunc_details if was_truncated else None,
-                    "full_output_path": temp_path,
-                },
-            )
-
-        is_error = exit_code is not None and exit_code != 0
-        if is_error:
-            result_text += f"\n\nCommand exited with code {exit_code}."
-            if exit_code == 22 and _CURL_BIN_RE.search(command):
-                result_text += (
-                    "\n(curl: HTTP 4xx/5xx response — fix auth, URL, or "
-                    "payload before retrying the same request.)"
-                )
-            _path_hint = self._suggest_path_fix(truncated_text, command)
-            if _path_hint:
-                result_text += f"\n{_path_hint}"
-            _shell_hints = format_shell_error_hints(
-                truncated_text, command, self._cwd,
-            )
-            if _shell_hints:
-                result_text += f"\n{_shell_hints}"
-
-        # gh often exits 0 while printing "run gh auth login" — treat as failure.
-        if not is_error and truncated_text and _GH_BIN_RE.search(command):
-            _gh_lower = truncated_text.lower()
-            if any(p in _gh_lower for p in (
-                "gh auth login",
-                "to get started with github cli",
-                "not logged in",
-                "authentication failed",
-            )):
-                is_error = True
-                result_text += format_gh_auth_required_hint()
-
-        # PowerShell Invoke-RestMethod often exits 0 while printing JSON errors.
-        if not is_error and truncated_text:
-            if looks_like_shell_command_failure(truncated_text, command):
-                is_error = True
-                _api_hints = format_shell_error_hints(
-                    truncated_text, command, self._cwd,
-                )
-                if _api_hints:
-                    result_text += f"\n{_api_hints}"
-
-        # Annotate successful commands that produce deprecation/warning
-        # output — prevents the agent from misinterpreting noisy-but-ok
-        # commands (e.g. `gh repo delete --confirm` deprecation warning).
-        if not is_error and truncated_text:
-            _lower = truncated_text.lower()
-            if any(kw in _lower for kw in (
-                "deprecat", "warning:", "warn:", "deprecated",
-                "flag --", "has been deprecated",
-            )):
-                result_text += (
-                    "\n\n(Note: command succeeded (exit code 0) despite "
-                    "the deprecation/warning message above.)"
-                )
-
-        result_text += f"\n\n[CWD: {self._friendly_cwd()}]{self._venv_context_suffix()}"
-        if self._project_venv_bin == "" and self._project_venv_root:
-            from .project_runtime import (
-                check_venv_location_allowed,
-                dual_venv_conflict_message,
-                resolve_guardrail_workspace,
-            )
-            scope = resolve_guardrail_workspace(
-                self._cwd,
-                self._workspace_root,
-                plan_project_dir=self._plan_project_dir() or None,
-            )
-            blocked = (
-                check_venv_location_allowed(self._project_venv_root, scope)
-                or dual_venv_conflict_message(
-                    scope,
-                    target_venv_root=self._project_venv_root,
-                )
-            )
-            if blocked:
-                result_text += f"\n[VENV BLOCKED] {blocked}"
-
-        return ToolResult(
-            content=result_text,
-            is_error=is_error,
-            details={
-                "exit_code": exit_code,
-                "command": command,
-                "truncation": trunc_details if was_truncated else None,
-                "full_output_path": temp_path,
-            },
+        return self._build_command_result(
+            command,
+            text,
+            exit_code=proc.returncode,
+            timed_out=timed_out,
+            aborted=aborted,
+            timeout=timeout,
         )
 
     def _with_channel_api_hint(
@@ -2132,6 +2367,7 @@ def create_bash_tool(
     on_output: Any | None = None,
     shared_cwd: Any | None = None,
     file_state_cache: object | None = None,
+    agent_id: str = "",
 ) -> BashTool:
     """Factory: create a bash tool configured for a working directory."""
     return BashTool(
@@ -2143,4 +2379,5 @@ def create_bash_tool(
         on_output=on_output,
         shared_cwd=shared_cwd,
         file_state_cache=file_state_cache,
+        agent_id=agent_id,
     )

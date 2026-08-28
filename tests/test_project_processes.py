@@ -66,6 +66,25 @@ def test_infer_process_label_vite():
     assert ":5173" in label
 
 
+def test_process_is_alive_treats_windows_oserror_as_alive(monkeypatch):
+    """WinError 87 from os.kill(0) must not mark live servers as dead."""
+    import nls.tools.agent_tools.bash as bash_mod
+
+    monkeypatch.setattr(bash_mod, "_IS_WINDOWS", True)
+
+    def fake_pid_exists(pid: int) -> bool:
+        return pid == 4242
+
+    class FakePsutil:
+        @staticmethod
+        def pid_exists(pid: int) -> bool:
+            return fake_pid_exists(pid)
+
+    monkeypatch.setitem(__import__("sys").modules, "psutil", FakePsutil)
+    assert bash_mod._process_is_alive(4242) is True
+    assert bash_mod._process_is_alive(9999) is False
+
+
 @pytest.mark.asyncio
 async def test_list_and_kill_detached(tmp_path, monkeypatch):
     monkeypatch.setattr(

@@ -1,6 +1,6 @@
 import { Component, OnInit, OnDestroy, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { ProjectService } from './project.service';
 import { TeamsPanelComponent } from './teams-panel/teams-panel.component';
 import { BoardPanelComponent } from './board-panel/board-panel.component';
@@ -12,6 +12,7 @@ import { RunPanelComponent } from '../chat/run-panel/run-panel.component';
 import { OverviewBoardStripComponent } from './overview-board-strip/overview-board-strip.component';
 import { RunViewService } from '../../core/services/run-view.service';
 import { PlanSummary } from './project.models';
+import { WorkspaceTerminalTabsService } from '../../core/services/workspace-terminal-tabs.service';
 
 type PanelTab = 'overview' | 'board' | 'files';
 
@@ -101,13 +102,23 @@ export class ProjectsComponent implements OnInit, OnDestroy {
 
   constructor(
     private route: ActivatedRoute,
+    private router: Router,
     public svc: ProjectService,
     readonly runView: RunViewService,
+    private terminalTabs: WorkspaceTerminalTabsService,
   ) {}
 
   ngOnInit(): void {
     this.agentId = this.route.snapshot.params['agentId'];
     this.svc.init(this.agentId);
+    this.route.paramMap.subscribe((params) => {
+      const nextId = params.get('agentId') || '';
+      if (nextId && nextId !== this.agentId) {
+        this.agentId = nextId;
+        this.svc.destroy();
+        this.svc.init(this.agentId);
+      }
+    });
     this.route.queryParamMap.subscribe((params) => {
       const tab = params.get('tab');
       if (tab === 'overview' || tab === 'board' || tab === 'files') {
@@ -116,16 +127,27 @@ export class ProjectsComponent implements OnInit, OnDestroy {
       const path = params.get('path');
       if (path) {
         this.pendingFilePath.set(path);
+      } else {
+        this.pendingFilePath.set('');
+      }
+      if (params.get('terminal') === 'open' && this.agentId) {
+        this.terminalTabs.openPanel(this.agentId);
       }
     });
   }
 
   ngOnDestroy(): void {
+    this.terminalTabs.clearAgent(this.agentId);
     this.svc.destroy();
   }
 
   setTab(tab: PanelTab): void {
     this.activeTab.set(tab);
+    void this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { tab },
+      queryParamsHandling: 'merge',
+    });
   }
 
   openBoardTab(): void {

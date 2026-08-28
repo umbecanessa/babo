@@ -49,11 +49,10 @@ export function resolveAgentWorkspacePath(agentId: string): string {
   if (!agentId) return '';
 
   const nls = (window as { nls?: { getDataPath?: () => string } }).nls;
-  const base = nls?.getDataPath?.()
-    ? `${nls.getDataPath()}/agents/${agentId}/workspace`
-    : `C:/Users/umber/AppData/Roaming/babo-desktop/data/agents/${agentId}/workspace`;
+  const dataPath = nls?.getDataPath?.();
+  if (!dataPath) return '';
 
-  return base.replace(/\\/g, '/');
+  return `${dataPath}/agents/${agentId}/workspace`.replace(/\\/g, '/');
 }
 
 export function isInvalidWorkspacePathToken(filePath: string): boolean {
@@ -166,6 +165,36 @@ export function buildWorkspaceFilePathCandidates(
     const bare = sanitizeWorkspaceChipPath(filePath).replace(/^\/+/, '');
     if (bare && !bare.startsWith(`${pd}/`) && !isAbsoluteFilesystemPath(bare)) {
       add(`${root}/${pd}/${bare}`);
+    }
+  }
+  return out;
+}
+
+/** Try workspace project folders when project_dir is unknown. */
+export function expandWorkspaceFilePathCandidates(
+  workspaceRoot: string,
+  filePath: string,
+  projectDir: string | undefined,
+  extraProjectDirs: string[] = [],
+): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const addAll = (list: string[]) => {
+    for (const p of list) {
+      const n = p.replace(/\\/g, '/');
+      const key = n.toLowerCase();
+      if (n && !seen.has(key)) {
+        seen.add(key);
+        out.push(n);
+      }
+    }
+  };
+  addAll(buildWorkspaceFilePathCandidates(workspaceRoot, filePath, projectDir));
+  if (!projectDir) {
+    for (const dir of extraProjectDirs) {
+      const name = (dir || '').trim().replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+      if (!name) continue;
+      addAll(buildWorkspaceFilePathCandidates(workspaceRoot, filePath, name));
     }
   }
   return out;

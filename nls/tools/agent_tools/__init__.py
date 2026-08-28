@@ -318,6 +318,7 @@ def create_coding_tools(
             on_output=on_bash_output,
             shared_cwd=shared_cwd,
             file_state_cache=file_cache,
+            agent_id=agent_id,
         ),
         create_web_search_tool(),
         create_web_fetch_tool(),
@@ -331,7 +332,7 @@ def create_coding_tools(
         ),
         create_offer_download_tool(cwd),
         create_server_install_tool(),
-        create_project_install_tool(cwd, shared_cwd=shared_cwd),
+        create_project_install_tool(cwd, shared_cwd=shared_cwd, agent_id=agent_id),
         create_request_restart_tool(
             data_dir=data_dir,
             agent_id=agent_id,

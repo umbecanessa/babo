@@ -1,16 +1,29 @@
 import {
   buildWorkspaceFilePathCandidates,
   enrichWorkspaceRelativePath,
+  expandWorkspaceFilePathCandidates,
   isAbsoluteFilesystemPath,
   isInvalidWorkspacePathToken,
   resolvePathUnderWorkspace,
   sanitizeWorkspaceChipPath,
   toWorkspaceRelativePath,
+  resolveAgentWorkspacePath,
 } from './workspace-path.util';
 
 describe('workspace-path.util', () => {
   const root =
     'C:/Users/umber/AppData/Roaming/babo-desktop/data/agents/abc/workspace';
+
+  it('resolveAgentWorkspacePath uses nls data path when available', () => {
+    (window as any).nls = { getDataPath: () => 'D:/babo-data' };
+    expect(resolveAgentWorkspacePath('abc')).toBe('D:/babo-data/agents/abc/workspace');
+    delete (window as any).nls;
+  });
+
+  it('resolveAgentWorkspacePath returns empty without data path', () => {
+    delete (window as any).nls;
+    expect(resolveAgentWorkspacePath('abc')).toBe('');
+  });
 
   it('detects absolute Windows paths', () => {
     expect(isAbsoluteFilesystemPath('C:\\foo\\bar.ts')).toBe(true);
@@ -47,6 +60,18 @@ describe('workspace-path.util', () => {
       'icf-coaching-platform',
     );
     expect(candidates).toContain(`${root}/icf-coaching-platform/.gitignore`);
+  });
+
+  it('expands candidates across workspace project folders', () => {
+    const candidates = expandWorkspaceFilePathCandidates(
+      root,
+      'backend/app/models/transcript.py',
+      undefined,
+      ['ai-powered-icf-coaching-session'],
+    );
+    expect(candidates).toContain(
+      `${root}/ai-powered-icf-coaching-session/backend/app/models/transcript.py`,
+    );
   });
 
   it('does not double-prefix absolute explorer paths under workspace', () => {

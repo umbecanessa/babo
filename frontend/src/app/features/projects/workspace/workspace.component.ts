@@ -6,8 +6,10 @@ import {
   SimpleChanges,
   ViewChild,
   signal,
+  computed,
   HostListener,
   ElementRef,
+  inject,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FilesystemService } from '../../../core/services/filesystem.service';
@@ -17,8 +19,11 @@ import { WorkspaceEditorComponent } from './workspace-editor/workspace-editor.co
 import { WorkspaceTerminalComponent } from './workspace-terminal/workspace-terminal.component';
 import { EditorTab } from './workspace.models';
 import { AgentWorkspaceContextService } from '../../../core/services/agent-workspace-context.service';
+import { WorkspaceTerminalTabsService } from '../../../core/services/workspace-terminal-tabs.service';
+import { WorkspaceNavService } from '../../../core/services/workspace-nav.service';
 import {
   buildWorkspaceFilePathCandidates,
+  expandWorkspaceFilePathCandidates,
   isAbsoluteFilesystemPath,
   isPathUnderWorkspace,
   migrateWorkspacePath,
@@ -39,6 +44,8 @@ export class WorkspaceComponent implements OnInit, OnChanges {
   @Input() workspacePath = '';
   @Input() initialFilePath = '';
 
+  readonly agentIdSignal = signal('');
+
   @ViewChild(WorkspaceEditorComponent) editorPanel?: WorkspaceEditorComponent;
   @ViewChild(WorkspaceExplorerComponent) explorerPanel?: WorkspaceExplorerComponent;
   @ViewChild('fileUploadInput') fileUploadInput?: ElementRef<HTMLInputElement>;
@@ -48,8 +55,13 @@ export class WorkspaceComponent implements OnInit, OnChanges {
   tabs = signal<EditorTab[]>([]);
   activePath = signal('');
   explorerWidth = signal(260);
-  shellOpen = signal(false);
   uploading = signal(false);
+
+  private readonly terminalTabs = inject(WorkspaceTerminalTabsService);
+  private readonly workspaceNav = inject(WorkspaceNavService);
+  shellOpen = computed(() => this.terminalTabs.panelOpen(this.agentIdSignal())());
+  terminalTabsList = computed(() => this.terminalTabs.tabs(this.agentIdSignal())());
+  activeTerminalTabId = computed(() => this.terminalTabs.activeTabId(this.agentIdSignal())());
 
   private resizing = false;
   private resizeStartX = 0;
@@ -62,12 +74,22 @@ export class WorkspaceComponent implements OnInit, OnChanges {
   ) {}
 
   ngOnInit(): void {
+    this.agentIdSignal.set(this.agentId);
     const root = this.workspacePath || resolveAgentWorkspacePath(this.agentId);
     this.rootPath.set(root);
+    this.workspaceCtx.hydrateAgent(this.agentId);
     this._openInitialFileIfNeeded();
   }
 
   ngOnChanges(changes: SimpleChanges): void {
+    if (changes['agentId']) {
+      this.agentIdSignal.set(this.agentId);
+      const root = this.workspacePath || resolveAgentWorkspacePath(this.agentId);
+      if (root) {
+        this.rootPath.set(root);
+      }
+      this.workspaceCtx.hydrateAgent(this.agentId);
+    }
     if (changes['initialFilePath']) {
       this._openInitialFileIfNeeded();
     }
@@ -114,12 +136,34 @@ export class WorkspaceComponent implements OnInit, OnChanges {
       }
     }
 
-    const candidates = buildWorkspaceFilePathCandidates(root, path, projectDir);
-    if (!candidates.length) {
-      this.toast.show('Invalid file path', 'error');
+    const openCandidates = (projectDirs: string[]) => {
+      const candidates = expandWorkspaceFilePathCandidates(
+        root,
+        path,
+        projectDir,
+        projectDir ? [] : projectDirs,
+      );
+      if (!candidates.length) {
+        this.toast.show('Invalid file path', 'error');
+        return;
+      }
+      this._openFileCandidate(candidates, 0);
+    };
+
+    if (projectDir || !root) {
+      openCandidates([]);
       return;
     }
-    this._openFileCandidate(candidates, 0);
+
+    this.fs.readDir(root).subscribe({
+      next: (res) => {
+        const dirs = (res.entries || [])
+          .filter((e) => e.isDirectory && !e.name.startsWith('.'))
+          .map((e) => e.name);
+        openCandidates(dirs);
+      },
+      error: () => openCandidates([]),
+    });
   }
 
   private _openFileCandidate(candidates: string[], index: number): void {
@@ -160,6 +204,7 @@ export class WorkspaceComponent implements OnInit, OnChanges {
   }
 
   private _readFileAt(absPath: string, candidates: string[], index: number): void {
+    this._rememberProjectDirFromAbsolute(absPath);
     const existing = this.tabs().find(
       (t) =>
         workspacePathsEqual(t.path, absPath)
@@ -217,6 +262,18 @@ export class WorkspaceComponent implements OnInit, OnChanges {
         this.toast.show(detail || 'Failed to read file', 'error');
       },
     });
+  }
+
+  /** Learn project_dir from a resolved absolute path under the workspace root. */
+  private _rememberProjectDirFromAbsolute(absPath: string): void {
+    const root = this.rootPath().replace(/\\/g, '/').replace(/\/+$/, '');
+    const norm = absPath.replace(/\\/g, '/');
+    if (!root || !norm.toLowerCase().startsWith(`${root.toLowerCase()}/`)) return;
+    const rel = norm.slice(root.length).replace(/^\/+/, '');
+    const first = rel.split('/')[0];
+    if (first && !first.startsWith('.')) {
+      this.workspaceCtx.setProjectDir(this.agentId, first);
+    }
   }
 
   selectTab(path: string): void {
@@ -300,10 +357,28 @@ export class WorkspaceComponent implements OnInit, OnChanges {
   }
 
   toggleShell(): void {
-    const opening = !this.shellOpen();
-    this.shellOpen.update((v) => !v);
-    if (opening) {
+    const wasOpen = this.shellOpen();
+    const nowOpen = this.terminalTabs.togglePanel(this.agentIdSignal());
+    if (nowOpen && !wasOpen) {
       (document.activeElement as HTMLElement | null)?.blur?.();
+      void this.workspaceNav.syncTerminalQuery(this.agentIdSignal(), true);
+    } else if (!nowOpen && wasOpen) {
+      void this.workspaceNav.syncTerminalQuery(this.agentIdSignal(), false);
+    }
+  }
+
+  selectTerminalTab(tabId: string): void {
+    this.terminalTabs.selectTab(this.agentIdSignal(), tabId);
+  }
+
+  addTerminalTab(): void {
+    this.terminalTabs.addStandaloneTab(this.agentIdSignal());
+  }
+
+  closeTerminalTab(tabId: string): void {
+    const stillOpen = this.terminalTabs.closeTab(this.agentIdSignal(), tabId);
+    if (!stillOpen) {
+      void this.workspaceNav.syncTerminalQuery(this.agentIdSignal(), false);
     }
   }
 

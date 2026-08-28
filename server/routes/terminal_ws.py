@@ -1,20 +1,12 @@
 """Terminal WebSocket endpoint for the NLS IDE.
 
 Provides a persistent shell session over WebSocket so the Angular
-frontend can embed a real terminal (via xterm.js) without Electron.
+frontend can embed a real terminal (via xterm.js).
 
-Protocol::
-
-    Client -> Server (JSON):
-        {"type": "input", "data": "ls -la\\r"}
-        {"type": "resize", "cols": 120, "rows": 30}
-        {"type": "cwd", "path": "/home/user/project"}
-
-    Server -> Client (JSON):
-        {"type": "ready"}
-        {"type": "output", "data": "..."}
-        {"type": "exit", "code": 0}
-        {"type": "error", "message": "..."}
+When ``agent_id`` and ``workspace`` query params are supplied, the UI
+mirrors the same PTY session the agent ``bash()`` tool uses (read-only).
+The agent session is created on first ``bash()`` — never pre-created
+with the wrong host environment.
 """
 
 from __future__ import annotations
@@ -23,274 +15,145 @@ import asyncio
 import json
 import logging
 import os
-import platform
-import shlex
-from typing import Any, Protocol
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
+
+from server.services.agent_pty_pool import get_agent_pty_pool
+from server.services.pty_workspace import normalize_pty_workspace
+from server.services.pty_session import PtySession
 
 logger = logging.getLogger(__name__)
 
+
+def _agents_dir():
+    try:
+        from server.config import get_settings
+
+        return get_settings().agents_dir
+    except Exception:
+        return None
+
 router = APIRouter(tags=["terminal"])
 
-# Track active terminal sessions
-_terminals: dict[str, dict[str, Any]] = {}
+_AGENT_ATTACH_POLL_SEC = 1.0
+_AGENT_ATTACH_WAIT_SEC = 120.0
+
+_standalone_sessions: dict[str, PtySession] = {}
 
 
-class _TerminalSession(Protocol):
-    async def start(self) -> None: ...
-    async def write(self, data: str) -> None: ...
-    async def resize(self, cols: int, rows: int) -> None: ...
-    async def close(self) -> int: ...
-
-
-class _UnixPtySession:
-    """Interactive shell via POSIX pseudo-terminal."""
-
-    def __init__(self, cwd: str, cols: int, rows: int) -> None:
-        self.cwd = cwd
-        self.cols = max(cols, 2)
-        self.rows = max(rows, 2)
-        self._master_fd: int | None = None
-        self._process: asyncio.subprocess.Process | None = None
-        self._read_task: asyncio.Task[None] | None = None
-        self._websocket: WebSocket | None = None
-
-    async def bind(self, websocket: WebSocket) -> None:
-        self._websocket = websocket
-
-    async def start(self) -> None:
-        import pty
-        import termios
-        import struct
-        import fcntl
-
-        shell = os.environ.get("SHELL", "/bin/bash")
-        master_fd, slave_fd = pty.openpty()
-        self._master_fd = master_fd
-
+async def _forward_output(
+    websocket: WebSocket,
+    queue: asyncio.Queue[str],
+    *,
+    stop: asyncio.Event,
+) -> None:
+    while not stop.is_set():
         try:
-            winsize = struct.pack("HHHH", self.rows, self.cols, 0, 0)
-            fcntl.ioctl(slave_fd, termios.TIOCSWINSZ, winsize)
-        except OSError:
-            pass
-
-        env = {
-            **os.environ,
-            "TERM": "xterm-256color",
-            "PYTHONIOENCODING": "utf-8",
-        }
-
-        self._process = await asyncio.create_subprocess_exec(
-            shell,
-            "-i",
-            stdin=slave_fd,
-            stdout=slave_fd,
-            stderr=slave_fd,
-            cwd=self.cwd,
-            env=env,
-            close_fds=True,
-            start_new_session=True,
-        )
-        os.close(slave_fd)
-
-        self._read_task = asyncio.create_task(self._read_loop())
-
-    async def write(self, data: str) -> None:
-        if self._master_fd is None:
-            return
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, os.write, self._master_fd, data.encode("utf-8"))
-
-    async def resize(self, cols: int, rows: int) -> None:
-        if self._master_fd is None or cols <= 0 or rows <= 0:
-            return
-        import fcntl
-        import struct
-        import termios
-
-        self.cols = cols
-        self.rows = rows
-        winsize = struct.pack("HHHH", rows, cols, 0, 0)
+            data = await asyncio.wait_for(queue.get(), timeout=0.5)
+        except asyncio.TimeoutError:
+            continue
         try:
-            await asyncio.get_running_loop().run_in_executor(
-                None,
-                lambda: fcntl.ioctl(self._master_fd, termios.TIOCSWINSZ, winsize),
-            )
-        except OSError:
-            pass
-
-    async def close(self) -> int:
-        if self._read_task:
-            self._read_task.cancel()
-            try:
-                await self._read_task
-            except asyncio.CancelledError:
-                pass
-        if self._master_fd is not None:
-            try:
-                os.close(self._master_fd)
-            except OSError:
-                pass
-            self._master_fd = None
-        proc = self._process
-        if proc and proc.returncode is None:
-            proc.terminate()
-            try:
-                await asyncio.wait_for(proc.wait(), timeout=3.0)
-            except asyncio.TimeoutError:
-                proc.kill()
-                await proc.wait()
-        return proc.returncode if proc else 0
-
-    async def _read_loop(self) -> None:
-        assert self._master_fd is not None
-        loop = asyncio.get_running_loop()
-        while True:
-            try:
-                data = await loop.run_in_executor(None, os.read, self._master_fd, 4096)
-            except OSError:
-                break
-            if not data:
-                break
-            if self._websocket:
-                try:
-                    await self._websocket.send_json(
-                        {
-                            "type": "output",
-                            "data": data.decode("utf-8", errors="replace"),
-                        }
-                    )
-                except Exception:
-                    break
+            await websocket.send_json({"type": "output", "data": data})
+        except Exception:
+            break
 
 
-class _WindowsPtySession:
-    """Interactive shell via ConPTY (pywinpty)."""
-
-    def __init__(self, cwd: str, cols: int, rows: int) -> None:
-        self.cwd = cwd
-        self.cols = max(cols, 2)
-        self.rows = max(rows, 2)
-        self._proc: Any = None
-        self._read_task: asyncio.Task[None] | None = None
-        self._websocket: WebSocket | None = None
-
-    async def bind(self, websocket: WebSocket) -> None:
-        self._websocket = websocket
-
-    async def start(self) -> None:
-        try:
-            from winpty import PtyProcess
-        except ImportError as exc:
-            raise RuntimeError(
-                "Interactive shell on Windows requires the pywinpty package. "
-                "Re-run desktop setup or: pip install pywinpty"
-            ) from exc
-
-        shell = os.environ.get("COMSPEC", "cmd.exe")
-        env = {
-            **os.environ,
-            "TERM": "xterm-256color",
-            "PYTHONIOENCODING": "utf-8",
-        }
-        loop = asyncio.get_running_loop()
-        self._proc = await loop.run_in_executor(
-            None,
-            lambda: PtyProcess.spawn(
-                shell,
-                cwd=self.cwd,
-                env=env,
-                dimensions=(self.rows, self.cols),
-            ),
-        )
-        self._read_task = asyncio.create_task(self._read_loop())
-
-    async def write(self, data: str) -> None:
-        if not self._proc:
-            return
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(None, self._proc.write, data)
-
-    async def resize(self, cols: int, rows: int) -> None:
-        if not self._proc or cols <= 0 or rows <= 0:
-            return
-        self.cols = cols
-        self.rows = rows
-        loop = asyncio.get_running_loop()
-        if hasattr(self._proc, "setwinsize"):
-            await loop.run_in_executor(None, self._proc.setwinsize, rows, cols)
-        elif hasattr(self._proc, "set_size"):
-            await loop.run_in_executor(None, self._proc.set_size, cols, rows)
-
-    async def close(self) -> int:
-        if self._read_task:
-            self._read_task.cancel()
-            try:
-                await asyncio.wait_for(self._read_task, timeout=1.0)
-            except (asyncio.CancelledError, asyncio.TimeoutError):
-                pass
-        proc = self._proc
-        self._proc = None
-        if not proc:
-            return 0
-        loop = asyncio.get_running_loop()
-        if proc.isalive():
-            await loop.run_in_executor(None, proc.terminate, True)
-        return 0
-
-    async def _read_loop(self) -> None:
-        loop = asyncio.get_running_loop()
-        while True:
-            proc = self._proc
-            if not proc or not proc.isalive():
-                break
-            try:
-                data = await loop.run_in_executor(None, proc.read, 4096)
-            except EOFError:
-                break
-            except Exception as exc:
-                logger.debug("Windows PTY read ended: %s", exc)
-                break
-            if not data:
-                await asyncio.sleep(0.02)
-                continue
-            if self._websocket:
-                try:
-                    await self._websocket.send_json({"type": "output", "data": data})
-                except Exception:
-                    break
-
-
-def _create_session(cwd: str, cols: int = 120, rows: int = 30) -> _TerminalSession:
-    if platform.system() == "Windows":
-        return _WindowsPtySession(cwd, cols, rows)
-    return _UnixPtySession(cwd, cols, rows)
-
-
-def _cd_command(path: str) -> str:
-    if platform.system() == "Windows":
-        return f'cd /d {shlex.quote(path)}\r'
-    return f'cd {shlex.quote(path)}\n'
+async def _wait_for_agent_session(
+    agent_id: str,
+    workspace: str,
+    *,
+    stop: asyncio.Event,
+) -> PtySession | None:
+    """Poll until bash() creates the agent PTY (or stop is set)."""
+    pool = get_agent_pty_pool()
+    deadline = asyncio.get_running_loop().time() + _AGENT_ATTACH_WAIT_SEC
+    while not stop.is_set():
+        session = pool.get_existing(agent_id, workspace)
+        if session is not None:
+            return session
+        if asyncio.get_running_loop().time() >= deadline:
+            return None
+        await asyncio.sleep(_AGENT_ATTACH_POLL_SEC)
+    return None
 
 
 @router.websocket("/ws/terminal")
-async def websocket_terminal(websocket: WebSocket):
-    """WebSocket terminal endpoint -- persistent shell session."""
+async def websocket_terminal(
+    websocket: WebSocket,
+    agent_id: str = Query(default=""),
+    workspace: str = Query(default=""),
+):
+    """WebSocket terminal — standalone shell or read-only mirror of agent PTY."""
     await websocket.accept()
 
     session_id = str(id(websocket))
-    session: _TerminalSession | None = None
+    session: PtySession | None = None
+    output_queue: asyncio.Queue[str] | None = None
+    stop = asyncio.Event()
+    forward_task: asyncio.Task[None] | None = None
+    attach_task: asyncio.Task[PtySession | None] | None = None
     exit_code = 0
+    attached_agent = (agent_id or "").strip()
+    mirror_mode = bool(attached_agent and workspace)
+    norm_workspace = (
+        normalize_pty_workspace(attached_agent, workspace, agents_dir=_agents_dir())
+        if mirror_mode else ""
+    )
 
     try:
-        cwd = os.getcwd()
-        session = _create_session(cwd)
-        await session.bind(websocket)
-        await session.start()
-        _terminals[session_id] = {"session": session, "cwd": cwd}
-        logger.info("Terminal session started: %s", session_id)
-        await websocket.send_json({"type": "ready"})
+        if mirror_mode:
+            pool = get_agent_pty_pool()
+            session = pool.get_existing(attached_agent, norm_workspace)
+            await websocket.send_json({
+                "type": "ready",
+                "mode": "mirror" if session else "waiting",
+                "message": (
+                    "Mirroring agent shell."
+                    if session
+                    else "Waiting for agent shell (starts on first bash command)…"
+                ),
+            })
+            if session is None:
+                attach_task = asyncio.create_task(
+                    _wait_for_agent_session(
+                        attached_agent, norm_workspace, stop=stop,
+                    ),
+                )
+                session = await attach_task
+                attach_task = None
+                if session is None:
+                    try:
+                        await websocket.send_json({
+                            "type": "error",
+                            "message": (
+                                "Agent shell not started within "
+                                f"{int(_AGENT_ATTACH_WAIT_SEC)}s"
+                            ),
+                        })
+                    except Exception:
+                        pass
+                    return
+                await websocket.send_json({"type": "mode", "mode": "mirror"})
+            output_queue = await session.subscribe()
+            forward_task = asyncio.create_task(
+                _forward_output(websocket, output_queue, stop=stop),
+            )
+            logger.info(
+                "Terminal mirroring agent PTY agent=%s workspace=%s",
+                attached_agent,
+                norm_workspace,
+            )
+        else:
+            cwd = os.getcwd()
+            session = PtySession(cwd=cwd, env=dict(os.environ))
+            await session.start()
+            _standalone_sessions[session_id] = session
+            output_queue = await session.subscribe()
+            forward_task = asyncio.create_task(
+                _forward_output(websocket, output_queue, stop=stop),
+            )
+            await websocket.send_json({"type": "ready", "mode": "standalone"})
+            logger.info("Terminal standalone session started: %s", session_id)
 
         while True:
             raw = await websocket.receive_text()
@@ -300,19 +163,27 @@ async def websocket_terminal(websocket: WebSocket):
                 msg = {"type": "input", "data": raw}
 
             msg_type = msg.get("type", "input")
+            if not session:
+                continue
 
             if msg_type == "input":
+                if mirror_mode:
+                    continue
                 await session.write(msg.get("data", ""))
 
             elif msg_type == "resize":
+                if mirror_mode:
+                    continue
                 cols = int(msg.get("cols") or 0)
                 rows = int(msg.get("rows") or 0)
                 await session.resize(cols, rows)
 
             elif msg_type == "cwd":
+                if mirror_mode:
+                    continue
                 new_cwd = msg.get("path", "")
                 if new_cwd:
-                    await session.write(_cd_command(new_cwd))
+                    await session.set_cwd(new_cwd)
 
     except WebSocketDisconnect:
         logger.info("Terminal WebSocket disconnected: %s", session_id)
@@ -323,18 +194,29 @@ async def websocket_terminal(websocket: WebSocket):
         except Exception:
             pass
     finally:
-        if session_id in _terminals:
-            del _terminals[session_id]
-
-        if session:
+        stop.set()
+        if attach_task and not attach_task.done():
+            attach_task.cancel()
             try:
-                exit_code = await session.close()
+                await attach_task
+            except asyncio.CancelledError:
+                pass
+        if forward_task:
+            forward_task.cancel()
+            try:
+                await forward_task
+            except asyncio.CancelledError:
+                pass
+        if session and output_queue is not None:
+            session.unsubscribe(output_queue)
+        if session_id in _standalone_sessions:
+            standalone = _standalone_sessions.pop(session_id)
+            try:
+                exit_code = await standalone.close()
             except Exception as exc:
                 logger.debug("Terminal close error: %s", exc)
-
         try:
             await websocket.send_json({"type": "exit", "code": exit_code})
         except Exception:
             pass
-
         logger.info("Terminal session ended: %s (exit %s)", session_id, exit_code)
