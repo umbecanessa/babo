@@ -217,14 +217,14 @@
             @if (!isDrowsyResponded($index)) {
               <div class="drowsy-actions">
                 <button class="drowsy-btn drowsy-yes" (click)="onDrowsyAction($index, 'confirm')">
-                  Yes, rest up
+                  {{ 'chat.prompt.restYes' | translate }}
                 </button>
                 <button class="drowsy-btn drowsy-no" (click)="onDrowsyAction($index, 'deny')">
-                  Stay awake
+                  {{ 'chat.prompt.stayAwake' | translate }}
                 </button>
               </div>
             } @else {
-              <span class="drowsy-responded">Responded</span>
+              <span class="drowsy-responded">{{ 'chat.prompt.responded' | translate }}</span>
             }
           </div>
         } @else if (msg.type === 'loop_budget_prompt') {
@@ -242,15 +242,15 @@
                   <button
                     class="budget-btn budget-extend"
                     (click)="onBudgetAction($index, 'extend', opt)">
-                    +{{ opt }} steps
+                    {{ 'chat.prompt.extendSteps' | translate:{ count: opt } }}
                   </button>
                 }
                 <button class="budget-btn budget-stop" (click)="onBudgetAction($index, 'stop')">
-                  Stop
+                  {{ 'chat.composer.stop' | translate }}
                 </button>
               </div>
             } @else {
-              <span class="budget-responded">Responded</span>
+              <span class="budget-responded">{{ 'chat.prompt.responded' | translate }}</span>
             }
           </div>
         } @else if (msg.type === 'delegate_card' && msg.delegate && !isInGroupedWave($index) && msg.delegate.teamId && isFirstInWave($index) && getWaveMemberIndices($index).length > 1) {
@@ -271,7 +271,7 @@
               <span class="delegate-wave-title">{{ waveLabel(waveMsg) }}</span>
               <span class="delegate-wave-sub">{{ waveSubtitle(memberIndices) }}</span>
               @if (waveMsg.delegate!.waveAttempt && waveMsg.delegate!.waveAttempt > 1) {
-                <span class="delegate-wave-retry">try {{ waveMsg.delegate!.waveAttempt }}</span>
+                <span class="delegate-wave-retry">{{ 'chat.delegate.try' | translate:{ n: waveMsg.delegate!.waveAttempt } }}</span>
               }
               <span class="delegate-wave-chevron"
                     [class.expanded]="!isWaveCollapsed(waveMsg.delegate!.teamId!, waveMsg.delegate!.waveAttempt)">
@@ -295,12 +295,12 @@
                         <span class="delegate-member-meta">
                           @if (member.delegate.status === 'running') {
                             @if (member.delegate.iterations && member.delegate.maxIterations) {
-                              <span>{{ member.delegate.iterations }}/{{ member.delegate.maxIterations }} iters</span>
+                              <span>{{ 'chat.delegate.iters' | translate:{ current: member.delegate.iterations, max: member.delegate.maxIterations } }}</span>
                             } @else {
-                              <span>working…</span>
+                              <span>{{ 'chat.delegate.working' | translate }}</span>
                             }
                           } @else {
-                            <span>{{ member.delegate.totalToolCalls || member.delegate.toolCalls.length }} tools</span>
+                            <span>{{ 'chat.delegate.tools' | translate:{ count: member.delegate.totalToolCalls || member.delegate.toolCalls.length } }}</span>
                           }
                         </span>
                         <span class="delegate-card-chevron" [class.expanded]="member.delegate.expanded">
@@ -310,7 +310,7 @@
                       @if (member.delegate.expanded) {
                         <div class="delegate-card-body delegate-member-body">
                           @if (!member.delegate.toolCalls.length && member.delegate.status === 'running') {
-                            <div class="delegate-card-empty">Starting work…</div>
+                            <div class="delegate-card-empty">{{ 'chat.delegate.starting' | translate }}</div>
                           }
                           @for (tc of visibleDelegateTools(member.delegate); track $index) {
                             <div class="delegate-tool-row" [class.error]="tc.isError">
@@ -332,7 +332,7 @@
                             </div>
                           }
                           @if (hiddenDelegateToolCount(member.delegate) > 0) {
-                            <div class="delegate-tool-more">+ {{ hiddenDelegateToolCount(member.delegate) }} more in Projects</div>
+                            <div class="delegate-tool-more">{{ 'chat.delegate.moreInProjects' | translate:{ count: hiddenDelegateToolCount(member.delegate) } }}</div>
                           }
                           @if (member.delegate.summary && member.delegate.status !== 'running') {
                             <div class="delegate-card-summary">{{ member.delegate.summary.split('\n\n[DELEGATE')[0] }}</div>
@@ -344,7 +344,7 @@
                 }
               </div>
             } @else {
-              <div class="delegate-wave-collapsed">{{ waveSubtitle(memberIndices) }} — expand for details</div>
+              <div class="delegate-wave-collapsed">{{ 'chat.delegate.expandDetails' | translate:{ summary: waveSubtitle(memberIndices) } }}</div>
             }
           </div>
         } @else if (msg.type === 'delegate_batch_pill') {
@@ -358,7 +358,7 @@
             </span>
             <span class="delegate-batch-text">{{ msg.content }}</span>
             @if (agentId) {
-              <a class="delegate-batch-link" [routerLink]="['/projects', agentId]">Projects</a>
+              <a class="delegate-batch-link" [routerLink]="['/projects', agentId]">{{ 'chat.delegate.projects' | translate }}</a>
             }
           </div>
         } @else if (msg.type === 'delegate_card' && msg.delegate) {
@@ -383,12 +383,12 @@
               <span class="delegate-card-meta">
                 @if (msg.delegate.status === 'running') {
                   @if (msg.delegate.iterations && msg.delegate.maxIterations) {
-                    <span class="delegate-card-badge running">{{ msg.delegate.iterations }}/{{ msg.delegate.maxIterations }} iters</span>
+                    <span class="delegate-card-badge running">{{ 'chat.delegate.iters' | translate:{ current: msg.delegate.iterations, max: msg.delegate.maxIterations } }}</span>
                   } @else {
-                    <span class="delegate-card-badge running">working...</span>
+                    <span class="delegate-card-badge running">{{ 'chat.delegate.workingDots' | translate }}</span>
                   }
                 } @else {
-                  <span class="delegate-card-stats">{{ msg.delegate.totalToolCalls || msg.delegate.toolCalls.length }} tools@if (msg.delegate.partialTimeout) { · partial}</span>
+                  <span class="delegate-card-stats">{{ 'chat.delegate.tools' | translate:{ count: msg.delegate.totalToolCalls || msg.delegate.toolCalls.length } }}@if (msg.delegate.partialTimeout) { · {{ 'chat.delegate.partial' | translate }}}</span>
                 }
               </span>
               <span class="delegate-card-chevron" [class.expanded]="msg.delegate.expanded">
@@ -398,7 +398,7 @@
             @if (msg.delegate.expanded) {
               <div class="delegate-card-body">
                 @if (!msg.delegate.toolCalls.length && msg.delegate.status === 'running') {
-                  <div class="delegate-card-empty">Starting work…</div>
+                  <div class="delegate-card-empty">{{ 'chat.delegate.starting' | translate }}</div>
                 }
                 @for (tc of visibleDelegateTools(msg.delegate); track $index) {
                   <div class="delegate-tool-row" [class.error]="tc.isError">
@@ -420,7 +420,7 @@
                   </div>
                 }
                 @if (hiddenDelegateToolCount(msg.delegate) > 0) {
-                  <div class="delegate-tool-more">+ {{ hiddenDelegateToolCount(msg.delegate) }} more in Projects</div>
+                  <div class="delegate-tool-more">{{ 'chat.delegate.moreInProjects' | translate:{ count: hiddenDelegateToolCount(msg.delegate) } }}</div>
                 }
                 @if (msg.delegate.summary && msg.delegate.status !== 'running') {
                   <div class="delegate-card-summary">{{ msg.delegate.summary.split('\n\n[DELEGATE')[0] }}</div>
@@ -721,7 +721,7 @@
           <div class="ask-user-card">
             <div class="ask-user-icon">&#9995;</div>
             <div class="ask-user-body">
-              <div class="ask-user-label">Agent is waiting for your answer</div>
+              <div class="ask-user-label">{{ 'chat.prompt.askWaiting' | translate }}</div>
               <div class="ask-user-question">{{ msg.content }}</div>
             </div>
           </div>

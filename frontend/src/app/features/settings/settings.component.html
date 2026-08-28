@@ -305,30 +305,30 @@
       </p>
 
       @if (subscriptionLoading()) {
-        <p class="field-hint">Loading subscription…</p>
+        <p class="field-hint">{{ 'settings.billing.loading' | translate }}</p>
       } @else if (subscription(); as sub) {
         @if (sub.billingExempt || sub.status === 'lifetime_comp') {
           <div class="info-card babo-provided">
             <h4 class="subsection-title">{{ 'settings.billing.lifetime' | translate }}</h4>
             <p class="field-hint">
-              You have complimentary Babo Cloud access
+              {{ 'settings.billing.lifetimeHint' | translate }}
               @if (sub.hostedGx10Enabled) {
-                including <strong>Babo Brain (GX10)</strong>.
+                {{ 'settings.billing.lifetimeGx10' | translate }}
               }
             </p>
-            <p class="info-pill ok">No subscription required</p>
+            <p class="info-pill ok">{{ 'settings.billing.noSubRequired' | translate }}</p>
           </div>
         } @else if (sub.status === 'none' || sub.status === 'canceled') {
           <div class="info-card prereq">
             <h4 class="subsection-title">{{ 'settings.billing.subscribe' | translate }}</h4>
             <p class="field-hint">
-              Hosted models require an active subscription. Your API key on this device (BYOK) still works without a sub.
+              {{ 'settings.billing.subscribeHint' | translate }}
             </p>
             <ul class="checklist">
-              <li>{{ cloudBasicPriceLabel }} — billed via Stripe</li>
-              <li>WhatsApp, Telegram, Gmail relay &amp; Google integrations</li>
-              <li>Models via your API key (BYOK) or pay-as-you-go at upstream cost</li>
-              <li>No Babo markup on token usage</li>
+              <li>{{ 'settings.billing.checklistPrice' | translate:{ price: cloudBasicPriceLabel } }}</li>
+              <li>{{ 'settings.billing.checklistRelay' | translate }}</li>
+              <li>{{ 'settings.billing.checklistByok' | translate }}</li>
+              <li>{{ 'settings.billing.checklistNoMarkup' | translate }}</li>
             </ul>
             <button
               class="btn-primary"
@@ -336,7 +336,7 @@
               (click)="subscribeToCloud()"
               [disabled]="billingActionLoading()"
             >
-              {{ billingActionLoading() ? 'Opening checkout…' : 'Subscribe — ' + cloudBasicPriceLabel }}
+              {{ billingActionLoading() ? ('settings.billing.openingCheckout' | translate) : ('settings.billing.subscribeBtn' | translate:{ price: cloudBasicPriceLabel }) }}
             </button>
           </div>
         } @else {
@@ -346,7 +346,7 @@
               @if (sub.planId === 'cloud_basic') { · Babo Cloud Basic }
             </span>
             @if (sub.currentPeriodEnd) {
-              <span class="field-hint">Renews {{ sub.currentPeriodEnd | date: 'mediumDate' }}</span>
+              <span class="field-hint">{{ 'settings.billing.renews' | translate:{ date: (sub.currentPeriodEnd | date: 'mediumDate') } }}</span>
             }
           </div>
 
@@ -355,8 +355,7 @@
               <div class="usage-head">
                 <span class="field-label">{{ 'settings.billing.includedUsage' | translate }}</span>
                 <span class="field-hint">
-                  {{ formatUsd(sub.usedCreditCents) }} used of {{ formatUsd(sub.includedCreditCents) }}
-                  · {{ includedRemaining() }}% remaining
+                  {{ 'settings.billing.usedOf' | translate:{ used: formatUsd(sub.usedCreditCents), total: formatUsd(sub.includedCreditCents), remaining: includedRemaining() } }}
                 </span>
               </div>
               <div class="usage-bar">
@@ -383,7 +382,7 @@
 
           <h4 class="subsection-title">{{ 'settings.billing.payg' | translate }}</h4>
           <p class="field-hint">
-            Optional for Babo-routed models when you are not using BYOK. Billed at upstream cost with no Babo markup (monthly cap applies).
+            {{ 'settings.billing.paygHint' | translate }}
           </p>
           <div class="toggle-group compact">
             <button
@@ -391,13 +390,13 @@
               class="toggle-btn small"
               [class.active]="onDemandEnabled()"
               (click)="setOnDemandSetting(true)"
-            >On</button>
+            >{{ 'common.on' | translate }}</button>
             <button
               type="button"
               class="toggle-btn small"
               [class.active]="!onDemandEnabled()"
               (click)="setOnDemandSetting(false)"
-            >Off</button>
+            >{{ 'common.off' | translate }}</button>
           </div>
 
           @if (onDemandEnabled() && sub.usedCreditCents > 0) {
@@ -417,14 +416,14 @@
                 [ngModel]="spendCapInput()"
                 (ngModelChange)="spendCapInput.set($event)"
               />
-              <span class="field-hint">Default $15/mo cap on pay-as-you-go model usage.</span>
+              <span class="field-hint">{{ 'settings.billing.spendCapDefault' | translate }}</span>
               <button
                 class="btn-secondary"
                 type="button"
                 (click)="saveSpendCap()"
                 [disabled]="billingActionLoading()"
               >
-                Save cap
+                {{ 'settings.billing.saveCap' | translate }}
               </button>
             </div>
           }
@@ -450,31 +449,30 @@
 
       @if (localWebhookWarning(); as localWarn) {
         <div class="info-card localhost-webhook">
-          <h4 class="subsection-title">Localhost NestJS</h4>
+          <h4 class="subsection-title">{{ 'settings.integrations.localhostTitle' | translate }}</h4>
           <p class="field-hint">{{ localWarn }}</p>
         </div>
       }
 
       @if (platformCapsLoading()) {
-        <p class="field-hint">Loading…</p>
+        <p class="field-hint">{{ 'settings.integrations.loading' | translate }}</p>
       } @else if (usesBaboCloudBackend(backendChoice())) {
         <div class="info-card babo-provided">
-          <h4 class="subsection-title">Babo Cloud</h4>
+          <h4 class="subsection-title">{{ 'settings.integrations.baboCloudTitle' | translate }}</h4>
           <p class="field-hint">
-            Email and Google Workspace use Babo-provided credentials on
-            <strong>{{ nestjsUrl() }}</strong>. Connect channels per agent in Tools.
+            {{ 'settings.integrations.baboCloudHint' | translate:{ url: nestjsUrl() } }}
           </p>
           @if (emailServerConfigured()) {
-            <p class="info-pill ok">Email (Resend) active@if (emailInboundDomain()) { · {{ emailInboundDomain() }}}</p>
+            <p class="info-pill ok">{{ 'settings.integrations.emailActive' | translate }}@if (emailInboundDomain()) { · {{ emailInboundDomain() }}}</p>
           }
           <ul class="checklist">
-            <li>Telegram — your BotFather token (self-service)</li>
-            <li>WhatsApp — QR pairing on Babo Desktop</li>
+            <li>{{ 'settings.integrations.telegramSelf' | translate }}</li>
+            <li>{{ 'settings.integrations.whatsappQr' | translate }}</li>
           </ul>
         </div>
       } @else {
         <div class="info-card prereq">
-          <h4 class="subsection-title">Before connecting channels</h4>
+          <h4 class="subsection-title">{{ 'settings.integrations.beforeChannels' | translate }}</h4>
           <ol class="setup-steps">
             @for (step of integrationPrereqSteps(); track step) {
               <li>{{ step }}</li>
@@ -484,22 +482,20 @@
 
         <h4 class="subsection-title">{{ 'settings.integrations.email' | translate }}</h4>
         <p class="field-hint">
-          Inbound mail hits your NestJS webhook, then relays to Babo Desktop.
-          Configure Resend here <em>or</em> set <code>RESEND_API_KEY</code> and
-          <code>RESEND_INBOUND_DOMAIN</code> on your NestJS deployment.
+          {{ 'settings.integrations.emailHint' | translate }}
         </p>
         @if (emailServerConfigured() && !resendConfigured()) {
-          <p class="info-pill ok">Resend configured on server@if (emailInboundDomain()) { · {{ emailInboundDomain() }}}</p>
+          <p class="info-pill ok">{{ 'settings.integrations.resendOnServer' | translate }}@if (emailInboundDomain()) { · {{ emailInboundDomain() }}}</p>
         }
         @if (nestPublicWebhookBase()) {
           <p class="field-hint webhook-hint">
-            Resend inbound webhook URL:
+            {{ 'settings.integrations.webhookUrl' | translate }}
             <code>{{ nestPublicWebhookBase() }}/api/channels/email/webhook</code>
           </p>
         }
 
         @if (resendConfigured()) {
-          <p class="info-pill ok">Your Resend credentials saved@if (resendInboundDomain()) { · {{ resendInboundDomain() }}}</p>
+          <p class="info-pill ok">{{ 'settings.integrations.resendSaved' | translate }}@if (resendInboundDomain()) { · {{ resendInboundDomain() }}}</p>
           <button class="btn-secondary danger" type="button" (click)="clearResendCredentials()" [disabled]="resendSaving()">
             {{ 'settings.integrations.removeResend' | translate }}
           </button>
@@ -523,7 +519,7 @@
               (ngModelChange)="resendInboundDomain.set($event)"
               placeholder="inbox.yourdomain.com"
             />
-            <span class="field-hint">Verified domain in Resend for inbound routing.</span>
+            <span class="field-hint">{{ 'settings.integrations.inboundHint' | translate }}</span>
           </div>
           <button class="btn-primary" type="button" (click)="saveResendCredentials()" [disabled]="resendSaving()">
             {{ resendSaving() ? ('common.saving' | translate) : ('settings.integrations.saveResend' | translate) }}
@@ -532,9 +528,7 @@
 
         <h4 class="subsection-title">{{ 'settings.integrations.google' | translate }}</h4>
         <p class="field-hint">
-          Create a Google Cloud OAuth app and save <code>client_id</code> /
-          <code>client_secret</code> in each agent's Tools → Google Workspace config,
-          or ask the agent in chat to walk you through setup.
+          {{ 'settings.integrations.googleHint' | translate }}
         </p>
         <p class="field-hint">
           Redirect URI:

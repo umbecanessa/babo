@@ -88,8 +88,8 @@
 
         <!-- Digested fields (mini bar indicators) with trajectory arrows -->
         <div class="heartbeat-fields">
-          <div class="hb-field" title="Valence: how the agent feels (-1 bad → +1 good)">
-            <span class="hb-field-label">Valence</span>
+          <div class="hb-field" [title]="'chat.live.metric.valenceTitle' | translate">
+            <span class="hb-field-label">{{ 'chat.live.metric.valence' | translate }}</span>
             <div class="hb-bar-track valence-track">
               <div class="hb-bar-fill valence-fill"
                    [style.width.%]="((valence + 1) / 2) * 100"
@@ -102,8 +102,8 @@
               <span class="hb-delta" [style.color]="deltaColor(deltaValence)">{{ deltaArrow(deltaValence) }}{{ (deltaValence > 0 ? '+' : '') }}{{ deltaValence | number:'1.2-2' }}</span>
             }
           </div>
-          <div class="hb-field" title="Arousal: calm (0) → activated (1)">
-            <span class="hb-field-label">Arousal</span>
+          <div class="hb-field" [title]="'chat.live.metric.arousalTitle' | translate">
+            <span class="hb-field-label">{{ 'chat.live.metric.arousal' | translate }}</span>
             <div class="hb-bar-track">
               <div class="hb-bar-fill arousal-fill"
                    [style.width.%]="arousal * 100">
@@ -114,8 +114,8 @@
               <span class="hb-delta" [style.color]="deltaColor(deltaArousal)">{{ deltaArrow(deltaArousal) }}{{ (deltaArousal > 0 ? '+' : '') }}{{ deltaArousal | number:'1.2-2' }}</span>
             }
           </div>
-          <div class="hb-field" title="Engagement: bored (0) → absorbed (1)">
-            <span class="hb-field-label">Engage</span>
+          <div class="hb-field" [title]="'chat.live.metric.engageTitle' | translate">
+            <span class="hb-field-label">{{ 'chat.live.metric.engage' | translate }}</span>
             <div class="hb-bar-track">
               <div class="hb-bar-fill engage-fill"
                    [style.width.%]="engagement * 100">
@@ -123,8 +123,8 @@
             </div>
             <span class="hb-field-val">{{ engagement | number:'1.2-2' }}</span>
           </div>
-          <div class="hb-field" title="Bonding: alone (0) → connected (1)">
-            <span class="hb-field-label">Bond</span>
+          <div class="hb-field" [title]="'chat.live.metric.bondTitle' | translate">
+            <span class="hb-field-label">{{ 'chat.live.metric.bond' | translate }}</span>
             <div class="hb-bar-track">
               <div class="hb-bar-fill bond-fill"
                    [style.width.%]="bonding * 100">
@@ -132,8 +132,8 @@
             </div>
             <span class="hb-field-val">{{ bonding | number:'1.2-2' }}</span>
           </div>
-          <div class="hb-field" title="Coherence: confused (0) → aligned (1)">
-            <span class="hb-field-label">Cohere</span>
+          <div class="hb-field" [title]="'chat.live.metric.cohereTitle' | translate">
+            <span class="hb-field-label">{{ 'chat.live.metric.cohere' | translate }}</span>
             <div class="hb-bar-track">
               <div class="hb-bar-fill cohere-fill"
                    [style.width.%]="coherence * 100">
@@ -201,20 +201,20 @@
         </button>
       </h3>
       <div class="stat-row">
-        <span class="stat-key">Facts</span>
+        <span class="stat-key">{{ 'chat.live.stat.facts' | translate }}</span>
         <span class="stat-val">{{ factsCount }}</span>
       </div>
       <div class="stat-row">
-        <span class="stat-key">Sleep Cycles</span>
+        <span class="stat-key">{{ 'chat.live.stat.sleepCycles' | translate }}</span>
         <span class="stat-val">{{ sleepCount }}</span>
       </div>
       <div class="stat-row">
-        <span class="stat-key">ANS State</span>
+        <span class="stat-key">{{ 'chat.live.stat.ansState' | translate }}</span>
         <span class="stat-val ans-state">{{ ansState }}</span>
       </div>
       @if (narrativeCoherence > 0) {
         <div class="stat-row">
-          <span class="stat-key">Coherence</span>
+          <span class="stat-key">{{ 'chat.live.stat.coherence' | translate }}</span>
           <span class="stat-val">{{ (narrativeCoherence * 100) | number:'1.0-0' }}%
             @if (narrativeCoherenceLabel) {
               <span class="stat-sublabel">{{ narrativeCoherenceLabel }}</span>
@@ -224,13 +224,13 @@
       }
       @if (predictionError > 0) {
         <div class="stat-row">
-          <span class="stat-key">Pred. Error</span>
+          <span class="stat-key">{{ 'chat.live.stat.predError' | translate }}</span>
           <span class="stat-val">{{ predictionError | number:'1.3-3' }}</span>
         </div>
       }
       @if (metaWeight > 0) {
         <div class="stat-row">
-          <span class="stat-key">Meta Weight</span>
+          <span class="stat-key">{{ 'chat.live.stat.metaWeight' | translate }}</span>
           <span class="stat-val">{{ metaWeight | number:'1.2-2' }}</span>
         </div>
       }
@@ -255,7 +255,7 @@
             <span class="episode-detail"><span class="episode-detail-key">Resonance</span> {{ currentEpisode.peak_resonance.toFixed(2) }}</span>
           }
           @if (currentEpisode.peak_engagement > 0) {
-            <span class="episode-detail"><span class="episode-detail-key">Engagement</span> {{ currentEpisode.peak_engagement.toFixed(2) }}</span>
+            <span class="episode-detail"><span class="episode-detail-key">{{ 'chat.live.stat.engagement' | translate }}</span> {{ currentEpisode.peak_engagement.toFixed(2) }}</span>
           }
         </div>
         @if (currentEpisode.topics?.length) {
@@ -281,12 +281,12 @@
         <h3 class="section-title">{{ 'chat.live.userModel' | translate }}</h3>
         @if (userModel.style) {
           <div class="stat-row">
-            <span class="stat-key">Style</span>
+            <span class="stat-key">{{ 'chat.live.stat.style' | translate }}</span>
             <span class="stat-val">{{ userModel.style }}</span>
           </div>
         }
         <div class="stat-row">
-          <span class="stat-key">Temperature</span>
+          <span class="stat-key">{{ 'chat.live.stat.temperature' | translate }}</span>
           <div class="user-temp-bar">
             <div class="user-temp-fill" [style.width.%]="convTemperature * 100"></div>
           </div>
@@ -294,7 +294,7 @@
         </div>
         @if (userModel.top_interests?.length > 0) {
           <div class="stat-row user-interests">
-            <span class="stat-key">Interests</span>
+            <span class="stat-key">{{ 'chat.live.stat.interests' | translate }}</span>
             <span class="stat-val">
               @for (interest of userModel.top_interests; track interest) {
                 <span class="interest-pill">{{ interest[0] || interest }}</span>
@@ -316,7 +316,7 @@
         }
         @if (userModel.patience > 0) {
           <div class="stat-row">
-            <span class="stat-key">Patience</span>
+            <span class="stat-key">{{ 'chat.live.stat.patience' | translate }}</span>
             <div class="user-temp-bar">
               <div class="user-temp-fill patience-fill" [style.width.%]="userModel.patience * 100"></div>
             </div>

@@ -6,7 +6,7 @@
 
       <div class="ctx-title-row">
 
-        <h4 class="ctx-title">Private desk</h4>
+        <h4 class="ctx-title">{{ 'chat.context.privateDesk' | translate }}</h4>
 
         @if (canSetPrimaryReachability()) {
 
@@ -22,7 +22,7 @@
 
             (click)="togglePrimaryReachability()"
 
-            [title]="isPrimaryReachability() ? 'Primary reachability — Babo reports here by default' : 'Set as primary reachability'"
+            [title]="isPrimaryReachability() ? ('chat.context.primaryReach' | translate) : ('chat.context.setPrimaryReach' | translate)"
 
           >
 
@@ -34,7 +34,7 @@
 
       </div>
 
-      <p class="ctx-body">Messages here stay on your desktop. Nothing is sent to Discord, email, or other connected surfaces unless Babo uses a channel tool explicitly.</p>
+      <p class="ctx-body">{{ 'chat.context.privateBody' | translate }}</p>
 
       @if (canSetPrimaryReachability()) {
 
@@ -98,7 +98,7 @@
 
         @if (thread!.subject) {
 
-          <dt>Subject</dt>
+          <dt>{{ 'chat.context.subject' | translate }}</dt>
 
           <dd>{{ thread!.subject }}</dd>
 
@@ -106,19 +106,19 @@
 
         @if (isGroup()) {
 
-          <dt>Type</dt>
+          <dt>{{ 'chat.context.type' | translate }}</dt>
 
-          <dd>Shared channel / group</dd>
+          <dd>{{ 'chat.context.group' | translate }}</dd>
 
         } @else {
 
-          <dt>Type</dt>
+          <dt>{{ 'chat.context.type' | translate }}</dt>
 
-          <dd>Direct message</dd>
+          <dd>{{ 'chat.context.direct' | translate }}</dd>
 
         }
 
-        <dt>Session</dt>
+        <dt>{{ 'chat.context.session' | translate }}</dt>
 
         <dd class="ctx-mono">{{ thread!.key }}</dd>
 
@@ -126,13 +126,13 @@
 
       <p class="ctx-body ctx-reachability-hint">
 
-        Star this thread so Babo knows where to reach you for reports and progress when no explicit target is set.
+        {{ 'chat.context.reachHint' | translate }}
 
       </p>
 
       <a class="ctx-link" [routerLink]="toolsLink()" [queryParams]="{ skill: thread!.channel + '-channel' }">
 
-        Configure in Tools →
+        {{ 'chat.context.configureTools' | translate }}
 
       </a>
 

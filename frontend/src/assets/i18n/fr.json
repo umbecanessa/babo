@@ -298,7 +298,23 @@
       "includedUsage": "Included usage",
       "manage": "Manage subscription",
       "spendCap": "Monthly pay-as-you-go spend cap (USD)",
-      "spendCapHint": "Optional hard cap on pay-as-you-go spend."
+      "spendCapHint": "Optional hard cap on pay-as-you-go spend.",
+      "loading": "Loading subscription…",
+      "lifetimeHint": "You have complimentary Babo Cloud access",
+      "lifetimeGx10": "including Babo Brain (GX10).",
+      "noSubRequired": "No subscription required",
+      "subscribeHint": "Hosted models require an active subscription. Your API key on this device (BYOK) still works without a sub.",
+      "openingCheckout": "Opening checkout…",
+      "subscribeBtn": "Subscribe — {{price}}",
+      "renews": "Renews {{date}}",
+      "usedOf": "{{used}} used of {{total}} · {{remaining}}% remaining",
+      "paygHint": "Optional for Babo-routed models when you are not using BYOK. Billed at upstream cost with no Babo markup (monthly cap applies).",
+      "spendCapDefault": "Default $15/mo cap on pay-as-you-go model usage.",
+      "checklistPrice": "{{price}} — billed via Stripe",
+      "checklistRelay": "WhatsApp, Telegram, Gmail relay & Google integrations",
+      "checklistByok": "Models via your API key (BYOK) or pay-as-you-go at upstream cost",
+      "checklistNoMarkup": "No Babo markup on token usage",
+      "saveCap": "Save cap"
     },
     "integrations": {
       "title": "Integrations",
@@ -309,7 +325,21 @@
       "resendKey": "Resend API key",
       "inboundDomain": "Inbound domain",
       "saveResend": "Save Resend credentials",
-      "removeResend": "Remove saved credentials"
+      "removeResend": "Remove saved credentials",
+      "loading": "Loading…",
+      "localhostTitle": "Localhost NestJS",
+      "baboCloudTitle": "Babo Cloud",
+      "baboCloudHint": "Email and Google Workspace use Babo-provided credentials on {{url}}. Connect channels per agent in Tools.",
+      "emailActive": "Email (Resend) active",
+      "telegramSelf": "Telegram — your BotFather token (self-service)",
+      "whatsappQr": "WhatsApp — QR pairing on Babo Desktop",
+      "beforeChannels": "Before connecting channels",
+      "emailHint": "Inbound mail hits your NestJS webhook, then relays to Babo Desktop. Configure Resend here or set RESEND_API_KEY and RESEND_INBOUND_DOMAIN on your NestJS deployment.",
+      "resendOnServer": "Resend configured on server",
+      "webhookUrl": "Resend inbound webhook URL:",
+      "resendSaved": "Your Resend credentials saved",
+      "inboundHint": "Verified domain in Resend for inbound routing.",
+      "googleHint": "Create a Google Cloud OAuth app and save client_id / client_secret in each agent's Tools → Google Workspace config, or ask the agent in chat to walk you through setup."
     },
     "keys": {
       "title": "API keys",
@@ -595,13 +625,78 @@
       "refresh": "Refresh",
       "cryptexEmpty": "No active context — start a conversation to populate the Cryptex",
       "userModel": "User Model",
-      "showFewer": "Show fewer (top {{cap}})"
+      "showFewer": "Show fewer (top {{cap}})",
+      "metric": {
+        "valence": "Valence",
+        "valenceTitle": "Valence: how the agent feels (-1 bad → +1 good)",
+        "arousal": "Arousal",
+        "arousalTitle": "Arousal: calm (0) → activated (1)",
+        "engage": "Engage",
+        "engageTitle": "Engagement: bored (0) → absorbed (1)",
+        "bond": "Bond",
+        "bondTitle": "Bonding: alone (0) → connected (1)",
+        "cohere": "Cohere",
+        "cohereTitle": "Coherence: confused (0) → aligned (1)"
+      },
+      "stat": {
+        "facts": "Facts",
+        "sleepCycles": "Sleep Cycles",
+        "ansState": "ANS State",
+        "coherence": "Coherence",
+        "predError": "Pred. Error",
+        "metaWeight": "Meta Weight",
+        "engagement": "Engagement",
+        "style": "Style",
+        "temperature": "Temperature",
+        "interests": "Interests",
+        "patience": "Patience"
+      }
     },
     "status": {
       "startingTask": "Starting task...",
       "compiling": "Compiling delegate results...",
       "waitAnswer": "Waiting for your answer…",
       "waitDecision": "Waiting for your decision…"
+    },
+    "prompt": {
+      "restYes": "Yes, rest up",
+      "stayAwake": "Stay awake",
+      "responded": "Responded",
+      "extendSteps": "+{{count}} steps",
+      "askWaiting": "Agent is waiting for your answer"
+    },
+    "delegate": {
+      "working": "working…",
+      "workingDots": "working...",
+      "starting": "Starting work…",
+      "iters": "{{current}}/{{max}} iters",
+      "tools": "{{count}} tools",
+      "partial": "partial",
+      "moreInProjects": "+ {{count}} more in Projects",
+      "projects": "Projects",
+      "try": "try {{n}}",
+      "expandDetails": "{{summary}} — expand for details",
+      "wave": "Wave",
+      "doneWorking": "{{done}}/{{total}} done · {{running}} working",
+      "doneFailed": "{{done}}/{{total}} done · {{failed}} failed",
+      "complete": "{{done}}/{{total}} complete"
+    },
+    "model": {
+      "search": "Search models…",
+      "noMatch": "No models match your search"
+    },
+    "context": {
+      "type": "Type",
+      "group": "Shared channel / group",
+      "direct": "Direct message",
+      "session": "Session",
+      "reachHint": "Star this thread so Babo knows where to reach you for reports and progress when no explicit target is set.",
+      "configureTools": "Configure in Tools →",
+      "privateDesk": "Private desk",
+      "privateBody": "Messages here stay on your desktop. Nothing is sent to Discord, email, or other connected surfaces unless Babo uses a channel tool explicitly.",
+      "primaryReach": "Primary reachability — Babo reports here by default",
+      "setPrimaryReach": "Set as primary reachability",
+      "subject": "Subject"
     }
   },
   "dashboard": {

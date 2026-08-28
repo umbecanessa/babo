@@ -3,11 +3,12 @@ import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { ApiService } from '../../../core/services/api.service';
 import { ConversationService, type ConversationThread } from '../../../core/services/conversation.service';
+import { TranslateModule } from '@ngx-translate/core';
 
 @Component({
   selector: 'app-conversation-context',
   standalone: true,
-  imports: [CommonModule, RouterModule],
+  imports: [CommonModule, RouterModule, TranslateModule],
   templateUrl: './conversation-context.component.html',
   styleUrl: './conversation-context.component.scss',
 })

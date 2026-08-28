@@ -298,7 +298,23 @@
       "includedUsage": "Utilizzo incluso",
       "manage": "Gestisci abbonamento",
       "spendCap": "Tetto mensile pay-as-you-go (USD)",
-      "spendCapHint": "Limite opzionale sulla spesa pay-as-you-go."
+      "spendCapHint": "Limite opzionale sulla spesa pay-as-you-go.",
+      "loading": "Caricamento abbonamento…",
+      "lifetimeHint": "Hai accesso gratuito a Babo Cloud",
+      "lifetimeGx10": "incluso Babo Brain (GX10).",
+      "noSubRequired": "Nessun abbonamento richiesto",
+      "subscribeHint": "I modelli hosted richiedono un abbonamento attivo. La tua API key su questo dispositivo (BYOK) funziona anche senza.",
+      "openingCheckout": "Apertura checkout…",
+      "subscribeBtn": "Abbonati — {{price}}",
+      "renews": "Rinnovo {{date}}",
+      "usedOf": "{{used}} usati di {{total}} · {{remaining}}% rimanenti",
+      "paygHint": "Opzionale per i modelli Babo quando non usi BYOK. Fatturato al costo upstream senza markup Babo (vale il tetto mensile).",
+      "spendCapDefault": "Tetto predefinito $15/mese sull'uso pay-as-you-go.",
+      "checklistPrice": "{{price}} — fatturato via Stripe",
+      "checklistRelay": "WhatsApp, Telegram, relay Gmail e integrazioni Google",
+      "checklistByok": "Modelli via API key (BYOK) o pay-as-you-go al costo upstream",
+      "checklistNoMarkup": "Nessun markup Babo sull'uso token",
+      "saveCap": "Salva tetto"
     },
     "integrations": {
       "title": "Integrazioni",
@@ -309,7 +325,21 @@
       "resendKey": "API key Resend",
       "inboundDomain": "Dominio inbound",
       "saveResend": "Salva credenziali Resend",
-      "removeResend": "Rimuovi credenziali salvate"
+      "removeResend": "Rimuovi credenziali salvate",
+      "loading": "Caricamento…",
+      "localhostTitle": "NestJS localhost",
+      "baboCloudTitle": "Babo Cloud",
+      "baboCloudHint": "Email e Google Workspace usano credenziali Babo su {{url}}. Collega i canali per agente in Tools.",
+      "emailActive": "Email (Resend) attiva",
+      "telegramSelf": "Telegram — token BotFather (self-service)",
+      "whatsappQr": "WhatsApp — pairing QR su Babo Desktop",
+      "beforeChannels": "Prima di collegare i canali",
+      "emailHint": "La posta inbound arriva al webhook NestJS, poi al Desktop. Configura Resend qui oppure imposta RESEND_API_KEY e RESEND_INBOUND_DOMAIN sul deployment NestJS.",
+      "resendOnServer": "Resend configurato sul server",
+      "webhookUrl": "URL webhook inbound Resend:",
+      "resendSaved": "Credenziali Resend salvate",
+      "inboundHint": "Dominio verificato in Resend per il routing inbound.",
+      "googleHint": "Crea un'app OAuth Google Cloud e salva client_id / client_secret in Tools → Google Workspace di ogni agente, oppure chiedi all'agente in chat di guidarti."
     },
     "keys": {
       "title": "Chiavi API",
@@ -595,13 +625,78 @@
       "refresh": "Aggiorna",
       "cryptexEmpty": "Nessun contesto attivo — avvia una conversazione per popolare il Cryptex",
       "userModel": "Modello utente",
-      "showFewer": "Mostra meno (top {{cap}})"
+      "showFewer": "Mostra meno (top {{cap}})",
+      "metric": {
+        "valence": "Valenza",
+        "valenceTitle": "Valenza: come si sente l'agente (-1 male → +1 bene)",
+        "arousal": "Arousal",
+        "arousalTitle": "Arousal: calmo (0) → attivato (1)",
+        "engage": "Coinvolgimento",
+        "engageTitle": "Coinvolgimento: annoiato (0) → assorbito (1)",
+        "bond": "Legame",
+        "bondTitle": "Legame: solo (0) → connesso (1)",
+        "cohere": "Coerenza",
+        "cohereTitle": "Coerenza: confuso (0) → allineato (1)"
+      },
+      "stat": {
+        "facts": "Fatti",
+        "sleepCycles": "Cicli di sonno",
+        "ansState": "Stato ANS",
+        "coherence": "Coerenza",
+        "predError": "Errore pred.",
+        "metaWeight": "Peso meta",
+        "engagement": "Coinvolgimento",
+        "style": "Stile",
+        "temperature": "Temperatura",
+        "interests": "Interessi",
+        "patience": "Pazienza"
+      }
     },
     "status": {
       "startingTask": "Avvio task...",
       "compiling": "Compilazione risultati delegate...",
       "waitAnswer": "In attesa della tua risposta…",
       "waitDecision": "In attesa della tua decisione…"
+    },
+    "prompt": {
+      "restYes": "Sì, riposa",
+      "stayAwake": "Resta sveglio",
+      "responded": "Risposto",
+      "extendSteps": "+{{count}} passi",
+      "askWaiting": "L'agente è in attesa della tua risposta"
+    },
+    "delegate": {
+      "working": "al lavoro…",
+      "workingDots": "al lavoro...",
+      "starting": "Avvio lavoro…",
+      "iters": "{{current}}/{{max}} iter",
+      "tools": "{{count}} tool",
+      "partial": "parziale",
+      "moreInProjects": "+ {{count}} altri in Progetti",
+      "projects": "Progetti",
+      "try": "tentativo {{n}}",
+      "expandDetails": "{{summary}} — espandi per i dettagli",
+      "wave": "Onda",
+      "doneWorking": "{{done}}/{{total}} fatti · {{running}} al lavoro",
+      "doneFailed": "{{done}}/{{total}} fatti · {{failed}} falliti",
+      "complete": "{{done}}/{{total}} completati"
+    },
+    "model": {
+      "search": "Cerca modelli…",
+      "noMatch": "Nessun modello corrisponde alla ricerca"
+    },
+    "context": {
+      "type": "Tipo",
+      "group": "Canale condiviso / gruppo",
+      "direct": "Messaggio diretto",
+      "session": "Sessione",
+      "reachHint": "Metti in evidenza questo thread così Babo sa dove raggiungerti per report e progressi quando non c'è un target esplicito.",
+      "configureTools": "Configura in Tools →",
+      "privateDesk": "Desk privata",
+      "privateBody": "I messaggi qui restano sul desktop. Nulla va a Discord, email o altre superfici collegate a meno che Babo non usi esplicitamente un tool di canale.",
+      "primaryReach": "Reachability primaria — Babo riporta qui di default",
+      "setPrimaryReach": "Imposta come reachability primaria",
+      "subject": "Oggetto"
     }
   },
   "dashboard": {

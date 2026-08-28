@@ -9,6 +9,7 @@ import {
   input,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { TranslateModule } from '@ngx-translate/core';
 import { AgentModelService } from '../../../core/services/agent-model.service';
 import type { ModelPickerOption } from '../../../core/services/agent-model.service';
 import {
@@ -30,7 +31,7 @@ type MenuView =
 @Component({
   selector: 'app-chat-model-picker',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, TranslateModule],
   template: `
     @if (models.showPicker()) {
       <div
@@ -103,7 +104,7 @@ type MenuView =
                 #searchInput
                 type="search"
                 class="model-search context-menu-search"
-                placeholder="Search models…"
+                [placeholder]="'chat.model.search' | translate"
                 [value]="searchQuery()"
                 (input)="onSearchInput($event)"
                 (keydown.escape)="onSearchEscape($event)"
@@ -116,7 +117,7 @@ type MenuView =
               @if (menuView(); as view) {
                 @switch (view.mode) {
                   @case ('empty') {
-                    <p class="model-empty">No models match your search</p>
+                    <p class="model-empty">{{ 'chat.model.noMatch' | translate }}</p>
                   }
                   @case ('flat') {
                     @for (opt of view.options; track opt.id) {

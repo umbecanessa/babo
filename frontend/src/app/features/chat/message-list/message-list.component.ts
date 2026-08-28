@@ -292,7 +292,7 @@ export class MessageListComponent implements OnChanges, AfterViewChecked, OnDest
     const match = name.match(/^Wave\s+\d+/i);
     if (match) return match[0];
     if (name) return name.split(' - ')[0] || name;
-    return msg.delegate?.teamId?.slice(0, 8) || 'Wave';
+    return msg.delegate?.teamId?.slice(0, 8) || this.t('chat.delegate.wave');
   }
 
   waveSubtitle(memberIndices: number[]): string {
@@ -300,9 +300,14 @@ export class MessageListComponent implements OnChanges, AfterViewChecked, OnDest
     const done = members.filter(d => d.status === 'done').length;
     const running = members.filter(d => d.status === 'running').length;
     const failed = members.filter(d => d.status === 'error').length;
-    if (running > 0) return `${done}/${members.length} done · ${running} working`;
-    if (failed > 0) return `${done}/${members.length} done · ${failed} failed`;
-    return `${done}/${members.length} complete`;
+    const total = members.length;
+    if (running > 0) {
+      return this.t('chat.delegate.doneWorking', { done, total, running });
+    }
+    if (failed > 0) {
+      return this.t('chat.delegate.doneFailed', { done, total, failed });
+    }
+    return this.t('chat.delegate.complete', { done, total });
   }
 
   waveAnyRunning(memberIndices: number[]): boolean {
