@@ -430,8 +430,7 @@
 
           @if (sub.refundEligibleUntil) {
             <p class="field-hint refund-note">
-              31-day refund available on your first subscription payment until
-              {{ sub.refundEligibleUntil | date: 'mediumDate' }}. Pay-as-you-go model charges are not refundable.
+              {{ 'settings.billing.refundNote' | translate:{ date: (sub.refundEligibleUntil | date: 'mediumDate') } }}
             </p>
           }
         }
@@ -444,7 +443,7 @@
       <h3 class="section-title">{{ 'settings.integrations.title' | translate }}</h3>
       <p class="section-desc">
         {{ 'settings.integrations.desc' | translate }}
-        <a [routerLink]="toolsLink()">Tools → Integrations</a>.
+        <a [routerLink]="toolsLink()">{{ 'settings.integrations.toolsLink' | translate }}</a>.
       </p>
 
       @if (localWebhookWarning(); as localWarn) {
@@ -531,14 +530,13 @@
           {{ 'settings.integrations.googleHint' | translate }}
         </p>
         <p class="field-hint">
-          Redirect URI:
+          {{ 'settings.integrations.redirectUri' | translate }}
           <code>http://localhost:{{ runtimePort() }}/skills/google-workspace/oauth/callback</code>
         </p>
 
         <h4 class="subsection-title">{{ 'settings.integrations.messaging' | translate }}</h4>
         <p class="field-hint">
-          Telegram uses your BotFather token and registers webhooks on your NestJS server.
-          WhatsApp pairs via QR on Babo Desktop — no NestJS webhook for inbound WhatsApp messages.
+          {{ 'settings.integrations.messagingHint' | translate }}
         </p>
       }
     </section>
@@ -629,12 +627,11 @@
       <h3 class="section-title">{{ 'settings.general.title' | translate }}</h3>
 
       <div class="field-group">
-        <label class="field-label">Agent integrations</label>
+        <label class="field-label">{{ 'settings.general.integrationsLabel' | translate }}</label>
         <p class="field-hint">
-          Channel setup lives under
-          <a [routerLink]="toolsLink()">Tools → Integrations</a>.
-          Self-hosted Resend and platform prerequisites are under
-          <button type="button" class="inline-link-btn" (click)="onSectionChange('integrations')">Settings → Integrations</button>.
+          {{ 'settings.general.integrationsHintBefore' | translate }}
+          <a [routerLink]="toolsLink()">{{ 'settings.integrations.toolsLink' | translate }}</a>{{ 'settings.general.integrationsHintMid' | translate }}
+          <button type="button" class="inline-link-btn" (click)="onSectionChange('integrations')">{{ 'settings.general.settingsIntegrations' | translate }}</button>{{ 'settings.general.integrationsHintAfter' | translate }}
         </p>
       </div>
 
@@ -667,7 +664,7 @@
   @if (!platform.isElectron && activeSection() === 'appearance') {
     <div class="save-row">
       <button class="btn-primary" type="button" (click)="saveWebSettings()" [disabled]="saving()">
-        {{ saving() ? 'Saving…' : 'Save settings' }}
+        {{ saving() ? ('common.saving' | translate) : ('settings.appearance.save' | translate) }}
       </button>
     </div>
   }

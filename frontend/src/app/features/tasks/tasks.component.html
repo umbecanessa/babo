@@ -1,14 +1,14 @@
 <div class="tasks-page">
   <!-- Header with list filter tabs -->
   <div class="tasks-header">
-    <h2 class="tasks-title">Task Board</h2>
+    <h2 class="tasks-title">{{ 'tasks.title' | translate }}</h2>
     <div class="list-tabs">
       <button
         class="list-tab"
         [class.active]="activeListId() === null"
         (click)="selectList(null)"
       >
-        All
+        {{ 'tasks.filterAll' | translate }}
       </button>
       @for (list of lists(); track listTrack($index, list)) {
         <button
@@ -22,17 +22,17 @@
           <span class="tab-count">{{ countForList(list.id) }}</span>
         </button>
       }
-      <button class="list-tab list-tab-new" (click)="onCreateList()" title="New list">+</button>
+      <button class="list-tab list-tab-new" (click)="onCreateList()" [title]="'tasks.newList' | translate">+</button>
     </div>
   </div>
 
   <!-- Board -->
   @if (loading()) {
-    <div class="loading-state">Loading tasks...</div>
+    <div class="loading-state">{{ 'tasks.loading' | translate }}</div>
   } @else if (error()) {
     <div class="error-state">
       <p>{{ error() }}</p>
-      <button class="retry-btn" (click)="loadData()">Retry</button>
+      <button class="retry-btn" (click)="loadData()">{{ 'tasks.retry' | translate }}</button>
     </div>
   } @else {
     <div class="board-container">

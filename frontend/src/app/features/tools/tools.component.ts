@@ -16,6 +16,7 @@ import { DetailModalComponent } from './detail-modal/detail-modal.component';
 import { SchemaConfigFormComponent, ConfigFieldSchema } from './schema-config-form/schema-config-form.component';
 import { GoogleConnectModalComponent } from '../../shared/google-connect-modal/google-connect-modal.component';
 import { PlatformIntegrationsService } from '../../core/services/platform-integrations.service';
+import { TranslateModule } from '@ngx-translate/core';
 import { PlatformService } from '../../core/services/platform.service';
 import {
   buildIntegrationContext,
@@ -88,7 +89,7 @@ type IntegrationConfigCacheEntry = {
   selector: 'app-tools',
   standalone: true,
   imports: [
-    CommonModule, FormsModule, RouterLink,
+    CommonModule, FormsModule, RouterLink, TranslateModule,
     IntegrationCardComponent, SkillCardComponent, ToolCardComponent,
     DetailModalComponent, SchemaConfigFormComponent, GoogleConnectModalComponent,
   ],
@@ -96,15 +97,15 @@ type IntegrationConfigCacheEntry = {
     @if (loading()) {
       <div class="loading-state">
         <div class="spinner"></div>
-        <span>Loading...</span>
+        <span>{{ 'tools.loading' | translate }}</span>
       </div>
     }
 
     @if (!loading()) {
       <header class="shop-header">
         <div class="header-text">
-          <h1 class="title">Skills &amp; Tools</h1>
-          <p class="subtitle">Agent integrations, skills, and tools</p>
+          <h1 class="title">{{ 'tools.title' | translate }}</h1>
+          <p class="subtitle">{{ 'tools.subtitle' | translate }}</p>
         </div>
       </header>
 
@@ -115,7 +116,7 @@ type IntegrationConfigCacheEntry = {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
             </svg>
-            Pending Reviews
+            {{ 'tools.reviews.title' | translate }}
           </h2>
           <div class="review-list">
             @for (r of pendingReviews(); track r.id) {
@@ -130,11 +131,11 @@ type IntegrationConfigCacheEntry = {
                 <div class="review-actions">
                   <button class="review-btn approve" (click)="approveReview(r.id)" [disabled]="reviewLoading[r.id]">
                     @if (reviewLoading[r.id] === 'approve') { <span class="btn-spinner"></span> }
-                    Approve &amp; Restart
+                    {{ 'tools.reviews.approve' | translate }}
                   </button>
                   <button class="review-btn reject" (click)="rejectReview(r.id)" [disabled]="reviewLoading[r.id]">
                     @if (reviewLoading[r.id] === 'reject') { <span class="btn-spinner"></span> }
-                    Reject
+                    {{ 'tools.reviews.reject' | translate }}
                   </button>
                 </div>
               </div>
@@ -149,9 +150,9 @@ type IntegrationConfigCacheEntry = {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>
           </svg>
-          Integrations
+          {{ 'tools.sections.integrations' | translate }}
         </h2>
-        <p class="section-subtitle">Channel connections for your agent</p>
+        <p class="section-subtitle">{{ 'tools.sections.integrationsHint' | translate }}</p>
 
         @if (agentId) {
           <div
@@ -162,14 +163,14 @@ type IntegrationConfigCacheEntry = {
             <span class="relay-dot"></span>
             <div class="relay-text">
               @if (relayOnline() === null) {
-                <strong>Checking desktop relay…</strong>
-                <span>Connecting to your NestJS server to see if Babo Desktop is online.</span>
+                <strong>{{ 'tools.relay.checking' | translate }}</strong>
+                <span>{{ 'tools.relay.checkingHint' | translate }}</span>
               } @else if (relayOnline()) {
-                <strong>Desktop relay online</strong>
-                <span>Telegram and email webhooks can reach this agent. Babo Desktop is connected to {{ platformIntegrations.nestjsUrl() }}.</span>
+                <strong>{{ 'tools.relay.online' | translate }}</strong>
+                <span>{{ 'tools.relay.onlineHint' | translate:{ url: platformIntegrations.nestjsUrl() } }}</span>
               } @else {
-                <strong>Desktop relay offline</strong>
-                <span>This is separate from Babo Cloud being up — your desktop must keep an open WebSocket to {{ platformIntegrations.nestjsUrl() }} for this agent. Restart Babo Desktop if you closed it.</span>
+                <strong>{{ 'tools.relay.offline' | translate }}</strong>
+                <span>{{ 'tools.relay.offlineHint' | translate:{ url: platformIntegrations.nestjsUrl() } }}</span>
               }
             </div>
           </div>
@@ -177,15 +178,15 @@ type IntegrationConfigCacheEntry = {
 
         @if (localWebhookWarning(); as localWarn) {
           <div class="localhost-webhook-banner">
-            <strong>Localhost NestJS</strong>
+            <strong>{{ 'settings.integrations.localhostTitle' | translate }}</strong>
             <p>{{ localWarn }}</p>
           </div>
         }
 
         @if (!usesBaboCloudBackend(platformIntegrations.backendChoice())) {
           <div class="integration-prereq-banner">
-            <strong>Self-hosted backend</strong>
-            <p>Telegram and email need your NestJS server reachable over HTTPS and Babo Desktop online (relay). Configure platform credentials in <a routerLink="/settings" [queryParams]="{ section: 'integrations' }">Settings → Integrations</a>.</p>
+            <strong>{{ 'tools.selfHosted.title' | translate }}</strong>
+            <p>{{ 'tools.selfHosted.hint' | translate }}</p>
             <ul>
               @for (step of selfHostedPrereqSteps(); track step) {
                 <li>{{ step }}</li>
@@ -213,13 +214,13 @@ type IntegrationConfigCacheEntry = {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
           </svg>
-          Skills
+          {{ 'tools.sections.skills' | translate }}
         </h2>
-        <p class="section-subtitle">Installed skill packages</p>
+        <p class="section-subtitle">{{ 'tools.sections.skillsHint' | translate }}</p>
         @if (nonIntegrationSkills().length === 0) {
           <div class="empty-state">
-            <p>No skills installed yet.</p>
-            <p class="empty-hint">Ask the agent to build one, or create a skill directory manually.</p>
+            <p>{{ 'tools.empty.skills' | translate }}</p>
+            <p class="empty-hint">{{ 'tools.empty.skillsHint' | translate }}</p>
           </div>
         } @else {
           <div class="card-grid">
@@ -240,7 +241,7 @@ type IntegrationConfigCacheEntry = {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M8 12l2 2 4-4"/>
             </svg>
-            Connected Extensions
+            {{ 'tools.sections.extensions' | translate }}
           </h2>
           <p class="section-subtitle">Active MCP server connections</p>
           <div class="card-grid">
@@ -253,7 +254,7 @@ type IntegrationConfigCacheEntry = {
                 </div>
                 <button class="ext-disconnect-btn" (click)="disconnectExtension(ext.name)" [disabled]="extensionDisconnecting() === ext.name">
                   @if (extensionDisconnecting() === ext.name) { <span class="btn-spinner"></span> }
-                  @else { Disconnect }
+                  @else { {{ 'tools.actions.disconnect' | translate }} }
                 </button>
               </div>
             }
@@ -267,21 +268,21 @@ type IntegrationConfigCacheEntry = {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10"/><path d="M8 12l2 2 4-4"/>
           </svg>
-          Community Skills &amp; Extensions
+          {{ 'tools.sections.community' | translate }}
         </h2>
         <p class="section-subtitle">Browse skills from ClawHub and extensions from the MCP ecosystem</p>
 
         <div class="clawhub-search">
-          <input type="text" placeholder="Search skills &amp; extensions..."
+          <input type="text" [placeholder]="'tools.community.search' | translate"
             [value]="clawhubQuery()"
             (input)="onClawhubSearch($any($event.target).value)" />
         </div>
 
         <div class="source-filter-row">
           <div class="source-filter-tabs">
-            <button class="source-tab" [class.active]="sourceFilter() === 'all'" (click)="setSourceFilter('all')">All</button>
-            <button class="source-tab" [class.active]="sourceFilter() === 'skills'" (click)="setSourceFilter('skills')">Skills</button>
-            <button class="source-tab" [class.active]="sourceFilter() === 'extensions'" (click)="setSourceFilter('extensions')">Extensions</button>
+            <button class="source-tab" [class.active]="sourceFilter() === 'all'" (click)="setSourceFilter('all')">{{ 'tools.community.filterAll' | translate }}</button>
+            <button class="source-tab" [class.active]="sourceFilter() === 'skills'" (click)="setSourceFilter('skills')">{{ 'tools.community.filterSkills' | translate }}</button>
+            <button class="source-tab" [class.active]="sourceFilter() === 'extensions'" (click)="setSourceFilter('extensions')">{{ 'tools.community.filterExtensions' | translate }}</button>
           </div>
           @if (sourceFilter() !== 'extensions') {
             <div class="clawhub-categories">
@@ -319,11 +320,11 @@ type IntegrationConfigCacheEntry = {
                 <div class="clawhub-result-action" (click)="$event.stopPropagation()">
                   @if (r._source === 'extension') {
                     @if (r.installed) {
-                      <span class="ext-connected-label">Connected</span>
+                      <span class="ext-connected-label">{{ 'tools.actions.connected' | translate }}</span>
                     } @else if (r.url || r.command || r.source === 'saved') {
                       <button class="clawhub-install-btn ext-connect-btn" (click)="connectExtension(r)" [disabled]="extensionConnecting() === r.name">
                         @if (extensionConnecting() === r.name) { <span class="btn-spinner"></span> }
-                        @else { Connect }
+                        @else { {{ 'tools.actions.connect' | translate }} }
                       </button>
                     } @else if (r.install_command) {
                       <span class="ext-install-hint" [title]="r.install_command">Needs setup</span>
@@ -335,7 +336,7 @@ type IntegrationConfigCacheEntry = {
                   } @else {
                     <button class="clawhub-install-btn" (click)="installClawhubSkill(r.slug)" [disabled]="clawhubInstalling() === r.slug">
                       @if (clawhubInstalling() === r.slug) { <span class="btn-spinner"></span> }
-                      @else { Install }
+                        @else { {{ 'tools.actions.install' | translate }} }
                     </button>
                   }
                 </div>
@@ -428,7 +429,7 @@ type IntegrationConfigCacheEntry = {
                 } @else if (item.url || item.command || item.source === 'saved') {
                   <button class="cd-primary-btn ext-connect-btn" (click)="connectExtension(item)" [disabled]="extensionConnecting() === item.name">
                     @if (extensionConnecting() === item.name) { <span class="btn-spinner"></span> }
-                    @else { Connect Extension }
+                    @else { {{ 'tools.actions.connectExtension' | translate }} }
                   </button>
                 } @else {
                   <span class="ext-install-hint">Requires manual setup — ask the agent for help</span>
@@ -436,7 +437,7 @@ type IntegrationConfigCacheEntry = {
               } @else {
                 <button class="cd-primary-btn" (click)="installClawhubSkill(item.slug); communityDetailItem.set(null)" [disabled]="clawhubInstalling() === item.slug">
                   @if (clawhubInstalling() === item.slug) { <span class="btn-spinner"></span> }
-                  @else { Install Skill }
+                  @else { {{ 'tools.actions.installSkill' | translate }} }
                 </button>
               }
             </div>

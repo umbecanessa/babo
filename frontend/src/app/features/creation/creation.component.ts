@@ -7,6 +7,7 @@ import { AgentModelService } from '../../core/services/agent-model.service';
 import { PlatformService } from '../../core/services/platform.service';
 import { ChatModelPickerComponent } from '../chat/chat-model-picker/chat-model-picker.component';
 import { GenesisTemplate } from '../../core/models/agent.model';
+import { TranslateModule } from '@ngx-translate/core';
 
 /** Describes a selectable model size option in the UI. */
 interface ModelOption {
@@ -229,7 +230,7 @@ const SOUL_WISH_SUGGESTIONS: Record<string, string[]> = {
 @Component({
   selector: 'app-creation',
   standalone: true,
-  imports: [CommonModule, FormsModule, ChatModelPickerComponent],
+  imports: [CommonModule, FormsModule, ChatModelPickerComponent, TranslateModule],
   templateUrl: './creation.component.html',
   styleUrl: './creation.component.scss',
 })

@@ -19,7 +19,7 @@
       <span class="browser-panel-title" *ngIf="pageTitle">{{ pageTitle }} —</span>
       <span class="browser-panel-url">{{ pageUrl }}</span>
     </div>
-    <button class="browser-panel-close" (click)="onCollapse()" title="Close browser panel">
+    <button class="browser-panel-close" (click)="onCollapse()" [title]="'chat.browser.closePanel' | translate">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <line x1="18" y1="6" x2="6" y2="18"/>

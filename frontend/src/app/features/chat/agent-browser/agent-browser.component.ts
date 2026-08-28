@@ -14,6 +14,7 @@ import {
   NO_ERRORS_SCHEMA,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { TranslateModule } from '@ngx-translate/core';
 
 const GET_INTERACTIVE_ELEMENTS_JS = `
 (function() {
@@ -74,7 +75,7 @@ const GET_TEXT_JS = `
 @Component({
   selector: 'app-agent-browser',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, TranslateModule],
   schemas: [NO_ERRORS_SCHEMA],
   templateUrl: './agent-browser.component.html',
   styleUrl: './agent-browser.component.scss',

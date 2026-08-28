@@ -22,16 +22,18 @@ import type {
   NetworkDynamicsStatus,
 } from '../../core/models/agent.model';
 
+import { TranslateModule } from '@ngx-translate/core';
+
 @Component({
   selector: 'app-brain',
   standalone: true,
-  imports: [CommonModule, FormsModule, StatusBadgeComponent, LineChartComponent, TimeAgoPipe],
+  imports: [CommonModule, FormsModule, StatusBadgeComponent, LineChartComponent, TimeAgoPipe, TranslateModule],
   styleUrl: './brain.component.scss',
   template: `
     <div class="brain-container">
       <header class="brain-header">
         <div class="header-left">
-          <h1 class="agent-name">{{ agent()?.name || 'Agent' }}</h1>
+          <h1 class="agent-name">{{ agent()?.name || ('brain.agentFallback' | translate) }}</h1>
           <app-status-badge [status]="displayStatus()" [label]="displayStatus()"></app-status-badge>
         </div>
         <div class="header-actions">
@@ -40,7 +42,7 @@ import type {
             [disabled]="sleeping()"
             (click)="onSleep()"
           >
-            {{ sleeping() ? 'Sleeping...' : 'Sleep' }}
+            {{ sleeping() ? ('brain.sleeping' | translate) : ('brain.sleep' | translate) }}
           </button>
         </div>
       </header>
@@ -55,7 +57,7 @@ import type {
             [class.active]="activeTab() === t.id"
             (click)="activeTab.set(t.id)"
           >
-            {{ t.label }}
+            {{ ('brain.tabs.' + t.id) | translate }}
           </button>
         }
       </nav>
@@ -66,39 +68,39 @@ import type {
           <div class="tab-panel">
             <div class="stats-grid">
               <div class="stat-card">
-                <span class="stat-label">Status</span>
+                <span class="stat-label">{{ 'brain.stats.status' | translate }}</span>
                 <span class="stat-value">{{ displayStatus() }}</span>
               </div>
               <div class="stat-card">
-                <span class="stat-label">Chain Height</span>
+                <span class="stat-label">{{ 'brain.stats.chainHeight' | translate }}</span>
                 <span class="stat-value">{{ chain()?.current_height ?? '-' }}</span>
               </div>
               <div class="stat-card">
-                <span class="stat-label">Facts</span>
+                <span class="stat-label">{{ 'brain.stats.facts' | translate }}</span>
                 <span class="stat-value">{{ status()?.facts_in_memory ?? '-' }}</span>
               </div>
               <div class="stat-card">
-                <span class="stat-label">Turns</span>
+                <span class="stat-label">{{ 'brain.stats.turns' | translate }}</span>
                 <span class="stat-value">{{ status()?.turn_count ?? '-' }}</span>
               </div>
               <div class="stat-card">
-                <span class="stat-label">Sleeps</span>
+                <span class="stat-label">{{ 'brain.stats.sleeps' | translate }}</span>
                 <span class="stat-value">{{ status()?.sleep_count ?? '-' }}</span>
               </div>
               <div class="stat-card">
-                <span class="stat-label">Genesis Version</span>
+                <span class="stat-label">{{ 'brain.stats.genesisVersion' | translate }}</span>
                 <span class="stat-value mono">{{ status()?.genesis_version ?? agent()?.genesisVersion ?? '-' }}</span>
               </div>
               <div class="stat-card">
-                <span class="stat-label">Base Model</span>
+                <span class="stat-label">{{ 'brain.stats.baseModel' | translate }}</span>
                 <span class="stat-value mono">{{ chain()?.base_model ?? '-' }}</span>
               </div>
               <div class="stat-card">
-                <span class="stat-label">Soul Hash</span>
+                <span class="stat-label">{{ 'brain.stats.soulHash' | translate }}</span>
                 <span class="stat-value mono truncated">{{ chain()?.soul_hash ?? '-' }}</span>
               </div>
               <div class="stat-card">
-                <span class="stat-label">Sovereignty Mode</span>
+                <span class="stat-label">{{ 'brain.stats.sovereigntyMode' | translate }}</span>
                 <span class="stat-value">{{ chain()?.sovereignty_mode ?? '-' }}</span>
               </div>
               <div class="stat-card">
@@ -400,7 +402,7 @@ import type {
         @if (activeTab() === 'schedule') {
           <div class="tab-panel">
             <div class="schedule-section">
-              <h3 class="section-heading">Sleep Schedule</h3>
+              <h3 class="section-heading">{{ 'brain.schedule.title' | translate }}</h3>
               <p class="section-desc">Configure when this agent sleeps and wakes. Changes apply immediately.</p>
 
               <div class="schedule-grid">
@@ -453,7 +455,7 @@ import type {
 
               <div class="schedule-actions">
                 <button class="schedule-save-btn" (click)="saveSchedule()" [disabled]="scheduleSaving()">
-                  {{ scheduleSaving() ? 'Saving...' : 'Save Schedule' }}
+                  {{ scheduleSaving() ? ('common.saving' | translate) : ('brain.schedule.save' | translate) }}
                 </button>
                 @if (scheduleSaved()) {
                   <span class="schedule-saved-msg">Saved</span>

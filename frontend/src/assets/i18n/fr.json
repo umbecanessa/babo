@@ -18,7 +18,9 @@
     "off": "Off",
     "done": "Done",
     "online": "Online",
-    "offline": "Offline"
+    "offline": "Offline",
+    "close": "Close",
+    "retry": "Retry"
   },
   "setup": {
     "welcome": {
@@ -219,7 +221,8 @@
       "language": "Language",
       "languageHint": "Interface language only. Your agent still replies in the language you write in. Auto follows your device.",
       "fontSize": "Editor font size",
-      "fontFamily": "Font family"
+      "fontFamily": "Font family",
+      "save": "Save settings"
     },
     "nav": {
       "models": "Models & AI",
@@ -314,7 +317,8 @@
       "checklistRelay": "WhatsApp, Telegram, Gmail relay & Google integrations",
       "checklistByok": "Models via your API key (BYOK) or pay-as-you-go at upstream cost",
       "checklistNoMarkup": "No Babo markup on token usage",
-      "saveCap": "Save cap"
+      "saveCap": "Save cap",
+      "refundNote": "31-day refund available on your first subscription payment until {{date}}. Pay-as-you-go model charges are not refundable."
     },
     "integrations": {
       "title": "Integrations",
@@ -339,7 +343,10 @@
       "webhookUrl": "Resend inbound webhook URL:",
       "resendSaved": "Your Resend credentials saved",
       "inboundHint": "Verified domain in Resend for inbound routing.",
-      "googleHint": "Create a Google Cloud OAuth app and save client_id / client_secret in each agent's Tools → Google Workspace config, or ask the agent in chat to walk you through setup."
+      "googleHint": "Create a Google Cloud OAuth app and save client_id / client_secret in each agent's Tools → Google Workspace config, or ask the agent in chat to walk you through setup.",
+      "toolsLink": "Tools → Integrations",
+      "redirectUri": "Redirect URI:",
+      "messagingHint": "Telegram uses your BotFather token and registers webhooks on your NestJS server. WhatsApp pairs via QR on Babo Desktop — no NestJS webhook for inbound WhatsApp messages."
     },
     "keys": {
       "title": "API keys",
@@ -353,7 +360,12 @@
       "resetTour": "Reset first-run tour",
       "version": "Version",
       "checkUpdates": "Check for updates",
-      "checkingUpdates": "Checking…"
+      "checkingUpdates": "Checking…",
+      "integrationsLabel": "Agent integrations",
+      "integrationsHintBefore": "Channel setup lives under",
+      "integrationsHintMid": ". Self-hosted Resend and platform prerequisites are under",
+      "integrationsHintAfter": ".",
+      "settingsIntegrations": "Settings → Integrations"
     }
   },
   "info": {
@@ -697,6 +709,11 @@
       "primaryReach": "Primary reachability — Babo reports here by default",
       "setPrimaryReach": "Set as primary reachability",
       "subject": "Subject"
+    },
+    "browser": {
+      "workbench": "Workbench",
+      "tab": "Browser",
+      "closePanel": "Close browser panel"
     }
   },
   "dashboard": {
@@ -804,5 +821,137 @@
       "dataFolderFailed": "Could not open data folder",
       "exportFailed": "Export failed"
     }
+  },
+  "tools": {
+    "loading": "Loading...",
+    "title": "Skills & Tools",
+    "subtitle": "Agent integrations, skills, and tools",
+    "reviews": {
+      "title": "Pending Reviews",
+      "approve": "Approve & Restart",
+      "reject": "Reject",
+      "newSkill": "New skill:",
+      "newSkills": "New skills:"
+    },
+    "sections": {
+      "integrations": "Integrations",
+      "integrationsHint": "Channel connections for your agent",
+      "skills": "Skills",
+      "skillsHint": "Installed skill packages",
+      "agentTools": "Agent Tools",
+      "extensions": "Connected Extensions",
+      "community": "Community Skills & Extensions"
+    },
+    "empty": {
+      "skills": "No skills installed yet.",
+      "skillsHint": "Ask the agent to build one, or create a skill directory manually."
+    },
+    "relay": {
+      "checking": "Checking desktop relay…",
+      "checkingHint": "Connecting to your NestJS server to see if Babo Desktop is online.",
+      "online": "Desktop relay online",
+      "onlineHint": "Telegram and email webhooks can reach this agent. Babo Desktop is connected to {{url}}.",
+      "offline": "Desktop relay offline",
+      "offlineHint": "This is separate from Babo Cloud being up — your desktop must keep an open WebSocket to {{url}} for this agent. Restart Babo Desktop if you closed it."
+    },
+    "selfHosted": {
+      "title": "Self-hosted backend",
+      "hint": "Telegram and email need your NestJS server reachable over HTTPS and Babo Desktop online (relay). Configure platform credentials in Settings → Integrations."
+    },
+    "actions": {
+      "install": "Install",
+      "connect": "Connect",
+      "disconnect": "Disconnect",
+      "connected": "Connected",
+      "installSkill": "Install Skill",
+      "connectExtension": "Connect Extension"
+    },
+    "community": {
+      "search": "Search skills & extensions...",
+      "filterAll": "All",
+      "filterSkills": "Skills",
+      "filterExtensions": "Extensions"
+    }
+  },
+  "memory": {
+    "loading": "Loading agent...",
+    "unnamed": "Unnamed Agent",
+    "runtimeId": "Runtime ID",
+    "tabs": {
+      "overview": "Overview",
+      "knowledge": "Knowledge",
+      "chain": "Chain",
+      "working-memory": "Working Memory",
+      "episodes": "Episodes",
+      "soul": "Soul"
+    },
+    "stats": {
+      "facts": "Facts",
+      "chainHeight": "Chain Height",
+      "sleeps": "Sleeps",
+      "wmSlots": "WM Slots",
+      "ansSignals": "ANS Signals",
+      "sovereignty": "Sovereignty",
+      "soulHash": "Soul Hash"
+    }
+  },
+  "brain": {
+    "agentFallback": "Agent",
+    "sleep": "Sleep",
+    "sleeping": "Sleeping...",
+    "tabs": {
+      "overview": "Overview",
+      "self-state": "Self-State",
+      "network": "Network",
+      "hormones": "Hormones",
+      "working-memory": "Working Memory",
+      "theory-of-mind": "Theory of Mind",
+      "narrative": "Narrative",
+      "predictions": "Predictions",
+      "visual-cortex": "Visual Cortex",
+      "signals": "Signals",
+      "events": "Events",
+      "schedule": "Schedule",
+      "config": "Config"
+    },
+    "stats": {
+      "status": "Status",
+      "chainHeight": "Chain Height",
+      "facts": "Facts",
+      "turns": "Turns",
+      "sleeps": "Sleeps",
+      "genesisVersion": "Genesis Version",
+      "baseModel": "Base Model",
+      "soulHash": "Soul Hash",
+      "sovereigntyMode": "Sovereignty Mode"
+    },
+    "schedule": {
+      "title": "Sleep Schedule",
+      "save": "Save Schedule",
+      "saved": "Saved"
+    }
+  },
+  "tasks": {
+    "title": "Task Board",
+    "filterAll": "All",
+    "newList": "New list",
+    "loading": "Loading tasks...",
+    "retry": "Retry",
+    "columns": {
+      "inbox": "Inbox",
+      "queued": "Queued",
+      "in_progress": "In Progress",
+      "blocked": "Blocked",
+      "done": "Done",
+      "deferred": "Deferred"
+    }
+  },
+  "creation": {
+    "title": "Choose a Mind",
+    "subtitle": "Each path shapes how your agent thinks",
+    "model": "Model",
+    "skip": "Skip",
+    "clickOrb": "Click the orb to initiate life",
+    "redirecting": "Redirecting to chat..."
   }
 }

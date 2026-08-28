@@ -7,11 +7,12 @@ import { WebSocketService } from '../../core/services/websocket.service';
 import { TaskBoardComponent } from './task-board/task-board.component';
 import { TodoItem, TodoList, PlanSummary, PlanStepSummary } from './task.models';
 import { THEME_COLORS } from '../../core/theme-colors';
+import { TranslateModule } from '@ngx-translate/core';
 
 @Component({
   selector: 'app-tasks',
   standalone: true,
-  imports: [CommonModule, TaskBoardComponent],
+  imports: [CommonModule, TaskBoardComponent, TranslateModule],
   templateUrl: './tasks.component.html',
   styleUrl: './tasks.component.scss',
 })

@@ -1,9 +1,10 @@
-import { Component, Input, Output, EventEmitter } from '@angular/core';
+import { Component, Input, Output, EventEmitter, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { CdkDragDrop, DragDropModule, moveItemInArray, transferArrayItem } from '@angular/cdk/drag-drop';
 import { TaskCardComponent } from '../task-card/task-card.component';
 import { TaskCreateComponent } from '../task-create/task-create.component';
 import { PlanSummary } from '../task.models';
+import { TranslateService } from '@ngx-translate/core';
 
 export interface BoardColumn {
   id: string;
@@ -12,13 +13,13 @@ export interface BoardColumn {
   items: any[];
 }
 
-const COLUMNS: { id: string; label: string; color: string }[] = [
-  { id: 'inbox', label: 'Inbox', color: '#94a3b8' },
-  { id: 'queued', label: 'Queued', color: 'var(--accent-primary)' },
-  { id: 'in_progress', label: 'In Progress', color: 'var(--accent-warn)' },
-  { id: 'blocked', label: 'Blocked', color: 'var(--accent-danger)' },
-  { id: 'done', label: 'Done', color: 'var(--accent-success)' },
-  { id: 'deferred', label: 'Deferred', color: '#6b7280' },
+const COLUMNS: { id: string; color: string }[] = [
+  { id: 'inbox', color: '#94a3b8' },
+  { id: 'queued', color: 'var(--accent-primary)' },
+  { id: 'in_progress', color: 'var(--accent-warn)' },
+  { id: 'blocked', color: 'var(--accent-danger)' },
+  { id: 'done', color: 'var(--accent-success)' },
+  { id: 'deferred', color: '#6b7280' },
 ];
 
 @Component({
@@ -29,6 +30,7 @@ const COLUMNS: { id: string; label: string; color: string }[] = [
   styleUrl: './task-board.component.scss',
 })
 export class TaskBoardComponent {
+  private readonly translate = inject(TranslateService);
   @Input() set items(value: any[]) {
     this._items = value || [];
     this.buildColumns();
@@ -64,7 +66,9 @@ export class TaskBoardComponent {
     this.childrenByParent = childMap;
 
     this.columns = COLUMNS.map(col => ({
-      ...col,
+      id: col.id,
+      color: col.color,
+      label: this.translate.instant(`tasks.columns.${col.id}`),
       items: topLevel
         .filter(i => i.status === col.id)
         .sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0)),

@@ -7,7 +7,7 @@
       [class.active]="panels.leftDock() === 'workbench'"
       (click)="selectTab('workbench')"
     >
-      Workbench
+      {{ 'chat.browser.workbench' | translate }}
     </button>
     <button
       type="button"
@@ -16,7 +16,7 @@
       [class.active]="panels.leftDock() === 'browser'"
       (click)="selectTab('browser')"
     >
-      Browser
+      {{ 'chat.browser.tab' | translate }}
     </button>
   </div>
 

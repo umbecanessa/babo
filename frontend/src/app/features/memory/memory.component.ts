@@ -53,15 +53,17 @@ interface ContextGroup {
   items: ContextItem[];
 }
 
+import { TranslateModule } from '@ngx-translate/core';
+
 @Component({
   selector: 'app-memory',
   standalone: true,
-  imports: [CommonModule, FormsModule, KeyValuePipe, StatusBadgeComponent, TimeAgoPipe],
+  imports: [CommonModule, FormsModule, KeyValuePipe, StatusBadgeComponent, TimeAgoPipe, TranslateModule],
   template: `
     @if (loading()) {
       <div class="loading-state">
         <div class="spinner"></div>
-        <span>Loading agent...</span>
+        <span>{{ 'memory.loading' | translate }}</span>
       </div>
     }
 
@@ -69,12 +71,12 @@ interface ContextGroup {
       <header class="detail-header">
         <div class="header-info">
           <div class="header-title-row">
-            <h1 class="agent-name">{{ a.name || 'Unnamed Agent' }}</h1>
+            <h1 class="agent-name">{{ a.name || ('memory.unnamed' | translate) }}</h1>
             <app-status-badge [status]="a.status" />
           </div>
           <div class="header-meta">
             <span class="meta-item">
-              <span class="meta-label">Runtime ID</span>
+              <span class="meta-label">{{ 'memory.runtimeId' | translate }}</span>
               <code class="mono">{{ a.runtimeAgentId }}</code>
             </span>
           </div>
@@ -89,7 +91,7 @@ interface ContextGroup {
             (click)="selectTab(tab.id)"
           >
             <span class="tab-icon">{{ tab.icon }}</span>
-            {{ tab.label }}
+            {{ ('memory.tabs.' + tab.id) | translate }}
           </button>
         }
       </nav>
@@ -102,27 +104,27 @@ interface ContextGroup {
             <div class="overview-grid">
               <div class="stat-card clickable" (click)="selectTab('knowledge')">
                 <span class="stat-value">{{ overviewStats().factsCount }}</span>
-                <span class="stat-label">Facts</span>
+                <span class="stat-label">{{ 'memory.stats.facts' | translate }}</span>
               </div>
               <div class="stat-card clickable" (click)="selectTab('chain')">
                 <span class="stat-value">{{ overviewStats().chainHeight }}</span>
-                <span class="stat-label">Chain Height</span>
+                <span class="stat-label">{{ 'memory.stats.chainHeight' | translate }}</span>
               </div>
               <div class="stat-card">
                 <span class="stat-value">{{ overviewStats().sleepCount }}</span>
-                <span class="stat-label">Sleeps</span>
+                <span class="stat-label">{{ 'memory.stats.sleeps' | translate }}</span>
               </div>
               <div class="stat-card clickable" (click)="selectTab('working-memory')">
                 <span class="stat-value">{{ wmData()?.slot_count ?? overviewStats().ansSignals }}</span>
-                <span class="stat-label">{{ wmData()?.slot_count != null ? 'WM Slots' : 'ANS Signals' }}</span>
+                <span class="stat-label">{{ wmData()?.slot_count != null ? ('memory.stats.wmSlots' | translate) : ('memory.stats.ansSignals' | translate) }}</span>
               </div>
               <div class="stat-card">
                 <span class="stat-value stat-mono">{{ overviewStats().sovereignty }}</span>
-                <span class="stat-label">Sovereignty</span>
+                <span class="stat-label">{{ 'memory.stats.sovereignty' | translate }}</span>
               </div>
               <div class="stat-card clickable" (click)="selectTab('soul')">
                 <span class="stat-value stat-mono">{{ truncate(overviewStats().soulHash, 14) }}</span>
-                <span class="stat-label">Soul Hash</span>
+                <span class="stat-label">{{ 'memory.stats.soulHash' | translate }}</span>
               </div>
             </div>
 

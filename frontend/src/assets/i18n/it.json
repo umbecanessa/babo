@@ -18,7 +18,9 @@
     "off": "Off",
     "done": "Fatto",
     "online": "Online",
-    "offline": "Offline"
+    "offline": "Offline",
+    "close": "Chiudi",
+    "retry": "Riprova"
   },
   "setup": {
     "welcome": {
@@ -219,7 +221,8 @@
       "language": "Lingua",
       "languageHint": "Solo lingua dell'interfaccia. L'agente risponde nella lingua in cui scrivi. Auto segue il dispositivo.",
       "fontSize": "Dimensione font editor",
-      "fontFamily": "Famiglia di font"
+      "fontFamily": "Famiglia di font",
+      "save": "Salva impostazioni"
     },
     "nav": {
       "models": "Modelli e AI",
@@ -314,7 +317,8 @@
       "checklistRelay": "WhatsApp, Telegram, relay Gmail e integrazioni Google",
       "checklistByok": "Modelli via API key (BYOK) o pay-as-you-go al costo upstream",
       "checklistNoMarkup": "Nessun markup Babo sull'uso token",
-      "saveCap": "Salva tetto"
+      "saveCap": "Salva tetto",
+      "refundNote": "Rimborso entro 31 giorni sul primo pagamento di abbonamento fino al {{date}}. I costi pay-as-you-go dei modelli non sono rimborsabili."
     },
     "integrations": {
       "title": "Integrazioni",
@@ -339,7 +343,10 @@
       "webhookUrl": "URL webhook inbound Resend:",
       "resendSaved": "Credenziali Resend salvate",
       "inboundHint": "Dominio verificato in Resend per il routing inbound.",
-      "googleHint": "Crea un'app OAuth Google Cloud e salva client_id / client_secret in Tools → Google Workspace di ogni agente, oppure chiedi all'agente in chat di guidarti."
+      "googleHint": "Crea un'app OAuth Google Cloud e salva client_id / client_secret in Tools → Google Workspace di ogni agente, oppure chiedi all'agente in chat di guidarti.",
+      "toolsLink": "Tools → Integrazioni",
+      "redirectUri": "URI di redirect:",
+      "messagingHint": "Telegram usa il token BotFather e registra webhook sul server NestJS. WhatsApp si collega via QR su Babo Desktop — nessun webhook NestJS per i messaggi WhatsApp in ingresso."
     },
     "keys": {
       "title": "Chiavi API",
@@ -353,7 +360,12 @@
       "resetTour": "Reimposta tour iniziale",
       "version": "Versione",
       "checkUpdates": "Controlla aggiornamenti",
-      "checkingUpdates": "Controllo…"
+      "checkingUpdates": "Controllo…",
+      "integrationsLabel": "Integrazioni agente",
+      "integrationsHintBefore": "La configurazione dei canali è in",
+      "integrationsHintMid": ". Resend self-hosted e i prerequisiti di piattaforma sono in",
+      "integrationsHintAfter": ".",
+      "settingsIntegrations": "Impostazioni → Integrazioni"
     }
   },
   "info": {
@@ -697,6 +709,11 @@
       "primaryReach": "Reachability primaria — Babo riporta qui di default",
       "setPrimaryReach": "Imposta come reachability primaria",
       "subject": "Oggetto"
+    },
+    "browser": {
+      "workbench": "Workbench",
+      "tab": "Browser",
+      "closePanel": "Chiudi pannello browser"
     }
   },
   "dashboard": {
@@ -804,5 +821,137 @@
       "dataFolderFailed": "Impossibile aprire la cartella dati",
       "exportFailed": "Esportazione non riuscita"
     }
+  },
+  "tools": {
+    "loading": "Caricamento...",
+    "title": "Skill e tool",
+    "subtitle": "Integrazioni, skill e tool dell'agente",
+    "reviews": {
+      "title": "Revisioni in sospeso",
+      "approve": "Approva e riavvia",
+      "reject": "Rifiuta",
+      "newSkill": "Nuova skill:",
+      "newSkills": "Nuove skill:"
+    },
+    "sections": {
+      "integrations": "Integrazioni",
+      "integrationsHint": "Connessioni canale per il tuo agente",
+      "skills": "Skill",
+      "skillsHint": "Pacchetti skill installati",
+      "agentTools": "Tool agente",
+      "extensions": "Estensioni collegate",
+      "community": "Skill ed estensioni della community"
+    },
+    "empty": {
+      "skills": "Nessuna skill installata.",
+      "skillsHint": "Chiedi all'agente di crearne una, oppure crea una directory skill manualmente."
+    },
+    "relay": {
+      "checking": "Controllo relay desktop…",
+      "checkingHint": "Connessione al server NestJS per verificare se Babo Desktop è online.",
+      "online": "Relay desktop online",
+      "onlineHint": "I webhook Telegram ed email raggiungono questo agente. Babo Desktop è connesso a {{url}}.",
+      "offline": "Relay desktop offline",
+      "offlineHint": "Diverso da Babo Cloud online — il desktop deve mantenere un WebSocket aperto verso {{url}} per questo agente. Riavvia Babo Desktop se l'hai chiuso."
+    },
+    "selfHosted": {
+      "title": "Backend self-hosted",
+      "hint": "Telegram ed email richiedono NestJS raggiungibile via HTTPS e Babo Desktop online (relay). Configura le credenziali in Impostazioni → Integrazioni."
+    },
+    "actions": {
+      "install": "Installa",
+      "connect": "Collega",
+      "disconnect": "Scollega",
+      "connected": "Collegato",
+      "installSkill": "Installa skill",
+      "connectExtension": "Collega estensione"
+    },
+    "community": {
+      "search": "Cerca skill ed estensioni...",
+      "filterAll": "Tutto",
+      "filterSkills": "Skill",
+      "filterExtensions": "Estensioni"
+    }
+  },
+  "memory": {
+    "loading": "Caricamento agente...",
+    "unnamed": "Agente senza nome",
+    "runtimeId": "Runtime ID",
+    "tabs": {
+      "overview": "Panoramica",
+      "knowledge": "Conoscenza",
+      "chain": "Catena",
+      "working-memory": "Memoria di lavoro",
+      "episodes": "Episodi",
+      "soul": "Soul"
+    },
+    "stats": {
+      "facts": "Fatti",
+      "chainHeight": "Altezza catena",
+      "sleeps": "Sonni",
+      "wmSlots": "Slot WM",
+      "ansSignals": "Segnali ANS",
+      "sovereignty": "Sovranità",
+      "soulHash": "Hash Soul"
+    }
+  },
+  "brain": {
+    "agentFallback": "Agente",
+    "sleep": "Sonno",
+    "sleeping": "In sonno...",
+    "tabs": {
+      "overview": "Panoramica",
+      "self-state": "Stato interno",
+      "network": "Rete",
+      "hormones": "Ormoni",
+      "working-memory": "Memoria di lavoro",
+      "theory-of-mind": "Theory of Mind",
+      "narrative": "Narrativa",
+      "predictions": "Previsioni",
+      "visual-cortex": "Corteccia visiva",
+      "signals": "Segnali",
+      "events": "Eventi",
+      "schedule": "Programma",
+      "config": "Config"
+    },
+    "stats": {
+      "status": "Stato",
+      "chainHeight": "Altezza catena",
+      "facts": "Fatti",
+      "turns": "Turni",
+      "sleeps": "Sonni",
+      "genesisVersion": "Versione genesis",
+      "baseModel": "Modello base",
+      "soulHash": "Hash Soul",
+      "sovereigntyMode": "Modalità sovranità"
+    },
+    "schedule": {
+      "title": "Programma di sonno",
+      "save": "Salva programma",
+      "saved": "Salvato"
+    }
+  },
+  "tasks": {
+    "title": "Board attività",
+    "filterAll": "Tutto",
+    "newList": "Nuova lista",
+    "loading": "Caricamento attività...",
+    "retry": "Riprova",
+    "columns": {
+      "inbox": "Inbox",
+      "queued": "In coda",
+      "in_progress": "In corso",
+      "blocked": "Bloccate",
+      "done": "Fatte",
+      "deferred": "Rinviate"
+    }
+  },
+  "creation": {
+    "title": "Scegli una mente",
+    "subtitle": "Ogni percorso plasma come pensa il tuo agente",
+    "model": "Modello",
+    "skip": "Salta",
+    "clickOrb": "Clicca l'orb per dare inizio alla vita",
+    "redirecting": "Reindirizzamento alla chat..."
   }
 }

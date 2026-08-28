@@ -23,14 +23,14 @@
   @if (phase() === 'selecting') {
     <div class="selection-stage animate-fade-in">
       <div class="selection-header">
-        <h1 class="selection-title">Choose a Mind</h1>
+        <h1 class="selection-title">{{ 'creation.title' | translate }}</h1>
       </div>
-      <p class="selection-subtitle">Each path shapes how your agent thinks</p>
+      <p class="selection-subtitle">{{ 'creation.subtitle' | translate }}</p>
 
       <!-- Model selector -->
       @if (!loading() && modelOptions().length > 1) {
         <div class="model-selector">
-          <span class="model-selector-label">Model</span>
+          <span class="model-selector-label">{{ 'creation.model' | translate }}</span>
           <div class="model-pills">
             @for (opt of modelOptions(); track opt.key) {
               <button class="model-pill"
@@ -138,7 +138,7 @@
         <button class="confirm-btn"
                 [disabled]="!selectedVersion()"
                 (click)="confirmSelection()">
-          Continue
+          {{ 'common.continue' | translate }}
         </button>
       }
     </div>
@@ -169,8 +169,8 @@
       }
 
       <div class="soul-wish-actions">
-        <button class="skip-btn" (click)="skipSoulWish()">Skip</button>
-        <button class="confirm-btn" (click)="confirmSoulWish()">Continue</button>
+        <button class="skip-btn" (click)="skipSoulWish()">{{ 'creation.skip' | translate }}</button>
+        <button class="confirm-btn" (click)="confirmSoulWish()">{{ 'common.continue' | translate }}</button>
       </div>
     </div>
 
@@ -225,14 +225,14 @@
       <!-- Phase text -->
       <div class="phase-text">
         @if (phase() === 'waiting') {
-          <p class="hint animate-fade-in">Click the orb to initiate life</p>
+          <p class="hint animate-fade-in">{{ 'creation.clickOrb' | translate }}</p>
         }
         @if (phase() === 'creating') {
           <p class="status animate-fade-in">{{ phaseText() }}</p>
         }
         @if (phase() === 'done') {
           <p class="done-text animate-fade-in">{{ phaseText() }}</p>
-          <p class="done-sub animate-fade-in">Redirecting to chat...</p>
+          <p class="done-sub animate-fade-in">{{ 'creation.redirecting' | translate }}</p>
         }
       </div>
     </div>
