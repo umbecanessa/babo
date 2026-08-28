@@ -41,7 +41,9 @@ def _valid_agent_name(name: str) -> bool:
         return False
     if cleaned.lower() in _INVALID_AGENT_NAMES:
         return False
-    if not cleaned[0].isupper():
+    # Allow lowercase ("your name is babo"); other patterns already require
+    # an initial capital in the regex when the phrasing is ambiguous.
+    if not cleaned[0].isalpha():
         return False
     return True
 
