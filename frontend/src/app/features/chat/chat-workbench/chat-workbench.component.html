@@ -1,54 +1,54 @@
-<div class="wb-shell" role="region" aria-label="Agent workbench">
+<div class="wb-shell" role="region" [attr.aria-label]="'chat.workbench.aria' | translate">
   <div class="wb-handle-bar">
     <div class="wb-handle" aria-hidden="true"></div>
     <div class="wb-header-text">
-      <span class="wb-title">Workbench</span>
-      <span class="wb-count">{{ counts().all }} events</span>
+      <span class="wb-title">{{ 'chat.workbench.title' | translate }}</span>
+      <span class="wb-count">{{ 'chat.workbench.eventCount' | translate:{ count: counts().all } }}</span>
     </div>
-    <button type="button" class="wb-close" (click)="close()" title="Close workbench">
+    <button type="button" class="wb-close" (click)="close()" [title]="'chat.workbench.close' | translate">
       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
       </svg>
     </button>
     <button type="button" class="wb-density" (click)="workbench.toggleShowAllThreads()"
-      [title]="workbench.showAllThreads() ? 'Showing all branches' : 'Showing current branch only'">
-      {{ workbench.showAllThreads() ? 'All branches' : 'This branch' }}
+      [title]="workbench.showAllThreads() ? ('chat.workbench.allBranchesTitle' | translate) : ('chat.workbench.thisBranchTitle' | translate)">
+      {{ workbench.showAllThreads() ? ('chat.workbench.allBranches' | translate) : ('chat.workbench.thisBranch' | translate) }}
     </button>
-    <button type="button" class="wb-density" (click)="cycleDensity()" [title]="'View: ' + densityLabel()">
+    <button type="button" class="wb-density" (click)="cycleDensity()" [title]="'chat.workbench.viewTitle' | translate:{ label: densityLabel() }">
       {{ densityLabel() }}
     </button>
   </div>
 
-  <div class="wb-tabs" role="tablist" aria-label="Workbench scope">
+  <div class="wb-tabs" role="tablist" [attr.aria-label]="'chat.workbench.tabsAria' | translate">
     <button type="button" role="tab" class="wb-tab" [class.active]="activeTab() === 'all'"
       [attr.aria-selected]="activeTab() === 'all'" (click)="setTab('all')">
-      All <span class="wb-tab-badge">{{ counts().all }}</span>
+      {{ 'chat.workbench.tabAll' | translate }} <span class="wb-tab-badge">{{ counts().all }}</span>
     </button>
     <button type="button" role="tab" class="wb-tab" [class.active]="activeTab() === 'chat'"
       [attr.aria-selected]="activeTab() === 'chat'" (click)="setTab('chat')">
-      Chat task <span class="wb-tab-badge">{{ counts().chat }}</span>
+      {{ 'chat.workbench.tabChat' | translate }} <span class="wb-tab-badge">{{ counts().chat }}</span>
     </button>
     <button type="button" role="tab" class="wb-tab" [class.active]="activeTab() === 'background'"
       [attr.aria-selected]="activeTab() === 'background'" (click)="setTab('background')">
-      Background <span class="wb-tab-badge">{{ counts().background }}</span>
+      {{ 'chat.workbench.tabBackground' | translate }} <span class="wb-tab-badge">{{ counts().background }}</span>
     </button>
     <button type="button" role="tab" class="wb-tab" [class.active]="activeTab() === 'channel'"
       [attr.aria-selected]="activeTab() === 'channel'" (click)="setTab('channel')">
-      Channels <span class="wb-tab-badge">{{ counts().channel }}</span>
+      {{ 'chat.workbench.tabChannels' | translate }} <span class="wb-tab-badge">{{ counts().channel }}</span>
     </button>
   </div>
 
   <div class="wb-body">
     @if (workbench.entries().length === 0) {
       <div class="wb-empty">
-        <p>Tool runs and agent steps will appear here while the agent works.</p>
-        <p class="wb-empty-hint">Use <strong>Chat task</strong> for this thread, <strong>Background</strong> for autonomous work.</p>
+        <p>{{ 'chat.workbench.empty' | translate }}</p>
+        <p class="wb-empty-hint">{{ 'chat.workbench.emptyHint' | translate }}</p>
       </div>
     } @else if (displayItems().length === 0) {
       <div class="wb-empty wb-empty-tab">
-        <p>No events match the current view.</p>
+        <p>{{ 'chat.workbench.emptyTab' | translate }}</p>
         @if (workbench.density() === 'focused') {
-          <p class="wb-empty-hint">Switch to <strong>Standard</strong> or <strong>Debug</strong> to see reads and activity.</p>
+          <p class="wb-empty-hint">{{ 'chat.workbench.emptyFocusedHint' | translate }}</p>
         }
       </div>
     } @else {
@@ -66,7 +66,7 @@
                   <span class="wb-tag wb-tag--actor" [class.wb-tag--sub]="!!item.delegateNumber">
                     {{ actorLabel(item.delegateNumber) }}
                   </span>
-                  <span class="wb-tag wb-tag--parallel">Parallel</span>
+                  <span class="wb-tag wb-tag--parallel">{{ 'chat.workbench.parallel' | translate }}</span>
                   <span class="wb-tag wb-tag--muted">{{ groupTitle(item) }}</span>
                 </div>
                 <time class="wb-time">{{ item.ts | date:'HH:mm:ss' }}</time>
@@ -191,7 +191,7 @@
 
               @if (showErrorDetail(e, entryOutputText(e))) {
                 <details class="wb-detail">
-                  <summary class="wb-detail-summary">Full output</summary>
+                  <summary class="wb-detail-summary">{{ 'chat.workbench.fullOutput' | translate }}</summary>
                   <pre class="wb-detail-pre" [innerHTML]="e.detail | ansi"></pre>
                 </details>
               }

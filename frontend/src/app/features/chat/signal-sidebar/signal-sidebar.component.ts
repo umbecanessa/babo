@@ -6,6 +6,7 @@ import { ApiService } from '../../../core/services/api.service';
 import { HormonePanelComponent } from '../hormone-panel/hormone-panel.component';
 import { InfoModalComponent, InfoModalConfig } from '../../../shared/info-modal/info-modal.component';
 import { CryptexVizComponent } from '../cryptex-viz/cryptex-viz.component';
+import { TranslateModule } from '@ngx-translate/core';
 import {
   SignalTag,
   tagColor as _tagColor,
@@ -88,7 +89,7 @@ const MAX_VISIBLE_ACTIVITIES_EXPANDED = 10;
 @Component({
   selector: 'app-signal-sidebar',
   standalone: true,
-  imports: [CommonModule, FormsModule, HormonePanelComponent, InfoModalComponent, CryptexVizComponent],
+  imports: [CommonModule, FormsModule, HormonePanelComponent, InfoModalComponent, CryptexVizComponent, TranslateModule],
   templateUrl: './signal-sidebar.component.html',
   styleUrl: './signal-sidebar.component.scss',
 })

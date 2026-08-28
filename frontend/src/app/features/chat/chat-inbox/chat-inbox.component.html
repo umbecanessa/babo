@@ -1,11 +1,11 @@
 <div class="inbox-panel">
   @if (sections().needsYou.length === 0 && sections().unread.length === 0 && sections().skipped.length === 0) {
-    <p class="inbox-empty">All caught up.</p>
+    <p class="inbox-empty">{{ 'chat.inbox.empty' | translate }}</p>
   }
 
   @if (sections().needsYou.length > 0) {
     <section class="inbox-section">
-      <h4 class="inbox-section-title">Needs you</h4>
+      <h4 class="inbox-section-title">{{ 'chat.inbox.needsYou' | translate }}</h4>
       @for (item of sections().needsYou; track item.id) {
         <button type="button" class="inbox-row priority" (click)="open(item)">
           <span class="inbox-kind">{{ kindLabel(item.kind) }}</span>
@@ -18,7 +18,7 @@
 
   @if (sections().unread.length > 0) {
     <section class="inbox-section">
-      <h4 class="inbox-section-title">Unread</h4>
+      <h4 class="inbox-section-title">{{ 'chat.inbox.unread' | translate }}</h4>
       @for (item of sections().unread; track item.id) {
         <button type="button" class="inbox-row" (click)="open(item)">
           <span class="inbox-kind">{{ kindLabel(item.kind) }}</span>
@@ -31,7 +31,7 @@
 
   @if (sections().skipped.length > 0) {
     <section class="inbox-section">
-      <h4 class="inbox-section-title">Skipped / blocked</h4>
+      <h4 class="inbox-section-title">{{ 'chat.inbox.skipped' | translate }}</h4>
       @for (item of sections().skipped; track item.id) {
         <button type="button" class="inbox-row muted" (click)="open(item)">
           <span class="inbox-kind">{{ kindLabel(item.kind) }}</span>
@@ -43,7 +43,7 @@
 
   @if (sections().recent.length > 0) {
     <section class="inbox-section">
-      <h4 class="inbox-section-title">Recent</h4>
+      <h4 class="inbox-section-title">{{ 'chat.inbox.recent' | translate }}</h4>
       @for (item of sections().recent; track item.id) {
         <button type="button" class="inbox-row faint" (click)="open(item)">
           <span class="inbox-preview">{{ item.preview }}</span>

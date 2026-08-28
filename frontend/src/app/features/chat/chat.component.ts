@@ -1008,7 +1008,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     const sent = this.ws.sendCommand(cmd);
     if (!sent) {
       this.toast.show(
-        'Not connected — could not send sleep response. Reopen chat and try again.',
+        this.translate.instant('toast.chat.sleepNotConnected'),
         'error',
       );
       return;
@@ -1024,7 +1024,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     });
     if (!sent) {
       this.toast.show(
-        'Not connected — could not send budget response. Reopen chat and try again.',
+        this.translate.instant('toast.chat.budgetNotConnected'),
         'error',
       );
       return;
@@ -2108,7 +2108,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
       case 'channel_send_result': {
         if (!msg.ok) {
-          this.toast.show(msg.error || 'Failed to send on channel', 'error');
+          this.toast.show(msg.error || this.translate.instant('toast.chat.channelSendFailed'), 'error');
           this.messages.update(msgs => {
             const sk = msg.session_key as string;
             const reversed = [...msgs];
@@ -2190,7 +2190,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         this.agenticStopping.set(false);
         this.agenticStep.set(0);
         this.agenticMaxSteps.set(msg.max_steps || 15);
-        this.activityStatus.set('Starting task...');
+        this.activityStatus.set(this.translate.instant('chat.status.startingTask'));
         this.lastAgenticResult.set(null);
         this._agenticStepEvents = [];
         this._preToolReasoning = '';
@@ -2610,7 +2610,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         const count = msg.count || 0;
         const batchId = msg.batch_id || '';
         this._completeDelegateBatchPill(batchId, count);
-        this.activityStatus.set('Compiling delegate results...');
+        this.activityStatus.set(this.translate.instant('chat.status.compiling'));
         break;
       }
 
@@ -3316,7 +3316,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         this.clearAwaitingResponse();
         this.askUserPending.set(true);
         this.budgetPromptPending.set(false);
-        this.activityStatus.set('Waiting for your answer…');
+        this.activityStatus.set(this.translate.instant('chat.status.waitAnswer'));
         const question = msg.question || 'I need more information to continue.';
         this.messages.update(msgs => [...msgs, {
           type: 'ask_user',
@@ -3349,7 +3349,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         this.clearAwaitingResponse();
         this.budgetPromptPending.set(true);
         this.askUserPending.set(false);
-        this.activityStatus.set('Waiting for your decision…');
+        this.activityStatus.set(this.translate.instant('chat.status.waitDecision'));
         const question = msg.question || 'I need more steps to continue.';
         const options = Array.isArray(msg.options)
           ? msg.options.map((o: unknown) => Number(o)).filter((o: number) => o > 0)
@@ -3418,7 +3418,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
             this.messageList?.clearBudgetResponded(pending);
             this._pendingBudgetIndex = null;
           }
-          this.toast.show(msg.content || 'Budget response failed.', 'error');
+          this.toast.show(msg.content || this.translate.instant('toast.chat.budgetFailed'), 'error');
         }
         break;
       }
@@ -3530,7 +3530,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
             this.messageList?.clearDrowsyResponded(pending);
             this._pendingDrowsyIndex = null;
           }
-          this.toast.show(msg.content || 'Sleep response could not be applied.', 'error');
+          this.toast.show(msg.content || this.translate.instant('toast.chat.sleepFailed'), 'error');
           break;
         }
         this._pendingDrowsyIndex = null;

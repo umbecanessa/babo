@@ -217,7 +217,9 @@
       "themeDark": "Dark",
       "themeSystem": "System",
       "language": "Language",
-      "languageHint": "Interface language only. Your agent still replies in the language you write in. Auto follows your device."
+      "languageHint": "Interface language only. Your agent still replies in the language you write in. Auto follows your device.",
+      "fontSize": "Editor font size",
+      "fontFamily": "Font family"
     },
     "nav": {
       "models": "Models & AI",
@@ -253,31 +255,61 @@
       "stop": "Stop",
       "restart": "Restart",
       "viewLogs": "View logs",
-      "resetEnv": "Reset Python environment"
+      "resetEnv": "Reset Python environment",
+      "portHint": "Process on this machine (port {{port}}).",
+      "running": "Running",
+      "stopped": "Stopped",
+      "envReady": "Environment ready",
+      "notInstalled": "Not installed",
+      "setupComplete": "Setup complete",
+      "setupIncomplete": "Setup incomplete",
+      "setupStatus": "Setup {{status}}",
+      "openWizard": "Open setup wizard",
+      "resetting": "Resetting…",
+      "emptyLogs": "(empty)"
     },
     "support": {
       "title": "Support & Debug",
       "desc": "Diagnostics for support and local troubleshooting.",
       "recentErrors": "Recent errors",
-      "logsConfig": "App logs & config"
+      "logsConfig": "App logs & config",
+      "exportBundle": "Export full debug bundle",
+      "exporting": "Exporting…",
+      "refresh": "Refresh",
+      "refreshing": "Refreshing…",
+      "openDataFolder": "Open data folder",
+      "errorsHint": "Parsed from runtime, setup, and desktop logs (newest first).",
+      "loading": "Loading…",
+      "noErrors": "No recent errors in logs or runtime status.",
+      "notFound": "Not found",
+      "export": "Export"
     },
     "permissions": {
       "title": "Permissions",
-      "desc": "What the local agent may access on this computer."
+      "desc": "What the local agent may access on this computer.",
+      "resetAll": "Reset all permission decisions"
     },
     "billing": {
       "title": "Billing",
       "desc": "Babo Cloud subscription and usage.",
       "lifetime": "Lifetime access",
       "subscribe": "Subscribe to use Babo Cloud models",
-      "payg": "Pay-as-you-go models"
+      "payg": "Pay-as-you-go models",
+      "includedUsage": "Included usage",
+      "manage": "Manage subscription",
+      "spendCap": "Monthly pay-as-you-go spend cap (USD)",
+      "spendCapHint": "Optional hard cap on pay-as-you-go spend."
     },
     "integrations": {
       "title": "Integrations",
       "desc": "Platform credentials and channel prerequisites.",
       "email": "Email (Resend)",
       "google": "Google Workspace",
-      "messaging": "Telegram & WhatsApp"
+      "messaging": "Telegram & WhatsApp",
+      "resendKey": "Resend API key",
+      "inboundDomain": "Inbound domain",
+      "saveResend": "Save Resend credentials",
+      "removeResend": "Remove saved credentials"
     },
     "keys": {
       "title": "API keys",
@@ -461,6 +493,115 @@
       "live": "Live",
       "context": "Context",
       "conversations": "Conversations"
+    },
+    "tool": {
+      "file": "file",
+      "readFile": "Read file",
+      "writing": "Writing…",
+      "written": "Written",
+      "failed": "Failed",
+      "reading": "Reading…",
+      "editing": "Editing…",
+      "read": "Read",
+      "edited": "Edited",
+      "shellOutput": "Shell output",
+      "viewInWorkbench": "view in workbench",
+      "planning": "Planning next step…",
+      "crunching": "Crunching data… ({{elapsed}})",
+      "thinking": "Thinking…",
+      "stillThinking": "Still thinking… ({{elapsed}})",
+      "waitDecision": "Waiting for your decision…",
+      "waitAnswer": "Waiting for your answer…",
+      "openWorkbench": "Open workbench",
+      "reasoning": "Reasoning…",
+      "reasoned": "Reasoned",
+      "thought": "Thought",
+      "thoughtStep": "Thought (step {{step}})",
+      "loading": "Loading...",
+      "download": "Download",
+      "approveRestart": "Approve & Restart",
+      "reject": "Reject",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "approving": "Approving...",
+      "approvedDetail": "Approved — server restarting to load skills",
+      "rejectedDetail": "Rejected — skills deleted",
+      "waiting": "Waiting {{seconds}}s…",
+      "waited": "Waited {{seconds}}s"
+    },
+    "workbench": {
+      "title": "Workbench",
+      "aria": "Agent workbench",
+      "eventCount": "{{count}} events",
+      "close": "Close workbench",
+      "allBranches": "All branches",
+      "thisBranch": "This branch",
+      "allBranchesTitle": "Showing all branches",
+      "thisBranchTitle": "Showing current branch only",
+      "viewTitle": "View: {{label}}",
+      "tabsAria": "Workbench scope",
+      "tabAll": "All",
+      "tabChat": "Chat task",
+      "tabBackground": "Background",
+      "tabChannels": "Channels",
+      "empty": "Tool runs and agent steps will appear here while the agent works.",
+      "emptyHint": "Use Chat task for this thread, Background for autonomous work.",
+      "emptyTab": "No events match the current view.",
+      "emptyFocusedHint": "Switch to Standard or Debug to see reads and activity.",
+      "parallel": "Parallel",
+      "fullOutput": "Full output",
+      "orchestrator": "Orchestrator",
+      "sub": "Sub #{{n}}",
+      "running": "Running",
+      "warning": "Warning",
+      "failed": "Failed",
+      "density": {
+        "focused": "Focused",
+        "standard": "Standard",
+        "debug": "Debug"
+      }
+    },
+    "inbox": {
+      "empty": "All caught up.",
+      "needsYou": "Needs you",
+      "unread": "Unread",
+      "skipped": "Skipped / blocked",
+      "recent": "Recent",
+      "kind": {
+        "needsYou": "Needs you",
+        "skipped": "Skipped",
+        "failed": "Failed",
+        "unread": "Unread",
+        "recent": "Recent"
+      }
+    },
+    "live": {
+      "neuralState": "Neural State",
+      "neuralStateInfo": "What is Neural State?",
+      "channels": "Channels",
+      "network": "Network Dynamics",
+      "networkInfo": "What is Network Dynamics?",
+      "memory": "Memory",
+      "memoryInfo": "What is Memory?",
+      "hormones": "Hormones",
+      "hormonesInfo": "What are Hormones?",
+      "activity": "Activity",
+      "activityInfo": "What is Activity?",
+      "noActivity": "No activity yet...",
+      "showMore": "Show more ({{hidden}} hidden, up to {{cap}})",
+      "orchestration": "Orchestration",
+      "cryptex": "Cryptex",
+      "cryptexInfo": "What is the Cryptex?",
+      "refresh": "Refresh",
+      "cryptexEmpty": "No active context — start a conversation to populate the Cryptex",
+      "userModel": "User Model",
+      "showFewer": "Show fewer (top {{cap}})"
+    },
+    "status": {
+      "startingTask": "Starting task...",
+      "compiling": "Compiling delegate results...",
+      "waitAnswer": "Waiting for your answer…",
+      "waitDecision": "Waiting for your decision…"
     }
   },
   "dashboard": {
@@ -527,7 +668,12 @@
     "chat": {
       "uploadFailed": "File upload failed",
       "feedbackSent": "Feedback sent",
-      "feedbackFailed": "Failed to send feedback"
+      "feedbackFailed": "Failed to send feedback",
+      "sleepNotConnected": "Not connected — could not send sleep response. Reopen chat and try again.",
+      "budgetNotConnected": "Not connected — could not send budget response. Reopen chat and try again.",
+      "channelSendFailed": "Failed to send on channel",
+      "budgetFailed": "Budget response failed.",
+      "sleepFailed": "Sleep response could not be applied."
     },
     "settings": {
       "latestVersion": "You are on the latest version",

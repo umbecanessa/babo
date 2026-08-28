@@ -28,15 +28,10 @@ import {
   shouldShowErrorDetail,
 } from '../../../core/services/workbench-error.util';
 import { AnsiPipe } from '../../../shared/pipes/ansi.pipe';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 
 export type WorkbenchTab = 'all' | 'chat' | 'background' | 'channel';
 
-import {
-  WORKBENCH_DENSITY_LABELS,
-  type WorkbenchDensity,
-} from '../../../core/services/workbench-density.util';
-
-/** Titles that only repeat the tool badge label. */
 const REDUNDANT_TITLE_BY_TOOL: Record<string, RegExp> = {
   read: /^read file(\s|$|—|-)/i,
   write: /^write file/i,
@@ -54,7 +49,7 @@ const REDUNDANT_TITLE_BY_TOOL: Record<string, RegExp> = {
 @Component({
   selector: 'app-chat-workbench',
   standalone: true,
-  imports: [CommonModule, AnsiPipe],
+  imports: [CommonModule, AnsiPipe, TranslateModule],
   templateUrl: './chat-workbench.component.html',
   styleUrl: './chat-workbench.component.scss',
 })
@@ -66,6 +61,7 @@ export class ChatWorkbenchComponent {
   private readonly panels = inject(ChatPanelService);
   private readonly workspaceNav = inject(WorkspaceNavService);
   private readonly workspaceCtx = inject(AgentWorkspaceContextService);
+  private readonly translate = inject(TranslateService);
 
   readonly activeTab = signal<WorkbenchTab>('all');
   private prevFocusKey: string | null = null;
@@ -139,9 +135,9 @@ export class ChatWorkbenchComponent {
 
   actorLabel(delegateNumber?: number): string {
     if (typeof delegateNumber === 'number' && delegateNumber >= 0) {
-      return `Sub #${delegateNumber}`;
+      return this.translate.instant('chat.workbench.sub', { n: delegateNumber });
     }
-    return 'Orchestrator';
+    return this.translate.instant('chat.workbench.orchestrator');
   }
 
   toolTagLabel(e: WorkbenchEntry): string {
@@ -269,9 +265,9 @@ export class ChatWorkbenchComponent {
   }
 
   statusLabel(e: WorkbenchEntry): string | null {
-    if (e.status === 'running') return 'Running';
-    if (e.status === 'warn') return 'Warning';
-    if (e.status === 'error') return 'Failed';
+    if (e.status === 'running') return this.translate.instant('chat.workbench.running');
+    if (e.status === 'warn') return this.translate.instant('chat.workbench.warning');
+    if (e.status === 'error') return this.translate.instant('chat.workbench.failed');
     return null;
   }
 
@@ -281,7 +277,8 @@ export class ChatWorkbenchComponent {
   }
 
   densityLabel(): string {
-    return WORKBENCH_DENSITY_LABELS[this.workbench.density()];
+    const d = this.workbench.density();
+    return this.translate.instant(`chat.workbench.density.${d}`);
   }
 
   cycleDensity(): void {

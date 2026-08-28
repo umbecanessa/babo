@@ -6,8 +6,8 @@
         <div class="brain-core"></div>
         <div class="brain-ring"></div>
       </div>
-      <span class="brain-label">Neural State</span>
-      <button class="section-info-btn" (click)="infoNeural?.show()" title="What is Neural State?">
+      <span class="brain-label">{{ 'chat.live.neuralState' | translate }}</span>
+      <button class="section-info-btn" (click)="infoNeural?.show()" [title]="'chat.live.neuralStateInfo' | translate">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
         </svg>
@@ -17,7 +17,7 @@
     <!-- Channel status strip -->
     @if (connectedChannels.length > 0) {
       <div class="channel-strip">
-        <span class="channel-strip-label">Channels</span>
+        <span class="channel-strip-label">{{ 'chat.live.channels' | translate }}</span>
         <div class="channel-pills">
           @for (ch of connectedChannels; track ch) {
             <span class="channel-pill" [attr.data-channel]="ch">
@@ -156,8 +156,8 @@
     @if (dominantNetwork) {
       <div class="section network-section">
         <div class="network-dominant">
-          <span class="network-label">Network Dynamics</span>
-          <button class="section-info-btn" (click)="infoNetwork?.show()" title="What is Network Dynamics?">
+          <span class="network-label">{{ 'chat.live.network' | translate }}</span>
+          <button class="section-info-btn" (click)="infoNetwork?.show()" [title]="'chat.live.networkInfo' | translate">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
             </svg>
@@ -193,8 +193,8 @@
     <!-- Brain stats -->
     <div class="section">
       <h3 class="section-title section-title-row">
-        Memory
-        <button class="section-info-btn" (click)="infoMemory?.show()" title="What is Memory?">
+        {{ 'chat.live.memory' | translate }}
+        <button class="section-info-btn" (click)="infoMemory?.show()" [title]="'chat.live.memoryInfo' | translate">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
           </svg>
@@ -278,7 +278,7 @@
     <!-- User Model -->
     @if (userModel) {
       <div class="section user-model-section">
-        <h3 class="section-title">User Model</h3>
+        <h3 class="section-title">{{ 'chat.live.userModel' | translate }}</h3>
         @if (userModel.style) {
           <div class="stat-row">
             <span class="stat-key">Style</span>
@@ -329,8 +329,8 @@
     <!-- Hormones -->
     <div class="section">
       <h3 class="section-title section-title-row">
-        Hormones
-        <button class="section-info-btn" (click)="infoHormones?.show()" title="What are Hormones?">
+        {{ 'chat.live.hormones' | translate }}
+        <button class="section-info-btn" (click)="infoHormones?.show()" [title]="'chat.live.hormonesInfo' | translate">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
           </svg>
@@ -343,18 +343,18 @@
     <div class="section">
       <h3 class="section-title section-title-row">
         <span class="activity-title-dot"></span>
-        Activity
+        {{ 'chat.live.activity' | translate }}
         @if (nonExitingActivityCount() > 0) {
           <span class="activity-count">{{ visibleActivities().length }}{{ hiddenActivityCount() > 0 ? '+' + hiddenActivityCount() : '' }}</span>
         }
-        <button class="section-info-btn" (click)="infoActivity?.show()" title="What is Activity?">
+        <button class="section-info-btn" (click)="infoActivity?.show()" [title]="'chat.live.activityInfo' | translate">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
           </svg>
         </button>
       </h3>
       @if (activityList.length === 0) {
-        <p class="no-activity">No activity yet...</p>
+        <p class="no-activity">{{ 'chat.live.noActivity' | translate }}</p>
       } @else {
         <div class="activity-list">
           @for (item of visibleActivities(); track item.id) {
@@ -472,11 +472,11 @@
         </div>
         @if (canExpandActivities()) {
           <button type="button" class="activity-more-btn" (click)="expandActivities()">
-            Show more ({{ hiddenActivityCount() }} hidden, up to {{ activityCapExpanded }})
+            {{ 'chat.live.showMore' | translate:{ hidden: hiddenActivityCount(), cap: activityCapExpanded } }}
           </button>
         } @else if (canCollapseActivities()) {
           <button type="button" class="activity-more-btn activity-more-btn--muted" (click)="collapseActivities()">
-            Show fewer (top {{ activityCapCompact }})
+            {{ 'chat.live.showFewer' | translate:{ cap: activityCapCompact } }}
           </button>
         }
       }
@@ -485,7 +485,7 @@
     <!-- Orchestration Status -->
     @if (hasOrchState) {
       <div class="orch-strip">
-        <span class="orch-strip-label">Orchestration</span>
+        <span class="orch-strip-label">{{ 'chat.live.orchestration' | translate }}</span>
         <div class="orch-pills">
           @if (wmOrchTeams.length > 0) {
             <span class="orch-pill orch-pill--teams">
@@ -513,16 +513,16 @@
     <div class="section cryptex-primary">
       <h3 class="section-title cryptex-title">
         <span class="cryptex-title-icon">&#128272;</span>
-        Cryptex
+        {{ 'chat.live.cryptex' | translate }}
         @if (cryptexActiveProject) {
           <span class="cryptex-project-badge">{{ cryptexActiveProject }}</span>
         }
-        <button class="section-info-btn" (click)="infoWm?.show()" title="What is the Cryptex?">
+        <button class="section-info-btn" (click)="infoWm?.show()" [title]="'chat.live.cryptexInfo' | translate">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
           </svg>
         </button>
-        <button class="cryptex-refresh" (click)="loadContext()" [disabled]="contextLoading" title="Refresh">
+        <button class="cryptex-refresh" (click)="loadContext()" [disabled]="contextLoading" [title]="'chat.live.refresh' | translate">
           <span class="cryptex-refresh-icon" [class.spinning]="contextLoading">&#8635;</span>
         </button>
       </h3>
@@ -610,7 +610,7 @@
           </div>
         }
       } @else if (!contextLoading) {
-        <p class="cryptex-empty">No active context — start a conversation to populate the Cryptex</p>
+        <p class="cryptex-empty">{{ 'chat.live.cryptexEmpty' | translate }}</p>
       }
     </div>
   </div>

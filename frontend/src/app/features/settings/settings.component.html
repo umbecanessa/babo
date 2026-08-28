@@ -94,16 +94,16 @@
         <p class="section-desc">{{ 'settings.system.desc' | translate }}</p>
 
         <h4 class="subsection-title">{{ 'settings.system.runtime' | translate }}</h4>
-        <p class="field-hint">Process on this machine (port {{ runtimePort() }}).</p>
+        <p class="field-hint">{{ 'settings.system.portHint' | translate:{ port: runtimePort() } }}</p>
 
         <div class="status-card">
           <span class="status-dot" [class.running]="runtimeStatus()?.running" [class.stopped]="!runtimeStatus()?.running"></span>
           <div>
             <div class="status-title">
               @if (runtimeStatus()?.running) {
-                Running
+                {{ 'settings.system.running' | translate }}
               } @else {
-                Stopped
+                {{ 'settings.system.stopped' | translate }}
               }
             </div>
             @if (runtimeStatus()?.running) {
@@ -121,36 +121,36 @@
         <div class="action-row">
           @if (!runtimeStatus()?.running) {
             <button class="btn-primary" type="button" (click)="runtimeControl('start')" [disabled]="runtimeAction() !== 'idle'">
-              Start
+              {{ 'settings.system.start' | translate }}
             </button>
           } @else {
             <button class="btn-secondary" type="button" (click)="runtimeControl('restart')" [disabled]="runtimeAction() !== 'idle'">
-              Restart
+              {{ 'settings.system.restart' | translate }}
             </button>
             <button class="btn-secondary danger" type="button" (click)="runtimeControl('stop')" [disabled]="runtimeAction() !== 'idle'">
-              Stop
+              {{ 'settings.system.stop' | translate }}
             </button>
           }
-          <button class="btn-secondary" type="button" (click)="loadRuntimeLogs()">View logs</button>
+          <button class="btn-secondary" type="button" (click)="loadRuntimeLogs()">{{ 'settings.system.viewLogs' | translate }}</button>
         </div>
 
         @if (showRuntimeLogs()) {
-          <pre class="log-view">{{ runtimeLogs().join('\n') || '(empty)' }}</pre>
+          <pre class="log-view">{{ runtimeLogs().join('\n') || ('settings.system.emptyLogs' | translate) }}</pre>
         }
 
         <h4 class="subsection-title">{{ 'settings.system.pythonEnv' | translate }}</h4>
         <div class="status-card">
           <span class="status-dot" [class.running]="venvReady()"></span>
           <div>
-            <div class="status-title">{{ venvReady() ? 'Environment ready' : 'Not installed' }}</div>
-            <div class="status-meta">Setup {{ setupComplete() ? 'complete' : 'incomplete' }}</div>
+            <div class="status-title">{{ venvReady() ? ('settings.system.envReady' | translate) : ('settings.system.notInstalled' | translate) }}</div>
+            <div class="status-meta">{{ 'settings.system.setupStatus' | translate:{ status: setupComplete() ? ('settings.system.setupComplete' | translate) : ('settings.system.setupIncomplete' | translate) } }}</div>
           </div>
         </div>
 
         <div class="action-row stacked">
-          <button class="btn-secondary" type="button" (click)="openSetupWizard()">Open setup wizard</button>
+          <button class="btn-secondary" type="button" (click)="openSetupWizard()">{{ 'settings.system.openWizard' | translate }}</button>
           <button class="btn-secondary danger" type="button" (click)="resetPythonEnvironment()" [disabled]="envResetting()">
-            {{ envResetting() ? 'Resetting…' : 'Reset Python environment' }}
+            {{ envResetting() ? ('settings.system.resetting' | translate) : ('settings.system.resetEnv' | translate) }}
           </button>
         </div>
       </section>
@@ -171,7 +171,7 @@
             (click)="exportFullDebugBundle()"
             [disabled]="debugExporting() || debugLoading()"
           >
-            {{ debugExporting() ? 'Exporting…' : 'Export full debug bundle' }}
+            {{ debugExporting() ? ('settings.support.exporting' | translate) : ('settings.support.exportBundle' | translate) }}
           </button>
           <button
             class="btn-secondary"
@@ -179,10 +179,10 @@
             (click)="loadDebugSummary()"
             [disabled]="debugLoading()"
           >
-            {{ debugLoading() ? 'Refreshing…' : 'Refresh' }}
+            {{ debugLoading() ? ('settings.support.refreshing' | translate) : ('settings.support.refresh' | translate) }}
           </button>
           <button class="btn-secondary" type="button" (click)="revealUserDataFolder()">
-            Open data folder
+            {{ 'settings.support.openDataFolder' | translate }}
           </button>
         </div>
 
@@ -191,11 +191,11 @@
         }
 
         <h4 class="subsection-title">{{ 'settings.support.recentErrors' | translate }}</h4>
-        <p class="field-hint">Parsed from runtime, setup, and desktop logs (newest first).</p>
+        <p class="field-hint">{{ 'settings.support.errorsHint' | translate }}</p>
         @if (debugLoading() && !debugErrors().length) {
-          <p class="field-hint">Loading…</p>
+          <p class="field-hint">{{ 'settings.support.loading' | translate }}</p>
         } @else if (!debugErrors().length) {
-          <p class="info-pill">No recent errors in logs or runtime status.</p>
+          <p class="info-pill">{{ 'settings.support.noErrors' | translate }}</p>
         } @else {
           <ul class="debug-error-list">
             @for (err of debugErrors(); track err.id) {
@@ -218,7 +218,7 @@
                 <span class="debug-artifact-label">{{ item.label }}</span>
                 <span class="debug-artifact-desc">{{ item.description }}</span>
                 <span class="debug-artifact-size">
-                  {{ item.exists ? formatBytes(item.sizeBytes) : 'Not found' }}
+                  {{ item.exists ? formatBytes(item.sizeBytes) : ('settings.support.notFound' | translate) }}
                 </span>
               </div>
               <button
@@ -227,7 +227,7 @@
                 (click)="exportDebugArtifact(item.kind)"
                 [disabled]="!item.exists || debugExporting()"
               >
-                Export
+                {{ 'settings.support.export' | translate }}
               </button>
             </div>
           }
@@ -243,7 +243,7 @@
                   <span class="debug-artifact-label">{{ item.label }}</span>
                   <span class="debug-artifact-desc">{{ item.description }}</span>
                   <span class="debug-artifact-size">
-                    {{ item.exists ? formatBytes(item.sizeBytes) : 'Not found' }}
+                    {{ item.exists ? formatBytes(item.sizeBytes) : ('settings.support.notFound' | translate) }}
                   </span>
                 </div>
                 <button
@@ -252,7 +252,7 @@
                   (click)="exportDebugArtifact(item.kind, item.agentId)"
                   [disabled]="!item.exists || debugExporting()"
                 >
-                  Export
+                  {{ 'settings.support.export' | translate }}
                 </button>
               </div>
             }
@@ -291,7 +291,7 @@
           }
         </div>
 
-        <button class="btn-secondary" type="button" (click)="resetPermissions()">Reset all permission decisions</button>
+        <button class="btn-secondary" type="button" (click)="resetPermissions()">{{ 'settings.permissions.resetAll' | translate }}</button>
       </section>
     }
   }
@@ -353,7 +353,7 @@
           @if (sub.includedCreditCents > 0) {
             <div class="usage-block">
               <div class="usage-head">
-                <span class="field-label">Included usage</span>
+                <span class="field-label">{{ 'settings.billing.includedUsage' | translate }}</span>
                 <span class="field-hint">
                   {{ formatUsd(sub.usedCreditCents) }} used of {{ formatUsd(sub.includedCreditCents) }}
                   · {{ includedRemaining() }}% remaining
@@ -377,7 +377,7 @@
               (click)="openBillingPortal()"
               [disabled]="billingActionLoading()"
             >
-              Manage subscription
+              {{ 'settings.billing.manage' | translate }}
             </button>
           </div>
 
@@ -408,7 +408,7 @@
 
           @if (onDemandEnabled()) {
             <div class="field-group">
-              <label class="field-label">Monthly pay-as-you-go spend cap (USD)</label>
+              <label class="field-label">{{ 'settings.billing.spendCap' | translate }}</label>
               <input
                 type="number"
                 class="field-input short"
@@ -501,11 +501,11 @@
         @if (resendConfigured()) {
           <p class="info-pill ok">Your Resend credentials saved@if (resendInboundDomain()) { · {{ resendInboundDomain() }}}</p>
           <button class="btn-secondary danger" type="button" (click)="clearResendCredentials()" [disabled]="resendSaving()">
-            Remove saved credentials
+            {{ 'settings.integrations.removeResend' | translate }}
           </button>
         } @else if (!emailServerConfigured()) {
           <div class="field-group">
-            <label class="field-label">Resend API key</label>
+            <label class="field-label">{{ 'settings.integrations.resendKey' | translate }}</label>
             <input
               class="field-input"
               type="password"
@@ -516,7 +516,7 @@
             />
           </div>
           <div class="field-group">
-            <label class="field-label">Inbound domain</label>
+            <label class="field-label">{{ 'settings.integrations.inboundDomain' | translate }}</label>
             <input
               class="field-input"
               [ngModel]="resendInboundDomain()"
@@ -526,7 +526,7 @@
             <span class="field-hint">Verified domain in Resend for inbound routing.</span>
           </div>
           <button class="btn-primary" type="button" (click)="saveResendCredentials()" [disabled]="resendSaving()">
-            {{ resendSaving() ? 'Saving…' : 'Save Resend credentials' }}
+            {{ resendSaving() ? ('common.saving' | translate) : ('settings.integrations.saveResend' | translate) }}
           </button>
         }
 
@@ -591,7 +591,7 @@
       @if (!platform.isElectron) {
         <div class="field-row">
           <div class="field-group">
-            <label class="field-label">Editor font size</label>
+            <label class="field-label">{{ 'settings.appearance.fontSize' | translate }}</label>
             <input
               type="number"
               class="field-input short"
@@ -602,7 +602,7 @@
             />
           </div>
           <div class="field-group">
-            <label class="field-label">Font family</label>
+            <label class="field-label">{{ 'settings.appearance.fontFamily' | translate }}</label>
             <select
               class="field-select"
               [ngModel]="webSettings().editor_font_family"

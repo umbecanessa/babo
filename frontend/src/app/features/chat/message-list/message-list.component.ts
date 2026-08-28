@@ -16,7 +16,7 @@ import {
   parseStreamingThinking,
 } from '../../../shared/signal-utils';
 import { MarkdownPipe } from '../../../shared/pipes/markdown.pipe';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { ApiService } from '../../../core/services/api.service';
 import { WebSocketService } from '../../../core/services/websocket.service';
 import { ChatWorkbenchService } from '../../../core/services/chat-workbench.service';
@@ -101,7 +101,46 @@ export class MessageListComponent implements OnChanges, AfterViewChecked, OnDest
     private workbench: ChatWorkbenchService,
     private workspaceNav: WorkspaceNavService,
     private workspaceCtx: AgentWorkspaceContextService,
+    private translate: TranslateService,
   ) {}
+
+  private t(key: string, params?: Record<string, unknown>): string {
+    return this.translate.instant(key, params);
+  }
+
+  writeToolStatus(msg: ChatMessage): string {
+    const tp = msg.toolProgress;
+    if (!tp?.done) return this.t('chat.tool.writing');
+    return tp.isError ? this.t('chat.tool.failed') : this.t('chat.tool.written');
+  }
+
+  readEditToolStatus(msg: ChatMessage): string {
+    const tp = msg.toolProgress;
+    const isEdit = tp?.toolName === 'edit';
+    if (!tp?.done) return this.t(isEdit ? 'chat.tool.editing' : 'chat.tool.reading');
+    if (tp.isError) return this.t('chat.tool.failed');
+    return this.t(isEdit ? 'chat.tool.edited' : 'chat.tool.read');
+  }
+
+  thoughtLabel(iteration?: number): string {
+    if ((iteration ?? 0) > 1) {
+      return this.t('chat.tool.thoughtStep', { step: iteration });
+    }
+    return this.t('chat.tool.thought');
+  }
+
+  reviewResolvedLabel(state: 'approved' | 'rejected'): string {
+    return state === 'approved'
+      ? this.t('chat.tool.approvedDetail')
+      : this.t('chat.tool.rejectedDetail');
+  }
+
+  waitToolLabel(msg: ChatMessage): string {
+    const seconds = msg.toolProgress?.arguments?.['seconds'] ?? '';
+    return msg.toolProgress?.done
+      ? this.t('chat.tool.waited', { seconds })
+      : this.t('chat.tool.waiting', { seconds });
+  }
 
   toolFilePaths(msg: ChatMessage): string[] {
     const tp = (msg as any).toolProgress as {
@@ -361,20 +400,16 @@ export class MessageListComponent implements OnChanges, AfterViewChecked, OnDest
 
   get generationLabel(): string {
     const s = this.generationElapsed();
-    if (s < 10) return 'Planning next step\u2026';
-    if (s < 60) return `Crunching data\u2026 (${s}s)`;
-    const m = Math.floor(s / 60);
-    const rem = s % 60;
-    return `Crunching data\u2026 (${m}m ${rem}s)`;
+    if (s < 10) return this.t('chat.tool.planning');
+    const elapsed = s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
+    return this.t('chat.tool.crunching', { elapsed });
   }
 
   get awaitingLabel(): string {
     const s = this.generationElapsed();
-    if (s < 10) return 'Thinking\u2026';
-    if (s < 60) return `Still thinking\u2026 (${s}s)`;
-    const m = Math.floor(s / 60);
-    const rem = s % 60;
-    return `Still thinking\u2026 (${m}m ${rem}s)`;
+    if (s < 10) return this.t('chat.tool.thinking');
+    const elapsed = s < 60 ? `${s}s` : `${Math.floor(s / 60)}m ${s % 60}s`;
+    return this.t('chat.tool.stillThinking', { elapsed });
   }
 
   /** True when any in-flight indicator should display. */
@@ -387,10 +422,10 @@ export class MessageListComponent implements OnChanges, AfterViewChecked, OnDest
 
   get pendingLabel(): string {
     if (this.showBudgetPromptIndicator) {
-      return 'Waiting for your decision…';
+      return this.t('chat.tool.waitDecision');
     }
     if (this.showAskUserIndicator) {
-      return 'Waiting for your answer…';
+      return this.t('chat.tool.waitAnswer');
     }
     if (this.showGenerationIndicator) {
       return this.generationLabel;

@@ -217,7 +217,9 @@
       "themeDark": "Scuro",
       "themeSystem": "Sistema",
       "language": "Lingua",
-      "languageHint": "Solo lingua dell'interfaccia. L'agente risponde nella lingua in cui scrivi. Auto segue il dispositivo."
+      "languageHint": "Solo lingua dell'interfaccia. L'agente risponde nella lingua in cui scrivi. Auto segue il dispositivo.",
+      "fontSize": "Dimensione font editor",
+      "fontFamily": "Famiglia di font"
     },
     "nav": {
       "models": "Modelli e AI",
@@ -253,31 +255,61 @@
       "stop": "Ferma",
       "restart": "Riavvia",
       "viewLogs": "Vedi log",
-      "resetEnv": "Reimposta ambiente Python"
+      "resetEnv": "Reimposta ambiente Python",
+      "portHint": "Processo su questa macchina (porta {{port}}).",
+      "running": "In esecuzione",
+      "stopped": "Fermato",
+      "envReady": "Ambiente pronto",
+      "notInstalled": "Non installato",
+      "setupComplete": "completo",
+      "setupIncomplete": "incompleto",
+      "setupStatus": "Setup {{status}}",
+      "openWizard": "Apri wizard di setup",
+      "resetting": "Reset in corso…",
+      "emptyLogs": "(vuoto)"
     },
     "support": {
       "title": "Supporto e debug",
       "desc": "Diagnostica per il supporto e la risoluzione problemi in locale.",
       "recentErrors": "Errori recenti",
-      "logsConfig": "Log e config app"
+      "logsConfig": "Log e config app",
+      "exportBundle": "Esporta pacchetto debug completo",
+      "exporting": "Esportazione…",
+      "refresh": "Aggiorna",
+      "refreshing": "Aggiornamento…",
+      "openDataFolder": "Apri cartella dati",
+      "errorsHint": "Da log di runtime, setup e desktop (più recenti prima).",
+      "loading": "Caricamento…",
+      "noErrors": "Nessun errore recente nei log o nello stato runtime.",
+      "notFound": "Non trovato",
+      "export": "Esporta"
     },
     "permissions": {
       "title": "Permessi",
-      "desc": "Cosa può accedere l'agente locale su questo computer."
+      "desc": "Cosa può accedere l'agente locale su questo computer.",
+      "resetAll": "Reimposta tutte le decisioni sui permessi"
     },
     "billing": {
       "title": "Fatturazione",
       "desc": "Abbonamento Babo Cloud e utilizzo.",
       "lifetime": "Accesso a vita",
       "subscribe": "Abbonati per usare i modelli Babo Cloud",
-      "payg": "Modelli pay-as-you-go"
+      "payg": "Modelli pay-as-you-go",
+      "includedUsage": "Utilizzo incluso",
+      "manage": "Gestisci abbonamento",
+      "spendCap": "Tetto mensile pay-as-you-go (USD)",
+      "spendCapHint": "Limite opzionale sulla spesa pay-as-you-go."
     },
     "integrations": {
       "title": "Integrazioni",
       "desc": "Credenziali di piattaforma e prerequisiti dei canali.",
       "email": "Email (Resend)",
       "google": "Google Workspace",
-      "messaging": "Telegram e WhatsApp"
+      "messaging": "Telegram e WhatsApp",
+      "resendKey": "API key Resend",
+      "inboundDomain": "Dominio inbound",
+      "saveResend": "Salva credenziali Resend",
+      "removeResend": "Rimuovi credenziali salvate"
     },
     "keys": {
       "title": "Chiavi API",
@@ -461,6 +493,115 @@
       "live": "Live",
       "context": "Contesto",
       "conversations": "Conversazioni"
+    },
+    "tool": {
+      "file": "file",
+      "readFile": "Leggi file",
+      "writing": "Scrittura…",
+      "written": "Scritto",
+      "failed": "Non riuscito",
+      "reading": "Lettura…",
+      "editing": "Modifica…",
+      "read": "Letto",
+      "edited": "Modificato",
+      "shellOutput": "Output shell",
+      "viewInWorkbench": "apri nel workbench",
+      "planning": "Pianificazione del passo successivo…",
+      "crunching": "Elaborazione dati… ({{elapsed}})",
+      "thinking": "Pensando…",
+      "stillThinking": "Ancora in pensiero… ({{elapsed}})",
+      "waitDecision": "In attesa della tua decisione…",
+      "waitAnswer": "In attesa della tua risposta…",
+      "openWorkbench": "Apri workbench",
+      "reasoning": "Ragionamento…",
+      "reasoned": "Ragionato",
+      "thought": "Pensiero",
+      "thoughtStep": "Pensiero (passo {{step}})",
+      "loading": "Caricamento...",
+      "download": "Scarica",
+      "approveRestart": "Approva e riavvia",
+      "reject": "Rifiuta",
+      "approved": "Approvato",
+      "rejected": "Rifiutato",
+      "approving": "Approvazione...",
+      "approvedDetail": "Approvato — riavvio server per caricare le skill",
+      "rejectedDetail": "Rifiutato — skill eliminate",
+      "waiting": "Attesa {{seconds}}s…",
+      "waited": "Atteso {{seconds}}s"
+    },
+    "workbench": {
+      "title": "Workbench",
+      "aria": "Workbench agente",
+      "eventCount": "{{count}} eventi",
+      "close": "Chiudi workbench",
+      "allBranches": "Tutti i branch",
+      "thisBranch": "Questo branch",
+      "allBranchesTitle": "Mostra tutti i branch",
+      "thisBranchTitle": "Solo il branch corrente",
+      "viewTitle": "Vista: {{label}}",
+      "tabsAria": "Ambito workbench",
+      "tabAll": "Tutto",
+      "tabChat": "Task chat",
+      "tabBackground": "Sfondo",
+      "tabChannels": "Canali",
+      "empty": "Qui compaiono tool e passi mentre l'agente lavora.",
+      "emptyHint": "Usa Task chat per questo thread, Sfondo per il lavoro autonomo.",
+      "emptyTab": "Nessun evento corrisponde alla vista corrente.",
+      "emptyFocusedHint": "Passa a Standard o Debug per vedere letture e attività.",
+      "parallel": "Parallelo",
+      "fullOutput": "Output completo",
+      "orchestrator": "Orchestratore",
+      "sub": "Sub #{{n}}",
+      "running": "In corso",
+      "warning": "Avviso",
+      "failed": "Non riuscito",
+      "density": {
+        "focused": "Focalizzata",
+        "standard": "Standard",
+        "debug": "Debug"
+      }
+    },
+    "inbox": {
+      "empty": "Tutto a posto.",
+      "needsYou": "Serve te",
+      "unread": "Non letti",
+      "skipped": "Saltati / bloccati",
+      "recent": "Recenti",
+      "kind": {
+        "needsYou": "Serve te",
+        "skipped": "Saltato",
+        "failed": "Non riuscito",
+        "unread": "Non letto",
+        "recent": "Recente"
+      }
+    },
+    "live": {
+      "neuralState": "Stato neurale",
+      "neuralStateInfo": "Cos'è lo stato neurale?",
+      "channels": "Canali",
+      "network": "Dinamiche di rete",
+      "networkInfo": "Cosa sono le dinamiche di rete?",
+      "memory": "Memoria",
+      "memoryInfo": "Cos'è la memoria?",
+      "hormones": "Ormoni",
+      "hormonesInfo": "Cosa sono gli ormoni?",
+      "activity": "Attività",
+      "activityInfo": "Cos'è l'attività?",
+      "noActivity": "Nessuna attività ancora...",
+      "showMore": "Mostra altri ({{hidden}} nascosti, fino a {{cap}})",
+      "orchestration": "Orchestrazione",
+      "cryptex": "Cryptex",
+      "cryptexInfo": "Cos'è il Cryptex?",
+      "refresh": "Aggiorna",
+      "cryptexEmpty": "Nessun contesto attivo — avvia una conversazione per popolare il Cryptex",
+      "userModel": "Modello utente",
+      "showFewer": "Mostra meno (top {{cap}})"
+    },
+    "status": {
+      "startingTask": "Avvio task...",
+      "compiling": "Compilazione risultati delegate...",
+      "waitAnswer": "In attesa della tua risposta…",
+      "waitDecision": "In attesa della tua decisione…"
     }
   },
   "dashboard": {
@@ -527,7 +668,12 @@
     "chat": {
       "uploadFailed": "Caricamento file non riuscito",
       "feedbackSent": "Feedback inviato",
-      "feedbackFailed": "Invio feedback non riuscito"
+      "feedbackFailed": "Invio feedback non riuscito",
+      "sleepNotConnected": "Non connesso — impossibile inviare la risposta sul sonno. Riapri la chat e riprova.",
+      "budgetNotConnected": "Non connesso — impossibile inviare la risposta sul budget. Riapri la chat e riprova.",
+      "channelSendFailed": "Invio sul canale non riuscito",
+      "budgetFailed": "Risposta budget non riuscita.",
+      "sleepFailed": "Risposta sul sonno non applicabile."
     },
     "settings": {
       "latestVersion": "Hai già l'ultima versione",
