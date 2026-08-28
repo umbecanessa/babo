@@ -458,7 +458,7 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
                   {{ scheduleSaving() ? ('common.saving' | translate) : ('brain.schedule.save' | translate) }}
                 </button>
                 @if (scheduleSaved()) {
-                  <span class="schedule-saved-msg">Saved</span>
+                  <span class="schedule-saved-msg">{{ 'brain.schedule.saved' | translate }}</span>
                 }
               </div>
             </div>
@@ -469,16 +469,16 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
         @if (activeTab() === 'self-state') {
           <div class="tab-panel">
             <section class="section">
-              <h3>Temporal Self</h3>
+              <h3>{{ 'brain.selfState.title' | translate }}</h3>
               @if (status()?.heartbeat; as hb) {
                 <div class="self-state-grid">
                   <div class="self-state-item">
-                    <span class="ss-label">Energy</span>
+                    <span class="ss-label">{{ 'brain.selfState.energy' | translate }}</span>
                     <div class="ss-bar-track"><div class="ss-bar-fill energy" [style.width.%]="(hb.energy ?? 0) * 100"></div></div>
                     <span class="ss-val">{{ ((hb.energy ?? 0) * 100).toFixed(0) }}%</span>
                   </div>
                   <div class="self-state-item">
-                    <span class="ss-label">Valence</span>
+                    <span class="ss-label">{{ 'brain.selfState.valence' | translate }}</span>
                     <div class="ss-bar-track"><div class="ss-bar-fill valence" [style.width.%]="((hb.valence ?? 0) + 1) / 2 * 100"></div></div>
                     <span class="ss-val">{{ (hb.valence ?? 0).toFixed(2) }}</span>
                     @if (hb.delta_valence && Math.abs(hb.delta_valence) > 0.02) {
@@ -486,7 +486,7 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
                     }
                   </div>
                   <div class="self-state-item">
-                    <span class="ss-label">Arousal</span>
+                    <span class="ss-label">{{ 'brain.selfState.arousal' | translate }}</span>
                     <div class="ss-bar-track"><div class="ss-bar-fill arousal" [style.width.%]="(hb.arousal ?? 0) * 100"></div></div>
                     <span class="ss-val">{{ (hb.arousal ?? 0).toFixed(2) }}</span>
                     @if (hb.delta_arousal && Math.abs(hb.delta_arousal) > 0.02) {
@@ -494,7 +494,7 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
                     }
                   </div>
                   <div class="self-state-item">
-                    <span class="ss-label">Coherence</span>
+                    <span class="ss-label">{{ 'brain.selfState.coherence' | translate }}</span>
                     <div class="ss-bar-track"><div class="ss-bar-fill coherence" [style.width.%]="(hb.coherence ?? 0) * 100"></div></div>
                     <span class="ss-val">{{ (hb.coherence ?? 0).toFixed(2) }}</span>
                     @if (hb.delta_coherence && Math.abs(hb.delta_coherence) > 0.02) {
@@ -502,24 +502,24 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
                     }
                   </div>
                   <div class="self-state-item">
-                    <span class="ss-label">Engagement</span>
+                    <span class="ss-label">{{ 'brain.selfState.engagement' | translate }}</span>
                     <div class="ss-bar-track"><div class="ss-bar-fill engagement" [style.width.%]="(hb.engagement ?? 0) * 100"></div></div>
                     <span class="ss-val">{{ (hb.engagement ?? 0).toFixed(2) }}</span>
                   </div>
                   <div class="self-state-item">
-                    <span class="ss-label">Bonding</span>
+                    <span class="ss-label">{{ 'brain.selfState.bonding' | translate }}</span>
                     <div class="ss-bar-track"><div class="ss-bar-fill bonding" [style.width.%]="(hb.bonding ?? 0) * 100"></div></div>
                     <span class="ss-val">{{ (hb.bonding ?? 0).toFixed(2) }}</span>
                   </div>
                 </div>
                 <div class="self-state-meta">
-                  @if (hb.mood_label) { <span class="ss-chip">Mood: {{ hb.mood_label }}</span> }
-                  @if (hb.momentum) { <span class="ss-chip">Momentum: {{ hb.momentum }}</span> }
-                  @if (hb.felt_idle) { <span class="ss-chip">Idle: {{ hb.felt_idle }}</span> }
-                  @if (hb.flow) { <span class="ss-chip">Flow: {{ hb.flow }}</span> }
+                  @if (hb.mood_label) { <span class="ss-chip">{{ 'brain.selfState.mood' | translate:{ value: hb.mood_label } }}</span> }
+                  @if (hb.momentum) { <span class="ss-chip">{{ 'brain.selfState.momentum' | translate:{ value: hb.momentum } }}</span> }
+                  @if (hb.felt_idle) { <span class="ss-chip">{{ 'brain.selfState.idle' | translate:{ value: hb.felt_idle } }}</span> }
+                  @if (hb.flow) { <span class="ss-chip">{{ 'brain.selfState.flow' | translate:{ value: hb.flow } }}</span> }
                 </div>
               } @else {
-                <div class="empty-state">No temporal self data available</div>
+                <div class="empty-state">{{ 'brain.selfState.empty' | translate }}</div>
               }
             </section>
           </div>
@@ -530,17 +530,17 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
           <div class="tab-panel">
             @if (networkData(); as nd) {
               <section class="section">
-                <h3>Network Activation</h3>
+                <h3>{{ 'brain.networkDetail.activation' | translate }}</h3>
                 <div class="network-detail-bars">
-                  <div class="nd-bar"><span class="nd-label">Executive Control (ECN)</span><div class="nd-track"><div class="nd-fill ecn" [style.width.%]="nd.ecn * 100"></div></div><span class="nd-val">{{ (nd.ecn * 100).toFixed(0) }}%</span></div>
-                  <div class="nd-bar"><span class="nd-label">Salience (SN)</span><div class="nd-track"><div class="nd-fill sn" [style.width.%]="nd.sn * 100"></div></div><span class="nd-val">{{ (nd.sn * 100).toFixed(0) }}%</span></div>
-                  <div class="nd-bar"><span class="nd-label">Default Mode (DMN)</span><div class="nd-track"><div class="nd-fill dmn" [style.width.%]="nd.dmn * 100"></div></div><span class="nd-val">{{ (nd.dmn * 100).toFixed(0) }}%</span></div>
+                  <div class="nd-bar"><span class="nd-label">{{ 'brain.networkDetail.ecn' | translate }}</span><div class="nd-track"><div class="nd-fill ecn" [style.width.%]="nd.ecn * 100"></div></div><span class="nd-val">{{ (nd.ecn * 100).toFixed(0) }}%</span></div>
+                  <div class="nd-bar"><span class="nd-label">{{ 'brain.networkDetail.sn' | translate }}</span><div class="nd-track"><div class="nd-fill sn" [style.width.%]="nd.sn * 100"></div></div><span class="nd-val">{{ (nd.sn * 100).toFixed(0) }}%</span></div>
+                  <div class="nd-bar"><span class="nd-label">{{ 'brain.networkDetail.dmn' | translate }}</span><div class="nd-track"><div class="nd-fill dmn" [style.width.%]="nd.dmn * 100"></div></div><span class="nd-val">{{ (nd.dmn * 100).toFixed(0) }}%</span></div>
                 </div>
-                <p class="nd-state">Dominant: <strong>{{ nd.dominant_label }}</strong> ({{ nd.transition_count }} transitions)</p>
+                <p class="nd-state">{{ 'brain.networkDetail.dominant' | translate:{ label: nd.dominant_label, count: nd.transition_count } }}</p>
               </section>
               @if (nd.recent_transitions?.length) {
                 <section class="section">
-                  <h3>Recent Transitions</h3>
+                  <h3>{{ 'brain.networkDetail.recentTransitions' | translate }}</h3>
                   <div class="transition-list">
                     @for (t of nd.recent_transitions; track $index) {
                       <div class="transition-row">
@@ -555,12 +555,12 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
               }
               @if (networkChartSeries().length) {
                 <section class="section">
-                  <h3>Activation Timeline</h3>
-                  <nls-line-chart [series]="networkChartSeries()" [height]="220" xLabel="Turn" [yMin]="0" [yMax]="1"></nls-line-chart>
+                  <h3>{{ 'brain.networkDetail.activationTimeline' | translate }}</h3>
+                  <nls-line-chart [series]="networkChartSeries()" [height]="220" [xLabel]="('brain.overview.turn' | translate)" [yMin]="0" [yMax]="1"></nls-line-chart>
                 </section>
               }
             } @else {
-              <div class="empty-state">No network dynamics data</div>
+              <div class="empty-state">{{ 'brain.networkDetail.empty' | translate }}</div>
             }
           </div>
         }
@@ -574,7 +574,7 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
                   <button class="wm-ws-btn"
                     [class.active]="wmDisplayWorkspace() === 'professional'"
                     (click)="wmViewWorkspace.set('professional')">
-                    Professional
+                    {{ 'brain.wm.professional' | translate }}
                     @if (wmActiveWorkspace() === 'professional') {
                       <span class="wm-ws-active-dot"></span>
                     }
@@ -582,24 +582,24 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
                   <button class="wm-ws-btn"
                     [class.active]="wmDisplayWorkspace() === 'personal'"
                     (click)="wmViewWorkspace.set('personal')">
-                    Personal
+                    {{ 'brain.wm.personal' | translate }}
                     @if (wmActiveWorkspace() === 'personal') {
                       <span class="wm-ws-active-dot"></span>
                     }
                   </button>
                 </div>
                 @if (wm.slot_count || wm.goal_count || wm.intention_count) {
-                  <span class="wm-stat">{{ wm.slot_count }}/{{ wm.max_slots }} slots</span>
-                  <span class="wm-stat">{{ wm.goal_count }} goals</span>
-                  <span class="wm-stat">{{ wm.intention_count }} intentions</span>
+                  <span class="wm-stat">{{ 'brain.wm.slotsStat' | translate:{ used: wm.slot_count, max: wm.max_slots } }}</span>
+                  <span class="wm-stat">{{ 'brain.wm.goalsStat' | translate:{ count: wm.goal_count } }}</span>
+                  <span class="wm-stat">{{ 'brain.wm.intentionsStat' | translate:{ count: wm.intention_count } }}</span>
                 }
                 @if (wm.common_slot_count) {
-                  <span class="wm-stat muted">{{ wm.common_slot_count }} common</span>
+                  <span class="wm-stat muted">{{ 'brain.wm.commonStat' | translate:{ count: wm.common_slot_count } }}</span>
                 }
               </div>
               @if (wmPrimaryGoals().length) {
                 <section class="section">
-                  <h3>Goals</h3>
+                  <h3>{{ 'brain.wm.goals' | translate }}</h3>
                   @for (g of wmPrimaryGoals(); track $index) {
                     <div class="wm-card goal-card">
                       <span class="wm-card-badge">{{ g.level }}</span>
@@ -610,7 +610,7 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
               }
               @if (wmPrimarySlots().length) {
                 <section class="section">
-                  <h3>Slots <span class="muted">({{ wmDisplayWorkspace() }})</span></h3>
+                  <h3>{{ 'brain.wm.slots' | translate }} <span class="muted">({{ ('brain.wm.' + wmDisplayWorkspace()) | translate }})</span></h3>
                   @for (s of wmPrimarySlots(); track $index) {
                     <div class="wm-card slot-card" [style.opacity]="Math.max(0.4, s.salience)">
                       <span class="wm-card-badge">{{ s.type }}</span>
@@ -622,7 +622,7 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
               }
               @if (wm.intentions?.length) {
                 <section class="section">
-                  <h3>Intentions</h3>
+                  <h3>{{ 'brain.wm.intentions' | translate }}</h3>
                   @for (it of wm.intentions; track $index) {
                     <div class="wm-card intention-card">
                       <span class="wm-card-badge">{{ it.trigger }}</span>
@@ -634,7 +634,7 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
               <!-- Session Consolidation (protected long-term tier) -->
               @if (wm.consolidation_context) {
                 <section class="section">
-                  <h3>Session Consolidation</h3>
+                  <h3>{{ 'brain.wm.consolidation' | translate }}</h3>
                   <div class="wm-consolidation-block">{{ wm.consolidation_context }}</div>
                 </section>
               }
@@ -642,7 +642,7 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
               @if (wmOtherSlots(); as other) {
                 @if (other.slots.length) {
                   <section class="section">
-                    <h3>{{ other.label }} Workspace <span class="muted">({{ other.slots.length }} slots)</span></h3>
+                    <h3>{{ 'brain.wm.workspaceSlots' | translate:{ label: other.label, count: other.slots.length } }}</h3>
                     @for (s of other.slots; track $index) {
                       <div class="wm-card slot-card other-ws-card" [style.opacity]="Math.max(0.35, s.salience * 0.7)">
                         <span class="wm-card-badge">{{ s.type }}</span>
@@ -658,7 +658,7 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
             @if (ansContext(); as ctx) {
               @if (ctx.items.length) {
                 <section class="section">
-                  <h3>Context Window <span class="muted">({{ ctx.total }} items)</span></h3>
+                  <h3>{{ 'brain.wm.contextWindow' | translate:{ count: ctx.total } }}</h3>
                   <div class="ctx-list">
                     @for (item of ctx.items; track $index) {
                       <div class="wm-card ctx-card" [class]="'wm-card ctx-card ctx-' + item.signal_type.toLowerCase()">
@@ -682,12 +682,12 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
           <div class="tab-panel">
             @if (tomData(); as tom) {
               <div class="tom-header">
-                <span>Active user: {{ tom.active_user || 'none' }}</span>
-                <span>{{ tom.user_count }} user(s) modeled</span>
+                <span>{{ 'brain.tom.activeUser' | translate:{ user: tom.active_user || ('brain.tom.none' | translate) } }}</span>
+                <span>{{ 'brain.tom.usersModeled' | translate:{ count: tom.user_count } }}</span>
               </div>
               @if (tom.temperature) {
                 <section class="section">
-                  <h3>Conversation Temperature</h3>
+                  <h3>{{ 'brain.tom.temperature' | translate }}</h3>
                   <div class="tom-temp-bar">
                     <div class="tom-temp-fill" [style.width.%]="tom.temperature.temperature * 100"></div>
                   </div>
@@ -696,15 +696,15 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
               }
               @if (tom.users?.length) {
                 <section class="section">
-                  <h3>User Models</h3>
+                  <h3>{{ 'brain.tom.userModels' | translate }}</h3>
                   @for (u of tom.users; track u.user_id) {
                     <div class="tom-user-card">
                       <div class="tom-user-header">
                         <span class="tom-user-id">{{ u.user_id }}</span>
-                        <span class="tom-user-turns muted">{{ u.turn_count }} turns</span>
+                        <span class="tom-user-turns muted">{{ 'brain.tom.turns' | translate:{ count: u.turn_count } }}</span>
                       </div>
-                      @if (u.style) { <div class="tom-field"><span class="tom-key">Style:</span> {{ u.style }}</div> }
-                      @if (u.patience) { <div class="tom-field"><span class="tom-key">Patience:</span> {{ u.patience.toFixed(2) }}</div> }
+                      @if (u.style) { <div class="tom-field"><span class="tom-key">{{ 'brain.tom.style' | translate }}</span> {{ u.style }}</div> }
+                      @if (u.patience) { <div class="tom-field"><span class="tom-key">{{ 'brain.tom.patience' | translate }}</span> {{ u.patience.toFixed(2) }}</div> }
                       @if (u.top_interests?.length) {
                         <div class="tom-interests">
                           @for (interest of u.top_interests; track interest) {
@@ -727,18 +727,18 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
                 </section>
               } @else if (tom.user_model) {
                 <section class="section">
-                  <h3>Active User Model</h3>
+                  <h3>{{ 'brain.tom.activeUserModel' | translate }}</h3>
                   <div class="tom-user-card">
                     <div class="tom-user-header">
                       <span class="tom-user-id">{{ tom.user_model.user_id }}</span>
-                      <span class="tom-user-turns muted">{{ tom.user_model.turn_count }} turns</span>
+                      <span class="tom-user-turns muted">{{ 'brain.tom.turns' | translate:{ count: tom.user_model.turn_count } }}</span>
                     </div>
-                    @if (tom.user_model.style) { <div class="tom-field"><span class="tom-key">Style:</span> {{ tom.user_model.style }}</div> }
+                    @if (tom.user_model.style) { <div class="tom-field"><span class="tom-key">{{ 'brain.tom.style' | translate }}</span> {{ tom.user_model.style }}</div> }
                   </div>
                 </section>
               }
             } @else {
-              <div class="empty-state">No theory of mind data</div>
+              <div class="empty-state">{{ 'brain.tom.empty' | translate }}</div>
             }
           </div>
         }
@@ -751,34 +751,34 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
               <div class="narrative-header">
                 <div class="narr-stat">
                   <span class="narr-stat-value">{{ (narr.narrative_coherence * 100).toFixed(0) }}%</span>
-                  <span class="narr-stat-label">Coherence ({{ narr.coherence_label }})</span>
+                  <span class="narr-stat-label">{{ 'brain.narrative.coherence' | translate:{ label: narr.coherence_label } }}</span>
                 </div>
                 <div class="narr-stat">
                   <span class="narr-stat-value">{{ narr.episode_count }}</span>
-                  <span class="narr-stat-label">Episodes</span>
+                  <span class="narr-stat-label">{{ 'brain.narrative.episodes' | translate }}</span>
                 </div>
                 <div class="narr-stat">
                   <span class="narr-stat-value">{{ narr.regulation_count }}</span>
-                  <span class="narr-stat-label">Regulations</span>
+                  <span class="narr-stat-label">{{ 'brain.narrative.regulations' | translate }}</span>
                 </div>
                 @if (narr.active_strategy) {
                   <div class="narr-stat active-strategy">
                     <span class="narr-stat-value">{{ narr.active_strategy }}</span>
-                    <span class="narr-stat-label">Active Strategy</span>
+                    <span class="narr-stat-label">{{ 'brain.narrative.activeStrategy' | translate }}</span>
                   </div>
                 }
               </div>
               <!-- Soul Wish -->
               @if (narr.soul_wish) {
                 <div class="soul-wish-card">
-                  <div class="soul-wish-label">Soul Wish</div>
+                  <div class="soul-wish-label">{{ 'brain.narrative.soulWish' | translate }}</div>
                   <div class="soul-wish-text">{{ narr.soul_wish }}</div>
                 </div>
               }
 
               @if (narr.values?.length) {
                 <div class="narr-values">
-                  <span class="narr-values-label">Core Values:</span>
+                  <span class="narr-values-label">{{ 'brain.narrative.coreValues' | translate }}</span>
                   @for (v of narr.values; track v) {
                     <span class="narr-value-pill">{{ v }}</span>
                   }
@@ -788,7 +788,7 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
               <!-- Narrative Thread -->
               @if (narr.narrative_blocks?.length) {
                 <section class="section">
-                  <h3>Narrative Thread</h3>
+                  <h3>{{ 'brain.narrative.thread' | translate }}</h3>
                   <div class="narrative-timeline">
                     @for (block of (narr.narrative_blocks ?? []).slice().reverse().slice(0, narrativeBlocksExpanded ? 50 : 10); track block.timestamp) {
                       <div class="narrative-block">
@@ -809,7 +809,7 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
                   </div>
                   @if ((narr.narrative_blocks?.length || 0) > 10 && !narrativeBlocksExpanded) {
                     <button class="show-more-btn" (click)="narrativeBlocksExpanded = true">
-                      Show all {{ narr.narrative_blocks?.length }} blocks
+                      {{ 'brain.narrative.showAllBlocks' | translate:{ count: narr.narrative_blocks?.length } }}
                     </button>
                   }
                 </section>
@@ -818,23 +818,23 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
               <!-- Current episode -->
               @if (narr.current_episode; as cur) {
                 <section class="section">
-                  <h3><span class="ep-live-dot"></span> Live Episode</h3>
+                  <h3><span class="ep-live-dot"></span> {{ 'brain.narrative.liveEpisode' | translate }}</h3>
                   <div class="episode-card ep-current">
                     <div class="ep-header">
                       <span class="ep-number">#{{ cur.index }}</span>
                       <span class="ep-title">{{ cur.title }}</span>
-                      <span class="ep-badge ep-active">LIVE</span>
+                      <span class="ep-badge ep-active">{{ 'brain.narrative.live' | translate }}</span>
                     </div>
                     @if (cur.summary) {
                       <div class="ep-summary">{{ cur.summary }}</div>
                     }
                     <div class="ep-body">
-                      <div class="ep-row"><span class="ep-key">Turns</span><span>{{ cur.turns }}</span></div>
-                      <div class="ep-row"><span class="ep-key">Emotional Arc</span><span>{{ cur.arc_summary || 'building...' }}</span></div>
-                      <div class="ep-row"><span class="ep-key">Peak Resonance</span><span>{{ cur.peak_resonance.toFixed(3) }}</span></div>
-                      <div class="ep-row"><span class="ep-key">Peak Engagement</span><span>{{ (cur.peak_engagement ?? 0).toFixed(3) }}</span></div>
+                      <div class="ep-row"><span class="ep-key">{{ 'brain.narrative.turns' | translate }}</span><span>{{ cur.turns }}</span></div>
+                      <div class="ep-row"><span class="ep-key">{{ 'brain.narrative.emotionalArc' | translate }}</span><span>{{ cur.arc_summary || ('brain.narrative.building' | translate) }}</span></div>
+                      <div class="ep-row"><span class="ep-key">{{ 'brain.narrative.peakResonance' | translate }}</span><span>{{ cur.peak_resonance.toFixed(3) }}</span></div>
+                      <div class="ep-row"><span class="ep-key">{{ 'brain.narrative.peakEngagement' | translate }}</span><span>{{ (cur.peak_engagement ?? 0).toFixed(3) }}</span></div>
                       @if (cur.start_time) {
-                        <div class="ep-row"><span class="ep-key">Started</span><span>{{ cur.start_time * 1000 | date:'short' }}</span></div>
+                        <div class="ep-row"><span class="ep-key">{{ 'brain.narrative.started' | translate }}</span><span>{{ cur.start_time * 1000 | date:'short' }}</span></div>
                       }
                     </div>
                     @if (cur.topics?.length) {
@@ -844,10 +844,10 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
                     }
                     @if (cur.arc_snapshots?.length) {
                       <div class="ep-arc-visual">
-                        <div class="ep-arc-label">Mood Journey</div>
+                        <div class="ep-arc-label">{{ 'brain.narrative.moodJourney' | translate }}</div>
                         <div class="ep-arc-track">
                           @for (snap of cur.arc_snapshots; track snap.turn) {
-                            <div class="ep-arc-dot" [title]="'Turn ' + snap.turn + ': ' + snap.mood + ' (v=' + snap.v + ', a=' + snap.a + ')'"
+                            <div class="ep-arc-dot" [title]="moodArcTitle(snap)"
                                  [style.background]="moodColor(snap.v)"
                                  [style.bottom.%]="(snap.v + 1) * 50">
                             </div>
@@ -872,7 +872,7 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
               <!-- Past episodes -->
               @if (narr.episodes?.length) {
                 <section class="section">
-                  <h3>Episode History</h3>
+                  <h3>{{ 'brain.narrative.episodeHistory' | translate }}</h3>
                   @for (ep of narr.episodes.slice().reverse(); track ep.index) {
                     <div class="episode-card ep-closed" [class.ep-expanded]="expandedEpisode === ep.index"
                          (click)="expandedEpisode = expandedEpisode === ep.index ? null : ep.index">
@@ -880,8 +880,8 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
                         <span class="ep-number">#{{ ep.index }}</span>
                         <span class="ep-title">{{ ep.title }}</span>
                         <span class="ep-meta-inline">
-                          {{ ep.turns }} turns
-                          @if (ep.duration_min) { &bull; {{ ep.duration_min | number:'1.0-0' }}min }
+                          {{ 'brain.narrative.turnsMeta' | translate:{ count: ep.turns } }}
+                          @if (ep.duration_min) { &bull; {{ 'brain.narrative.durationMin' | translate:{ min: (ep.duration_min | number:'1.0-0') } } }
                         </span>
                         <span class="ep-mood-badge" [style.background]="moodColor(moodValence(ep.dominant_emotion))">{{ ep.dominant_emotion }}</span>
                         <span class="ep-chevron">{{ expandedEpisode === ep.index ? '▾' : '▸' }}</span>
@@ -892,24 +892,24 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
                           @if (ep.summary) {
                             <div class="ep-summary">{{ ep.summary }}</div>
                           }
-                          <div class="ep-row"><span class="ep-key">Emotional Arc</span><span>{{ ep.arc_summary }}</span></div>
-                          <div class="ep-row"><span class="ep-key">Mood Journey</span><span>{{ ep.opening_mood }} → {{ ep.closing_mood }}</span></div>
-                          <div class="ep-row"><span class="ep-key">Dominant Emotion</span><span>{{ ep.dominant_emotion }}</span></div>
-                          <div class="ep-row"><span class="ep-key">Peak Resonance</span><span>{{ ep.peak_resonance.toFixed(3) }}</span></div>
-                          <div class="ep-row"><span class="ep-key">Peak Engagement</span><span>{{ (ep.peak_engagement ?? 0).toFixed(3) }}</span></div>
-                          <div class="ep-row"><span class="ep-key">Peak Cortisol</span><span>{{ (ep.peak_cortisol ?? 0).toFixed(3) }}</span></div>
+                          <div class="ep-row"><span class="ep-key">{{ 'brain.narrative.emotionalArc' | translate }}</span><span>{{ ep.arc_summary }}</span></div>
+                          <div class="ep-row"><span class="ep-key">{{ 'brain.narrative.moodJourney' | translate }}</span><span>{{ ep.opening_mood }} → {{ ep.closing_mood }}</span></div>
+                          <div class="ep-row"><span class="ep-key">{{ 'brain.narrative.dominantEmotion' | translate }}</span><span>{{ ep.dominant_emotion }}</span></div>
+                          <div class="ep-row"><span class="ep-key">{{ 'brain.narrative.peakResonance' | translate }}</span><span>{{ ep.peak_resonance.toFixed(3) }}</span></div>
+                          <div class="ep-row"><span class="ep-key">{{ 'brain.narrative.peakEngagement' | translate }}</span><span>{{ (ep.peak_engagement ?? 0).toFixed(3) }}</span></div>
+                          <div class="ep-row"><span class="ep-key">{{ 'brain.narrative.peakCortisol' | translate }}</span><span>{{ (ep.peak_cortisol ?? 0).toFixed(3) }}</span></div>
                           @if (ep.coherence_contribution) {
-                            <div class="ep-row"><span class="ep-key">Coherence Contribution</span><span>{{ (ep.coherence_contribution * 100).toFixed(0) }}%</span></div>
+                            <div class="ep-row"><span class="ep-key">{{ 'brain.narrative.coherenceContribution' | translate }}</span><span>{{ (ep.coherence_contribution * 100).toFixed(0) }}%</span></div>
                           }
                           @if (ep.start_time) {
-                            <div class="ep-row"><span class="ep-key">Started</span><span>{{ ep.start_time * 1000 | date:'medium' }}</span></div>
+                            <div class="ep-row"><span class="ep-key">{{ 'brain.narrative.started' | translate }}</span><span>{{ ep.start_time * 1000 | date:'medium' }}</span></div>
                           }
                           @if (ep.end_time) {
-                            <div class="ep-row"><span class="ep-key">Ended</span><span>{{ ep.end_time * 1000 | date:'medium' }}</span></div>
+                            <div class="ep-row"><span class="ep-key">{{ 'brain.narrative.ended' | translate }}</span><span>{{ ep.end_time * 1000 | date:'medium' }}</span></div>
                           }
                           @if (ep.topics?.length) {
                             <div class="ep-topics">
-                              <span class="ep-topics-label">Topics:</span>
+                              <span class="ep-topics-label">{{ 'brain.narrative.topics' | translate }}</span>
                               @for (t of ep.topics; track t) { <span class="topic-pill">{{ t }}</span> }
                             </div>
                           }
@@ -920,10 +920,10 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
                           }
                           @if (ep.arc_snapshots?.length) {
                             <div class="ep-arc-visual">
-                              <div class="ep-arc-label">Turn-by-Turn Mood</div>
+                              <div class="ep-arc-label">{{ 'brain.narrative.turnByTurnMood' | translate }}</div>
                               <div class="ep-arc-track">
                                 @for (snap of ep.arc_snapshots; track snap.turn) {
-                                  <div class="ep-arc-dot" [title]="'Turn ' + snap.turn + ': ' + snap.mood + ' (v=' + snap.v + ', a=' + snap.a + ')'"
+                                  <div class="ep-arc-dot" [title]="moodArcTitle(snap)"
                                        [style.background]="moodColor(snap.v)"
                                        [style.bottom.%]="(snap.v + 1) * 50">
                                   </div>
@@ -944,10 +944,10 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
               }
 
               @if (!narr.current_episode && !narr.episodes?.length) {
-                <div class="empty-state">No episodes recorded yet — episodes are created automatically during conversations</div>
+                <div class="empty-state">{{ 'brain.narrative.emptyEpisodes' | translate }}</div>
               }
             } @else {
-              <div class="empty-state">No narrative data</div>
+              <div class="empty-state">{{ 'brain.narrative.empty' | translate }}</div>
             }
           </div>
         }
@@ -957,25 +957,25 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
           <div class="tab-panel">
             @if (status()?.predictive_processing; as pp) {
               <div class="predictions-header">
-                <span>{{ pp.prediction_count }} predictions</span>
-                <span>Avg PE: {{ pp.average_pe.toFixed(3) }}</span>
-                <span>{{ pp.surprise_count }} surprises</span>
+                <span>{{ 'brain.predictions.headerPredictions' | translate:{ count: pp.prediction_count } }}</span>
+                <span>{{ 'brain.predictions.headerAvgPe' | translate:{ value: pp.average_pe.toFixed(3) } }}</span>
+                <span>{{ 'brain.predictions.headerSurprises' | translate:{ count: pp.surprise_count } }}</span>
               </div>
               @if (pp.last_prediction) {
                 <section class="section">
-                  <h3>Last Prediction</h3>
+                  <h3>{{ 'brain.predictions.lastPrediction' | translate }}</h3>
                   <div class="prediction-detail">
-                    <div class="pred-row"><span class="pred-key">Turn</span><span>{{ pp.last_prediction.turn }}</span></div>
-                    <div class="pred-row"><span class="pred-key">PE</span><span>{{ pp.last_prediction.pe.toFixed(3) }}</span></div>
-                    <div class="pred-row"><span class="pred-key">Confidence</span><span>{{ pp.last_prediction.confidence.toFixed(2) }}</span></div>
-                    <div class="pred-row"><span class="pred-key">Expected</span><span class="mono">{{ pp.last_prediction.expected_domain }}</span></div>
-                    <div class="pred-row"><span class="pred-key">Actual</span><span class="mono">{{ pp.last_prediction.actual_domain }}</span></div>
+                    <div class="pred-row"><span class="pred-key">{{ 'brain.predictions.turn' | translate }}</span><span>{{ pp.last_prediction.turn }}</span></div>
+                    <div class="pred-row"><span class="pred-key">{{ 'brain.predictions.pe' | translate }}</span><span>{{ pp.last_prediction.pe.toFixed(3) }}</span></div>
+                    <div class="pred-row"><span class="pred-key">{{ 'brain.predictions.confidence' | translate }}</span><span>{{ pp.last_prediction.confidence.toFixed(2) }}</span></div>
+                    <div class="pred-row"><span class="pred-key">{{ 'brain.predictions.expected' | translate }}</span><span class="mono">{{ pp.last_prediction.expected_domain }}</span></div>
+                    <div class="pred-row"><span class="pred-key">{{ 'brain.predictions.actual' | translate }}</span><span class="mono">{{ pp.last_prediction.actual_domain }}</span></div>
                   </div>
                 </section>
               }
               @if (pp.high_uncertainty_domains?.length) {
                 <section class="section">
-                  <h3>High Uncertainty Domains</h3>
+                  <h3>{{ 'brain.predictions.highUncertainty' | translate }}</h3>
                   @for (d of pp.high_uncertainty_domains; track d.domain) {
                     <div class="uncertainty-row">
                       <span class="uncertainty-domain mono">{{ d.domain }}</span>
@@ -986,7 +986,7 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
                 </section>
               }
             } @else {
-              <div class="empty-state">No predictive processing data</div>
+              <div class="empty-state">{{ 'brain.predictions.empty' | translate }}</div>
             }
           </div>
         }
@@ -997,7 +997,7 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
             @if (config(); as cfg) {
               <div class="config-toolbar">
                 <button class="view-toggle-btn" (click)="toggleConfigView()">
-                  {{ configViewMode() === 'visual' ? '{ } Show JSON' : '⊞ Show Cards' }}
+                  {{ configViewMode() === 'visual' ? ('brain.config.showJson' | translate) : ('brain.config.showCards' | translate) }}
                 </button>
               </div>
 
@@ -1028,7 +1028,7 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
                               <span class="config-field-label">{{ field.label }}</span>
                               @if (field.type === 'bool') {
                                 <span class="config-field-value config-bool" [class.config-bool-on]="field.value === 'true'" [class.config-bool-off]="field.value === 'false'">
-                                  {{ field.value === 'true' ? 'ON' : 'OFF' }}
+                                  {{ field.value === 'true' ? ('brain.config.on' | translate) : ('brain.config.off' | translate) }}
                                 </span>
                               } @else if (field.type === 'number') {
                                 <span class="config-field-value config-number">{{ field.value }}</span>
@@ -1039,7 +1039,7 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
                           }
                         </div>
                         <details class="config-json-toggle">
-                          <summary class="config-json-summary">Raw JSON</summary>
+                          <summary class="config-json-summary">{{ 'brain.config.rawJson' | translate }}</summary>
                           <div class="json-tree-container">
                             <pre class="config-code"><code>{{ formatJson(cfg[key]) }}</code></pre>
                           </div>
@@ -1059,10 +1059,10 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
               }
 
               @if (!configKeys().length) {
-                <div class="empty-state">No configuration data.</div>
+                <div class="empty-state">{{ 'brain.config.empty' | translate }}</div>
               }
             } @else {
-              <div class="empty-state">Loading configuration...</div>
+              <div class="empty-state">{{ 'brain.config.loading' | translate }}</div>
             }
           </div>
         }
@@ -1157,7 +1157,7 @@ export class BrainComponent implements OnInit, OnDestroy {
       ? ((wm as any)[`${otherWs}_slots`] ?? [])
       : (wm.slots || []);
     return {
-      label: otherWs.charAt(0).toUpperCase() + otherWs.slice(1),
+      label: this.translate.instant('brain.wm.' + otherWs),
       slots: otherSlots as { type: string; content: string; salience: number; domain: string }[],
     };
   });
@@ -1272,7 +1272,9 @@ export class BrainComponent implements OnInit, OnDestroy {
       ecn: 'var(--accent-primary)', sn: 'var(--accent-warn)', dmn: 'var(--accent-primary)',
     };
     const labels: Record<string, string> = {
-      ecn: 'ECN (Executive)', sn: 'SN (Salience)', dmn: 'DMN (Default)',
+      ecn: this.translate.instant('brain.networkDetail.chartEcn'),
+      sn: this.translate.instant('brain.networkDetail.chartSn'),
+      dmn: this.translate.instant('brain.networkDetail.chartDmn'),
     };
     return Object.entries(nh.network)
       .filter(([, pts]) => pts.length > 1)
@@ -1566,6 +1568,15 @@ export class BrainComponent implements OnInit, OnDestroy {
 
   configSectionVersion(data: any): string {
     return data?.version || '';
+  }
+
+  moodArcTitle(snap: { turn: number; mood: string; v: number; a: number }): string {
+    return this.translate.instant('brain.narrative.moodArcTitle', {
+      turn: snap.turn,
+      mood: snap.mood,
+      v: snap.v,
+      a: snap.a,
+    });
   }
 
   configSectionIcon(key: string): string {
