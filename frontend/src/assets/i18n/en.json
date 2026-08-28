@@ -1452,7 +1452,19 @@
     "repair": {
       "starting": "Starting repair...",
       "escalate": "Escalate to Chat",
-      "fixWithAgent": "Fix with Agent"
+      "fixWithAgent": "Fix with Agent",
+      "analyzing": "Analyzing error...",
+      "retry": "Retry #{{pass}}...",
+      "reading": "Reading{{file}}...",
+      "writing": "Writing{{file}}...",
+      "editing": "Editing{{file}}...",
+      "runningTest": "Running test...",
+      "reloading": "Reloading skill...",
+      "reloadFailed": "Reload failed: {{error}}",
+      "fixed": "Fixed!",
+      "failed": "Repair failed",
+      "errorStatus": "Error: {{status}}",
+      "networkError": "Network error: {{message}}"
     },
     "skillConfig": {
       "loading": "Loading config...",
@@ -1518,6 +1530,25 @@
         "whatsappLocal": "WhatsApp pairs locally via QR — it does not use the NestJS webhook relay for inbound messages.",
         "httpsRequired": "Your NestJS server ({{url}}) must be reachable over HTTPS for Telegram and email webhooks."
       }
+    },
+    "categories": {
+      "Popular": "Popular",
+      "Highlighted": "Highlighted",
+      "Newest": "Newest",
+      "Top Rated": "Top Rated"
+    },
+    "files": {
+      "save": "Save",
+      "saved": "Saved!"
+    },
+    "errors": {
+      "channelScopeApi": "Channel scope API not found — restart Babo Desktop (or the Python runtime on port 9222) so the latest discord-channel skill is loaded.",
+      "rolesApi": "Roles API not found — restart Babo Desktop to load the updated discord-channel skill.",
+      "configureResend": "Configure Resend in Settings → Integrations first",
+      "loadClawhubSkills": "Could not load skills from ClawHub",
+      "connectClawhub": "Could not connect to ClawHub",
+      "loadExtensions": "Could not load extensions — the MCP registry may be unavailable",
+      "connectExtensions": "Could not connect to extension registry"
     }
   },
   "memory": {
@@ -1890,6 +1921,60 @@
       "blocked": "Blocked",
       "done": "Done",
       "deferred": "Deferred"
+    },
+    "loadError": "Could not load tasks. Is the agent running?",
+    "newListPrompt": "New list name:",
+    "card": {
+      "markComplete": "Mark complete",
+      "membersDone": "{{done}}/{{total}} members done",
+      "idleEligible": "Idle eligible",
+      "executionPlan": "Execution Plan",
+      "teamMembers": "Team Members",
+      "progressNotes": "Progress notes:",
+      "created": "Created {{time}}",
+      "doneAt": "Done {{time}}",
+      "edit": "Edit",
+      "delete": "Delete",
+      "titlePlaceholder": "Task title",
+      "descriptionPlaceholder": "Description (optional)",
+      "dueDate": "Due date",
+      "pickUpIdle": "Pick up during idle time",
+      "save": "Save",
+      "cancel": "Cancel"
+    },
+    "create": {
+      "addTask": "Add task",
+      "titlePlaceholder": "What needs to be done?",
+      "descriptionPlaceholder": "Description (optional)",
+      "idleTitle": "Agent works on this during idle time",
+      "idle": "Idle",
+      "add": "Add",
+      "cancel": "Cancel"
+    },
+    "board": {
+      "expand": "Expand",
+      "collapse": "Collapse",
+      "emptyInbox": "No new tasks",
+      "emptyInProgress": "Nothing in progress",
+      "empty": "Empty"
+    },
+    "priority": {
+      "low": "Low",
+      "normal": "Normal",
+      "high": "High",
+      "urgent": "Urgent"
+    },
+    "due": {
+      "overdue": "Overdue {{days}}d",
+      "today": "Due today",
+      "tomorrow": "Due tomorrow",
+      "inDays": "Due in {{days}}d"
+    },
+    "time": {
+      "justNow": "just now",
+      "minutesAgo": "{{count}}m ago",
+      "hoursAgo": "{{count}}h ago",
+      "daysAgo": "{{count}}d ago"
     }
   },
   "creation": {
@@ -2310,7 +2395,10 @@
     "actions": "Actions",
     "active": "Active",
     "revoked": "Revoked",
-    "delete": "Delete"
+    "delete": "Delete",
+    "usageExamples": "Usage Examples",
+    "pythonSdk": "Python (OpenAI SDK)",
+    "curl": "curl"
   },
   "cryptex": {
     "empty": "No rings loaded",

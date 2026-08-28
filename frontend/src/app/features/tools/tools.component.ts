@@ -289,7 +289,7 @@ type IntegrationConfigCacheEntry = {
               @for (cat of clawhubCategories; track cat.label) {
                 <button class="category-chip" [class.active]="clawhubActiveCategory() === cat.label"
                   (click)="browseClawhubCategory(cat)">
-                  {{ cat.label }}
+                  {{ clawhubCategoryLabel(cat.label) }}
                 </button>
               }
             </div>
@@ -306,7 +306,7 @@ type IntegrationConfigCacheEntry = {
                   <div class="clawhub-result-header">
                     <span class="clawhub-result-name">{{ r.displayName || r.name || r.slug }}</span>
                     <span class="source-badge" [class.badge-skill]="r._source === 'skill'" [class.badge-extension]="r._source === 'extension'">
-                      {{ r._source === 'extension' ? 'Extension' : 'Skill' }}
+                      {{ r._source === 'extension' ? ('tools.community.extension' | translate) : ('tools.community.skill' | translate) }}
                     </span>
                     @if (r.stats?.stars || r.stars) {
                       <span class="clawhub-stars">{{ r.stats?.stars || r.stars }}</span>
@@ -361,7 +361,7 @@ type IntegrationConfigCacheEntry = {
           <div class="community-detail">
             <div class="cd-badges">
               <span class="source-badge" [class.badge-skill]="item._source === 'skill'" [class.badge-extension]="item._source === 'extension'">
-                {{ item._source === 'extension' ? 'Extension' : 'Skill' }}
+                {{ item._source === 'extension' ? ('tools.community.extension' | translate) : ('tools.community.skill' | translate) }}
               </span>
               @if (item.stats?.stars || item.stars) {
                 <span class="cd-stat">{{ item.stats?.stars || item.stars }} stars</span>
@@ -817,7 +817,7 @@ type IntegrationConfigCacheEntry = {
                     @if (fileEditable()) {
                       <button class="file-save-btn" (click)="saveFile(skName)" [disabled]="fileSaving()">
                         @if (fileSaving()) { <span class="btn-spinner"></span> }
-                        {{ fileSaveSuccess() ? 'Saved!' : 'Save' }}
+                        {{ fileSaveSuccess() ? ('tools.files.saved' | translate) : ('tools.files.save' | translate) }}
                       </button>
                     }
                   </div>
@@ -1092,9 +1092,16 @@ export class ToolsComponent implements OnInit, OnDestroy {
     private translate: TranslateService,
   ) {}
 
-  private t(key: string): string {
-    return this.translate.instant(key);
+  private t(key: string, params?: Record<string, unknown>): string {
+    return this.translate.instant(key, params);
   }
+  clawhubCategoryLabel(label: string): string {
+    const key = `tools.categories.${label}`;
+    const translated = this.t(key);
+    return translated === key ? label : translated;
+  }
+
+
 
   private routerSub?: ReturnType<typeof this.router.events.subscribe>;
   private wsSub?: Subscription;
@@ -1531,10 +1538,7 @@ export class ToolsComponent implements OnInit, OnDestroy {
         const status = err?.status;
         const detail = err.error?.detail;
         if (status === 404) {
-          this.channelScopeError.set(
-            'Channel scope API not found — restart Babo Desktop (or the Python runtime on port 9222) '
-            + 'so the latest discord-channel skill is loaded.',
-          );
+          this.channelScopeError.set(this.t('tools.errors.channelScopeApi'));
         } else {
           this.channelScopeError.set(detail || this.t('toast.tools.syncFailed'));
         }
@@ -1556,7 +1560,7 @@ export class ToolsComponent implements OnInit, OnDestroy {
       error: (err) => {
         if (err?.status === 404) {
           this.channelScopeError.set(
-            'Roles API not found — restart Babo Desktop to load the updated discord-channel skill.',
+            this.t('tools.errors.rolesApi'),
           );
         }
         this.discordRolesLoading.set(false);
@@ -2011,7 +2015,7 @@ export class ToolsComponent implements OnInit, OnDestroy {
     if (!this.agentId) return;
     if (!this.emailChannelReady()) {
       this.toast.show(
-        'Configure Resend in Settings → Integrations first',
+        this.t('tools.errors.configureResend'),
         'error',
         5000,
       );
@@ -2153,7 +2157,7 @@ export class ToolsComponent implements OnInit, OnDestroy {
 
     this.repairRunning.set(true);
     this.repairSkillName.set(skillName);
-    this.repairStep.set('Starting repair...');
+    this.repairStep.set(this.t('tools.repair.starting'));
     this.repairResult.set(null);
 
     const url = `${this.api.runtimeBase}/admin/skills/${encodeURIComponent(skillName)}/repair?agent_id=${encodeURIComponent(this.agentId)}`;
@@ -2161,7 +2165,7 @@ export class ToolsComponent implements OnInit, OnDestroy {
     try {
       const resp = await fetch(url, { method: 'POST' });
       if (!resp.ok || !resp.body) {
-        this.repairStep.set(`Error: ${resp.statusText}`);
+        this.repairStep.set(this.t('tools.repair.errorStatus', { status: resp.statusText }));
         this.repairResult.set('failed');
         this.repairRunning.set(false);
         return;
@@ -2192,7 +2196,7 @@ export class ToolsComponent implements OnInit, OnDestroy {
         try { this.handleRepairEvent(JSON.parse(buffer.slice(6))); } catch { /* ignore */ }
       }
     } catch (err: any) {
-      this.repairStep.set(`Network error: ${err.message || err}`);
+      this.repairStep.set(this.t('tools.repair.networkError', { message: err.message || String(err) }));
       this.repairResult.set('failed');
     } finally {
       this.repairRunning.set(false);
@@ -2203,28 +2207,37 @@ export class ToolsComponent implements OnInit, OnDestroy {
   private handleRepairEvent(event: any): void {
     switch (event.type) {
       case 'pass_start':
-        this.repairStep.set(event.pass > 1 ? `Retry #${event.pass}...` : 'Analyzing error...');
+        this.repairStep.set(
+          event.pass > 1
+            ? this.t('tools.repair.retry', { pass: event.pass })
+            : this.t('tools.repair.analyzing'),
+        );
         break;
       case 'step': {
         const tool = event.tool || '?';
         const file = event.file ? ` ${event.file}` : '';
-        const labels: Record<string, string> = { read: `Reading${file}...`, write: `Writing${file}...`, edit: `Editing${file}...`, bash: 'Running test...' };
+        const labels: Record<string, string> = {
+          read: this.t('tools.repair.reading', { file }),
+          write: this.t('tools.repair.writing', { file }),
+          edit: this.t('tools.repair.editing', { file }),
+          bash: this.t('tools.repair.runningTest'),
+        };
         this.repairStep.set(labels[tool] ?? `${tool}${file}...`);
         break;
       }
       case 'reloading':
-        this.repairStep.set('Reloading skill...');
+        this.repairStep.set(this.t('tools.repair.reloading'));
         break;
       case 'reload_failed':
-        this.repairStep.set(`Reload failed: ${event.error}`);
+        this.repairStep.set(this.t('tools.repair.reloadFailed', { error: event.error }));
         break;
       case 'complete':
         if (event.success) {
-          this.repairStep.set('Fixed!');
+          this.repairStep.set(this.t('tools.repair.fixed'));
           this.repairResult.set('success');
           this.loadSkills();
         } else {
-          this.repairStep.set(event.error || 'Repair failed');
+          this.repairStep.set(event.error || this.t('tools.repair.failed'));
           this.repairResult.set('failed');
         }
         break;
@@ -2307,7 +2320,7 @@ export class ToolsComponent implements OnInit, OnDestroy {
           await new Promise(r => setTimeout(r, 1500));
           return this.loadFeaturedSkills(categoryLabel, retry + 1);
         }
-        this.clawhubError.set('Could not load skills from ClawHub');
+        this.clawhubError.set(this.t('tools.errors.loadClawhubSkills'));
       }
     } catch {
       if (!stale) {
@@ -2315,7 +2328,7 @@ export class ToolsComponent implements OnInit, OnDestroy {
           await new Promise(r => setTimeout(r, 1500));
           return this.loadFeaturedSkills(categoryLabel, retry + 1);
         }
-        this.clawhubError.set('Could not connect to ClawHub');
+        this.clawhubError.set(this.t('tools.errors.connectClawhub'));
       }
     } finally {
       this.clawhubLoading.set(false);
@@ -2421,7 +2434,7 @@ export class ToolsComponent implements OnInit, OnDestroy {
           await new Promise(r => setTimeout(r, 1500));
           return this.loadFeaturedExtensions(retry + 1);
         }
-        this.clawhubError.set('Could not load extensions — the MCP registry may be unavailable');
+        this.clawhubError.set(this.t('tools.errors.loadExtensions'));
         this.mcpResults.set([]);
       }
     } catch {
@@ -2430,7 +2443,7 @@ export class ToolsComponent implements OnInit, OnDestroy {
           await new Promise(r => setTimeout(r, 1500));
           return this.loadFeaturedExtensions(retry + 1);
         }
-        this.clawhubError.set('Could not connect to extension registry');
+        this.clawhubError.set(this.t('tools.errors.connectExtensions'));
         this.mcpResults.set([]);
       }
     } finally {

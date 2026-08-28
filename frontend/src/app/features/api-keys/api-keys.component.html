@@ -86,10 +86,10 @@
 
     <!-- Code snippets -->
     <div class="snippets-card animate-fade-in">
-      <h2 class="card-title">Usage Examples</h2>
+      <h2 class="card-title">{{ 'apiKeys.usageExamples' | translate }}</h2>
 
       <div class="snippet-group">
-        <h3 class="snippet-label">Python (OpenAI SDK)</h3>
+        <h3 class="snippet-label">{{ 'apiKeys.pythonSdk' | translate }}</h3>
         <pre class="snippet-code"><code>from openai import OpenAI
 
 client = OpenAI(
@@ -107,7 +107,7 @@ for chunk in response:
       </div>
 
       <div class="snippet-group">
-        <h3 class="snippet-label">curl</h3>
+        <h3 class="snippet-label">{{ 'apiKeys.curl' | translate }}</h3>
         <pre class="snippet-code"><code>curl https://nls-api.up.railway.app/v1/chat/completions \
   -H "Authorization: Bearer nlsk_your_key_here" \
   -H "Content-Type: application/json" \

@@ -1451,8 +1451,20 @@
     "completeSetupBody": "compila i campi obbligatori sotto, poi salva.",
     "repair": {
       "starting": "Avvio riparazione...",
-      "escalate": "Scala in Chat",
-      "fixWithAgent": "Ripara con agente"
+      "escalate": "Escalation in chat",
+      "fixWithAgent": "Correggi con l'agente",
+      "analyzing": "Analisi errore...",
+      "retry": "Nuovo tentativo #{{pass}}...",
+      "reading": "Lettura{{file}}...",
+      "writing": "Scrittura{{file}}...",
+      "editing": "Modifica{{file}}...",
+      "runningTest": "Esecuzione test...",
+      "reloading": "Ricaricamento skill...",
+      "reloadFailed": "Ricaricamento fallito: {{error}}",
+      "fixed": "Risolto!",
+      "failed": "Riparazione fallita",
+      "errorStatus": "Errore: {{status}}",
+      "networkError": "Errore di rete: {{message}}"
     },
     "skillConfig": {
       "loading": "Caricamento config...",
@@ -1518,6 +1530,25 @@
         "whatsappLocal": "WhatsApp si associa in locale via QR — non usa il relay webhook NestJS per i messaggi in arrivo.",
         "httpsRequired": "Il server NestJS ({{url}}) deve essere raggiungibile via HTTPS per webhook Telegram ed email."
       }
+    },
+    "categories": {
+      "Popular": "Popolari",
+      "Highlighted": "In evidenza",
+      "Newest": "Più recenti",
+      "Top Rated": "Più votati"
+    },
+    "files": {
+      "save": "Salva",
+      "saved": "Salvato!"
+    },
+    "errors": {
+      "channelScopeApi": "API ambito canali non trovata — riavvia Babo Desktop (o il runtime Python sulla porta 9222) per caricare l'ultima skill discord-channel.",
+      "rolesApi": "API ruoli non trovata — riavvia Babo Desktop per caricare la skill discord-channel aggiornata.",
+      "configureResend": "Configura Resend prima in Impostazioni → Integrazioni",
+      "loadClawhubSkills": "Impossibile caricare le skill da ClawHub",
+      "connectClawhub": "Impossibile connettersi a ClawHub",
+      "loadExtensions": "Impossibile caricare le estensioni — il registro MCP potrebbe non essere disponibile",
+      "connectExtensions": "Impossibile connettersi al registro estensioni"
     }
   },
   "memory": {
@@ -1890,6 +1921,60 @@
       "blocked": "Bloccate",
       "done": "Fatte",
       "deferred": "Rinviate"
+    },
+    "loadError": "Impossibile caricare le attività. L'agente è in esecuzione?",
+    "newListPrompt": "Nome nuova lista:",
+    "card": {
+      "markComplete": "Segna come completata",
+      "membersDone": "{{done}}/{{total}} membri completati",
+      "idleEligible": "Idonea in idle",
+      "executionPlan": "Piano di esecuzione",
+      "teamMembers": "Membri del team",
+      "progressNotes": "Note di avanzamento:",
+      "created": "Creata {{time}}",
+      "doneAt": "Completata {{time}}",
+      "edit": "Modifica",
+      "delete": "Elimina",
+      "titlePlaceholder": "Titolo attività",
+      "descriptionPlaceholder": "Descrizione (opzionale)",
+      "dueDate": "Scadenza",
+      "pickUpIdle": "Prendi in carico durante l'idle",
+      "save": "Salva",
+      "cancel": "Annulla"
+    },
+    "create": {
+      "addTask": "Aggiungi attività",
+      "titlePlaceholder": "Cosa va fatto?",
+      "descriptionPlaceholder": "Descrizione (opzionale)",
+      "idleTitle": "L'agente lavora su questa attività durante l'idle",
+      "idle": "Idle",
+      "add": "Aggiungi",
+      "cancel": "Annulla"
+    },
+    "board": {
+      "expand": "Espandi",
+      "collapse": "Comprimi",
+      "emptyInbox": "Nessuna nuova attività",
+      "emptyInProgress": "Niente in corso",
+      "empty": "Vuoto"
+    },
+    "priority": {
+      "low": "Bassa",
+      "normal": "Normale",
+      "high": "Alta",
+      "urgent": "Urgente"
+    },
+    "due": {
+      "overdue": "In ritardo di {{days}}g",
+      "today": "Scade oggi",
+      "tomorrow": "Scade domani",
+      "inDays": "Scade tra {{days}}g"
+    },
+    "time": {
+      "justNow": "proprio ora",
+      "minutesAgo": "{{count}}m fa",
+      "hoursAgo": "{{count}}h fa",
+      "daysAgo": "{{count}}g fa"
     }
   },
   "creation": {
@@ -2310,7 +2395,10 @@
     "actions": "Azioni",
     "active": "Attiva",
     "revoked": "Revocata",
-    "delete": "Elimina"
+    "delete": "Elimina",
+    "usageExamples": "Esempi d'uso",
+    "pythonSdk": "Python (OpenAI SDK)",
+    "curl": "curl"
   },
   "cryptex": {
     "empty": "Nessun anello caricato",

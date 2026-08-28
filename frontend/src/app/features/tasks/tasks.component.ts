@@ -7,7 +7,7 @@ import { WebSocketService } from '../../core/services/websocket.service';
 import { TaskBoardComponent } from './task-board/task-board.component';
 import { TodoItem, TodoList, PlanSummary, PlanStepSummary } from './task.models';
 import { THEME_COLORS } from '../../core/theme-colors';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 
 @Component({
   selector: 'app-tasks',
@@ -33,6 +33,7 @@ export class TasksComponent implements OnInit, OnDestroy {
     private route: ActivatedRoute,
     private api: ApiService,
     private ws: WebSocketService,
+    private translate: TranslateService,
   ) {}
 
   ngOnInit(): void {
@@ -62,7 +63,7 @@ export class TasksComponent implements OnInit, OnDestroy {
         this.loadPlansForItems(items);
       },
       error: (err) => {
-        this.error.set('Could not load tasks. Is the agent running?');
+        this.error.set(this.translate.instant('tasks.loadError'));
         this.loading.set(false);
       },
     });
@@ -129,7 +130,7 @@ export class TasksComponent implements OnInit, OnDestroy {
   }
 
   onCreateList(): void {
-    const name = window.prompt('New list name:');
+    const name = window.prompt(this.translate.instant('tasks.newListPrompt'));
     if (!name?.trim()) return;
     const color = THEME_COLORS.chart[Math.floor(Math.random() * THEME_COLORS.chart.length)];
     this.api.createTodoList(this.agentId, { name: name.trim(), color }).subscribe({

@@ -4,7 +4,7 @@ import { CdkDragDrop, DragDropModule, moveItemInArray, transferArrayItem } from 
 import { TaskCardComponent } from '../task-card/task-card.component';
 import { TaskCreateComponent } from '../task-create/task-create.component';
 import { PlanSummary } from '../task.models';
-import { TranslateService } from '@ngx-translate/core';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 
 export interface BoardColumn {
   id: string;
@@ -25,7 +25,7 @@ const COLUMNS: { id: string; color: string }[] = [
 @Component({
   selector: 'app-task-board',
   standalone: true,
-  imports: [CommonModule, DragDropModule, TaskCardComponent, TaskCreateComponent],
+  imports: [CommonModule, DragDropModule, TaskCardComponent, TaskCreateComponent, TranslateModule],
   templateUrl: './task-board.component.html',
   styleUrl: './task-board.component.scss',
 })

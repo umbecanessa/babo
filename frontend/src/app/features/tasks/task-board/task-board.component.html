@@ -6,7 +6,7 @@
         <span class="column-label">{{ col.label }}</span>
         <span class="column-count">{{ col.items.length }}</span>
         @if (col.id === 'done') {
-          <button class="collapse-btn" (click)="toggleDone()" [title]="doneCollapsed ? 'Expand' : 'Collapse'">
+          <button class="collapse-btn" (click)="toggleDone()" [title]="(doneCollapsed ? 'tasks.board.expand' : 'tasks.board.collapse') | translate">
             {{ doneCollapsed ? '\u25B6' : '\u25BC' }}
           </button>
         }
@@ -46,11 +46,11 @@
           @if (col.items.length === 0) {
             <div class="column-empty">
               @if (col.id === 'inbox') {
-                No new tasks
+                {{ 'tasks.board.emptyInbox' | translate }}
               } @else if (col.id === 'in_progress') {
-                Nothing in progress
+                {{ 'tasks.board.emptyInProgress' | translate }}
               } @else {
-                Empty
+                {{ 'tasks.board.empty' | translate }}
               }
             </div>
           }

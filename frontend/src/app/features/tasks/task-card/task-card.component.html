@@ -12,7 +12,7 @@
     <div class="card-header">
       <div class="card-left">
         @if (task.status !== 'done') {
-          <button class="check-btn" (click)="onComplete($event)" title="Mark complete">
+          <button class="check-btn" (click)="onComplete($event)" [title]="'tasks.card.markComplete' | translate">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
               <circle cx="8" cy="8" r="7" />
             </svg>
@@ -28,7 +28,7 @@
       </div>
       <div class="card-badges">
         @if (children.length > 0) {
-          <span class="badge badge-members" [title]="childDoneCount + '/' + children.length + ' members done'">
+          <span class="badge badge-members" [title]="'tasks.card.membersDone' | translate:{ done: childDoneCount, total: children.length }">
             &#9654; {{ childDoneCount }}/{{ children.length }}
           </span>
         }
@@ -43,7 +43,7 @@
           </span>
         }
         @if (task.idle_eligible) {
-          <span class="badge badge-idle" title="Idle eligible">&#9889;</span>
+          <span class="badge badge-idle" [title]="'tasks.card.idleEligible' | translate">&#9889;</span>
         }
         <span class="badge badge-priority" [class]="'bp-' + task.priority">
           {{ task.priority }}
@@ -66,7 +66,7 @@
         @if (plan && plan.steps.length > 0) {
           <div class="plan-progress">
             <div class="plan-header">
-              <span class="plan-title">{{ plan.title || 'Execution Plan' }}</span>
+              <span class="plan-title">{{ plan.title || ('tasks.card.executionPlan' | translate) }}</span>
               <span class="plan-count">{{ planDoneCount }}/{{ planTotalCount }}</span>
             </div>
             <div class="plan-bar">
@@ -93,7 +93,7 @@
         @if (children.length > 0) {
           <div class="member-progress">
             <div class="member-header">
-              <span class="member-title">Team Members</span>
+              <span class="member-title">{{ 'tasks.card.teamMembers' | translate }}</span>
               <span class="member-count">{{ childDoneCount }}/{{ children.length }}</span>
             </div>
             <div class="member-bar">
@@ -116,7 +116,7 @@
 
         @if (task.notes) {
           <div class="detail-notes">
-            <span class="detail-label">Progress notes:</span>
+            <span class="detail-label">{{ 'tasks.card.progressNotes' | translate }}</span>
             <p>{{ task.notes }}</p>
           </div>
         }
@@ -129,14 +129,14 @@
         }
         <div class="detail-meta">
           <span class="source-icon" [title]="task.source">{{ sourceIcon }}</span>
-          <span class="meta-time">Created {{ formatTime(task.created_at) }}</span>
+          <span class="meta-time">{{ 'tasks.card.created' | translate:{ time: formatTime(task.created_at) } }}</span>
           @if (task.completed_at) {
-            <span class="meta-time">Done {{ formatTime(task.completed_at) }}</span>
+            <span class="meta-time">{{ 'tasks.card.doneAt' | translate:{ time: formatTime(task.completed_at) } }}</span>
           }
         </div>
         <div class="detail-actions">
-          <button class="action-btn" (click)="startEdit($event)">Edit</button>
-          <button class="action-btn danger" (click)="onRemove($event)">Delete</button>
+          <button class="action-btn" (click)="startEdit($event)">{{ 'tasks.card.edit' | translate }}</button>
+          <button class="action-btn danger" (click)="onRemove($event)">{{ 'tasks.card.delete' | translate }}</button>
         </div>
       </div>
     }
@@ -149,28 +149,28 @@
         #editTitleInput
         class="edit-input edit-title"
         [(ngModel)]="editTitle"
-        placeholder="Task title"
+        [placeholder]="'tasks.card.titlePlaceholder' | translate"
         (keydown.enter)="saveEdit($event)"
         (keydown.escape)="cancelEdit($event)"
       />
       <textarea
         class="edit-input edit-desc"
         [(ngModel)]="editDescription"
-        placeholder="Description (optional)"
+        [placeholder]="'tasks.card.descriptionPlaceholder' | translate"
         rows="2"
       ></textarea>
       <div class="edit-row">
         <select class="edit-select" [(ngModel)]="editPriority">
-          <option value="low">Low</option>
-          <option value="normal">Normal</option>
-          <option value="high">High</option>
-          <option value="urgent">Urgent</option>
+          <option value="low">{{ 'tasks.priority.low' | translate }}</option>
+          <option value="normal">{{ 'tasks.priority.normal' | translate }}</option>
+          <option value="high">{{ 'tasks.priority.high' | translate }}</option>
+          <option value="urgent">{{ 'tasks.priority.urgent' | translate }}</option>
         </select>
         <input
           class="edit-input edit-date"
           type="date"
           [(ngModel)]="editDueDate"
-          title="Due date"
+          [title]="'tasks.card.dueDate' | translate"
         />
       </div>
       <label class="edit-idle">
@@ -178,8 +178,8 @@
         <span>&#9889; Pick up during idle time</span>
       </label>
       <div class="edit-actions">
-        <button class="action-btn primary" (click)="saveEdit($event)">Save</button>
-        <button class="action-btn" (click)="cancelEdit($event)">Cancel</button>
+        <button class="action-btn primary" (click)="saveEdit($event)">{{ 'tasks.card.save' | translate }}</button>
+        <button class="action-btn" (click)="cancelEdit($event)">{{ 'tasks.card.cancel' | translate }}</button>
       </div>
     </div>
   }

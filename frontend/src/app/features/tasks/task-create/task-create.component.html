@@ -1,7 +1,7 @@
 <div class="create-wrapper">
   @if (!open) {
     <button class="add-btn" (click)="toggle()">
-      <span class="plus">+</span> Add task
+      <span class="plus">+</span> {{ 'tasks.create.addTask' | translate }}
     </button>
   }
 
@@ -10,22 +10,22 @@
       <input
         type="text"
         class="input-title"
-        placeholder="What needs to be done?"
+        [placeholder]="'tasks.create.titlePlaceholder' | translate"
         [(ngModel)]="title"
         autofocus
       />
       <textarea
         class="input-desc"
-        placeholder="Description (optional)"
+        [placeholder]="'tasks.create.descriptionPlaceholder' | translate"
         [(ngModel)]="description"
         rows="2"
       ></textarea>
       <div class="form-row">
         <select class="select-field" [(ngModel)]="priority">
-          <option value="low">Low</option>
-          <option value="normal">Normal</option>
-          <option value="high">High</option>
-          <option value="urgent">Urgent</option>
+          <option value="low">{{ 'tasks.priority.low' | translate }}</option>
+          <option value="normal">{{ 'tasks.priority.normal' | translate }}</option>
+          <option value="high">{{ 'tasks.priority.high' | translate }}</option>
+          <option value="urgent">{{ 'tasks.priority.urgent' | translate }}</option>
         </select>
         <select class="select-field" [(ngModel)]="listId">
           @for (list of lists; track list.id) {
@@ -34,12 +34,12 @@
         </select>
         <label class="idle-toggle">
           <input type="checkbox" [(ngModel)]="idleEligible" />
-          <span class="idle-label" title="Agent works on this during idle time">&#9889; Idle</span>
+          <span class="idle-label" [title]="'tasks.create.idleTitle' | translate">{{ 'tasks.create.idle' | translate }}</span>
         </label>
       </div>
       <div class="form-actions">
-        <button class="btn-submit" (click)="submit()" [disabled]="!title.trim()">Add</button>
-        <button class="btn-cancel" (click)="toggle()">Cancel</button>
+        <button class="btn-submit" (click)="submit()" [disabled]="!title.trim()">{{ 'tasks.create.add' | translate }}</button>
+        <button class="btn-cancel" (click)="toggle()">{{ 'tasks.create.cancel' | translate }}</button>
       </div>
     </div>
   }

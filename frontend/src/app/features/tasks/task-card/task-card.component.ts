@@ -1,16 +1,19 @@
-import { Component, Input, Output, EventEmitter, ViewChild, ElementRef, ChangeDetectorRef } from '@angular/core';
+import { Component, Input, Output, EventEmitter, ViewChild, ElementRef, ChangeDetectorRef, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { PlanSummary } from '../task.models';
 
 @Component({
   selector: 'app-task-card',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, TranslateModule],
   templateUrl: './task-card.component.html',
   styleUrl: './task-card.component.scss',
 })
 export class TaskCardComponent {
+  private readonly translate = inject(TranslateService);
+
   @Input() task: any = {};
   @Input() lists: any[] = [];
   @Input() plan: PlanSummary | null = null;
@@ -64,10 +67,12 @@ export class TaskCardComponent {
       const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
       const dueStart = new Date(due.getFullYear(), due.getMonth(), due.getDate());
       this._dueDiffDays = Math.round((dueStart.getTime() - todayStart.getTime()) / 86400000);
-      if (this._dueDiffDays < 0) return `Overdue ${Math.abs(this._dueDiffDays)}d`;
-      if (this._dueDiffDays === 0) return 'Due today';
-      if (this._dueDiffDays === 1) return 'Due tomorrow';
-      return `Due in ${this._dueDiffDays}d`;
+      if (this._dueDiffDays < 0) {
+        return this.t('tasks.due.overdue', { days: Math.abs(this._dueDiffDays) });
+      }
+      if (this._dueDiffDays === 0) return this.t('tasks.due.today');
+      if (this._dueDiffDays === 1) return this.t('tasks.due.tomorrow');
+      return this.t('tasks.due.inDays', { days: this._dueDiffDays });
     } catch {
       return '';
     }
@@ -77,7 +82,7 @@ export class TaskCardComponent {
   private _dueDiffDays = 0;
 
   get dueDateOverdue(): boolean {
-    return !!this.task.due_date && this.dueDateLabel.startsWith('Overdue');
+    return !!this.task.due_date && this._dueDiffDays < 0;
   }
 
   get planDoneCount(): number {
@@ -120,6 +125,10 @@ export class TaskCardComponent {
   }
 
   constructor(private cdr: ChangeDetectorRef) {}
+
+  private t(key: string, params?: Record<string, unknown>): string {
+    return this.translate.instant(key, params);
+  }
 
   startEdit(event: Event): void {
     event.stopPropagation();
@@ -171,11 +180,11 @@ export class TaskCardComponent {
     const now = new Date();
     const diffMs = now.getTime() - d.getTime();
     const diffMins = Math.floor(diffMs / 60000);
-    if (diffMins < 1) return 'just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffMins < 1) return this.t('tasks.time.justNow');
+    if (diffMins < 60) return this.t('tasks.time.minutesAgo', { count: diffMins });
     const diffHrs = Math.floor(diffMins / 60);
-    if (diffHrs < 24) return `${diffHrs}h ago`;
+    if (diffHrs < 24) return this.t('tasks.time.hoursAgo', { count: diffHrs });
     const diffDays = Math.floor(diffHrs / 24);
-    return `${diffDays}d ago`;
+    return this.t('tasks.time.daysAgo', { count: diffDays });
   }
 }
