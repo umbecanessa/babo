@@ -554,7 +554,9 @@
       "thisThread": "This thread",
       "allChannels": "All channels",
       "searching": "Searching",
-      "wikipedia": "Wikipedia"
+      "wikipedia": "Wikipedia",
+      "resultPreview": "Result preview",
+      "success": "Success"
     },
     "mobile": {
       "live": "Live",
@@ -800,7 +802,8 @@
       "privateBody": "Messages here stay on your desktop. Nothing is sent to Discord, email, or other connected surfaces unless Babo uses a channel tool explicitly.",
       "primaryReach": "Primary reachability — Babo reports here by default",
       "setPrimaryReach": "Set as primary reachability",
-      "subject": "Subject"
+      "subject": "Subject",
+      "lastSpeaker": "Last speaker"
     },
     "browser": {
       "workbench": "Workbench",
@@ -1119,6 +1122,21 @@
       "applyProfileFailed": "Could not apply profile",
       "resetPermissionsFailed": "Could not reset permissions",
       "debugBundleSaved": "Debug bundle saved. You can attach it when contacting support."
+    },
+    "tools": {
+      "emailActivated": "Email channel activated!",
+      "emailActivateFailed": "Failed to activate email",
+      "whatsappConnected": "WhatsApp already connected!",
+      "whatsappPaired": "WhatsApp connected!",
+      "pairingFailed": "Failed to start pairing",
+      "skillInstalled": "Skill installed successfully",
+      "skillAlreadyInstalled": "Skill already installed",
+      "skillInstallFailed": "Failed to install skill",
+      "noDescription": "No description available.",
+      "loadFileFailed": "Failed to load file.",
+      "loadChannelsFailed": "Failed to load channels",
+      "syncFailed": "Sync failed",
+      "saveChannelScopeFailed": "Failed to save channel scope"
     }
   },
   "tools": {
@@ -2082,7 +2100,12 @@
     "checkingServer": "Checking server…",
     "serverUnreachable": "Server unreachable",
     "serverReachable": "Server reachable",
-    "waitingServer": "Waiting for server…"
+    "waitingServer": "Waiting for server…",
+    "serverUnreachableCatch": "Could not reach server",
+    "waitingServerStart": "Waiting for server to start...",
+    "connectionLost": "Server connection lost. Retrying...",
+    "loginFailed": "Login failed",
+    "registerFailed": "Registration failed"
   },
   "apiKeys": {
     "title": "API Keys",

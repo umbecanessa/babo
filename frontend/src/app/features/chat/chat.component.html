@@ -435,7 +435,7 @@
                 @if (fileUploading()) {
                   <div class="attachment-chip uploading">
                     <span class="upload-spinner"></span>
-                    <span class="attachment-name">Uploading...</span>
+                    <span class="attachment-name">{{ 'projects.chat.uploading' | translate }}</span>
                   </div>
                 }
                 @if (!agenticActive() && composerDest().hint) {

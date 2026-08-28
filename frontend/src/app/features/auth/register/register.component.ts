@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { AuthService } from '../../../core/services/auth.service';
 import { ApiService } from '../../../core/services/api.service';
 import { checkAuthServer } from '../auth-server.util';
@@ -34,7 +34,12 @@ export class RegisterComponent implements OnInit, OnDestroy {
     private api: ApiService,
     private route: ActivatedRoute,
     public theme: ThemeService,
+    private translate: TranslateService,
   ) {}
+
+  private t(key: string): string {
+    return this.translate.instant(key);
+  }
 
   private returnUrl(): string | null {
     const q = this.route.snapshot.queryParamMap.get('returnUrl');
@@ -63,7 +68,7 @@ export class RegisterComponent implements OnInit, OnDestroy {
         }
       })
       .catch(() => {
-        this.serverMessage.set('Could not reach server');
+        this.serverMessage.set(this.t('auth.serverUnreachableCatch'));
         this.serverStatus.set('offline');
         this.startPolling();
       });
@@ -88,7 +93,7 @@ export class RegisterComponent implements OnInit, OnDestroy {
 
   async onSubmit() {
     if (this.serverStatus() !== 'online') {
-      this.error.set('Waiting for server to start...');
+      this.error.set(this.t('auth.waitingServerStart'));
       return;
     }
 
@@ -106,9 +111,9 @@ export class RegisterComponent implements OnInit, OnDestroy {
         if (err.status === 0) {
           this.serverStatus.set('offline');
           this.startPolling();
-          this.error.set('Server connection lost. Retrying...');
+          this.error.set(this.t('auth.connectionLost'));
         } else {
-          this.error.set(err.error?.message || 'Registration failed');
+          this.error.set(err.error?.message || this.t('auth.registerFailed'));
         }
         this.loading.set(false);
       },

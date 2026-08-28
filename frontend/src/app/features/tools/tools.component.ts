@@ -16,7 +16,7 @@ import { DetailModalComponent } from './detail-modal/detail-modal.component';
 import { SchemaConfigFormComponent, ConfigFieldSchema } from './schema-config-form/schema-config-form.component';
 import { GoogleConnectModalComponent } from '../../shared/google-connect-modal/google-connect-modal.component';
 import { PlatformIntegrationsService } from '../../core/services/platform-integrations.service';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { PlatformService } from '../../core/services/platform.service';
 import {
   buildIntegrationContext,
@@ -373,7 +373,7 @@ type IntegrationConfigCacheEntry = {
                 <span class="cd-stat">{{ item.transport_type }} transport</span>
               }
             </div>
-            <p class="cd-description">{{ item.summary || item.description || 'No description available.' }}</p>
+            <p class="cd-description">{{ item.summary || item.description || ('toast.tools.noDescription' | translate) }}</p>
 
             @if (item._source === 'extension') {
               @if (item.github_url) {
@@ -1089,7 +1089,12 @@ export class ToolsComponent implements OnInit, OnDestroy {
     readonly platformIntegrations: PlatformIntegrationsService,
     private platform: PlatformService,
     private ws: WebSocketService,
+    private translate: TranslateService,
   ) {}
+
+  private t(key: string): string {
+    return this.translate.instant(key);
+  }
 
   private routerSub?: ReturnType<typeof this.router.events.subscribe>;
   private wsSub?: Subscription;
@@ -1501,7 +1506,7 @@ export class ToolsComponent implements OnInit, OnDestroy {
         this.channelScopeLoading.set(false);
       },
       error: (err) => {
-        this.channelScopeError.set(err.error?.detail || 'Failed to load channels');
+        this.channelScopeError.set(err.error?.detail || this.t('toast.tools.loadChannelsFailed'));
         this.channelScopeLoading.set(false);
       },
     });
@@ -1531,7 +1536,7 @@ export class ToolsComponent implements OnInit, OnDestroy {
             + 'so the latest discord-channel skill is loaded.',
           );
         } else {
-          this.channelScopeError.set(detail || 'Sync failed');
+          this.channelScopeError.set(detail || this.t('toast.tools.syncFailed'));
         }
         this.channelScopeSyncing.set(false);
       },
@@ -1651,7 +1656,7 @@ export class ToolsComponent implements OnInit, OnDestroy {
           this.channelScopeDirty.set(false);
         },
         error: (err) => {
-          this.channelScopeError.set(err.error?.detail || 'Failed to save channel scope');
+          this.channelScopeError.set(err.error?.detail || this.t('toast.tools.saveChannelScopeFailed'));
           this.channelScopeSaving.set(false);
         },
       });
@@ -1922,7 +1927,7 @@ export class ToolsComponent implements OnInit, OnDestroy {
         );
         this.fileLoading.set(false);
       },
-      error: () => { this.fileContent.set('Failed to load file.'); this.fileLoading.set(false); },
+      error: () => { this.fileContent.set(this.t('toast.tools.loadFileFailed')); this.fileLoading.set(false); },
     });
   }
 
@@ -2017,7 +2022,7 @@ export class ToolsComponent implements OnInit, OnDestroy {
       next: (res) => {
         this.emailActivating.set(false);
         this.emailAlias.set(res.alias || '');
-        this.toast.show('Email channel activated!', 'info', 3000);
+        this.toast.show(this.t('toast.tools.emailActivated'), 'info', 3000);
         if (res.alias) {
           this.http.post<any>(
             `${this.api.runtimeBase}/skills/email-channel/activate/${this.agentId}`,
@@ -2028,7 +2033,7 @@ export class ToolsComponent implements OnInit, OnDestroy {
       },
       error: (err) => {
         this.emailActivating.set(false);
-        this.toast.show(err.error?.detail || 'Failed to activate email', 'error', 5000);
+        this.toast.show(err.error?.detail || this.t('toast.tools.emailActivateFailed'), 'error', 5000);
       },
     });
   }
@@ -2097,7 +2102,7 @@ export class ToolsComponent implements OnInit, OnDestroy {
         if (res.status === 'already_connected') {
           this.whatsappConnected.set(true);
           this.whatsappPhone.set(res.phone || '');
-          this.toast.show('WhatsApp already connected!', 'info', 3000);
+          this.toast.show(this.t('toast.tools.whatsappConnected'), 'info', 3000);
           return;
         }
         if (res.qr) this.whatsappQR.set(res.qr);
@@ -2106,7 +2111,7 @@ export class ToolsComponent implements OnInit, OnDestroy {
       },
       error: (err) => {
         this.whatsappPairing.set(false);
-        this.toast.show(err.error?.detail || 'Failed to start pairing', 'error', 5000);
+        this.toast.show(err.error?.detail || this.t('toast.tools.pairingFailed'), 'error', 5000);
       },
     });
   }
@@ -2124,7 +2129,7 @@ export class ToolsComponent implements OnInit, OnDestroy {
             this.whatsappPhone.set(res.phone || '');
             this.whatsappStatus.set('connected');
             this.stopWhatsAppQrPoll();
-            this.toast.show('WhatsApp connected!', 'info', 3000);
+            this.toast.show(this.t('toast.tools.whatsappPaired'), 'info', 3000);
             return;
           }
           if (res.qr) this.whatsappQR.set(res.qr);
@@ -2355,16 +2360,16 @@ export class ToolsComponent implements OnInit, OnDestroy {
         body: JSON.stringify({ slug })
       });
       if (res.ok) {
-        this.toast.show('Skill installed successfully', 'info');
+        this.toast.show(this.t('toast.tools.skillInstalled'), 'info');
         this.loadSkills();
         this.clawhubResults.update(arr => arr.filter(r => r.slug !== slug));
       } else if (res.status === 409) {
-        this.toast.show('Skill already installed', 'info');
+        this.toast.show(this.t('toast.tools.skillAlreadyInstalled'), 'info');
       } else {
-        this.toast.show('Failed to install skill', 'error');
+        this.toast.show(this.t('toast.tools.skillInstallFailed'), 'error');
       }
     } catch {
-      this.toast.show('Failed to install skill', 'error');
+      this.toast.show(this.t('toast.tools.skillInstallFailed'), 'error');
     }
     finally { this.clawhubInstalling.set(null); this.cdr.detectChanges(); }
   }

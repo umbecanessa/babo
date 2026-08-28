@@ -145,7 +145,7 @@
             </div>
             @if (msg.tool?.preview) {
               <details class="tool-preview">
-                <summary>Result preview</summary>
+                <summary>{{ 'chat.message.resultPreview' | translate }}</summary>
                 <p>{{ (msg.tool?.preview ?? '') | slice:0:200 }}</p>
               </details>
             }
@@ -182,7 +182,7 @@
                 }
                 <div class="drive-status-line">
                   @if (msg.drive?.success) {
-                    <span class="drive-dot success"></span> <span>Success</span>
+                    <span class="drive-dot success"></span> <span>{{ 'chat.message.success' | translate }}</span>
                   } @else {
                     <span class="drive-dot fail"></span> <span>Failed</span>
                   }

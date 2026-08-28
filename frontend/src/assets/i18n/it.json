@@ -554,7 +554,9 @@
       "thisThread": "Questo thread",
       "allChannels": "Tutti i canali",
       "searching": "Ricerca",
-      "wikipedia": "Wikipedia"
+      "wikipedia": "Wikipedia",
+      "resultPreview": "Anteprima risultato",
+      "success": "Successo"
     },
     "mobile": {
       "live": "Live",
@@ -800,7 +802,8 @@
       "privateBody": "I messaggi qui restano sul desktop. Nulla va a Discord, email o altre superfici collegate a meno che Babo non usi esplicitamente un tool di canale.",
       "primaryReach": "Reachability primaria — Babo riporta qui di default",
       "setPrimaryReach": "Imposta come reachability primaria",
-      "subject": "Oggetto"
+      "subject": "Oggetto",
+      "lastSpeaker": "Ultimo speaker"
     },
     "browser": {
       "workbench": "Workbench",
@@ -1119,6 +1122,21 @@
       "applyProfileFailed": "Impossibile applicare il profilo",
       "resetPermissionsFailed": "Impossibile reimpostare i permessi",
       "debugBundleSaved": "Bundle di debug salvato. Puoi allegarlo quando contatti il supporto."
+    },
+    "tools": {
+      "emailActivated": "Canale email attivato!",
+      "emailActivateFailed": "Attivazione email fallita",
+      "whatsappConnected": "WhatsApp già connesso!",
+      "whatsappPaired": "WhatsApp connesso!",
+      "pairingFailed": "Avvio pairing fallito",
+      "skillInstalled": "Skill installata con successo",
+      "skillAlreadyInstalled": "Skill già installata",
+      "skillInstallFailed": "Installazione skill fallita",
+      "noDescription": "Nessuna descrizione disponibile.",
+      "loadFileFailed": "Caricamento file fallito.",
+      "loadChannelsFailed": "Caricamento canali fallito",
+      "syncFailed": "Sincronizzazione fallita",
+      "saveChannelScopeFailed": "Salvataggio scope canale fallito"
     }
   },
   "tools": {
@@ -2082,7 +2100,12 @@
     "checkingServer": "Controllo server…",
     "serverUnreachable": "Server non raggiungibile",
     "serverReachable": "Server raggiungibile",
-    "waitingServer": "In attesa del server…"
+    "waitingServer": "In attesa del server…",
+    "serverUnreachableCatch": "Impossibile raggiungere il server",
+    "waitingServerStart": "In attesa dell'avvio del server...",
+    "connectionLost": "Connessione al server persa. Nuovo tentativo...",
+    "loginFailed": "Accesso fallito",
+    "registerFailed": "Registrazione fallita"
   },
   "apiKeys": {
     "title": "API key",
