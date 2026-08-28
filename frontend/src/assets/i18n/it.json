@@ -15,10 +15,10 @@
     "optional": "Opzionale",
     "easier_setup": "Più semplice",
     "on": "attivo",
-    "off": "Off",
+    "off": "Spento",
     "done": "Fatto",
-    "online": "Online",
-    "offline": "Offline",
+    "online": "In linea",
+    "offline": "Non in linea",
     "close": "Chiudi",
     "retry": "Riprova"
   },
@@ -74,7 +74,7 @@
       "lanFound": "Abbiamo trovato un server chat sulla rete — viene suggerito <strong>Il mio server</strong>.",
       "cloudModel": "Modello chat (Babo Cloud)",
       "cloudHint": "Modelli e accesso remoto passano da <strong>api.babo.agency</strong>. Gli agenti girano sempre su questo computer — Babo Cloud sincronizza l'account e fa da relay quando sei lontano.",
-      "useApiKey": "Usa una API key solo su questo computer",
+      "useApiKey": "Usa un'API key solo su questo computer",
       "useCloud": "Usa invece Babo Cloud",
       "provider": "Provider",
       "apiKey": "API key",
@@ -193,7 +193,7 @@
       "thisPc": "Questo PC",
       "thisComputer": "Questo computer",
       "myServer": "Il mio server",
-      "off": "Off"
+      "off": "Spento"
     },
     "lan": {
       "title": "Server di rete",
@@ -214,7 +214,7 @@
       "savingConfig": "Salvataggio configurazione...",
       "creatingAgent": "Creazione agente...",
       "openingBabo": "Apertura Babo...",
-      "downloadingVision": "Download modello screen awareness…",
+      "downloadingVision": "Download modello consapevolezza schermo…",
       "visionDeferred": "Scaricherà al primo utilizzo"
     },
     "errors": {
@@ -234,7 +234,7 @@
       "enterCredentials": "Inserisci email e password, o crea un account.",
       "signInFailed": "Accesso fallito",
       "checkoutFailed": "Impossibile avviare il checkout",
-      "saveApiKeyFailed": "Impossibile salvare la API key",
+      "saveApiKeyFailed": "Impossibile salvare l'API key",
       "chooseAccountServer": "Scegli prima un server account (passo precedente)."
     },
     "test": {
@@ -255,7 +255,7 @@
       "voice": "Voce",
       "localChatOnServer": "Chat locale su questo server",
       "vllmChat": "Chat vLLM / compatibile OpenAI",
-      "visionSubtitle": "Screen awareness (Moondream / VLM)",
+      "visionSubtitle": "Consapevolezza schermo (Moondream / VLM)",
       "transcribeSubtitle": "Microfono → testo (Whisper)",
       "modelsMore": "{{primary}} +{{count}} altri"
     },
@@ -264,16 +264,16 @@
       "vramUnknown": "VRAM sconosciuta"
     },
     "reasons": {
-      "cloudVisionRelay": "Screen awareness via relay GPU Babo Cloud",
+      "cloudVisionRelay": "Consapevolezza schermo tramite relay GPU Babo Cloud",
       "codeSearchLocal": "Ricerca semantica del codice su questo computer"
     },
     "experience": {
       "notConfigured": "Non configurato",
       "baboCloud": "Babo Cloud",
-      "off": "Off",
+      "off": "Spento",
       "thinking": "Pensiero",
       "voice": "Voce",
-      "screenAwareness": "Screen awareness",
+      "screenAwareness": "Consapevolezza schermo",
       "codeSearch": "Ricerca codice",
       "accountSync": "Account e sync"
     },
@@ -281,8 +281,8 @@
       "thisComputer": "Questo computer",
       "myServer": "Il mio server",
       "cloud": "Cloud",
-      "baboHosted": "Babo hosted",
-      "off": "Off"
+      "baboHosted": "Ospitato da Babo",
+      "off": "Spento"
     },
     "ollama": {
       "tapModelHint": "Tocca un modello per i passi di setup Ollama.",
@@ -386,7 +386,7 @@
       "notInstalled": "Non installato",
       "setupComplete": "completo",
       "setupIncomplete": "incompleto",
-      "setupStatus": "Setup {{status}}",
+      "setupStatus": "Configurazione {{status}}",
       "openWizard": "Apri wizard di setup",
       "resetting": "Reset in corso…",
       "emptyLogs": "(vuoto)"
@@ -426,7 +426,7 @@
       "lifetimeHint": "Hai accesso gratuito a Babo Cloud",
       "lifetimeGx10": "incluso Babo Brain (GX10).",
       "noSubRequired": "Nessun abbonamento richiesto",
-      "subscribeHint": "I modelli hosted richiedono un abbonamento attivo. La tua API key su questo dispositivo (BYOK) funziona anche senza.",
+      "subscribeHint": "I modelli ospitati richiedono un abbonamento attivo. La tua API key su questo dispositivo (BYOK) funziona anche senza.",
       "openingCheckout": "Apertura checkout…",
       "subscribeBtn": "Abbonati — {{price}}",
       "renews": "Rinnovo {{date}}",
@@ -638,7 +638,7 @@
       "transcribing": "Trascrizione...",
       "cancel": "Annulla",
       "stopTranscribe": "Ferma e trascrivi",
-      "attach": "Allega file (Maiusc+click per cartella)",
+      "attach": "Allega file (Maiusc+clic per cartella)",
       "send": "Invia",
       "sendGuidance": "Invia guida",
       "stop": "Ferma",
@@ -850,8 +850,8 @@
         "grep": "Grep",
         "delegate": "Delegate",
         "comms": "Comms",
-        "failedSuffix": " — failed",
-        "doneSuffix": " — done",
+        "failedSuffix": " — fallito",
+        "doneSuffix": " — completato",
         "searchPrefix": "Search: {{query}}",
         "fetchPrefix": "Fetch {{url}}",
         "delegatePrefix": "Delegate: {{task}}"
@@ -1111,7 +1111,7 @@
       "file_tree": "Albero file",
       "git": "Git",
       "web_search": "Ricerca web",
-      "web_fetch": "Fetch web",
+      "web_fetch": "Recupero web",
       "wikipedia": "Wikipedia",
       "arxiv_search": "Arxiv",
       "note_memory": "Note",
@@ -1150,7 +1150,7 @@
       "oxytocin": "Oxy"
     },
     "thread": {
-      "emailThread": "Thread email",
+      "emailThread": "Conversazione email",
       "fromSender": "da {{sender}}"
     },
     "toolbar": {
@@ -1180,33 +1180,33 @@
       "job": "Ruolo",
       "trust": "Fiducia",
       "openChat": "Apri chat",
-      "online": "Online",
-      "offline": "Offline",
+      "online": "In linea",
+      "offline": "Non in linea",
       "sleeping": "In sonno",
       "paused": "In pausa",
       "chatting": "In chat",
       "working": "Al lavoro",
       "dreaming": "Sogno a occhi aperti",
       "unreachable": "Irraggiungibile",
-      "desktopOffline": "Desktop offline",
+      "desktopOffline": "Desktop non in linea",
       "defaultJob": "Assistente generico",
       "created": "Creato {{time}}",
       "lastActive": "Ultima attività {{time}}",
       "openChatBtn": "Apri chat"
     },
     "squad": {
-      "checkbackTitle": "Checkback squad",
-      "checkbackLead": "Sveglia il lead a intervalli e quando le proposte in inbox superano lo SLA.",
-      "enableCheckback": "Abilita checkback programmato",
+      "checkbackTitle": "Controllo squadra",
+      "checkbackLead": "Sveglia il lead a intervalli e quando le proposte in posta in arrivo superano lo SLA.",
+      "enableCheckback": "Abilita controllo programmato",
       "interval": "Intervallo (minuti)",
       "sla": "SLA proposte (ore, sveglia urgente)",
-      "boardTitle": "Board squad",
+      "boardTitle": "Bacheca squad",
       "loadingBoard": "Caricamento board…",
       "inbox": "Inbox",
       "proposed": "Proposte",
       "approved": "Approvate",
       "openEscalations": "Escalation aperte",
-      "noTodos": "Nessun todo di squad"
+      "noTodos": "Nessuna attività di squad"
     },
     "emptyHintBefore": "Clicca l'orb o premi",
     "emptyHintAfter": "per iniziare",
@@ -1238,11 +1238,11 @@
       "loading": "Caricamento squad…",
       "empty": "Nessuna squad ancora. Raggruppa gli agenti con un lead per inbox e coordinamento condivisi.",
       "board": "Board",
-      "checkback": "Checkback",
+      "checkback": "Controllo",
       "delete": "Elimina",
       "lead": "Lead: {{name}}",
-      "autoCheckback": "Checkback automatico ogni {{minutes}} min",
-      "checkbackOff": "Checkback programmato disattivato",
+      "autoCheckback": "Controllo automatico ogni {{minutes}} min",
+      "checkbackOff": "Controllo programmato disattivato",
       "proposalsPending": "{{count}} proposta/e in attesa di approvazione del lead",
       "leadRequests": "Richieste del lead — approvazione del proprietario",
       "approve": "Approva",
@@ -1274,7 +1274,7 @@
       "deleteFailed": "Eliminazione squad non riuscita",
       "updateFailed": "Aggiornamento non riuscito"
     },
-    "removeFromSquad": "Rimuovi dallo squad"
+    "removeFromSquad": "Rimuovi dalla squad"
   },
   "toast": {
     "chat": {
@@ -1504,7 +1504,7 @@
       "email": {
         "localInboundLimited": "Finché NestJS non ha un URL pubblico, email e Telegram in ingresso non funzionano — l'associazione QR WhatsApp funziona ancora in locale.",
         "deployPublic": "Distribuisci NestJS con un URL HTTPS pubblico (Railway, VPS, ecc.) così Resend può raggiungere il webhook.",
-        "resendAccount": "Crea un account Resend, verifica un dominio inbound e ottieni una API key.",
+        "resendAccount": "Crea un account Resend, verifica un dominio inbound e ottieni un'API key.",
         "resendWebhook": "Punta il webhook inbound Resend a: {{url}}",
         "resendCredentialsServer": "Imposta RESEND_API_KEY + RESEND_INBOUND_DOMAIN sul server NestJS,",
         "resendCredentialsSettings": "oppure salva le credenziali Resend in Impostazioni → Integrazioni.",
@@ -2054,7 +2054,7 @@
       },
       "scientist": {
         "title": "Scienziato",
-        "bio": "Addestrato al ragionamento analitico, all'indagine guidata da ipotesi e alla ricerca cross-domain. Eccelle nel scomporre problemi complessi in componenti testabili."
+        "bio": "Addestrato al ragionamento analitico, all'indagine guidata da ipotesi e alla ricerca multidominio. Eccelle nello scomporre problemi complessi in componenti testabili."
       },
       "engineer": {
         "title": "Ingegnere",
@@ -2153,7 +2153,7 @@
       "Research": "Ricerca",
       "Analysis": "Analisi",
       "Logic": "Logica",
-      "Cross-domain": "Cross-domain",
+      "Cross-domain": "Multidominio",
       "Systems": "Sistemi",
       "Architecture": "Architettura",
       "Tools": "Tool",
@@ -2517,7 +2517,7 @@
     "delegateModelLabel": "Modello delegato:",
     "delegateHint": "Usa il modello di connessione primario sopra. Scegli un tier primario diverso per più opzioni.",
     "otherCapabilities": "Altre capacità",
-    "ambientTitle": "Screen awareness in background",
+    "ambientTitle": "Consapevolezza schermo in secondo piano",
     "ambientDesc": "Vista opzionale del desktop (piccolo modello locale).",
     "voiceTitle": "Input vocale",
     "codeSearchTitle": "Ricerca codice",
@@ -2532,7 +2532,7 @@
     "brain": {
       "cloud": {
         "title": "Babo Cloud",
-        "subtitle": "Percorso più semplice — modelli hosted via account Babo"
+        "subtitle": "Percorso più semplice — modelli ospitati via account Babo"
       },
       "local": {
         "title": "Questo computer",

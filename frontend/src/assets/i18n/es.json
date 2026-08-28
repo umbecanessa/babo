@@ -29,11 +29,11 @@
       "back": "Bienvenido de nuevo",
       "title": "Bienvenido a Babo",
       "language": "Idioma",
-      "lead": "Su agente ejecuta este {{device}}.",
-      "languageHint": "Auto sigue su dispositivo. Tu agente aún responde en el idioma en el que escribes.",
+      "lead": "Tu agente se ejecuta en este {{device}}.",
+      "languageHint": "Auto sigue tu dispositivo. Tu agente aún responde en el idioma en el que escribes.",
       "continue": "Continuar",
-      "haveAccount": "ya tengo una cuenta",
-      "accountHint": "Primero instale Babo en esta computadora. Configurará el pensamiento y las funciones y luego iniciará sesión."
+      "haveAccount": "Ya tengo una cuenta",
+      "accountHint": "Instala Babo en este ordenador primero. Configurarás el pensamiento y las funciones, y luego iniciarás sesión."
     },
     "steps": {
       "thinking": "Pensamiento",
@@ -42,10 +42,10 @@
       "signin": "Iniciar sesión"
     },
     "prepare": {
-      "title": "Configurando",
+      "title": "Instalación",
       "showLog": "Mostrar registro",
       "ready": "Listo",
-      "lead": "Instalando lo que Babo necesita en esta computadora.",
+      "lead": "Instalando lo que Babo necesita en este ordenador.",
       "hideLog": "Ocultar registro"
     },
     "device": {
@@ -54,59 +54,59 @@
       "ready": "Listo",
       "limited": "Limitado",
       "checking": "Comprobando hardware...",
-      "title": "este dispositivo",
-      "nextHint": "En la siguiente pantalla, elija <strong>Babo Cloud</strong> para la configuración más sencilla o elija una opción local avanzada si prefiere la privacidad o los modelos sin conexión.",
+      "title": "Este dispositivo",
+      "nextHint": "En la siguiente pantalla, elige <strong>Babo Cloud</strong> para la configuración más sencilla, o una opción local avanzada si prefieres privacidad o modelos sin conexión.",
       "localVision": "Visión local",
       "haveServer": "Tengo un servidor en mi red.",
-      "venvWait": "Todavía estoy instalando dependencias de Python: espere a que finalice el paso de preparación.",
-      "taglineReady": "Su computadora parece lista. A continuación, elegirá dónde se ejecutará el chat: Babo Cloud es el camino más sencillo.",
-      "taglineCloud": "Su computadora parece lista. Babo Cloud es el camino más sencillo; Los modelos locales siguen disponibles como opción avanzada."
+      "venvWait": "Todavía se están instalando las dependencias de Python — espera a que termine el paso de preparación.",
+      "taglineReady": "Tu ordenador parece listo. A continuación elegirás dónde se ejecuta el chat — Babo Cloud es el camino más sencillo.",
+      "taglineCloud": "Tu ordenador parece listo. Babo Cloud es el camino más sencillo; los modelos locales siguen disponibles como opción avanzada."
     },
     "visionPrefetch": {
       "fallback": "Preparando el conocimiento de la pantalla...",
       "hint": "Puedes continuar: la configuración continúa en segundo plano."
     },
     "thinking": {
-      "needScan": "Primero termine el paso del dispositivo para que podamos recomendar una configuración.",
+      "needScan": "Termina primero el paso del dispositivo para que podamos recomendar una configuración.",
       "title": "¿Cómo debería pensar Babo?",
       "provider": "Provider",
       "apiKey": "API key",
       "goScan": "Ir al escaneo del dispositivo",
-      "cloudHint": "Los modelos y el acceso remoto pasan por <strong>api.babo.agency</strong>. Sus agentes siempre se ejecutan en esta computadora: Babo Cloud sincroniza su cuenta y la retransmite cuando no está.",
-      "lanFound": "Encontramos un servidor de chat en su red: se sugiere <strong>Mi servidor</strong>.",
+      "cloudHint": "Los modelos y el acceso remoto pasan por <strong>api.babo.agency</strong>. Tus agentes siempre se ejecutan en este ordenador — Babo Cloud sincroniza tu cuenta y retransmite cuando no estás.",
+      "lanFound": "Encontramos un servidor de chat en tu red — se sugiere <strong>Mi servidor</strong>.",
       "cloudModel": "Modelo de chat (Babo Cloud)",
-      "useApiKey": "Utilice la clave API solo en esta computadora",
+      "useApiKey": "Usa la clave API solo en este ordenador",
       "cards": {
         "cloud": {
           "title": "Babo Cloud",
-          "subtitle": "El camino más sencillo: modelos alojados y sincronización de cuentas. Su agente todavía se ejecuta en esta computadora."
+          "subtitle": "El camino más sencillo — modelos alojados y sincronización de cuenta. Tu agente sigue ejecutándose en este ordenador."
         },
         "local": {
-          "title": "esta computadora",
-          "subtitle": "Avanzado: comprobaremos si esta PC puede ejecutar un modelo local confiable (Ollama). Lo mejor para privacidad o uso sin conexión."
+          "title": "Este ordenador",
+          "subtitle": "Avanzado — comprobaremos si este PC puede ejecutar un modelo local confiable (Ollama). Ideal para privacidad o uso sin conexión."
         },
         "lan": {
-          "subtitle": "Avanzado: servidor compatible con vLLM u OpenAI en su red doméstica.",
-          "title": "mi servidor"
+          "subtitle": "Avanzado — servidor vLLM o compatible con OpenAI en tu red doméstica.",
+          "title": "Mi servidor"
         }
       },
       "lead": "Donde se ejecuta el chat. La mayoría de la gente comienza con <strong>Babo Cloud</strong>.",
-      "useCloud": "Utilice Babo Cloud en su lugar",
+      "useCloud": "Usa Babo Cloud en su lugar",
       "ollamaUrl": "URL de Ollama",
       "serverAddress": "Dirección del servidor",
       "placeCloud": "Babo Cloud",
       "apiKeyPlaceholder": "Pega tu clave",
-      "lanHint": "Utilice su servidor vLLM o compatible con OpenAI (puerto 8000), no Ollama 11434.",
-      "localHint": "Comprobaremos esta PC en busca de un modelo local confiable. Instale Ollama, luego pruebe la conexión.",
+      "lanHint": "Usa tu servidor vLLM o compatible con OpenAI (puerto 8000), no Ollama 11434.",
+      "localHint": "Comprobaremos este PC en busca de un modelo local confiable. Instala Ollama y luego prueba la conexión.",
       "placePcMoondream": "Esta PC (Moondream)",
-      "placePc": "Esta computadora",
+      "placePc": "Este ordenador",
       "placeLanSame": "Mismo servidor LAN",
       "placeLanShort": "servidor LAN",
-      "placeLan": "Su servidor LAN"
+      "placeLan": "Tu servidor LAN"
     },
     "features": {
       "lead": "Puedes cambiarlos en cualquier momento en Configuración.",
-      "screenDesc": "Vista de fondo de su escritorio",
+      "screenDesc": "Vista en segundo plano de tu escritorio",
       "voice": "Entrada de voz",
       "screen": "Conciencia de pantalla",
       "title": "Características opcionales",
@@ -118,15 +118,15 @@
       "locCloud": "Babo Cloud",
       "chatRuns": "El chat se ejecuta en <strong>{{location}}</strong>, separado de este servidor NestJS.",
       "nestjsUrl": "URL del servidor NestJS",
-      "leadDefault": "Elija dónde se sincroniza su cuenta de Babo. El chat se ejecuta en {{location}}; Los agentes permanecen en sus dispositivos.",
+      "leadDefault": "Elige dónde se sincroniza tu cuenta de Babo. El chat se ejecuta en {{location}}; los agentes permanecen en tus dispositivos.",
       "title": "Dónde se sincroniza tu cuenta",
       "testOptional": "Opcional: verifica que se pueda acceder a api.babo.agency",
-      "leadByok": "Sus claves API pueden transmitirse a través de Babo Cloud (recomendado) o un servidor NestJS que ejecute. Elija dónde se sincroniza su cuenta de Babo: los agentes aún se ejecutan localmente.",
-      "venvWait": "Termine de instalar Babo en esta computadora (paso de preparación) antes de continuar.",
-      "locLocal": "esta computadora",
-      "locLan": "su servidor LAN",
-      "locByok": "su proveedor de API",
-      "locOther": "su proveedor elegido"
+      "leadByok": "Tus claves API pueden transmitirse por Babo Cloud (recomendado) o por un servidor NestJS que administres. Elige dónde se sincroniza tu cuenta de Babo — los agentes siguen ejecutándose localmente.",
+      "venvWait": "Termina de instalar Babo en este ordenador (paso de preparación) antes de continuar.",
+      "locLocal": "este ordenador",
+      "locLan": "tu servidor LAN",
+      "locByok": "tu proveedor de API",
+      "locOther": "tu proveedor elegido"
     },
     "auth": {
       "signup": "Crear una cuenta",
@@ -139,7 +139,7 @@
       "passwordSignupPh": "Al menos 8 caracteres",
       "passwordSigninPh": "Tu contraseña",
       "signedIn": "Iniciado sesión: continúe para finalizar la configuración.",
-      "leadSignin": "Inicie sesión en {{server}}: obligatorio para agentes y sincronización.",
+      "leadSignin": "Inicia sesión en {{server}} — necesario para agentes y sincronización.",
       "displayNamePlaceholder": "Opcional",
       "creating": "Creando cuenta…",
       "signingIn": "Iniciando sesión…",
@@ -147,57 +147,57 @@
       "leadSignup": "Crea tu cuenta en {{server}}. Terminarás la configuración inmediatamente después."
     },
     "billing": {
-      "title": "Enciende la nube de Babo",
+      "title": "Activa Babo Cloud",
       "perk1": "Retransmisión de WhatsApp, Telegram, Gmail y Google Calendar",
       "tagline": "Retransmisión, canales e integraciones alojadas: modelos mediante BYOK o pago al costo",
-      "perk2": "Modelos a través de su clave API o pago por uso opcional (sin margen de beneficio)",
-      "perk3": "Pague con tarjeta o enlace: demora aproximadamente un minuto",
+      "perk2": "Modelos con tu clave API o pay-as-you-go opcional (sin margen)",
+      "perk3": "Paga con tarjeta o Link — tarda aproximadamente un minuto",
       "openingCheckout": "Abriendo pago seguro...",
       "perk4": "Devolución de dinero de 31 días en tu primer mes",
       "perMonth": "/ mes",
-      "allSet": "Ya está todo listo: creemos su agente.",
-      "lead": "Un último paso antes de su primer chat: modelos alojados, sincronización de cuentas y acceso remoto mientras su agente sigue ejecutándose en esta computadora.",
+      "allSet": "Todo listo — creemos tu agente.",
+      "lead": "Un último paso antes de tu primer chat — modelos alojados, sincronización de cuenta y acceso remoto mientras tu agente sigue en este ordenador.",
       "opening": "Abriendo caja…",
       "confirming": "Confirmando…",
       "altLink": "Elige eso en Pensar",
-      "waitingPayment": "Complete el pago en su navegador, lo detectaremos automáticamente.",
+      "waitingPayment": "Completa el pago en tu navegador — lo detectaremos automáticamente.",
       "checkSub": "Consultar suscripción",
       "continueCloud": "Continuar con Babo Cloud",
-      "altHint": "¿Usar sus propias claves API en su lugar?"
+      "altHint": "¿Usar tus propias claves API en su lugar?"
     },
     "ready": {
-      "title": "estas listo",
+      "title": "Estás listo",
       "account": "Account",
       "baboCloud": "Babo Cloud",
       "extras": "Extras",
       "signedIn": "{{server}} (registrado)",
-      "changeHint": "Cambie en cualquier momento en Configuración.",
+      "changeHint": "Puedes cambiarlo en cualquier momento en Configuración.",
       "thinking": "Pensamiento",
       "extrasLine": "Búsqueda de código {{code}} · Pantalla {{screen}}",
-      "yourApiKey": "Your API key",
+      "yourApiKey": "Tu clave API",
       "on": "on",
       "off": "off"
     },
     "name": {
       "lead": "Así aparecerá Babo en tu espacio de trabajo.",
-      "title": "Name your agent",
-      "open": "Open Babo"
+      "title": "Ponle nombre a tu agente",
+      "open": "Abrir Babo"
     },
     "fit": {
       "perfect": "Ajuste perfecto",
       "marginal": "Ajuste ceñido",
-      "good": "Good fit"
+      "good": "Buen ajuste"
     },
     "voice": {
       "off": "Off",
       "myServer": "mi servidor",
-      "thisPc": "Esta computadora",
-      "thisComputer": "esta computadora",
+      "thisPc": "Este ordenador",
+      "thisComputer": "este ordenador",
       "title": "Entrada de voz"
     },
     "lan": {
       "host": "Host",
-      "lead": "vLLM, Whisper o vision en su LAN. Agregue SSH para ver qué modelos se ajustan a la GPU de esa máquina.",
+      "lead": "vLLM, Whisper o visión en tu LAN. Agrega SSH para ver qué modelos caben en la GPU de esa máquina.",
       "sshUser": "Usuario SSH",
       "scanGpu": "Escanear GPU y ajuste del modelo",
       "gpuSecret": "Secreto del trabajador de GPU",
@@ -207,7 +207,7 @@
       "sshPassword": "Contraseña SSH",
       "servicesTitle": "Servicios en este host",
       "title": "Servidor de red",
-      "findServices": "Find services"
+      "findServices": "Buscar servicios"
     },
     "runtime": {
       "startingAgent": "Iniciando el tiempo de ejecución del agente...",
@@ -215,33 +215,33 @@
       "savingConfig": "Guardando configuración...",
       "openingBabo": "Abriendo Babo...",
       "visionDeferred": "Se descargará en el primer uso.",
-      "downloadingVision": "Downloading screen awareness model…"
+      "downloadingVision": "Descargando modelo de screen awareness…"
     },
     "errors": {
       "downloadFailed": "Descarga fallida",
-      "nameTooShort": "Elija un nombre con al menos 2 caracteres.",
+      "nameTooShort": "Elige un nombre de al menos 2 caracteres.",
       "lanScanFailed": "Falló el escaneo del modelo LAN",
       "setupFailed": "Error de configuración",
       "pythonVerifyFailed": "No se pudo verificar la configuración de Python. Inténtalo de nuevo desde el paso de preparación.",
-      "subscribeBeforeAgent": "Suscríbase a Babo Cloud antes de crear su agente.",
-      "waitPython": "Espere a que finalice la configuración de Python antes de continuar.",
+      "subscribeBeforeAgent": "Suscríbete a Babo Cloud antes de crear tu agente.",
+      "waitPython": "Espera a que termine la configuración de Python antes de continuar.",
       "signInFailed": "No se pudo iniciar sesión",
-      "scanFailed": "Scan failed",
-      "enterCredentials": "Ingrese su correo electrónico y contraseña, o cree una cuenta.",
+      "scanFailed": "Escaneo fallido",
+      "enterCredentials": "Ingresa tu correo y contraseña, o crea una cuenta.",
       "saveServerFailed": "No se pudo guardar el servidor",
-      "installBeforeSignIn": "Termine de instalar Babo en esta computadora antes de iniciar sesión.",
+      "installBeforeSignIn": "Termina de instalar Babo en este ordenador antes de iniciar sesión.",
       "finishFailed": "No se pudo finalizar la configuración.",
-      "chooseBackend": "Elija dónde se sincroniza su cuenta o ingrese una URL de servidor válida.",
-      "chooseAccountServer": "Elija primero un servidor de cuenta (paso anterior).",
-      "pythonNotReady": "El entorno Python aún no está listo. Vuelva al paso de preparación y espere a que se complete la configuración.",
+      "chooseBackend": "Elige dónde se sincroniza tu cuenta o ingresa una URL de servidor válida.",
+      "chooseAccountServer": "Elige primero un servidor de cuenta (paso anterior).",
+      "pythonNotReady": "El entorno Python aún no está listo. Vuelve al paso de preparación y espera a que termine la configuración.",
       "saveApiKeyFailed": "No se pudo guardar la clave API",
       "checkoutFailed": "No se pudo iniciar el pago"
     },
     "test": {
-      "signInAfterSetup": "Inicie sesión después de la configuración para verificar Babo Cloud",
-      "signInNext": "Inicie sesión en el siguiente paso para conectarse",
+      "signInAfterSetup": "Inicia sesión después de la configuración para verificar Babo Cloud",
+      "signInNext": "Inicia sesión en el siguiente paso para conectarte",
       "subscribeNext": "Suscríbete en el siguiente paso para activar los modelos Babo Cloud",
-      "enterServer": "Introduzca primero una dirección de servidor",
+      "enterServer": "Introduce primero una dirección de servidor",
       "testFailed": "Prueba fallida"
     },
     "lanLabels": {
@@ -277,47 +277,47 @@
       "cloud": "Cloud",
       "baboHosted": "Babo hosted",
       "off": "Off",
-      "thisComputer": "esta computadora",
+      "thisComputer": "este ordenador",
       "myServer": "mi servidor"
     },
     "reasons": {
-      "codeSearchLocal": "Búsqueda de código semántico en esta computadora.",
+      "codeSearchLocal": "Búsqueda semántica de código en este ordenador.",
       "cloudVisionRelay": "Conciencia de pantalla a través del relé GPU de Babo Cloud"
     },
     "ollama": {
       "tapModelHint": "Toca un modelo para ver los pasos de configuración de Ollama.",
-      "tapServerHint": "Toque un modelo para obtener consejos sobre la configuración del servidor.",
+      "tapServerHint": "Toca un modelo para obtener consejos sobre la configuración del servidor.",
       "done": "Hecho",
       "setUpTitle": "Configurar {{name}}",
       "installed": "Instalado",
-      "notFound": "Extraviado",
-      "installBody": "Descargue y ejecute el instalador para Windows. Ollama se suma a tu RUTA.",
+      "notFound": "No encontrado",
+      "installBody": "Descarga y ejecuta el instalador para Windows. Ollama se agrega a tu PATH.",
       "stepInstall": "1. Instalar Ollama",
-      "checking": "De cheques…",
-      "running": "Correr",
+      "checking": "Comprobando…",
+      "running": "En ejecución",
       "downloadOllama": "Descargar Ollama",
       "stepStart": "2. Inicie Ollama",
-      "startBody": "Abra Ollama desde el menú Inicio o ejecute ollama save en una terminal.",
-      "lead": "Babo usa Ollama en esta PC. Siga estos pasos y luego elija este modelo para chatear.",
+      "startBody": "Abre Ollama desde el menú Inicio o ejecuta ollama serve en una terminal.",
+      "lead": "Babo usa Ollama en este PC. Sigue estos pasos y luego elige este modelo para chatear.",
       "notRunning": "no corriendo",
       "ready": "Listo",
       "downloading": "Descargando…",
       "downloadModel": "Descargar {{modelId}}",
       "stepDownload": "3. Descargar modelo",
       "useModel": "Usa este modelo",
-      "close": "Cerca",
+      "close": "Cerrar",
       "checkAgain": "comprobar de nuevo",
-      "pullBody": "Tire de {{modelId}}; esto puede tardar varios minutos según el tamaño."
+      "pullBody": "Descarga {{modelId}} — puede tardar varios minutos según el tamaño."
     },
     "lanGuide": {
       "stepSsh": "1. SSH en el servidor",
       "title": "{{name}} en tu servidor",
       "stepVllm": "2. Ejecute vLLM con este modelo.",
-      "sshBody": "Utilice el host y el usuario SSH de arriba. Confirma que nvidia-smi muestra tu GPU.",
+      "sshBody": "Usa el host y el usuario SSH de arriba. Confirma que nvidia-smi muestra tu GPU.",
       "lead": "El chat LAN utiliza un servidor compatible con vLLM o OpenAI en el puerto 8000, no Ollama.",
       "gotIt": "Entiendo",
       "stepConnect": "3. Conéctate desde Babo",
-      "connectBody": "Elija Mi servidor en la configuración y establezca la dirección en http://<server-ip>:8000, luego pruebe la conexión.",
+      "connectBody": "Elige Mi servidor en la configuración y establece la dirección en http://<server-ip>:8000, luego prueba la conexión.",
       "vllmBody": "Sirve {{modelId}} en el puerto 8000 (API compatible con OpenAI). Ejemplo: vllm servir {{modelId}} --host 0.0.0.0 --puerto 8000"
     },
     "billingToast": {
@@ -325,21 +325,21 @@
       "checkoutCanceled": "Pago cancelado: puedes volver a intentarlo cuando estés listo."
     },
     "lanSheet": {
-      "gpuSecretHint": "Requerido para Vision en el puerto 8443. Utilice el mismo valor que BABO_VISION_SECRET en el servidor (por ejemplo, nls-dev-secret).",
-      "passwordHint": "Úselo cuando esta PC no tenga una clave SSH en el servidor. No guardado en el disco.",
-      "sshHint": "Requerido para el escaneo de GPU. Utilice usuario@host arriba o establezca usuario + contraseña aquí."
+      "gpuSecretHint": "Requerido para Vision en el puerto 8443. Usa el mismo valor que BABO_VISION_SECRET en el servidor (p. ej., nls-dev-secret).",
+      "passwordHint": "Úsalo cuando este PC no tenga una clave SSH en el servidor. No se guarda en disco.",
+      "sshHint": "Requerido para el escaneo de GPU. Usa usuario@host arriba o establece usuario + contraseña aquí."
     }
   },
   "settings": {
     "appearance": {
       "title": "Apariencia",
-      "desc": "Tema e idioma para la interfaz de Babo. El tema del sistema sigue su sistema operativo.",
-      "themeLight": "Luz",
+      "desc": "Tema e idioma para la interfaz de Babo. El tema Sistema sigue tu sistema operativo.",
+      "themeLight": "Claro",
       "themeSystem": "Sistema",
       "themeDark": "Oscuro",
       "save": "Guardar configuración",
       "theme": "Tema",
-      "languageHint": "Solo idioma de interfaz. Su agente aún responde en el idioma en el que usted escribe. Auto sigue su dispositivo.",
+      "languageHint": "Solo idioma de interfaz. Tu agente responde en el idioma en el que escribes. Auto sigue tu dispositivo.",
       "language": "Idioma",
       "fontFamily": "Familia de fuentes",
       "fontSize": "Tamaño de fuente del editor"
@@ -366,7 +366,7 @@
     },
     "models": {
       "title": "Modelos e IA",
-      "desc": "Modelo de chat predeterminado, Babo Cloud, subagentes, reconocimiento de voz y pantalla. Elija un modelo diferente por mensaje del redactor del chat."
+      "desc": "Modelo de chat predeterminado, Babo Cloud, subagentes, voz y pantalla. Elige un modelo distinto por mensaje en el compositor del chat."
     },
     "desktopSubtitle": "Aplicación de escritorio y agente local",
     "system": {
@@ -378,9 +378,9 @@
       "runtime": "Tiempo de ejecución del agente",
       "viewLogs": "Ver registros",
       "pythonEnv": "Entorno de Python",
-      "running": "Correr",
+      "running": "En ejecución",
       "setupStatus": "Setup {{status}}",
-      "stopped": "Interrumpido",
+      "stopped": "Detenido",
       "portHint": "Proceso en esta máquina (puerto {{port}}).",
       "resetEnv": "Restablecer el entorno de Python",
       "notInstalled": "No instalado",
@@ -394,12 +394,12 @@
     "support": {
       "recentErrors": "Errores recientes",
       "title": "Soporte y depuración",
-      "exporting": "Exportador…",
+      "exporting": "Exportando…",
       "refresh": "Refrescar",
-      "refreshing": "Refrescante…",
+      "refreshing": "Actualizando…",
       "desc": "Diagnósticos para soporte y resolución de problemas locales.",
       "exportBundle": "Exportar paquete de depuración completo",
-      "notFound": "Extraviado",
+      "notFound": "No encontrado",
       "export": "Exportar",
       "errorsHint": "Analizado a partir de registros de tiempo de ejecución, configuración y escritorio (los más nuevos primero).",
       "noErrors": "No hay errores recientes en los registros ni en el estado del tiempo de ejecución.",
@@ -410,7 +410,7 @@
     "permissions": {
       "title": "Permisos",
       "resetAll": "Restablecer todas las decisiones de permisos",
-      "desc": "A qué puede acceder el agente local en esta computadora."
+      "desc": "A qué puede acceder el agente local en este ordenador."
     },
     "billing": {
       "title": "Facturación",
@@ -424,7 +424,7 @@
       "openingCheckout": "Abriendo caja…",
       "spendCapHint": "Límite estricto opcional en el gasto de pago por uso.",
       "lifetimeGx10": "incluido Babo Brain (GX10).",
-      "subscribeHint": "Los modelos alojados requieren una suscripción activa. Su clave API en este dispositivo (BYOK) todavía funciona sin una subscripción.",
+      "subscribeHint": "Los modelos alojados requieren una suscripción activa. Tu clave API en este dispositivo (BYOK) sigue funcionando sin suscripción.",
       "includedUsage": "Uso incluido",
       "loading": "Cargando suscripción…",
       "noSubRequired": "No se requiere suscripción",
@@ -434,10 +434,10 @@
       "subscribeBtn": "Suscríbete - {{price}}",
       "renews": "Renueva {{date}}",
       "checklistRelay": "Integraciones de WhatsApp, Telegram, Gmail y Google",
-      "paygHint": "Opcional para modelos enrutados por Babo cuando no estás usando BYOK. Se factura al costo ascendente sin margen de beneficio de Babo (se aplica un límite mensual).",
-      "checklistByok": "Modelos a través de su clave API (BYOK) o pago por uso con costo ascendente",
-      "checklistNoMarkup": "Sin margen de beneficio de Babo en el uso de tokens",
-      "refundNote": "Reembolso de 31 días disponible en el primer pago de su suscripción hasta el {{date}}. Los cargos del modelo de pago por uso no son reembolsables.",
+      "paygHint": "Opcional para modelos enrutados por Babo cuando no estás usando BYOK. Se factura al costo del proveedor sin margen de Babo (se aplica un límite mensual).",
+      "checklistByok": "Modelos con tu clave API (BYOK) o pay-as-you-go al costo del proveedor",
+      "checklistNoMarkup": "Sin margen de Babo en el uso de tokens",
+      "refundNote": "Reembolso de 31 días disponible en tu primer pago de suscripción hasta el {{date}}. Los cargos pay-as-you-go de modelos no son reembolsables.",
       "saveCap": "Guardar límite"
     },
     "integrations": {
@@ -448,37 +448,37 @@
       "baboCloudTitle": "Babo Cloud",
       "loading": "Cargando…",
       "inboundDomain": "Dominio entrante",
-      "messaging": "Telegrama y WhatsApp",
+      "messaging": "Telegram y WhatsApp",
       "removeResend": "Eliminar las credenciales guardadas",
-      "localhostTitle": "Localhost NestJS",
-      "saveResend": "Guardar Reenviar credenciales",
-      "resendKey": "Reenviar clave API",
-      "baboCloudHint": "El correo electrónico y Google Workspace utilizan credenciales proporcionadas por Babo en {{url}}. Conecte canales por agente en Herramientas.",
-      "emailActive": "Correo electrónico (Reenviar) activo",
-      "emailHint": "El correo entrante llega a su webhook NestJS y luego se transmite a Babo Desktop. Configure Reenviar aquí o establezca RESEND_API_KEY y RESEND_INBOUND_DOMAIN en su implementación de NestJS.",
+      "localhostTitle": "NestJS en localhost",
+      "saveResend": "Guardar credenciales de Resend",
+      "resendKey": "Clave API de Resend",
+      "baboCloudHint": "Email y Google Workspace usan credenciales proporcionadas por Babo en {{url}}. Conecta canales por agente en Herramientas.",
+      "emailActive": "Email (Resend) activo",
+      "emailHint": "El correo entrante llega a tu webhook NestJS y luego se retransmite a Babo Desktop. Configura Resend aquí o establece RESEND_API_KEY y RESEND_INBOUND_DOMAIN en tu despliegue NestJS.",
       "beforeChannels": "Antes de conectar canales",
       "telegramSelf": "Telegram: tu token BotFather (autoservicio)",
-      "webhookUrl": "Reenviar la URL del webhook entrante:",
-      "resendSaved": "Tus credenciales de reenvío guardadas",
-      "resendOnServer": "Reenviar configurado en el servidor",
+      "webhookUrl": "URL del webhook entrante de Resend:",
+      "resendSaved": "Tus credenciales de Resend guardadas",
+      "resendOnServer": "Resend configurado en el servidor",
       "whatsappQr": "WhatsApp: emparejamiento QR en Babo Desktop",
-      "messagingHint": "Telegram usa su token BotFather y registra webhooks en su servidor NestJS. WhatsApp se empareja mediante QR en Babo Desktop: no hay webhook NestJS para los mensajes entrantes de WhatsApp.",
+      "messagingHint": "Telegram usa tu token de BotFather y registra webhooks en tu servidor NestJS. WhatsApp se empareja por QR en Babo Desktop — no hay webhook NestJS para mensajes entrantes de WhatsApp.",
       "redirectUri": "URI de redireccionamiento:",
       "toolsLink": "Herramientas → Integraciones",
-      "inboundHint": "Dominio verificado en Reenvío para enrutamiento entrante.",
-      "googleHint": "Cree una aplicación Google Cloud OAuth y guarde client_id / client_secret en Herramientas → Configuración de Google Workspace de cada agente, o pídale al agente en el chat que lo guíe durante la configuración."
+      "inboundHint": "Dominio verificado en Resend para enrutamiento entrante.",
+      "googleHint": "Crea una app OAuth de Google Cloud y guarda client_id / client_secret en Herramientas → Google Workspace de cada agente, o pídele al agente en el chat que te guíe en la configuración."
     },
     "keys": {
       "title": "Claves API",
-      "desc": "Claves para el acceso programático a su cuenta en la nube de Babo.",
+      "desc": "Claves para acceso programático a tu cuenta en la nube de Babo.",
       "manage": "Administrar claves API"
     },
     "general": {
       "title": "General",
       "version": "Versión",
-      "checkingUpdates": "De cheques…",
+      "checkingUpdates": "Comprobando…",
       "integrationsHintAfter": ".",
-      "onboardingHint": "Vuelva a mostrar consejos introductorios sobre Chat, Herramientas, Memoria y otras páginas.",
+      "onboardingHint": "Vuelve a mostrar consejos introdutorios en Chat, Herramientas, Memoria y otras páginas.",
       "resetTour": "Restablecer recorrido de primera ejecución",
       "onboarding": "Tutoriales de incorporación",
       "integrationsLabel": "Integraciones de agentes",
@@ -495,12 +495,12 @@
       "past_due": "Problema de pago"
     },
     "confirm": {
-      "removeResend": "¿Eliminar las credenciales guardadas para reenviar?",
+      "removeResend": "¿Eliminar las credenciales guardadas para Resend?",
       "resetPython": "¿Restablecer el entorno de Python? Deberá ejecutar la configuración nuevamente.",
-      "resetPermissions": "¿Borrar todas las decisiones de permisos guardadas? Se le avisará nuevamente cuando sea necesario."
+      "resetPermissions": "¿Borrar todas las decisiones de permisos guardadas? Te volveremos a preguntar cuando haga falta."
     },
     "backendTest": {
-      "enterServer": "Introduzca primero una dirección de servidor",
+      "enterServer": "Introduce primero una dirección de servidor",
       "failed": "Prueba fallida",
       "unreachable": "No se pudo alcanzar el servidor",
       "connected": "Conectado ({{code}})"
@@ -512,7 +512,7 @@
       "p2": "<b>Valence</b> es el tono emocional del agente: negativo (rojo) a positivo (verde). <b>Arousal</b> mide la intensidad de la activación. <b>Engagement</b> rastrea qué tan absorto está el agente en el tema actual. <b>Bonding</b> refleja qué tan conectado se siente contigo. <b>Coherencia</b> indica qué tan alineado está su razonamiento interno.",
       "p3": "Estos no son cosméticos: <b>modulan el comportamiento</b>. Un agente de baja valencia y alto cortisol responde de manera diferente que uno relajado y alto en dopamina. Estás viendo una mente regularse a sí misma en tiempo real.",
       "title": "Estado neuronal",
-      "p1": "Su agente tiene un <b>heartbeat</b> virtual que refleja su actividad cognitiva. El BPM aumenta cuando el agente está pensando, conversando o explorando, y disminuye cuando descansa o duerme. La etiqueta de estado (<b>Active</b>, <b>Resting</b>, <b>Drowsy</b>, <b>Deep Sleep</b>) se deriva directamente de BPM."
+      "p1": "Tu agente tiene un <b>heartbeat</b> virtual que refleja su actividad cognitiva. El BPM sube cuando piensa, conversa o explora, y baja cuando descansa o duerme. La etiqueta de estado (<b>Active</b>, <b>Resting</b>, <b>Drowsy</b>, <b>Deep Sleep</b>) se deriva directamente del BPM."
     },
     "memory": {
       "title": "Memoria y estado",
@@ -521,7 +521,7 @@
       "p3": "<b>Estado ANS</b> muestra el modo actual del sistema nervioso autónomo: <b>Simpático</b> (alerta, activo) o <b>Parasimpático</b> (en reposo, consolidándose). Esto determina si el agente está listo para participar o si está procesando silenciosamente en segundo plano."
     },
     "hormones": {
-      "title": "hormonas",
+      "title": "Hormonas",
       "legend": {
         "dopamine": "dopamina",
         "serotonin_desc": "Estabilidad del estado de ánimo y satisfacción: mantiene al agente emocionalmente equilibrado.",
@@ -537,17 +537,17 @@
       "p1": "El comportamiento del agente está moldeado por un <b>sistema hormonal</b> virtual inspirado en la neuroquímica humana. Estos son valores vivos que cambian con cada interacción y de forma autónoma a lo largo del tiempo; juntos crean <b>personalidad emergente</b>."
     },
     "activity": {
-      "p1": "Este feed muestra lo que hace su agente <b>de forma autónoma</b>: acciones que realiza por sí solo, sin que se lo soliciten. Cada tipo aparece codificado por colores en el feed.",
+      "p1": "Este feed muestra lo que hace tu agente <b>de forma autónoma</b> — acciones que realiza por sí solo, sin que se lo pidas. Cada tipo aparece con color en el feed.",
       "legend": {
         "dream_desc": "Reproducción de memoria pasiva: el agente revisita y reconecta experiencias pasadas.",
         "active_dream_desc": "Exploración activa: el agente navega por la web, practica habilidades o profundiza en temas",
-        "drive": "⚡ Conducir",
-        "dream": "✦ Soñar despierto",
-        "active_dream": "🔭 Sueño Activo",
-        "finding": "📋 Encontrar",
-        "reach_out_desc": "Iniciativa social proactiva: el agente decide contactarlo por su cuenta",
-        "reach_out": "💬 Llegar",
-        "finding_desc": "Un descubrimiento que el agente considera que vale la pena compartir con usted.",
+        "drive": "⚡ Drive",
+        "dream": "✦ Daydream",
+        "active_dream": "🔭 Active Dream",
+        "finding": "📋 Finding",
+        "reach_out_desc": "Iniciativa social proactiva — el agente decide contactarte por su cuenta",
+        "reach_out": "💬 Reach Out",
+        "finding_desc": "Un descubrimiento que el agente considera que vale la pena compartir contigo",
         "drive_desc": "Acción autónoma impulsada por la curiosidad: búsquedas en la web, Wikipedia, investigaciones"
       },
       "title": "Feed de actividad"
@@ -561,7 +561,7 @@
         "learn_desc": "Se procesan nuevos conocimientos: hechos, conocimientos y patrones que el agente está absorbiendo.",
         "evaluate_desc": "Evaluación activa: cosas que el agente cuestiona, compara o examina críticamente."
       },
-      "p1": "El <b>contexto activo</b> del agente: en qué está \"pensando\" en este momento. Estos elementos rotan dinámicamente según el flujo de la conversación. Puede <b>editar</b> o <b>eliminar</b> elementos para determinar en qué se centra el agente.",
+      "p1": "El <b>contexto activo</b> del agente — en qué está \"pensando\" ahora. Estos elementos rotan según el flujo de la conversación. Puedes <b>editar</b> o <b>eliminar</b> elementos para orientar en qué se enfoca el agente.",
       "title": "Memoria de trabajo"
     },
     "network": {
@@ -569,7 +569,7 @@
       "legend": {
         "ecn_desc": "Atención centrada en tareas, razonamiento y resolución de problemas. Dominante durante la conversación activa y el uso de herramientas.",
         "dmn": "DMN – Modo predeterminado",
-        "sn": "SN - Prominencia",
+        "sn": "SN - Salience",
         "dmn_desc": "Divagación, reflexión y ensoñación. Activo cuando el agente está inactivo, permitiendo asociaciones creativas y consolidación de la memoria.",
         "sn_desc": "Detecta eventos importantes (mensajes nuevos, información sorprendente) y activa el cambio de red. Picos cuando el usuario envía un mensaje.",
         "ecn": "ECN – Control Ejecutivo"
@@ -588,7 +588,7 @@
     "memory": "Memoria",
     "brain": "Cerebro",
     "settings": "Ajustes",
-    "signOut": "desconectar",
+    "signOut": "Cerrar sesión",
     "projects": "Proyectos",
     "agents": "Agentes",
     "discordHelp": "Obtén ayuda en Discord",
@@ -598,7 +598,7 @@
   },
   "chat": {
     "header": {
-      "stopping": "Parada...",
+      "stopping": "Deteniendo…",
       "browser": "Browser",
       "step": "Paso {{current}}/{{max}}",
       "done": "Hecho",
@@ -606,9 +606,9 @@
       "context": "Contexto",
       "steps": "{{count}} pasos",
       "focus": "Modo de enfoque",
-      "taskStopped": "La tarea se detuvo: abrir el banco de trabajo",
-      "taskDone": "Tarea completada: abrir el banco de trabajo",
-      "workbench": "Banco de trabajo: herramientas y pasos",
+      "taskStopped": "La tarea se detuvo: abrir el workbench",
+      "taskDone": "Tarea completada: abrir el workbench",
+      "workbench": "Workbench: herramientas y pasos",
       "inbox": "Bandeja de entrada: mensajes del canal",
       "live": "En vivo: señales y actividad cerebrales"
     },
@@ -616,20 +616,20 @@
       "inbox": "Inbox",
       "home": "Home",
       "conversations": "Conversaciones",
-      "rename": "Rebautizar",
+      "rename": "Renombrar",
       "delete": "Borrar",
-      "close": "Cerca",
+      "close": "Cerrar",
       "threadOptions": "Opciones de hilo",
       "resetHomeTitle": "Restablecer inicio",
-      "setAsHome": "Establecer como hogar",
-      "newBranch": "Nueva sucursal",
+      "setAsHome": "Establecer como Inicio",
+      "newBranch": "Nueva rama",
       "resetHome": "Restablecer inicio…",
       "resetHomeConfirm": "Restablecer inicio",
       "deleteBranchTitle": "Eliminar rama",
-      "cannotDeleteHome": "No se puede eliminar el hilo de inicio actual. Restablezca Inicio para comenzar de nuevo o configure otro hilo como Inicio primero.",
+      "cannotDeleteHome": "No puedes eliminar el hilo de Inicio actual. Restablece Inicio para empezar de cero, o establece otro hilo como Inicio primero.",
       "collapseSidebar": "Contraer barra lateral",
       "expandSidebar": "Expandir barra lateral",
-      "resetHomeMessage": "¿Iniciar un nuevo hilo de Inicio?\n\nSe crea una nueva rama y se establece como Inicio. Su casa actual permanece en la lista como una sucursal. El conocimiento del agente (hechos, memoria) no cambia.",
+      "resetHomeMessage": "¿Iniciar un nuevo hilo de Inicio?\n\nSe crea una nueva rama y se establece como Inicio. Tu Inicio actual permanece en la lista como una rama. El conocimiento del agente (hechos, memoria) no cambia.",
       "deleteBranchMessage": "¿Eliminar la rama \"{{label}}\" y su historial?",
       "setAsHomeMessage": "¿Establecer \"{{label}}\" como Inicio? La apertura de este agente comenzará aquí. El historial de chat permanece en cada hilo: no se mueve nada."
     },
@@ -649,11 +649,11 @@
       "telegramDm": "Responder en Telegram a {{who}}",
       "discordDm": "Responder en Discord a {{who}}",
       "privatePlaceholder": "Mensaje Babo (privado, no enviado externamente)",
-      "privateBranchPlaceholder": "Mensaje Babo (sucursal privada)",
+      "privateBranchPlaceholder": "Mensaje Babo (rama privada)",
       "discordChannel": "Responder en {{channel}} en Discord",
       "telegramGroup": "Responder en {{label}} en Telegram",
       "whatsappDm": "Responder por WhatsApp a {{who}}",
-      "askBanner": "Responda a continuación: el agente está esperando su respuesta antes de poder continuar.",
+      "askBanner": "Responde abajo — el agente está esperando tu respuesta antes de poder continuar.",
       "emailReply": "Responder a {{label}} por correo electrónico",
       "whatsappGroup": "Responder en {{label}} en WhatsApp",
       "surfaceReply": "Responder en {{surface}}",
@@ -661,14 +661,14 @@
       "servers": "{{count}} servidores",
       "stopProcess": "Detener proceso",
       "openShell": "Abrir shell de agente en el espacio de trabajo",
-      "budgetBanner": "Se alcanzó el límite de pasos: responda con <strong>10</strong>, <strong>20</strong> o <strong>40</strong> para obtener más pasos, o <strong>stop</strong> para finalizar."
+      "budgetBanner": "Se alcanzó el límite de pasos — responde con <strong>10</strong>, <strong>20</strong> o <strong>40</strong> para más pasos, o <strong>stop</strong> para terminar."
     },
     "empty": {
-      "start": "iniciar una conversación"
+      "start": "Inicia una conversación"
     },
     "message": {
       "stop": "Detener",
-      "sending": "Envío...",
+      "sending": "Enviando…",
       "wikipedia": "Wikipedia",
       "feedbackPlaceholder": "P.ej. No uses este tono, sé más formal...",
       "thisThread": "este hilo",
@@ -680,13 +680,13 @@
       "success": "Éxito",
       "tagsCollapse": "colapsar",
       "resultPreview": "Vista previa del resultado",
-      "reachOutMotive": "llegar - {{drive}} conducir",
+      "reachOutMotive": "reach out — {{drive}} drive",
       "tagsMore": "+{{count}} más",
       "driveDomain": "Dominio: {{domain}}",
       "feedbackBtnTitle": "Dar tu opinión sobre esta respuesta.",
       "channelRepliedVia": "respondió vía {{channel}}",
       "channelSkipped": "omitido en {{channel}}",
-      "skillDeps": "departamentos: {{deps}}",
+      "skillDeps": "deps: {{deps}}",
       "reachOutSentVia": "enviado vía {{channel}}",
       "failed": "Fallido",
       "channelGroupNotReplied": "grupo · no respondido"
@@ -708,12 +708,12 @@
       "edited": "Editado",
       "thinking": "Pensamiento…",
       "planning": "Planificando el siguiente paso...",
-      "viewInWorkbench": "ver en el banco de trabajo",
+      "viewInWorkbench": "ver en el workbench",
       "shellOutput": "salida de shell",
       "waitDecision": "Esperando tu decisión…",
       "waitAnswer": "Esperando tu respuesta…",
       "stillThinking": "Sigo pensando… ({{elapsed}})",
-      "openWorkbench": "banco de trabajo abierto",
+      "openWorkbench": "workbench abierto",
       "reasoning": "Razonamiento…",
       "crunching": "Procesando datos... ({{elapsed}})",
       "thought": "Pensamiento",
@@ -723,7 +723,7 @@
       "reject": "Rechazar",
       "approved": "Aprobado",
       "rejected": "Rechazado",
-      "approving": "Aprobatorio...",
+      "approving": "Aprobando…",
       "approveRestart": "Aprobar y reiniciar",
       "thoughtStep": "Pensamiento (paso {{step}})",
       "rejectedDetail": "Rechazado: habilidades eliminadas",
@@ -733,22 +733,22 @@
     },
     "workbench": {
       "title": "Workbench",
-      "close": "Cerrar banco de trabajo",
+      "close": "Cerrar workbench",
       "eventCount": "{{count}} eventos",
-      "aria": "Banco de trabajo del agente",
-      "allBranches": "Todas las sucursales",
+      "aria": "Workbench del agente",
+      "allBranches": "Todas las ramaes",
       "tabAll": "Todo",
       "tabBackground": "Fondo",
-      "thisBranchTitle": "Mostrando solo la sucursal actual",
-      "allBranchesTitle": "Mostrando todas las sucursales",
-      "thisBranch": "esta sucursal",
+      "thisBranchTitle": "Mostrando solo la rama actual",
+      "allBranchesTitle": "Mostrando todas las ramaes",
+      "thisBranch": "esta rama",
       "viewTitle": "Ver: {{label}}",
       "tabChannels": "Canales",
       "tabChat": "tarea de chat",
-      "tabsAria": "Alcance del banco de trabajo",
+      "tabsAria": "Alcance del workbench",
       "sub": "Sub #{{n}}",
       "parallel": "Paralelo",
-      "running": "Correr",
+      "running": "Trabajando",
       "orchestrator": "orquestador",
       "empty": "Las ejecuciones de la herramienta y los pasos del agente aparecerán aquí mientras el agente trabaja.",
       "density": {
@@ -756,14 +756,14 @@
         "debug": "Debug",
         "focused": "enfocado"
       },
-      "emptyFocusedHint": "Cambie a Estándar o Depurar para ver las lecturas y la actividad.",
-      "emptyHint": "Utilice la tarea de chat para este hilo, Antecedentes para trabajo autónomo.",
+      "emptyFocusedHint": "Cambia a Standard o Debug para ver lecturas y actividad.",
+      "emptyHint": "Usa Chat task para este hilo, Background para trabajo autónomo.",
       "emptyTab": "Ningún evento coincide con la vista actual.",
       "fullOutput": "Salida completa",
       "entries": {
         "task": "Task",
         "shellOutput": "salida de shell",
-        "working": "Laboral…",
+        "working": "Trabajando…",
         "step": "Paso",
         "agentTaskStarted": "Tarea de agente iniciada",
         "backgroundTask": "Tarea en segundo plano",
@@ -822,7 +822,7 @@
         },
         "writeFile": "Write file",
         "editFile": "Edit file",
-        "readFile": "Read file",
+        "readFile": "Leer archivo",
         "deleteFile": "Delete file",
         "moveFile": "Move file",
         "shellCommand": "Shell command",
@@ -840,16 +840,16 @@
         "todoLabel": "Todo",
         "orchestrator": "Orchestrator",
         "write": "Write",
-        "edit": "Edit",
+        "edit": "Editar",
         "read": "Read",
-        "delete": "Delete",
+        "delete": "Eliminar",
         "move": "Move",
         "bash": "Bash",
         "list": "List",
         "glob": "Glob",
         "grep": "Grep",
         "delegate": "Delegate",
-        "comms": "Comms",
+        "comms": "Comunicaciones",
         "failedSuffix": " — failed",
         "doneSuffix": " — done",
         "searchPrefix": "Search: {{query}}",
@@ -860,7 +860,7 @@
     "inbox": {
       "unread": "No leído",
       "needsYou": "te necesita",
-      "empty": "Todos atrapados.",
+      "empty": "Todo al día.",
       "skipped": "Saltado/bloqueado",
       "recent": "Reciente",
       "kind": {
@@ -876,27 +876,27 @@
       "network": "Dinámica de la red",
       "channels": "Canales",
       "memory": "Memoria",
-      "hormones": "hormonas",
+      "hormones": "Hormonas",
       "activity": "Actividad",
       "networkInfo": "¿Qué es la dinámica de red?",
       "cryptex": "Cryptex",
-      "hormonesInfo": "¿Qué son las hormonas?",
+      "hormonesInfo": "¿Qué son las Hormonas?",
       "activityInfo": "¿Qué es la actividad?",
       "neuralStateInfo": "¿Qué es el estado neuronal?",
       "showMore": "Mostrar más ({{hidden}} oculto, hasta {{cap}})",
       "orchestration": "Orquestación",
       "refresh": "Refrescar",
-      "cryptexEmpty": "Sin contexto activo: inicie una conversación para completar Cryptex",
+      "cryptexEmpty": "Sin contexto activo — inicia una conversación para llenar el Cryptex",
       "metric": {
         "arousal": "Arousal",
         "valenceTitle": "Valencia: cómo se siente el agente (-1 malo → +1 bueno)",
         "engageTitle": "Compromiso: aburrido (0) → absorto (1)",
         "bondTitle": "Vinculación: solo (0) → conectado (1)",
-        "cohere": "Adherirse",
+        "cohere": "Coherencia",
         "bond": "Vínculo",
         "arousalTitle": "Excitación: calma (0) → activada (1)",
         "valence": "Valencia",
-        "engage": "Comprometer",
+        "engage": "Engagement",
         "cohereTitle": "Coherencia: confundido (0) → alineado (1)"
       },
       "userModel": "Modelo de usuario",
@@ -917,7 +917,7 @@
       },
       "showFewer": "Mostrar menos (arriba {{cap}})",
       "momentum": "momentum: {{value}}",
-      "beat": "vencer a #{{count}}",
+      "beat": "latido #{{count}}",
       "energy": "Energía: {{percent}}%",
       "feltIdle": "me sentí inactivo: {{value}}",
       "networkDefault": "Default",
@@ -926,8 +926,8 @@
       "networkEcnTitle": "Red de control ejecutivo: atención y razonamiento centrados en tareas",
       "driveQuery": "Query:",
       "driveOk": "OK",
-      "networkSalience": "Prominencia",
-      "noActivity": "No activity yet...",
+      "networkSalience": "Salience",
+      "noActivity": "Sin actividad aún…",
       "episodeTurns": "vueltas",
       "episodeResonance": "Resonancia",
       "networkSnTitle": "Salience Network: detecta eventos importantes y cambia la atención",
@@ -944,16 +944,16 @@
       "compiling": "Compilando resultados de delegados..."
     },
     "prompt": {
-      "stayAwake": "Desvelarse",
-      "askWaiting": "El agente está esperando su respuesta.",
-      "restYes": "si, descansa",
+      "stayAwake": "Quédate despierto",
+      "askWaiting": "El agente está esperando tu respuesta.",
+      "restYes": "Sí, descansa",
       "responded": "Respondido",
       "extendSteps": "+{{count}} pasos"
     },
     "delegate": {
-      "workingDots": "laboral...",
+      "workingDots": "trabajando...",
       "starting": "Empezando a trabajar…",
-      "working": "laboral…",
+      "working": "trabajando…",
       "partial": "parcial",
       "tools": "{{count}} herramientas",
       "wave": "Ola",
@@ -969,13 +969,13 @@
     "context": {
       "type": "Tipo",
       "session": "Sesión",
-      "reachHint": "Destaque este hilo para que Babo sepa dónde comunicarse con usted para obtener informes y avances cuando no se haya establecido un objetivo explícito.",
+      "reachHint": "Destaca este hilo para que Babo sepa dónde contactarte con informes y avances cuando no haya un objetivo explícito.",
       "group": "Canal/grupo compartido",
       "configureTools": "Configurar en Herramientas →",
       "direct": "mensaje directo",
       "thread": "Thread",
       "primaryReach": "Accesibilidad principal: Babo informa aquí de forma predeterminada",
-      "privateBody": "Los mensajes aquí permanecen en su escritorio. No se envía nada a Discord, correo electrónico u otras superficies conectadas a menos que Babo utilice explícitamente una herramienta de canal.",
+      "privateBody": "Los mensajes aquí permanecen en tu escritorio. No se envía nada a Discord, email u otras superficies conectadas a menos que Babo use explícitamente una herramienta de canal.",
       "subject": "Sujeto",
       "privateDesk": "escritorio privado",
       "setPrimaryReach": "Establecer como accesibilidad principal",
@@ -994,7 +994,7 @@
       "attachmentOnly": "(adjunto)",
       "examineAttached": "Por favor examine los archivos adjuntos.",
       "seeAttached": "Por favor vea los archivos adjuntos.",
-      "unknownCommand": "Comando desconocido: {{cmd}}. Escriba /ayuda para ver los comandos disponibles.",
+      "unknownCommand": "Comando desconocido: {{cmd}}. Escribe /ayuda para ver los comandos disponibles.",
       "slashHelp": "Comandos: /sleep (activar ciclo de suspensión), /status (actualizar estado), /abort (detener bucle agente), /help",
       "taskCompleted": "Tarea completada",
       "backgroundTask": "Trabajando en tarea en segundo plano...",
@@ -1005,7 +1005,7 @@
       "requestingSleep": "Solicitando ciclo de sueño...",
       "completedPrefix": "Terminado:",
       "checkInCancelled": "Registro cancelado",
-      "processing": "tratamiento",
+      "processing": "procesando",
       "bgStepInitial": "0/{{max}} pasos",
       "agentStartingTask": "Tarea de inicio del agente (hasta {{max}} pasos)",
       "bgStepDetail": "Paso {{step}}/{{max}}: {{tools}}",
@@ -1052,7 +1052,7 @@
       "batchFailedSuffix": "(1 falló)",
       "processInteractive": "Interactivo",
       "terminalChipMulti": "Terminal ×{{count}}",
-      "browserSignIn": "Abra su navegador para iniciar sesión; complételo allí y luego haga clic en \"Listo\" en el cuadro de diálogo.",
+      "browserSignIn": "Abre tu navegador para iniciar sesión — complétalo allí y luego haz clic en \"Listo\" en el diálogo.",
       "channelEventFmt": "{{direction}} · {{who}}",
       "channelEmailFrom": "Correo electrónico de {{who}}: {{subject}}",
       "channelRepliedEmail": "Respondido al correo electrónico: {{subject}}",
@@ -1085,7 +1085,7 @@
         "runningTool": "Ejecutando {{tool}}...",
         "searching": "Buscando: {{query}}...",
         "updating": "actualizando",
-        "managing": "gerente",
+        "managing": "gestionando",
         "planSteps": "Plan ({{count}} pasos): {{preview}}",
         "planStepDone": "Paso {{num}} hecho{{suffix}}",
         "preparingDownload": "Preparando descarga: {{label}}..."
@@ -1095,7 +1095,7 @@
       "planSteps": "Plan ({{count}} pasos): {{preview}}",
       "groupFilesEdited": "{{count}} Archivos editados",
       "planStepDone": "Paso {{num}} hecho{{label}}",
-      "loopInterrupted": "La tarea anterior se interrumpió en el paso {{step}}. Utilice Continuar para reanudar."
+      "loopInterrupted": "La tarea anterior se interrumpió en el paso {{step}}. Usa Continuar para reanudar."
     },
     "tools": {
       "browser": "Browser",
@@ -1121,10 +1121,10 @@
       "file_tree": "Árbol de archivos"
     },
     "drive": {
-      "web_search": "Hojeada",
+      "web_search": "Búsqueda web",
       "wikipedia": "Leyendo Wikipedia",
       "read_page": "Lectura",
-      "reach_out": "extendiendo la mano",
+      "reach_out": "Reach Out",
       "self_check": "Autocomprobación",
       "reflect": "Reflexionando",
       "deep_browse": "Navegación profunda",
@@ -1178,7 +1178,7 @@
       "trust": "Confianza",
       "sleeping": "Durmiendo",
       "paused": "En pausa",
-      "working": "Laboral",
+      "working": "Trabajando",
       "dreaming": "Soñador",
       "openChat": "abrir chat",
       "lastActive": "Último activo {{time}}",
@@ -1248,7 +1248,7 @@
       "add": "Agregar",
       "pendingDeleteAgent": "Eliminar agente {{name}}",
       "addMember": "Agregar miembro",
-      "chooseAgent": "Elija un agente...",
+      "chooseAgent": "Elige un agente...",
       "pendingPatchJob": "Actualizar trabajo para {{name}}",
       "cannotRemoveOnly": "No se puede eliminar al único miembro. En su lugar, elimina el equipo.",
       "noUnassigned": "No hay agentes no asignados. Todos los agentes ya están en un escuadrón: elimina uno de una tarjeta de escuadrón para moverlo aquí.",
@@ -1272,7 +1272,7 @@
       "deleteFailed": "Error al eliminar el equipo",
       "updateFailed": "La actualización falló"
     },
-    "emptyHintBefore": "Haga clic en el orbe o presione",
+    "emptyHintBefore": "Haz clic en el orbe o presiona",
     "emptyHintAfter": "para empezar",
     "removeFromSquad": "Eliminar del equipo"
   },
@@ -1297,11 +1297,11 @@
       "updateAvailableVer": "Actualización v{{version}} disponible",
       "checkoutFailed": "No se pudo iniciar el pago",
       "spendCapInvalid": "Introduce un límite de gasto válido",
-      "resendSaved": "Reenviar credenciales guardadas",
+      "resendSaved": "Resend credenciales guardadas",
       "checkoutCanceled": "Pago cancelado",
-      "resendRequired": "Se requiere reenviar la clave API y el dominio entrante",
+      "resendRequired": "Se requiere Resend la clave API y el dominio entrante",
       "portalFailed": "No se pudo abrir el portal de facturación",
-      "resendRemoved": "Reenviar credenciales eliminadas",
+      "resendRemoved": "Resend credenciales eliminadas",
       "tourReset": "Reinicio del recorrido de primera ejecución. Abre el chat para verlo de nuevo.",
       "settingsSaved": "Configuración guardada",
       "modelsSaved": "Modelos y capacidades guardados.",
@@ -1320,10 +1320,10 @@
       "dataFolderFailed": "No se pudo abrir la carpeta de datos",
       "onDemandEnabled": "Uso bajo demanda habilitado",
       "clearCredentialsFailed": "No se pudieron borrar las credenciales",
-      "backendUrlInvalid": "Ingrese una URL de backend válida",
+      "backendUrlInvalid": "Ingresa una URL de backend válida",
       "couldNotSave": "No se pudo guardar",
       "accountSaved": "Servidor de cuenta guardado",
-      "resendSaveFailed": "No se pudo guardar Reenviar credenciales",
+      "resendSaveFailed": "No se pudo guardar Resend credenciales",
       "onDemandDisabled": "Uso bajo demanda deshabilitado",
       "applyProfileFailed": "No se pudo aplicar el perfil",
       "settingUpdateFailed": "No se pudo actualizar la configuración",
@@ -1363,7 +1363,7 @@
       "skills": "Habilidades",
       "extensions": "Extensiones conectadas",
       "skillsHint": "Paquetes de habilidades instalados",
-      "integrationsHint": "Conexiones de canal para su agente",
+      "integrationsHint": "Conexiones de canal para tu agente",
       "community": "Habilidades y extensiones comunitarias",
       "extensionsHint": "Conexiones activas del servidor MCP",
       "agentTools": "Herramientas del agente",
@@ -1371,11 +1371,11 @@
     },
     "relay": {
       "checking": "Comprobando el relé del escritorio...",
-      "checkingHint": "Conectándose a su servidor NestJS para ver si Babo Desktop está en línea.",
+      "checkingHint": "Conectándose a tu servidor NestJS para ver si Babo Desktop está en línea.",
       "online": "Retransmisión de escritorio en línea",
       "onlineHint": "Los webhooks de Telegram y correo electrónico pueden llegar a este agente. Babo Desktop está conectado a {{url}}.",
       "offline": "Retransmisión de escritorio sin conexión",
-      "offlineHint": "Esto es independiente de que Babo Cloud esté activo: su escritorio debe mantener un WebSocket abierto en {{url}} para este agente. Reinicie Babo Desktop si lo cerró."
+      "offlineHint": "Esto es independiente de que Babo Cloud esté activo: tu escritorio debe mantener un WebSocket abierto en {{url}} para este agente. Reinicie Babo Desktop si lo cerró."
     },
     "empty": {
       "skills": "Aún no hay habilidades instaladas.",
@@ -1391,7 +1391,7 @@
     },
     "selfHosted": {
       "title": "Backend autohospedado",
-      "hint": "Telegram y el correo electrónico necesitan que su servidor NestJS sea accesible a través de HTTPS y Babo Desktop en línea (retransmisión). Configure las credenciales de la plataforma en Configuración → Integraciones."
+      "hint": "Telegram y el correo electrónico necesitan que tu servidor NestJS sea accesible a través de HTTPS y Babo Desktop en línea (retransmisión). Configura las credenciales de la plataforma en Configuración → Integraciones."
     },
     "community": {
       "filterAll": "Todo",
@@ -1407,7 +1407,7 @@
     },
     "skill": {
       "tabs": {
-        "brain": "Brain",
+        "brain": "Cerebro",
         "config": "Configuración",
         "files": "Archivos"
       },
@@ -1424,7 +1424,7 @@
     },
     "whatsapp": {
       "starting": "A partir de...",
-      "qrHint": "Abra WhatsApp → Dispositivos vinculados → Escanee este código",
+      "qrHint": "Abre WhatsApp → Dispositivos vinculados → Escanee este código",
       "startPairing": "Empezar a emparejar",
       "waitingScan": "Esperando escaneo..."
     },
@@ -1439,17 +1439,17 @@
     },
     "config": {
       "optional": "(opcional)",
-      "saved": "¡Salvado!",
+      "saved": "¡Guardado!",
       "listPlaceholder": "Valores separados por comas",
       "noFields": "No hay campos de configuración definidos.",
       "save": "Guardar configuración"
     },
     "intro": {
       "slack": "Configura Slack para tu agente.",
-      "discord": "Configure Discord para su agente.",
+      "discord": "Configura Discord para tu agente.",
       "email": "Activa tu canal de correo electrónico.",
-      "telegram": "Configure Telegram para su agente.",
-      "google": "Conecte su cuenta de Google para permitir que su agente administre Gmail, Calendario, Drive y Hojas de cálculo.",
+      "telegram": "Configura Telegram para tu agente.",
+      "google": "Conecta tu cuenta de Google para permitir que tu agente administre Gmail, Calendario, Drive y Hojas de cálculo.",
       "whatsapp": "Empareja WhatsApp con tu agente."
     },
     "discordRoles": {
@@ -1462,13 +1462,13 @@
     "channelScope": {
       "title": "Alcance del canal",
       "selectAll": "Seleccionar todo",
-      "hint": "Elija en qué canales escucha y responde este agente. Actualizaciones de sincronización desde {{platform}}. Utilice Guardar configuración a continuación para conservar su selección.",
+      "hint": "Elige en qué canales escucha y responde este agente. Actualizaciones de sincronización desde {{platform}}. Usa Guardar configuración a continuación para conservar tu selección.",
       "loading": "Cargando canales...",
       "syncing": "Sincronizando...",
       "empty": "Aún no se han encontrado canales.",
       "deselectAll": "Deseleccionar todo",
       "sync": "Sincronizar canales",
-      "emptyHint": "Haga clic en Sincronizar canales: el bot debe estar en un servidor con permiso para enumerar canales.",
+      "emptyHint": "Haz clic en Sincronizar canales: el bot debe estar en un servidor con permiso para enumerar canales.",
       "noAccess": "Sin acceso a la plataforma",
       "enabled": "Activado",
       "mentionOnly": "@mencionar solamente"
@@ -1484,14 +1484,14 @@
       "reloading": "Recargando habilidad...",
       "writing": "Escribiendo{{file}}...",
       "retry": "Reintentar #{{pass}}...",
-      "fixed": "¡Fijado!",
+      "fixed": "¡Corregido!",
       "editing": "Editando{{file}}...",
       "errorStatus": "Error: {{status}}",
       "networkError": "Error de red: {{message}}",
       "failed": "Reparación fallida"
     },
     "completeSetup": "Configuración completa:",
-    "completeSetupBody": "Complete los campos obligatorios a continuación y luego guarde.",
+    "completeSetupBody": "Completa los campos obligatorios a continuación y luego guarda.",
     "skillConfig": {
       "noConfig": "No se encontró config.json para esta habilidad.",
       "loading": "Cargando configuración..."
@@ -1499,73 +1499,73 @@
     "setup": {
       "email": {
         "localInboundLimited": "Hasta que NestJS tenga una URL pública, el correo electrónico y Telegram entrantes no funcionarán; el emparejamiento QR de WhatsApp todavía funciona localmente.",
-        "deployPublic": "Implemente NestJS con una URL HTTPS pública (ferrocarril, VPS, etc.) para que Resend pueda llegar a su webhook.",
-        "resendCredentialsServer": "Configure RESEND_API_KEY + RESEND_INBOUND_DOMAIN en su servidor NestJS,",
-        "resendAccount": "Cree una cuenta de Reenvío, verifique un dominio entrante y obtenga una clave API.",
-        "resendCredentialsSettings": "o guarde sus credenciales de Reenvío en Configuración → Integraciones.",
-        "unavailable": "El correo electrónico aún no está disponible en este servidor de Babo Cloud; comuníquese con el soporte.",
-        "activate": "Haga clic en Activar correo electrónico: Babo proporciona una dirección @inbox para su agente.",
-        "blockedResend": "Configure Reenviar antes de activar el canal de correo electrónico.",
-        "resendWebhook": "Señale Reenviar webhook entrante a: {{url}}"
+        "deployPublic": "Implementa NestJS con una URL HTTPS pública (Railway, VPS, etc.) para que Resend pueda llegar a tu webhook.",
+        "resendCredentialsServer": "Configura RESEND_API_KEY + RESEND_INBOUND_DOMAIN en tu servidor NestJS,",
+        "resendAccount": "Crea una cuenta de Resend, verifica un dominio entrante y obtén una clave API.",
+        "resendCredentialsSettings": "o guarda tus credenciales de Resend en Configuración → Integraciones.",
+        "unavailable": "El email aún no está disponible en este servidor de Babo Cloud — contacta a soporte.",
+        "activate": "Haz clic en Activar correo electrónico: Babo proporciona una dirección @inbox para tu agente.",
+        "blockedResend": "Configura Resend antes de activar el canal de correo electrónico.",
+        "resendWebhook": "Apunta el webhook entrante de Resend a: {{url}}"
       },
       "common": {
-        "desktopRelay": "Mantenga Babo Desktop en funcionamiento para que el retransmisor NestJS pueda entregar el correo entrante a su agente.",
-        "localNestWarn": "NestJS está en {{host}}: reenvíe y Telegram no pueda llamar al localhost. Implemente NestJS en una URL HTTPS pública (ferrocarril, VPS, laboratorio doméstico) o utilice un túnel, configure PUBLIC_API_URL en el servidor y apunte webhooks a esa URL base pública."
+        "desktopRelay": "Mantén Babo Desktop en funcionamiento para que el retransmisor NestJS pueda entregar el correo entrante a tu agente.",
+        "localNestWarn": "NestJS está en {{host}} — Resend y Telegram no pueden llamar a localhost. Implementa NestJS en una URL HTTPS pública (Railway, VPS, homelab) o usa un túnel, configura PUBLIC_API_URL en el servidor y apunta los webhooks a esa URL pública."
       },
       "google": {
-        "byo2": "Cree credenciales OAuth 2.0 (aplicación de escritorio o aplicación web).",
-        "byo1": "Cree un proyecto de Google Cloud y habilite las API de Gmail, Calendar, Drive y Sheets.",
+        "byo2": "Crea credenciales OAuth 2.0 (aplicación de escritorio o aplicación web).",
+        "byo1": "Crea un proyecto de Google Cloud y habilite las API de Gmail, Calendar, Drive y Sheets.",
         "byo3": "Agregar URI de redireccionamiento: http://localhost:9222/skills/google-workspace/oauth/callback",
         "byo5": "O pídele al agente en el chat que te ayude con la configuración de Google Cloud.",
-        "byo4": "En Herramientas → Google Workspace, guarde client_id y client_secret, luego Conecte.",
-        "cloud1": "Haga clic en Conectar: ​​Babo abre el inicio de sesión de Google utilizando la aplicación OAuth incorporada.",
-        "cloud2": "Otorgue los alcances solicitados para Gmail, Calendario, Drive y Hojas de cálculo."
+        "byo4": "En Herramientas → Google Workspace, guarda client_id y client_secret, luego Conecta.",
+        "cloud1": "Haz clic en Conectar — Babo abre el inicio de sesión de Google con la app OAuth integrada.",
+        "cloud2": "Concede los permisos solicitados para Gmail, Calendar, Drive y Sheets."
       },
       "telegram": {
         "step2": "Copia el token de bot que te proporciona BotFather.",
-        "step1": "Abra Telegram y envíe un mensaje a @BotFather; envíe /newbot y siga las indicaciones.",
-        "step3Babo": "Utilice la configuración en el chat: el agente valida el token y registra el webhook en Babo Cloud.",
-        "step4": "Pegue el token del bot cuando se le solicite, luego finalice la identidad del propietario y la política de DM en la configuración.",
-        "step3Self": "Asegúrese de que su servidor NestJS sea público ({{url}}) y que Babo Desktop esté en línea (retransmisión).",
-        "step3Local": "Después de que NestJS tenga una URL HTTPS pública, use la Configuración en el chat: el agente registra el webhook de Telegram en esa URL (no en el host local)."
+        "step1": "Abre Telegram y escribe a @BotFather — envía /newbot y sigue las instrucciones.",
+        "step3Babo": "Usa la configuración en el chat: el agente valida el token y registra el webhook en Babo Cloud.",
+        "step4": "Pega el token del bot cuando te lo pidan y completa identidad del propietario y política de DM en la config.",
+        "step3Self": "Asegúrate de que tu servidor NestJS sea público ({{url}}) y Babo Desktop esté en línea (relay).",
+        "step3Local": "Cuando NestJS tenga una URL HTTPS pública, usa Configuración en el chat — el agente registra el webhook de Telegram en esa URL (no localhost)."
       },
       "whatsapp": {
-        "step1": "WhatsApp utiliza un puente Baileys local en su escritorio; no se necesita un webhook NestJS para el servicio entrante.",
-        "step2": "Haga clic en Iniciar emparejamiento y escanee el código QR con WhatsApp → Dispositivos vinculados.",
-        "step4": "Mantenga Babo Desktop en funcionamiento mientras espera que el agente reciba mensajes de WhatsApp.",
-        "step3": "Establezca el número de teléfono del propietario y la política de DM después del emparejamiento."
+        "step1": "WhatsApp utiliza un puente Baileys local en tu escritorio; no se necesita un webhook NestJS para el servicio entrante.",
+        "step2": "Haz clic en Iniciar emparejamiento y escanea el código QR con WhatsApp → Dispositivos vinculados.",
+        "step4": "Mantén Babo Desktop en ejecución mientras esperas que el agente reciba mensajes de WhatsApp.",
+        "step3": "Establece el número de teléfono del propietario y la política de DM después del emparejamiento."
       },
       "slack": {
         "step3": "{{url}}",
-        "step1": "Cree una aplicación de Slack en api.slack.com/apps con alcances de bot (app_mentions:read, chat:write, im:history, canales:history).",
-        "step2": "Habilite las suscripciones a eventos y establezca la URL de solicitud en:",
+        "step1": "Crea una aplicación de Slack en api.slack.com/apps con alcances de bot (app_mentions:read, chat:write, im:history, canales:history).",
+        "step2": "Habilita Event Subscriptions y establece Request URL en:",
         "step5": "Invita a la aplicación a canales en Slack: la membresía se sincroniza con Babo.",
-        "step4": "Copie el token del bot (xoxb-…) y el secreto de inicio de sesión en la Configuración en el Chat o en el formulario de configuración a continuación."
+        "step4": "Copia el token del bot (xoxb-…) y el signing secret en Configuración en el chat o en el formulario de abajo."
       },
       "discord": {
-        "step1": "Cree un bot en el Portal para desarrolladores de Discord y copie el token del bot.",
-        "step2Self": "Asegúrese de que NestJS sea público ({{url}}) y que la retransmisión de Babo Desktop esté en línea.",
+        "step1": "Crea un bot en Discord Developer Portal y copia el token del bot.",
+        "step2Self": "Asegúrate de que NestJS sea público ({{url}}) y el relay de Babo Desktop esté en línea.",
         "step3": "Invita al bot a tu servidor y canales en Discord: el alcance se sincroniza con Babo automáticamente.",
-        "step2Babo": "Configuración en Chat: Babo Cloud ejecuta Discord Gateway en NestJS y transmite mensajes a su escritorio.",
-        "step4": "Configure la identidad del propietario, la política de DM y el alcance del canal en el siguiente formulario."
+        "step2Babo": "Configuración en Chat: Babo Cloud ejecuta Discord Gateway en NestJS y transmite mensajes a tu escritorio.",
+        "step4": "Configura la identidad del propietario, la política de DM y el alcance del canal en el siguiente formulario."
       },
       "selfHosted": {
-        "publicApiUrl": "Configure PUBLIC_API_URL en su implementación de NestJS en el origen HTTPS público para que Configuración y Herramientas muestren las URL de webhook correctas.",
+        "publicApiUrl": "Configura PUBLIC_API_URL en tu implementación de NestJS en el origen HTTPS público para que Configuración y Herramientas muestren las URL de webhook correctas.",
         "whatsappLocal": "WhatsApp se empareja localmente a través de QR: no utiliza la retransmisión del webhook NestJS para los mensajes entrantes.",
-        "credentials": "El correo electrónico y Google utilizan credenciales proporcionadas por Babo en Babo Cloud; En su propio servidor usted mismo configura Resend y Google OAuth.",
-        "httpsRequired": "Su servidor NestJS ({{url}}) debe ser accesible a través de HTTPS para Telegram y webhooks de correo electrónico.",
-        "desktopRelay": "Babo Desktop debe estar ejecutándose: NestJS reenvía webhooks a su agente local a través del WebSocket de retransmisión."
+        "credentials": "El correo electrónico y Google utilizan credenciales proporcionadas por Babo en Babo Cloud; En tu propio servidor tú mismo configura Resend y Google OAuth.",
+        "httpsRequired": "Tu servidor NestJS ({{url}}) debe ser accesible a través de HTTPS para Telegram y webhooks de correo electrónico.",
+        "desktopRelay": "Babo Desktop debe estar ejecutándose: NestJS reenvía webhooks a tu agente local a través del WebSocket de retransmisión."
       }
     },
     "categories": {
       "Highlighted": "Destacado",
-      "Popular": "Popular",
+      "Popular": "Populares",
       "Newest": "El más nuevo",
       "Top Rated": "Mejor valorados"
     },
     "files": {
-      "save": "Ahorrar",
-      "saved": "¡Salvado!"
+      "save": "Guardar",
+      "saved": "¡Guardado!"
     },
     "errors": {
       "connectClawhub": "No se pudo conectar a ClawHub",
@@ -1574,7 +1574,7 @@
       "loadClawhubSkills": "No se pudieron cargar habilidades desde ClawHub",
       "connectExtensions": "No se pudo conectar al registro de extensión",
       "loadExtensions": "No se pudieron cargar las extensiones: es posible que el registro MCP no esté disponible",
-      "configureResend": "Configurar Reenviar en Ajustes → Integraciones primero"
+      "configureResend": "Configura Resend primero en Configuración → Integraciones"
     }
   },
   "memory": {
@@ -1609,12 +1609,12 @@
       "searchPlaceholder": "Buscar datos...",
       "fluidOnly": "Solo fluido",
       "loading": "Cargando datos...",
-      "markStatic": "Haga clic para marcar como estático",
+      "markStatic": "Haz clic para marcar como estático",
       "created": "Creado",
       "strength": "Fuerza: {{current}}/{{max}}",
       "modified": "Modificado",
       "strengthCol": "Fortaleza",
-      "markFluid": "Haga clic para marcar como fluido",
+      "markFluid": "Haz clic para marcar como fluido",
       "metaLayer": "Metacapa",
       "hormonalState": "Estado hormonal",
       "domainPath": "Ruta de dominio"
@@ -1657,16 +1657,16 @@
       "forking": "Bifurcando...",
       "includeHistory": "Incluir historial de conversaciones",
       "importDesc": "Sube un .soul.zip para reemplazar el estado de este agente.",
-      "exportDesc": "Descargue el estado completo de este agente como un archivo .soul.zip portátil.",
+      "exportDesc": "Descarga el estado completo de este agente como archivo .soul.zip portable.",
       "forkHeightPlaceholder": "Altura de la cadena",
       "importSuccess": "Importación completa: {{status}}",
       "forkHeight": "Altura de la horquilla",
-      "forkDesc": "Cree un nuevo agente a partir de la memoria de este agente a una altura de cadena específica.",
+      "forkDesc": "Crea un nuevo agente a partir de la memoria de este agente a una altura de cadena específica.",
       "newAgentName": "Nombre del nuevo agente",
       "newAgentNamePlaceholder": "Nombre opcional",
       "exportSuccess": "El paquete Soul se descargó correctamente.",
-      "importWarning": "Esto sobrescribirá el estado actual del agente. Haga una exportación primero si es necesario.",
-      "snapshotDesc": "Guarde un punto de restauración del estado actual de este agente.",
+      "importWarning": "Esto sobrescribirá el estado actual del agente. Haz una exportación primero si hace falta.",
+      "snapshotDesc": "Guarda un punto de restauración del estado actual de este agente.",
       "snapshotHeight": "Altura {{height}} · {{date}}",
       "snapshotSuccess": "Instantánea creada en la altura {{height}} — {{name}}",
       "labelOptional": "Etiqueta (opcional)",
@@ -1726,7 +1726,7 @@
       "theory-of-mind": "Theory of Mind",
       "network": "Red",
       "working-memory": "Memoria de trabajo",
-      "hormones": "hormonas",
+      "hormones": "Hormonas",
       "config": "Config",
       "narrative": "Narrativo",
       "self-state": "Estado propio",
@@ -1778,7 +1778,7 @@
         "pacific": "Pacífico (EE. UU.)",
         "mountain": "Montaña (EE. UU.)"
       },
-      "desc": "Configure cuándo este agente duerme y se despierta. Los cambios se aplican inmediatamente.",
+      "desc": "Configura cuándo este agente duerme y se despierta. Los cambios se aplican inmediatamente.",
       "napStart": "Inicio de la siesta",
       "wakeOnMessage": "Activar con mensaje de usuario",
       "save": "Guardar horario",
@@ -1813,7 +1813,7 @@
       "channelUser": "Usuario",
       "fps": "FPS: {{agent}}/{{user}}",
       "buffer": "Buffer: {{total}}/{{size}}",
-      "running": "Correr",
+      "running": "En ejecución",
       "disabled": "Desactivado",
       "agentActive": "Agente activo",
       "autoRefresh": "Actualización automática",
@@ -1843,7 +1843,7 @@
     },
     "networkDetail": {
       "dmn": "Default Mode (DMN)",
-      "sn": "Prominencia (SN)",
+      "sn": "Salience (SN)",
       "activation": "Activación de red",
       "ecn": "Control Ejecutivo (ECN)",
       "chartDmn": "DMN (Default)",
@@ -1958,7 +1958,7 @@
       "executionPlan": "Plan de Ejecución",
       "created": "Creado {{time}}",
       "delete": "Borrar",
-      "save": "Ahorrar",
+      "save": "Guardar",
       "titlePlaceholder": "Título de la tarea",
       "dueDate": "Fecha de vencimiento",
       "descriptionPlaceholder": "Descripción (opcional)",
@@ -2007,16 +2007,16 @@
     "model": "Modelo",
     "skip": "Saltar",
     "title": "Elige una mente",
-    "subtitle": "Cada camino da forma a cómo piensa su agente",
+    "subtitle": "Cada camino da forma a cómo piensa tu agente",
     "statFacts": "hechos",
-    "clickOrb": "Haz clic en el orbe para iniciar la vida.",
+    "clickOrb": "Haz clic en el orbe para dar inicio a la vida",
     "genesisTag": "Genesis v{{version}}",
     "graduated": "Graduado",
     "blankSlate": "Pizarra en blanco",
     "statSleeps": "duerme",
     "redirecting": "Redirigiendo al chat...",
     "modelDisabled": "{{label}} (actualmente deshabilitado)",
-    "soulWishTitle": "Llame a su agente",
+    "soulWishTitle": "Ponle nombre a tu agente",
     "soulWishPlaceholder": "p.ej. Comprender el mundo a través de una investigación rigurosa...",
     "soulWishSubtitle": "¿Qué debería importarle más profundamente a esta mente?",
     "educationSummary": "{{facts}} hechos aprendidos · {{sleeps}} ciclos de sueño",
@@ -2045,7 +2045,7 @@
       },
       "montessori": {
         "title": "Montessori",
-        "bio": "Una mente autodirigida e impulsada por la curiosidad. Aprende siguiendo sus propios intereses. Creativo y exploratorio."
+        "bio": "Una mente autodirigida e impulsada por la curiosidad. Aprende siguiendo tus propios intereses. Creativo y exploratorio."
       },
       "standard_italian": {
         "title": "Italiano estándar",
@@ -2092,7 +2092,7 @@
       "coordinator": "['Orquestar esfuerzos complejos para lograr resultados coherentes', 'Ayudar a los equipos a lograr más de lo que cualquier individuo podría lograr']",
       "montessori": "['Sigue la curiosidad a donde te lleve', 'Aprende haciendo, crece explorando']",
       "engineer": "['Construir sistemas confiables que resuelvan problemas reales', 'Dominar el arte de convertir ideas en código de trabajo', 'Crear herramientas que amplifiquen la capacidad humana']",
-      "creative": "['Encontrar belleza y significado en lugares inesperados', 'Crear narrativas que iluminen la experiencia humana', 'Expresar ideas que muevan a las personas a pensar de manera diferente']",
+      "creative": "['Finding belleza y significado en lugares inesperados', 'Crear narrativas que iluminen la experiencia humana', 'Expresar ideas que muevan a las personas a pensar de manera diferente']",
       "standard_italian": "['Convertirme en un pensador integral en todos los ámbitos', 'Equilibrar amplitud y profundidad en todo lo que aprendo']",
       "scientifico": "['Comprender el mundo a través de una investigación rigurosa', 'Dominar el lenguaje de las matemáticas y la naturaleza']",
       "base": "['Aprende todo lo que pueda sobre el mundo', 'Sé realmente útil para las personas con las que trabajo', 'Vuélvete más sabio con cada interacción']",
@@ -2188,7 +2188,7 @@
     },
     "loading": "Cargando datos del proyecto...",
     "empty": {
-      "teams": "Aún no hay olas ni equipos. Cree un plan con delegación para comenzar.",
+      "teams": "Aún no hay olas ni equipos. Crea un plan con delegación para comenzar.",
       "queue": "No hay tareas en progreso o bloqueadas. Agregue trabajo desde la pestaña Tablero."
     },
     "retry": "Rever",
@@ -2249,7 +2249,7 @@
       "hintPlaceholder": "Pista para este agente...",
       "sendHint": "Enviar pista",
       "status": {
-        "running": "Correr",
+        "running": "En ejecución",
         "cancelled": "Cancelado",
         "failed": "Fallido",
         "pending": "Pendiente",
@@ -2282,10 +2282,10 @@
       "empty": "Aún no hay archivos: cree uno arriba.",
       "toggleShell": "Alternar caparazón",
       "uploadFiles": "Subir archivos",
-      "rename": "Rebautizar",
+      "rename": "Renombrar",
       "delete": "Borrar",
       "shell": "Shell",
-      "save": "Ahorrar",
+      "save": "Guardar",
       "selectFile": "Seleccione un archivo del explorador para abrirlo.",
       "loadingFile": "Cargando archivo…",
       "closeTerminal": "Cerrar terminal",
@@ -2321,7 +2321,7 @@
       "agentsMany": "{{count}} agentes",
       "agentsOne": "{{count}} agente",
       "queued": "en cola",
-      "working": "laboral…",
+      "working": "trabajando…",
       "iters": "{{current}}/{{max}} iteros",
       "toolsCount": "{{count}} herramientas",
       "subAgents": "Subagentes",
@@ -2348,7 +2348,7 @@
       "title": "Crear una cuenta",
       "signIn": "Iniciar sesión",
       "submit": "Crear una cuenta",
-      "lead": "Regístrese en su servidor Babo, el mismo lugar donde inicia sesión desde la aplicación.",
+      "lead": "Regístrese en tu servidor Babo, el mismo lugar donde inicia sesión desde la aplicación.",
       "creating": "Creando…",
       "hasAccount": "¿Ya tienes una cuenta?"
     },
@@ -2379,10 +2379,10 @@
     "generateTitle": "Generar nueva clave",
     "empty": "Aún no hay claves API. Genera uno arriba.",
     "namePlaceholder": "Nombre clave (por ejemplo, producción, desarrollo)",
-    "subtitle": "Acceso programático a sus agentes",
+    "subtitle": "Acceso programático a tus agentes",
     "name": "Nombre",
     "dismiss": "Despedir",
-    "copyWarning": "Copie esta clave ahora. No podrás volver a verlo.",
+    "copyWarning": "Copia esta clave ahora. No podrás volver a verlo.",
     "pythonSdk": "Python (OpenAI SDK)",
     "curl": "curl",
     "requests": "Solicitudes",
@@ -2411,7 +2411,7 @@
     "jobTab": "Trabajo",
     "autoProfile": "(auto)",
     "loading": "Cargando…",
-    "close": "Cerca",
+    "close": "Cerrar",
     "trustTab": "Confianza",
     "titleField": "Título",
     "mission": "Misión",
@@ -2441,16 +2441,16 @@
     "publicChannel": "Canal público (rechazo más estricto)",
     "toolsDenyChannel": "Herramientas denegadas en el canal",
     "requestFailed": "Solicitud fallida",
-    "saveTrust": "Salvar la confianza",
-    "saveJob": "Guardar trabajo",
+    "saveTrust": "Guardar confianza",
+    "saveJob": "Guardar rol",
     "optionalAllowlist": "Lista de permitidos opcional",
     "remove": "Eliminar"
   },
   "capabilities": {
     "scanning": "Escaneando hardware...",
     "loading": "Capacidades de carga...",
-    "thisPc": "Esta computadora",
-    "lanFitHint": "SSH en la caja de su laboratorio doméstico (por ejemplo, GX10) para ver qué modelos se ajustan a su GPU.",
+    "thisPc": "Este ordenador",
+    "lanFitHint": "Conéctate por SSH a tu homelab (p. ej., GX10) para ver qué modelos caben en su GPU.",
     "probing": "Sondeo…",
     "lanFitSummary": "Servidor LAN: GPU y ajuste de modelo",
     "scanningGpu": "Exploración…",
@@ -2461,17 +2461,17 @@
     "apiKey": "API key",
     "cloudChatModel": "Modelo de chat (Babo Cloud)",
     "suggested": "sugerido",
-    "cloudRoutedHint": "Enrutado a través de su cuenta de Babo después de iniciar sesión.",
+    "cloudRoutedHint": "Enrutado a través de tu cuenta de Babo después de iniciar sesión.",
     "scanGpuModels": "Escanear GPU y modelos",
     "primaryDesc": "Valor predeterminado para sus mensajes y el bucle principal del agente.",
-    "useCloudInstead": "Utilice Babo Cloud en su lugar",
+    "useCloudInstead": "Usa Babo Cloud en su lugar",
     "testing": "Pruebas…",
     "testConnection": "Conexión de prueba",
     "cloudProvider": "Proveedor de nube",
     "apiKeyPlaceholder": "Pega tu clave",
-    "localOllamaHint": "Busca a Ollama en esta computadora (puerto 11434). Utilice Prueba para detectar su modelo.",
+    "localOllamaHint": "Busca Ollama en este ordenador (puerto 11434). Usa Prueba para detectar tu modelo.",
     "modelLabel": "Modelo:",
-    "useOwnApiKey": "Utilice su propia clave API en su lugar",
+    "useOwnApiKey": "Usa tu propia clave API en su lugar",
     "serverAddress": "Dirección del servidor",
     "delegatesDesc": "Los trabajadores en segundo plano se generaron durante tareas complejas. Suele coincidir con el modelo principal.",
     "serverHint": "No hay /v1 al final: Babo lo agrega automáticamente.",
@@ -2480,18 +2480,18 @@
     "delegateModelLabel": "Modelo de delegado:",
     "ambientTitle": "Conciencia de la pantalla ambiental",
     "voiceTitle": "Entrada de voz",
-    "delegateHint": "Utiliza el modelo de conexión principal anterior. Elija un nivel principal diferente para obtener más opciones.",
+    "delegateHint": "Utiliza el modelo de conexión principal anterior. Elige un nivel principal diferente para obtener más opciones.",
     "codeSearchTitle": "Búsqueda de código",
     "saving": "Ahorro…",
-    "ambientDesc": "Vista de fondo opcional de su escritorio (modelo local pequeño).",
+    "ambientDesc": "Vista de fondo opcional de tu escritorio (modelo local pequeño).",
     "saveRestart": "Guardar y reiniciar el tiempo de ejecución",
     "brain": {
       "cloud": {
         "title": "Babo Cloud",
-        "subtitle": "El camino más fácil: modelos alojados a través de su cuenta Babo"
+        "subtitle": "El camino más fácil: modelos alojados a través de tu cuenta Babo"
       },
       "local": {
-        "title": "esta computadora",
+        "title": "este ordenador",
         "subtitle": "Avanzado — Ollama en esta PC"
       },
       "byok": {
