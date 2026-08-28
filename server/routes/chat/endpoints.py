@@ -27,7 +27,7 @@ async def list_sessions(agent_id: str, request: Request):
     agent_manager = app.state.agent_manager
     runtime = agent_manager.get_runtime(agent_id)
     if runtime is None:
-        return {"sessions": {}, "default_home_session_key": "websocket:main"}
+        return {"sessions": {}, "default_home_session_key": "websocket:main", "primary_reachability_session_key": "websocket:main"}
 
     sessions: dict[str, Any] = {}
 
@@ -97,7 +97,7 @@ async def list_sessions(agent_id: str, request: Request):
         except Exception:
             pass
 
-    return {"sessions": sessions, "default_home_session_key": runtime.get_default_home_session_key()}
+    return {"sessions": sessions, "default_home_session_key": runtime.get_default_home_session_key(), "primary_reachability_session_key": runtime.get_primary_reachability_session_key()}
 
 
 @router.get("/sessions/{agent_id}/{session_key:path}")
@@ -230,6 +230,59 @@ async def set_default_home_session(agent_id: str, request: Request):
     }
 
 
+@router.post("/sessions/{agent_id}/primary-reachability")
+async def set_primary_reachability(agent_id: str, request: Request):
+    """Set where Babo should reach you by default (star on channel thread)."""
+    body = await request.json()
+    session_key = str(body.get("session_key") or "").strip()
+    if not session_key:
+        return JSONResponse({"ok": False, "error": "session_key required"}, status_code=400)
+
+    runtime = request.app.state.agent_manager.get_runtime(agent_id)
+    if runtime is None:
+        return JSONResponse({"ok": False, "error": "agent not loaded"}, status_code=404)
+
+    from nls.runtime.session_routing.config import is_valid_reachability_session_key
+
+    if not is_valid_reachability_session_key(session_key, runtime):
+        return JSONResponse(
+            {"ok": False, "error": "session_key must be a Home branch or connected channel thread"},
+            status_code=400,
+        )
+
+    if not session_key.startswith("websocket:"):
+        registry = getattr(runtime, "channel_registry", None)
+        if registry is None:
+            return JSONResponse({"ok": False, "error": "session router unavailable"}, status_code=503)
+        router = registry.session_router
+        if session_key not in router.list_sessions():
+            return JSONResponse({"ok": False, "error": "unknown session"}, status_code=404)
+
+    ok = await asyncio.to_thread(runtime.set_primary_reachability_session_key, session_key)
+    if not ok:
+        return JSONResponse({"ok": False, "error": "failed to set primary reachability"}, status_code=500)
+    return {
+        "ok": True,
+        "primary_reachability_session_key": runtime.get_primary_reachability_session_key(),
+    }
+
+
+@router.delete("/sessions/{agent_id}/primary-reachability")
+async def clear_primary_reachability(agent_id: str, request: Request):
+    """Revert primary reachability to the current default Home session."""
+    runtime = request.app.state.agent_manager.get_runtime(agent_id)
+    if runtime is None:
+        return JSONResponse({"ok": False, "error": "agent not loaded"}, status_code=404)
+
+    ok = await asyncio.to_thread(runtime.clear_primary_reachability_session_key)
+    if not ok:
+        return JSONResponse({"ok": False, "error": "failed to clear primary reachability"}, status_code=500)
+    return {
+        "ok": True,
+        "primary_reachability_session_key": runtime.get_primary_reachability_session_key(),
+    }
+
+
 def _build_team_thread(runtime, team_id: str) -> dict:
     """Synthesize a chat-like thread from team lifecycle events."""
     _tm = getattr(runtime, "_team_manager", None)
@@ -356,7 +409,7 @@ async def chat_relay(request: Request):
     try:
         from nls.skills.surface_send import is_surface_session_key, send_surface_message
 
-        if is_surface_session_key(session_key):
+        if is_surface_session_key(session_key, runtime):
             result = await send_surface_message(
                 request.app,
                 runtime,

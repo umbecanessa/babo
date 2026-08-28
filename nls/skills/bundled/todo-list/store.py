@@ -103,6 +103,9 @@ class TodoItem:
     assigner_agent_id: str = ""
     assignee_agent_id: str = ""
 
+    # Channel session to report investigation results back to (e.g. telegram:group:-100…)
+    report_session_key: str = ""
+
     def __post_init__(self) -> None:
         if not self.id:
             self.id = uuid.uuid4().hex[:8]

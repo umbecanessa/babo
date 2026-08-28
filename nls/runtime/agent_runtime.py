@@ -3519,11 +3519,21 @@ class AgentRuntime:
 
         # 6. Working Memory: consolidate and clear session-scoped slots
         try:
+            from nls.runtime.orchestration_sleep_policy import (
+                should_preserve_orchestration_on_sleep,
+            )
+
+            preserve_orch = should_preserve_orchestration_on_sleep(self)
+            if preserve_orch:
+                logger.info(
+                    "[Agent] agent=%s: preserving orchestration WM through sleep",
+                    self.agent_id,
+                )
             if self.dual_wm is not None:
-                self.dual_wm.on_sleep()
+                self.dual_wm.on_sleep(preserve_orchestration=preserve_orch)
                 self.dual_wm.on_wake()
             elif self.working_memory is not None:
-                self.working_memory.on_sleep()
+                self.working_memory.on_sleep(preserve_orchestration=preserve_orch)
                 self.working_memory.on_wake()
         except Exception as exc:
             logger.debug(
@@ -3824,9 +3834,33 @@ class AgentRuntime:
         if is_valid_home_session_key(_home):
             meta["default_home_session_key"] = _home
         meta_path = self.agent_dir / "session_meta.json"
+        existing: dict[str, Any] = {}
+        if meta_path.exists():
+            try:
+                with open(meta_path, "r", encoding="utf-8") as f:
+                    loaded = json.load(f)
+                if isinstance(loaded, dict):
+                    existing = loaded
+            except Exception:
+                existing = {}
+        merged = {**existing, **meta}
+        try:
+            from nls.runtime.session_routing import get_session_router
+
+            cfg = get_session_router(self).config()
+            if is_valid_home_session_key(_home):
+                cfg.default_home_session_key = _home
+            merged["default_home_session_key"] = cfg.default_home_session_key
+            merged["session_routing"] = cfg.to_dict()
+        except Exception:
+            logger.debug(
+                "[Agent] agent=%s: session routing merge on save skipped",
+                self.agent_id,
+                exc_info=True,
+            )
         try:
             with open(meta_path, "w", encoding="utf-8") as f:
-                json.dump(meta, f, indent=2)
+                json.dump(merged, f, indent=2, ensure_ascii=False)
         except Exception:
             pass
 
@@ -4156,6 +4190,7 @@ class AgentRuntime:
                 signals, user_input, response,
                 agent_id=self.agent_id,
                 domain_db=self.domain_db,
+                current_name=self.agent_name,
             )
             if detected_name:
                 self.agent_name = detected_name
@@ -5271,6 +5306,17 @@ class AgentRuntime:
                 pass
         logger.info("[Agent] agent=%s: shutdown complete", self.agent_id)
 
+        try:
+            from server.services.agent_pty_pool import get_agent_pty_pool
+
+            await get_agent_pty_pool().close_agent(self.agent_id)
+        except Exception:
+            logger.debug(
+                "[Agent] agent=%s: PTY pool close failed",
+                self.agent_id,
+                exc_info=True,
+            )
+
     def shutdown(self) -> None:
         """Sync wrapper for :meth:`shutdown_async` (blocks until VC is released)."""
         try:
@@ -5452,24 +5498,50 @@ class AgentRuntime:
         sk = (session_key or "").strip()
         if not is_valid_home_session_key(sk):
             return False
+        old_home = self.get_default_home_session_key()
         self.default_home_session_key = sk
-        meta_path = self.agent_dir / "session_meta.json"
-        meta: dict[str, Any] = {}
-        if meta_path.exists():
-            try:
-                with open(meta_path, "r", encoding="utf-8") as f:
-                    loaded = json.load(f)
-                if isinstance(loaded, dict):
-                    meta = loaded
-            except Exception:
-                meta = {}
-        meta["default_home_session_key"] = sk
         try:
-            with open(meta_path, "w", encoding="utf-8") as f:
-                json.dump(meta, f, indent=2, ensure_ascii=False)
+            from nls.runtime.session_routing import get_session_router
+
+            router = get_session_router(self)
+            cfg = router.config()
+            cfg.default_home_session_key = sk
+            primary = (cfg.primary_reachability_session_key or "").strip()
+            if not primary or primary == old_home:
+                cfg.primary_reachability_session_key = sk
+            router.save()
+            router.refresh()
+            return True
+        except Exception:
+            logger.debug("session router default home sync failed", exc_info=True)
+            return False
+
+    def get_primary_reachability_session_key(self) -> str:
+        try:
+            from nls.runtime.session_routing import get_session_router
+
+            return (
+                get_session_router(self).config().primary_reachability_session_key
+                or self.get_default_home_session_key()
+            )
+        except Exception:
+            return self.get_default_home_session_key()
+
+    def set_primary_reachability_session_key(self, session_key: str) -> bool:
+        try:
+            from nls.runtime.session_routing import get_session_router
+
+            return get_session_router(self).set_primary_reachability(session_key)
         except Exception:
             return False
-        return True
+
+    def clear_primary_reachability_session_key(self) -> bool:
+        try:
+            from nls.runtime.session_routing import get_session_router
+
+            return get_session_router(self).clear_primary_reachability()
+        except Exception:
+            return False
 
     def update_session_label(self, session_key: str, label: str) -> bool:
         if self.channel_registry is None:

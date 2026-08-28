@@ -54,6 +54,7 @@ from .history import (
     _save_agentic_history_v2,
     _strip_internal_blocks,
     branch_session_metadata,
+    finalize_agentic_turn_after_checkpoint,
     persist_partial_agentic_transcript,
     record_visible_chat_turn,
     persist_conversation_turn,
@@ -61,6 +62,41 @@ from .history import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _should_apply_name_update(
+    runtime: Any,
+    agent_manager: Any,
+    agent_id: str,
+    new_name: str | None,
+) -> bool:
+    """Only broadcast/persist naming when the user explicitly changed the name."""
+    candidate = (new_name or "").strip()
+    if not candidate:
+        return False
+    current = (getattr(runtime, "agent_name", "") or "").strip()
+    if not current:
+        meta = agent_manager._ensure_agent_meta(agent_id)
+        current = str(meta.get("name") or meta.get("agent_name") or "").strip()
+    return not current or current.lower() != candidate.lower()
+
+
+async def _maybe_broadcast_name_update(
+    websocket: WebSocket,
+    runtime: Any,
+    agent_manager: Any,
+    agent_id: str,
+    new_name: str | None,
+) -> None:
+    if not _should_apply_name_update(runtime, agent_manager, agent_id, new_name):
+        return
+    await websocket.send_json({
+        "type": "name_update",
+        "name": new_name,
+        "agent_id": agent_id,
+    })
+    agent_manager.update_agent_name(agent_id, new_name)
+    logger.info("Agent %s: name updated to '%s'", agent_id, new_name)
 
 
 async def _send_turn_triage(
@@ -549,7 +585,7 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                     is_surface_session_key,
                     send_surface_message,
                 )
-                if is_surface_session_key(session_key):
+                if is_surface_session_key(session_key, runtime):
                     result = await send_surface_message(
                         app,
                         runtime,
@@ -1381,6 +1417,7 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                             if _turn_triage is not None
                             else None
                         ),
+                        **_foreground_ws_tags(websocket, runtime),
                     })
 
                     _eager_events: list[dict] = []
@@ -1413,6 +1450,7 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                                 "type": "tool_output_chunk",
                                 "chunk": chunk,
                                 "tool_name": "bash",
+                                **_foreground_ws_tags(websocket, runtime),
                             })
                         except Exception:
                             pass
@@ -1435,6 +1473,7 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                                 "url": url or "",
                                 "title": title or "",
                                 "action": action or "",
+                                **_foreground_ws_tags(websocket, runtime),
                             })
 
                         async def _emit_set_cookies(cookies: list) -> dict:
@@ -1639,20 +1678,35 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                             _sk_agentic,
                             label=getattr(websocket.state, "branch_label", None),
                         )
-                        persist_conversation_turn(
-                            runtime,
-                            _sk_agentic,
-                            history,
-                            user=_strip_internal_blocks(user_content_raw),
-                            assistant=_agentic_final_text or None,
-                            reasoning=_initial_thinking or None,
-                            metadata=_transcript_meta,
-                            attachments=attachments or None,
-                            session_metadata=_branch_meta,
-                        )
                         _pending = getattr(
                             websocket.state, "_pending_agentic_transcript", None,
                         )
+                        _eager_saved = (
+                            isinstance(_pending, dict) and _pending.get("saved")
+                        )
+                        if _eager_saved:
+                            finalize_agentic_turn_after_checkpoint(
+                                runtime,
+                                _sk_agentic,
+                                history,
+                                assistant=_agentic_final_text or None,
+                                reasoning=_initial_thinking or None,
+                                metadata=_transcript_meta,
+                                attachments=attachments or None,
+                                session_metadata=_branch_meta,
+                            )
+                        else:
+                            persist_conversation_turn(
+                                runtime,
+                                _sk_agentic,
+                                history,
+                                user=_strip_internal_blocks(user_content_raw),
+                                assistant=_agentic_final_text or None,
+                                reasoning=_initial_thinking or None,
+                                metadata=_transcript_meta,
+                                attachments=attachments or None,
+                                session_metadata=_branch_meta,
+                            )
                         if isinstance(_pending, dict):
                             _pending["saved"] = True
 
@@ -1712,13 +1766,12 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                                 websocket.state._agentic_complete_sent = False
 
                             if agentic_result.name_update:
-                                await websocket.send_json({
-                                    "type": "name_update",
-                                    "name": agentic_result.name_update,
-                                    "agent_id": agent_id,
-                                })
-                                agent_manager.update_agent_name(
-                                    agent_id, agentic_result.name_update,
+                                await _maybe_broadcast_name_update(
+                                    websocket,
+                                    runtime,
+                                    agent_manager,
+                                    agent_id,
+                                    agentic_result.name_update,
                                 )
 
                             # Execute deferred post-completion actions
@@ -1978,16 +2031,12 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                 await websocket.send_json(_resp_json)
 
                 if result_dict.get("name_update"):
-                    new_name = result_dict["name_update"]
-                    await websocket.send_json({
-                        "type": "name_update",
-                        "name": new_name,
-                        "agent_id": agent_id,
-                    })
-                    agent_manager.update_agent_name(agent_id, new_name)
-                    logger.info(
-                        "Agent %s: name updated to '%s'",
-                        agent_id, new_name,
+                    await _maybe_broadcast_name_update(
+                        websocket,
+                        runtime,
+                        agent_manager,
+                        agent_id,
+                        result_dict["name_update"],
                     )
 
                 history.append({"role": "user", "content": user_input})
@@ -2125,13 +2174,13 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                 })
 
                 if result_dict.get("name_update"):
-                    new_name = result_dict["name_update"]
-                    await websocket.send_json({
-                        "type": "name_update",
-                        "name": new_name,
-                        "agent_id": agent_id,
-                    })
-                    agent_manager.update_agent_name(agent_id, new_name)
+                    await _maybe_broadcast_name_update(
+                        websocket,
+                        runtime,
+                        agent_manager,
+                        agent_id,
+                        result_dict["name_update"],
+                    )
 
                 history.append({"role": "user", "content": user_input})
                 _simple_asst: dict = {
@@ -2280,6 +2329,31 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
 
 # ─── Agentic event dispatcher ───────────────────────────────────
 
+def _foreground_ws_tags(websocket: WebSocket, runtime: Any) -> dict[str, str]:
+    """Tag foreground desk WS payloads with the active thread session key."""
+    sk = ""
+    try:
+        from nls.runtime.session_routing import get_session_router
+
+        raw = get_session_router(runtime).ws_session_key(websocket.state)
+        sk = raw if isinstance(raw, str) else ""
+    except Exception:
+        sk = ""
+    if not sk:
+        sk = getattr(websocket.state, "session_key", "") or ""
+        if not isinstance(sk, str):
+            sk = ""
+        if not sk or sk == "websocket:main":
+            get_home = getattr(runtime, "get_default_home_session_key", None)
+            if callable(get_home):
+                home = get_home()
+                if isinstance(home, str):
+                    home = home.strip()
+                    if home and home != "websocket:main":
+                        sk = home
+    return {"session_key": sk or "websocket:main"}
+
+
 async def _send_foreground_agentic_complete(
     websocket: WebSocket,
     runtime: Any,
@@ -2309,11 +2383,13 @@ async def _send_foreground_agentic_complete(
                 if runtime.domain_db else 0
             ),
         },
+        **_foreground_ws_tags(websocket, runtime),
     })
     await websocket.send_json({
         "type": "activity_status",
         "text": "",
         "status": "",
+        **_foreground_ws_tags(websocket, runtime),
     })
     websocket.state._agentic_complete_sent = True
 
@@ -2358,12 +2434,15 @@ async def _dispatch_agentic_event(
             agent_id, etype, _iter, _extra,
         )
 
-    _sa_tag = {}
-    if data.get("sub_agent"):
-        _sa_tag = {
+    _is_sub_agent = bool(data.get("sub_agent"))
+    _ws_tags: dict[str, Any] = {}
+    if _is_sub_agent:
+        _ws_tags = {
             "sub_agent": True,
             "delegate_number": data.get("delegate_number", 0),
         }
+    else:
+        _ws_tags = _foreground_ws_tags(websocket, runtime)
 
     if etype == "agentic_token":
         _tok = data.get("token", "")
@@ -2399,7 +2478,7 @@ async def _dispatch_agentic_event(
                     "type": "agentic_token",
                     "token": _tok_chunk,
                     "iteration": _tok_iter,
-                    **_sa_tag,
+                    **_ws_tags,
                 })
             websocket.state._wm_prefix_buf = _WM_MARKER
             return
@@ -2408,7 +2487,7 @@ async def _dispatch_agentic_event(
             "type": "agentic_token",
             "token": _tok,
             "iteration": _tok_iter,
-            **_sa_tag,
+            **_ws_tags,
         }
         if _is_thinking:
             _token_msg["thinking"] = True
@@ -2421,7 +2500,7 @@ async def _dispatch_agentic_event(
             "function_name": data.get("function_name", ""),
             "arguments_delta": data.get("arguments_delta", ""),
             "iteration": data.get("iteration", 0),
-            **_sa_tag,
+            **_ws_tags,
         })
 
     elif etype == "agentic_plan":
@@ -2433,7 +2512,7 @@ async def _dispatch_agentic_event(
             "title": data.get("title", ""),
             "todo_id": data.get("todo_id", ""),
             "project_dir": data.get("project_dir", ""),
-            **_sa_tag,
+            **_ws_tags,
         })
 
     elif etype == "plan_step_update":
@@ -2446,7 +2525,7 @@ async def _dispatch_agentic_event(
             "plan_id": data.get("plan_id", ""),
             "todo_id": data.get("todo_id", ""),
             "iteration": data.get("iteration", 0),
-            **_sa_tag,
+            **_ws_tags,
         })
 
     elif etype == "tool_execution_start":
@@ -2456,12 +2535,13 @@ async def _dispatch_agentic_event(
             "call_id": data.get("call_id", ""),
             "arguments": data.get("arguments", {}),
             "iteration": data.get("iteration", 0),
-            **_sa_tag,
+            **_ws_tags,
         })
-        if not _sa_tag:
+        if not _is_sub_agent:
             await websocket.send_json({
                 "type": "activity_status",
                 "text": f"Running: {data.get('tool_name', '')}",
+                **_ws_tags,
             })
 
     elif etype == "tool_execution_end":
@@ -2473,7 +2553,7 @@ async def _dispatch_agentic_event(
             "is_error": data.get("is_error", False),
             "result_preview": data.get("result_preview", ""),
             "iteration": data.get("iteration", 0),
-            **_sa_tag,
+            **_ws_tags,
         }
         _details = data.get("details")
         if _details:
@@ -2481,19 +2561,22 @@ async def _dispatch_agentic_event(
         await websocket.send_json(_tool_end_msg)
 
     elif etype == "activity_status":
-        await websocket.send_json({
+        _status_msg: dict = {
             "type": "activity_status",
             "text": data.get("message", ""),
             "status": data.get("status", ""),
             "elapsed_ms": data.get("elapsed_ms", 0),
-        })
+        }
+        if not _is_sub_agent:
+            _status_msg.update(_ws_tags)
+        await websocket.send_json(_status_msg)
 
     elif etype == "tool_output_chunk":
         await websocket.send_json({
             "type": "tool_output_chunk",
             "chunk": data.get("chunk", ""),
             "tool_name": data.get("tool_name", ""),
-            **_sa_tag,
+            **_ws_tags,
         })
 
     elif etype == "turn_thinking":
@@ -2501,7 +2584,7 @@ async def _dispatch_agentic_event(
             "type": "turn_thinking",
             "thinking": data.get("thinking") or data.get("content", ""),
             "iteration": data.get("iteration", 0),
-            **_sa_tag,
+            **_ws_tags,
         })
 
     elif etype == "delegate_batch_started":
@@ -2512,6 +2595,7 @@ async def _dispatch_agentic_event(
             "delegate_numbers": data.get("delegate_numbers", []),
             "iteration": data.get("iteration", 0),
             "simple_delegate": data.get("simple_delegate", False),
+            **_ws_tags,
         })
 
     elif etype == "delegate_spawn":
@@ -2534,6 +2618,7 @@ async def _dispatch_agentic_event(
             _spawn_payload["step_id"] = data["step_id"]
         if data.get("member_idx") is not None:
             _spawn_payload["member_idx"] = data["member_idx"]
+        _spawn_payload.update(_ws_tags)
         await websocket.send_json(_spawn_payload)
 
     elif etype == "delegate_start":
@@ -2554,6 +2639,7 @@ async def _dispatch_agentic_event(
             _start_payload["step_id"] = data["step_id"]
         if data.get("member_idx") is not None:
             _start_payload["member_idx"] = data["member_idx"]
+        _start_payload.update(_ws_tags)
         await websocket.send_json(_start_payload)
 
     elif etype == "delegate_complete":
@@ -2571,6 +2657,7 @@ async def _dispatch_agentic_event(
             _end_payload["batch_id"] = data["batch_id"]
         if data.get("partial"):
             _end_payload["partial"] = True
+        _end_payload.update(_ws_tags)
         await websocket.send_json(_end_payload)
 
     elif etype == "delegate_failed":
@@ -2583,6 +2670,7 @@ async def _dispatch_agentic_event(
             "aborted": True,
             "summary": data.get("summary", data.get("error", "")),
             "iteration": data.get("iteration", 0),
+            **_ws_tags,
         })
 
     elif etype == "delegate_end":
@@ -2600,15 +2688,19 @@ async def _dispatch_agentic_event(
             _generic_end["batch_id"] = data["batch_id"]
         if data.get("partial"):
             _generic_end["partial"] = True
+        _generic_end.update(_ws_tags)
         await websocket.send_json(_generic_end)
 
     elif etype == "browser_navigation":
-        await websocket.send_json({
+        _nav_msg: dict = {
             "type": "browser_navigation",
             "url": data.get("url", ""),
             "title": data.get("title", ""),
             "action": data.get("action", ""),
-        })
+        }
+        if not _is_sub_agent:
+            _nav_msg.update(_ws_tags)
+        await websocket.send_json(_nav_msg)
 
     elif etype == "ask_user":
         await websocket.send_json({
@@ -2616,12 +2708,14 @@ async def _dispatch_agentic_event(
             "question": data.get("question", ""),
             "request_id": data.get("request_id", "") or data.get("tool_call_id", ""),
             "iteration": data.get("iteration", 0),
+            **_ws_tags,
         })
-        if not _sa_tag:
+        if not _is_sub_agent:
             await websocket.send_json({
                 "type": "activity_status",
                 "text": "Waiting for your answer\u2026",
                 "status": "waiting_for_user",
+                **_ws_tags,
             })
 
     elif etype == "loop_budget_prompt":
@@ -2638,12 +2732,14 @@ async def _dispatch_agentic_event(
             "elapsed_seconds": data.get("elapsed_seconds"),
             "timeout_seconds": data.get("timeout_seconds"),
             "wait_seconds": data.get("wait_seconds", 600),
+            **_ws_tags,
         })
-        if not _sa_tag:
+        if not _is_sub_agent:
             await websocket.send_json({
                 "type": "activity_status",
                 "text": "Waiting for your decision\u2026",
                 "status": "waiting_for_budget",
+                **_ws_tags,
             })
 
     elif etype == "budget_decision":
@@ -2653,12 +2749,14 @@ async def _dispatch_agentic_event(
             "extra_iterations": data.get("extra_iterations", 0),
             "max_iterations": data.get("max_iterations", 0),
             "request_id": data.get("request_id", ""),
+            **_ws_tags,
         })
-        if not _sa_tag:
+        if not _is_sub_agent:
             await websocket.send_json({
                 "type": "activity_status",
                 "text": "",
                 "status": "",
+                **_ws_tags,
             })
 
     elif etype == "communicate":
@@ -2666,7 +2764,7 @@ async def _dispatch_agentic_event(
             "type": "communicate",
             "message": data.get("message", ""),
             "iteration": data.get("iteration", 0),
-            **_sa_tag,
+            **_ws_tags,
         })
 
     elif etype == "probe_signal":
@@ -2676,25 +2774,29 @@ async def _dispatch_agentic_event(
             "fired": data.get("fired", []),
             "iteration": data.get("iteration", 0),
             "mid_generation": data.get("mid_generation", False),
+            **_ws_tags,
         })
 
     elif etype == "user_answer":
         await websocket.send_json({
             "type": "user_answer",
             "content": data.get("answer", ""),
+            **_ws_tags,
         })
-        if not _sa_tag:
+        if not _is_sub_agent:
             await websocket.send_json({
                 "type": "activity_status",
                 "text": "",
                 "status": "",
+                **_ws_tags,
             })
 
-    elif etype == "turn_start" and not _sa_tag:
+    elif etype == "turn_start" and not _is_sub_agent:
         await websocket.send_json({
             "type": "activity_status",
             "text": "Thinking\u2026",
             "status": "generating",
+            **_ws_tags,
         })
 
     elif etype == "turn_end":
@@ -2722,18 +2824,18 @@ async def _dispatch_agentic_event(
             "duration_ms": round(data.get("duration_ms", 0), 1),
             "signals_count": 0,
             "hold_prose": bool(data.get("hold_prose")),
-            **_sa_tag,
+            **_ws_tags,
         })
         _resp_text = data.get("response_text", "").strip()
-        if _resp_text and _sa_tag:
+        if _resp_text and _is_sub_agent:
             await websocket.send_json({
                 "type": "communicate",
                 "message": _resp_text,
                 "iteration": data.get("iteration", 0),
                 "mid_loop": True,
-                **_sa_tag,
+                **_ws_tags,
             })
-        if not _sa_tag:
+        if not _is_sub_agent:
             _turn_entry: dict = {
                 "step": data.get("iteration", 0),
                 "tool_calls": data.get("tool_calls", []),
@@ -2745,14 +2847,14 @@ async def _dispatch_agentic_event(
                 _turn_entry["prose"] = _resp_text
             eager_events.append(_turn_entry)
 
-    elif etype == "agent_start" and _sa_tag:
+    elif etype == "agent_start" and _is_sub_agent:
         await websocket.send_json({
             "type": "agentic_start",
             "max_steps": data.get("max_iterations", 15),
-            **_sa_tag,
+            **_ws_tags,
         })
 
-    elif etype == "agent_end" and _sa_tag:
+    elif etype == "agent_end" and _is_sub_agent:
         await websocket.send_json({
             "type": "agentic_complete",
             "total_steps": data.get("iterations", 0),
@@ -2760,10 +2862,10 @@ async def _dispatch_agentic_event(
             "duration_ms": data.get("duration_ms", 0),
             "aborted": data.get("aborted", False),
             "abort_reason": data.get("abort_reason", ""),
-            **_sa_tag,
+            **_ws_tags,
         })
 
-    elif etype == "agent_end" and not _sa_tag:
+    elif etype == "agent_end" and not _is_sub_agent:
         try:
             _eager_hist = list(history)
             _eager_hist.append({
@@ -2796,16 +2898,19 @@ async def _dispatch_agentic_event(
                     label=getattr(websocket.state, "branch_label", None),
                 ),
             )
+            _pending = getattr(websocket.state, "_pending_agentic_transcript", None)
+            if isinstance(_pending, dict):
+                _pending["saved"] = True
             logger.info(
-                "Agent %s: eager history save on "
-                "agent_end (len=%d, events=%d, session=%s)",
-                agent_id, len(_eager_hist),
+                "Agent %s: eager checkpoint on agent_end "
+                "(events=%d, session=%s)",
+                agent_id,
                 len(eager_events),
                 _sk_eager,
             )
         except Exception as _es:
             logger.warning(
-                "Agent %s: eager save failed: %s",
+                "Agent %s: eager checkpoint failed: %s",
                 agent_id, _es,
             )
 

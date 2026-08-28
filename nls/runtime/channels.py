@@ -1161,10 +1161,12 @@ class ChannelProgressReporter:
         adapter: Any,
         reply_target: str,
         agent_id: str,
+        runtime: Any | None = None,
     ) -> None:
         self._adapter = adapter
         self._target = reply_target
         self._agent_id = agent_id
+        self._runtime = runtime
         self._last_send = 0.0
         self._plan_announced = False
         self._started_announced = False
@@ -1189,8 +1191,38 @@ class ChannelProgressReporter:
                 self._target, text, agent_id=self._agent_id,
             )
             self._last_send = time.monotonic()
+            await self._mirror_to_home(text)
         except Exception:
             logger.debug("Channel progress send failed", exc_info=True)
+
+    async def _mirror_to_home(self, text: str) -> None:
+        rt = self._runtime
+        if rt is None:
+            return
+        try:
+            from nls.runtime.session_routing import get_session_router
+
+            cfg = get_session_router(rt).config()
+            if not cfg.mirror_channel_progress_to_home:
+                return
+            home = (cfg.default_home_session_key or "websocket:main").strip()
+            if not home:
+                return
+            from server.main import app
+
+            cm = getattr(app.state, "connection_manager", None)
+            if cm is None:
+                return
+            await cm.broadcast(self._agent_id, {
+                "type": "communicate",
+                "message": text,
+                "session_key": home,
+                "mirror": True,
+                "autonomous": True,
+                "user_facing": True,
+            })
+        except Exception:
+            logger.debug("Channel progress home mirror failed", exc_info=True)
 
     async def on_event(self, event: Any) -> None:
         raw_type = event.type if hasattr(event, "type") else ""

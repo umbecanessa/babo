@@ -1078,6 +1078,9 @@ async def run_loop(
     if recovered_ctx:
         context = recovered_ctx
         _loop_start_idx = len(context)
+        from nls.agentic.phase_boundary import ensure_user_query_in_context
+
+        ensure_user_query_in_context(context, user_input)
         logger.info("[LOOP:%s] resumed from crash journal (%d msgs)", state.loop_id, len(context))
 
     # Reasoning continuity state (ported from v3)
@@ -3290,6 +3293,7 @@ async def run_loop(
                 unlocked_tools=state.unlocked_tools,
                 prefill_msg=_prefill,
                 loop_id=state.loop_id,
+                user_input=user_input,
             )
         finally:
             _hb_task.cancel()

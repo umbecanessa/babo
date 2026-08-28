@@ -272,6 +272,7 @@ async def generate(
     unlocked_tools: set[str] | None = None,
     prefill_msg: dict | None = None,
     loop_id: str = "",
+    user_input: str = "",
 ) -> GenerationResult:
     """Stream a single LLM generation turn with lazy tool loading.
 
@@ -297,6 +298,10 @@ async def generate(
     )
 
     safe_ctx = sanitize_context(list(context))
+
+    from nls.agentic.phase_boundary import ensure_user_query_in_context
+
+    ensure_user_query_in_context(safe_ctx, user_input)
 
     # Lazy tool loading: base schemas + unlocked tool schemas only
     tool_schemas: list[dict] = list(base_schemas or [])

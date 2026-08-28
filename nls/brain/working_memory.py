@@ -1096,7 +1096,7 @@ class WorkingMemory:
     # Sleep Cycle Support
     # ------------------------------------------------------------------
 
-    def on_sleep(self) -> None:
+    def on_sleep(self, *, preserve_orchestration: bool = False) -> None:
         """Called when agent goes to sleep.
 
         Clears session-scoped tactical/immediate goals but preserves
@@ -1104,6 +1104,22 @@ class WorkingMemory:
         Keeps strategic goals, intentions, and consolidation slots.
         Purges session-only slots and instructions (task-scoped).
         """
+        if preserve_orchestration:
+            self._slots = [
+                s for s in self._slots
+                if _is_consolidation_slot(s)
+                or s.slot_type == "credential"
+                or not s.metadata.get("is_session_only", False)
+            ]
+            self._goal_stack = [
+                g for g in self._goal_stack
+                if g.level == "strategic"
+                or g.metadata.get("persistent", False)
+                or g.metadata.get("project_id")
+            ]
+            self.clear_instructions()
+            return
+
         # Consolidate orchestration patterns before clearing
         if self._orch_decisions or self._orch_teams:
             self._consolidate_orch_patterns()
@@ -2005,7 +2021,7 @@ class DualWorkingMemory:
 
         return pairs
 
-    def on_sleep(self) -> None:
+    def on_sleep(self, *, preserve_orchestration: bool = False) -> None:
         """Consolidate operational knowledge before clearing session data.
 
         Each workspace gets a pre-sleep consolidation pass so that the
@@ -2037,9 +2053,9 @@ class DualWorkingMemory:
                     lines.append(f"[Knowledge] {' | '.join(knowledge)}")
                 ws.consolidate_session("\n".join(lines) if lines else "")
 
-        self.common.on_sleep()
-        self.professional.on_sleep()
-        self.personal.on_sleep()
+        self.common.on_sleep(preserve_orchestration=preserve_orchestration)
+        self.professional.on_sleep(preserve_orchestration=preserve_orchestration)
+        self.personal.on_sleep(preserve_orchestration=preserve_orchestration)
 
     def on_wake(self) -> None:
         self.common.on_wake()

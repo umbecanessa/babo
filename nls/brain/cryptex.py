@@ -4213,8 +4213,9 @@ class CryptexMemory:
     # Sleep cycle
     # ------------------------------------------------------------------
 
-    def on_sleep(self) -> None:
+    def on_sleep(self, *, preserve_orchestration: bool = False) -> None:
         """Consolidate and clear session data across all ring positions."""
+        preserve = preserve_orchestration
         # Consolidate each project position's operational knowledge
         # Group digest facts per project for labeled consolidation
         project_digests: dict[str, list[str]] = {}
@@ -4243,22 +4244,24 @@ class CryptexMemory:
             summary = f"[Project: {proj_id}]\n" + "\n".join(lines)
             self.consolidate_session(summary)
 
-        # Consolidate orchestration patterns from professional view
+        # Consolidate orchestration patterns from professional view unless
+        # an active squad/delegate orchestration must survive sleep.
         view = self._get_professional_view()
-        if view._orch_decisions or view._orch_teams:
-            view._consolidate_orch_patterns()
-            # Migrate the orch consolidation slot from the view to the ring
-            orch_domain = CONSOLIDATION_DOMAINS[3]
-            for s in view._slots:
-                if s.domain == orch_domain:
-                    ring = self._rings[RING_CONSOLIDATION]
-                    ring.upsert_slot(
-                        domain=orch_domain, content=s.content,
-                        slot_type="fact", salience=1.0,
-                        source="consolidation",
-                    )
-                    break
-        view.orch_clear()
+        if not preserve:
+            if view._orch_decisions or view._orch_teams:
+                view._consolidate_orch_patterns()
+                # Migrate the orch consolidation slot from the view to the ring
+                orch_domain = CONSOLIDATION_DOMAINS[3]
+                for s in view._slots:
+                    if s.domain == orch_domain:
+                        ring = self._rings[RING_CONSOLIDATION]
+                        ring.upsert_slot(
+                            domain=orch_domain, content=s.content,
+                            slot_type="fact", salience=1.0,
+                            source="consolidation",
+                        )
+                        break
+            view.orch_clear()
 
         # Clear session-scoped data from project rings
         for ring in self._rings.values():
@@ -4281,7 +4284,14 @@ class CryptexMemory:
                             or getattr(s, "access", "malleable") == "genesis")
                     ]
             else:
-                # Orchestration, instructions, tactical goals: clear
+                # Orchestration, instructions, tactical goals: clear unless
+                # an active squad/delegate orchestration must survive sleep.
+                if preserve and ring.spec.ring_id in (
+                    RING_ORCHESTRATION,
+                    RING_INSTRUCTIONS,
+                    RING_TACTICAL_GOALS,
+                ):
+                    continue
                 for pos_id in list(ring.positions.keys()):
                     ring.positions[pos_id] = [
                         s for s in ring.positions.get(pos_id, [])
@@ -4290,8 +4300,8 @@ class CryptexMemory:
                     ]
 
         # Common and personal sleep
-        self.common.on_sleep()
-        self.personal.on_sleep()
+        self.common.on_sleep(preserve_orchestration=preserve)
+        self.personal.on_sleep(preserve_orchestration=preserve)
 
     def on_wake(self) -> None:
         """Post-sleep initialization."""

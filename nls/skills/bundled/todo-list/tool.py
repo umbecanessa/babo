@@ -237,6 +237,8 @@ class TodoTool:
             params, title=title, description=description,
         )
 
+        report_session_key = self._resolve_report_session_key(params)
+
         # Auto-triage: if explicitly classified into a list or marked
         # idle-eligible, promote from "inbox" (untriaged) to "queued".
         if status == "inbox" and (list_id != "inbox" or idle_eligible):
@@ -252,6 +254,7 @@ class TodoTool:
             source=params.get("source", "user"),
             tags=params.get("tags", []),
             due_date=params.get("due_date", ""),
+            report_session_key=report_session_key,
         )
         requested_id = params.get("id", "").strip()
         if requested_id and self._store.get(requested_id) is None:
@@ -298,6 +301,41 @@ class TodoTool:
             ),
             details={"todo_id": item.id, "action": "add"},
         )
+
+    def _resolve_report_session_key(self, params: dict[str, Any]) -> str:
+        explicit = str(params.get("report_session_key") or "").strip()
+        if explicit:
+            return explicit
+
+        tags = params.get("tags") or []
+        for tag in tags:
+            raw = str(tag).strip()
+            if raw.lower().startswith("session:"):
+                return raw.split(":", 1)[1].strip()
+
+        try:
+            from nls.runtime.session_routing import get_session_router
+            from nls.skills.surface_send import is_surface_session_key
+
+            am = getattr(self._app.state, "agent_manager", None)
+            if am is None:
+                return ""
+            runtime = am.get_runtime(self._agent_id)
+            if runtime is None:
+                return ""
+            router = get_session_router(runtime)
+            ctx = router.routing_context_from_runtime(
+                source=str(params.get("source") or "user"),
+                todo_title=str(params.get("title") or ""),
+                todo_description=str(params.get("description") or ""),
+            )
+            keys = router.resolve_report_keys(ctx=ctx)
+            for key in keys:
+                if is_surface_session_key(key, runtime):
+                    return key
+        except Exception:
+            pass
+        return ""
 
     async def _list(self, params: dict[str, Any]) -> ToolResult:
         items = self._store.list_items(

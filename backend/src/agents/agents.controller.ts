@@ -235,6 +235,31 @@ export class AgentsController {
     );
   }
 
+  @Post(':id/sessions/primary-reachability')
+  async setPrimaryReachability(
+    @Request() req: any,
+    @Param('id') id: string,
+    @Body() body: { session_key?: string },
+  ) {
+    const runtimeId = await this.agents.getRuntimeAgentId(req.user.userId, id);
+    return this.agents.proxyRuntime(
+      runtimeId,
+      `/sessions/${runtimeId}/primary-reachability`,
+      'POST',
+      body,
+    );
+  }
+
+  @Delete(':id/sessions/primary-reachability')
+  async clearPrimaryReachability(@Request() req: any, @Param('id') id: string) {
+    const runtimeId = await this.agents.getRuntimeAgentId(req.user.userId, id);
+    return this.agents.proxyRuntime(
+      runtimeId,
+      `/sessions/${runtimeId}/primary-reachability`,
+      'DELETE',
+    );
+  }
+
   // =================================================================
   // CRUD — item-level (MUST be after sub-resource routes)
   // =================================================================

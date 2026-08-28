@@ -35,6 +35,36 @@ def _is_completion_review_message(msg: dict[str, Any]) -> bool:
     return any(marker in text for marker in _REVIEW_MARKERS)
 
 
+_USER_QUERY_PLACEHOLDER = (
+    "[Continued from previous context — execute the active plan.]"
+)
+
+
+def ensure_user_query_in_context(
+    context: list[dict[str, Any]],
+    user_input: str = "",
+) -> bool:
+    """Ensure at least one user-role message exists (vLLM requirement).
+
+    Mutates *context* in place. Returns True when a message was injected.
+    """
+    if any(m.get("role") == "user" for m in context):
+        return False
+    content = (user_input or "").strip() or _USER_QUERY_PLACEHOLDER
+    insert_at = 0
+    for i, m in enumerate(context):
+        if m.get("role") == "system":
+            insert_at = i + 1
+        else:
+            break
+    context.insert(insert_at, {"role": "user", "content": content})
+    logger.warning(
+        "Injected user message for vLLM (no user role in %d context messages)",
+        len(context) - 1,
+    )
+    return True
+
+
 def trim_context_for_phase_boundary(
     context: list[dict[str, Any]],
     *,
@@ -72,6 +102,7 @@ def trim_context_for_phase_boundary(
     }
 
     trimmed = (system_msgs[:1] if system_msgs else []) + [boundary] + kept
+    ensure_user_query_in_context(trimmed, user_input)
     logger.info(
         "Phase boundary: trimmed context %d → %d (dropped %d review messages)",
         len(context),

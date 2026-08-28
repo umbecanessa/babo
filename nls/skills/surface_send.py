@@ -24,13 +24,10 @@ class SurfaceSendTarget:
     send_kwargs: dict[str, Any] = field(default_factory=dict)
 
 
-def is_surface_session_key(session_key: str | None) -> bool:
-    if not session_key or session_key == "websocket:main":
-        return False
-    if session_key.startswith("websocket:"):
-        return False
-    parts = session_key.split(":")
-    return len(parts) >= 2 and parts[0] in _SURFACE_CHANNELS
+def is_surface_session_key(session_key: str | None, runtime: Any | None = None) -> bool:
+    from nls.runtime.session_routing.surface import is_routable_surface_session_key
+
+    return is_routable_surface_session_key(session_key, runtime)
 
 
 def channel_session_metadata(normalized: dict[str, Any]) -> dict[str, Any]:
@@ -88,9 +85,10 @@ def _fallback_reply_target_from_key(session_key: str, channel: str) -> str | Non
 def resolve_surface_target(
     session_key: str,
     session_meta: dict[str, Any] | None = None,
+    runtime: Any | None = None,
 ) -> SurfaceSendTarget | None:
     """Resolve adapter send target from session key + persisted metadata."""
-    if not is_surface_session_key(session_key):
+    if not is_surface_session_key(session_key, runtime):
         return None
 
     meta = session_meta or {}
@@ -157,7 +155,7 @@ async def send_surface_message(
         return {"ok": False, "error": "empty_message"}
 
     meta = get_session_meta(runtime, session_key)
-    target = resolve_surface_target(session_key, meta)
+    target = resolve_surface_target(session_key, meta, runtime)
     if target is None:
         return {
             "ok": False,

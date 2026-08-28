@@ -29,6 +29,23 @@ _NAMING_PATTERNS = [
 ]
 
 
+_INVALID_AGENT_NAMES = frozenset({
+    "yours", "you", "me", "the", "a", "an", "is", "are", "called", "name",
+    "agent", "user", "assistant", "bot", "hey", "hello", "thanks",
+})
+
+
+def _valid_agent_name(name: str) -> bool:
+    cleaned = (name or "").strip().strip("\"'")
+    if len(cleaned) < 2 or len(cleaned) > 40:
+        return False
+    if cleaned.lower() in _INVALID_AGENT_NAMES:
+        return False
+    if not cleaned[0].isupper():
+        return False
+    return True
+
+
 def detect_name_from_user_input(user_input: str) -> str | None:
     """Return a name the user explicitly assigned this turn, if any."""
     if not (user_input or "").strip():
@@ -40,7 +57,7 @@ def detect_name_from_user_input(user_input: str) -> str | None:
         for g in m.groups():
             if g:
                 name = g.strip("\"' ").strip()
-                if len(name) >= 2:
+                if _valid_agent_name(name):
                     return name
     return None
 
@@ -52,11 +69,14 @@ def detect_name_from_signals(
     *,
     agent_id: str = "",
     domain_db: Any | None = None,
+    current_name: str | None = None,
 ) -> str | None:
     """Detect if the agent accepted a name this turn.
 
     Returns the detected name string, or None.
     """
+    established = (current_name or "").strip()
+
     # Step 1: User's explicit naming
     user_named = detect_name_from_user_input(user_input)
 
@@ -84,12 +104,18 @@ def detect_name_from_signals(
 
     # Step 3: Resolve — user's naming always wins
     if user_named:
+        if established and user_named.lower() == established.lower():
+            return None
         if signal_name and signal_name.lower() != user_named.lower():
             logger.warning(
                 "Agent %s: name conflict — user='%s' signal='%s'. Trusting user.",
                 agent_id, user_named, signal_name,
             )
         return user_named
+
+    # Never rename from LEARN alone once the agent already has a name.
+    if established or not signal_name:
+        return None
 
     return signal_name
 
@@ -107,9 +133,7 @@ def _extract_name(content: str) -> str | None:
         return None
     name = words[0] if len(words) <= 3 else " ".join(words[:2])
     name = name.strip()
-    if len(name) < 2 or len(name) > 40:
-        return None
-    if not name[0].isupper():
+    if not _valid_agent_name(name):
         return None
     return name
 

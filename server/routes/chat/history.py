@@ -121,19 +121,36 @@ def persist_conversation_turn(
     max_history: int = 40,
 ) -> None:
     """Save model history + UI transcript for main or branch threads."""
+    _persist_model_history(
+        runtime,
+        session_key,
+        history,
+        session_metadata=session_metadata,
+        max_history=max_history,
+    )
+    record_visible_chat_turn(
+        runtime,
+        user=user,
+        assistant=assistant,
+        reasoning=reasoning,
+        metadata=metadata,
+        attachments=attachments,
+        session_key=session_key,
+    )
+
+
+def _persist_model_history(
+    runtime,
+    session_key: str | None,
+    history: list[dict],
+    *,
+    session_metadata: dict | None = None,
+    max_history: int = 40,
+) -> None:
     sk = (session_key or "websocket:main").strip()
     trimmed = history[-max_history:] if len(history) > max_history else history
     if is_main_chat_session(sk):
         runtime.save_conversation_history(trimmed)
-        record_visible_chat_turn(
-            runtime,
-            user=user,
-            assistant=assistant,
-            reasoning=reasoning,
-            metadata=metadata,
-            attachments=attachments,
-            session_key=sk,
-        )
         return
 
     meta = dict(session_metadata or {})
@@ -144,14 +161,40 @@ def persist_conversation_turn(
         max_turns=200,
         metadata=meta or None,
     )
-    record_visible_chat_turn(
+
+
+def finalize_agentic_turn_after_checkpoint(
+    runtime,
+    session_key: str | None,
+    history: list[dict],
+    *,
+    assistant: str | None = None,
+    reasoning: str | None = None,
+    metadata: dict | None = None,
+    attachments: list | None = None,
+    session_metadata: dict | None = None,
+    max_history: int = 40,
+) -> None:
+    """Upgrade eager checkpoint: authoritative model history, patch UI row."""
+    _persist_model_history(
         runtime,
-        user=user,
+        session_key,
+        history,
+        session_metadata=session_metadata,
+        max_history=max_history,
+    )
+    agent_dir = getattr(runtime, "agent_dir", None)
+    if agent_dir is None:
+        return
+    from nls.runtime.session import patch_last_transcript_turn
+
+    patch_last_transcript_turn(
+        agent_dir,
+        (session_key or "websocket:main").strip(),
         assistant=assistant,
         reasoning=reasoning,
         metadata=metadata,
         attachments=attachments,
-        session_key=sk,
     )
 
 

@@ -168,6 +168,70 @@ def _append_jsonl_message(path: Path, entry: dict[str, Any]) -> None:
         logger.warning("Failed to append %s: %s", path.name, exc)
 
 
+def _write_jsonl_messages(path: Path, messages: list[dict[str, Any]]) -> None:
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w", encoding="utf-8") as fh:
+            for row in messages:
+                entry = dict(row)
+                entry.setdefault("ts", _transcript_ts())
+                if "timestamp" not in entry:
+                    entry["timestamp"] = time.time()
+                fh.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except (OSError, FileNotFoundError) as exc:
+        logger.warning("Failed to rewrite %s: %s", path.name, exc)
+
+
+def transcript_path_for_session(agent_dir: Path, session_key: str) -> Path:
+    sk = (session_key or "websocket:main").strip()
+    if sk == "websocket:main":
+        return _transcript_path(agent_dir)
+    return session_ui_transcript_path(agent_dir, sk)
+
+
+def patch_last_transcript_turn(
+    agent_dir: Path,
+    session_key: str,
+    *,
+    assistant: str | None = None,
+    reasoning: str | None = None,
+    metadata: dict | None = None,
+    attachments: list | None = None,
+) -> None:
+    """Replace the last assistant UI row after an eager checkpoint save."""
+    path = transcript_path_for_session(agent_dir, session_key)
+    rows = _read_jsonl_messages(path)
+    if not rows:
+        return
+
+    asst_text = (assistant or "").strip()
+    if not asst_text and not metadata:
+        return
+
+    entry: dict[str, Any] = {
+        "role": "assistant",
+        "content": asst_text,
+    }
+    if reasoning:
+        entry["reasoning"] = reasoning
+    if metadata:
+        entry["metadata"] = metadata
+    if attachments:
+        entry["attachments"] = attachments
+
+    if rows[-1].get("role") == "assistant":
+        prev = rows[-1]
+        entry.setdefault("ts", prev.get("ts"))
+        entry.setdefault("timestamp", prev.get("timestamp"))
+        rows[-1] = entry
+    elif rows[-1].get("role") == "user":
+        rows.append(entry)
+    else:
+        return
+
+    _write_jsonl_messages(path, rows)
+
+
 def _read_last_transcript_message(agent_dir: Path) -> dict | None:
     path = _transcript_path(agent_dir)
     if not path.exists():
@@ -384,6 +448,14 @@ def _append_transcript_turn_at(
             last = {"role": "user", "content": user_text}
 
     if asst_text or metadata:
+        if not asst_text:
+            events = (metadata or {}).get("events") or []
+            has_prose = any(
+                isinstance(ev, dict) and str(ev.get("prose") or "").strip()
+                for ev in events
+            )
+            if not has_prose:
+                return
         if (
             last
             and last.get("role") == "assistant"

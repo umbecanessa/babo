@@ -204,6 +204,57 @@ def pending_count(agent_id: str) -> int:
     return sum(1 for i in items if not i.handled)
 
 
+def resolve_report_session_from_inbox(
+    agent_id: str,
+    *,
+    content_blob: str = "",
+) -> str | None:
+    """Link a todo/investigation to a channel inbox row without registry guessing."""
+    from nls.skills.surface_send import is_surface_session_key
+
+    load_agent_inbox(agent_id)
+    items = [
+        i for i in _inboxes.get(agent_id, [])
+        if is_surface_session_key(i.session_key)
+    ]
+    if not items:
+        return None
+
+    blob = (content_blob or "").strip().lower()
+    words = {w for w in blob.split() if len(w) >= 4}
+
+    unhandled = [i for i in items if not i.handled]
+    candidates = unhandled or items
+
+    if len(candidates) == 1 and not blob:
+        return candidates[0].session_key
+
+    best_key = ""
+    best_score = 0
+    for item in sorted(candidates, key=lambda x: x.received_at, reverse=True):
+        preview = (item.content or item.preview or "").lower()
+        if blob and blob in preview:
+            return item.session_key
+        if words:
+            overlap = sum(1 for w in words if w in preview)
+            if overlap > best_score:
+                best_score = overlap
+                best_key = item.session_key
+
+    if best_score >= 2 and best_key:
+        return best_key
+
+    # Never link by inbox cardinality alone when we have todo text — that
+    # would mis-route QA reports across groups with one pending inbox row.
+    if len(unhandled) == 1:
+        if not blob:
+            return unhandled[0].session_key
+        if best_score >= 1:
+            return unhandled[0].session_key
+
+    return None
+
+
 def resolve_foreground_session_key(runtime: Any) -> str:
     """Best-effort active conversation thread for this runtime."""
     sk = getattr(runtime, "_foreground_session_key", "") or ""

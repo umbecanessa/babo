@@ -1535,7 +1535,9 @@ class InnerLoop:
         if registry is not None and channel_name and reply_target:
             adapter = registry.get(channel_name)
             if adapter is not None:
-                reporter = ChannelProgressReporter(adapter, reply_target, agent_id)
+                reporter = ChannelProgressReporter(
+                    adapter, reply_target, agent_id, runtime=rt,
+                )
                 on_event_cb = reporter.on_event
 
         # Wire copilot_queue into TeamManager (restore after dispatch — parallel
@@ -2045,6 +2047,8 @@ class InnerLoop:
         rt: Any,
         prompt: str,
         source: str = "system",
+        *,
+        report_session_key: str = "",
     ) -> str:
         """Run :meth:`AgentRuntime.process_message_agentic_async` autonomously (same as chat).
 
@@ -2081,6 +2085,45 @@ class InnerLoop:
         ))
 
         _communicated_texts: set[str] = set()
+
+        async def _deliver_autonomous_communicate(
+            message: str,
+            *,
+            mid_loop: bool = False,
+            iteration: int = 0,
+        ) -> None:
+            text = (message or "").strip()
+            if not text or _cm is None:
+                return
+            from nls.runtime.session_routing import DeliveryIntent, get_session_router
+
+            router = get_session_router(rt)
+            ctx = router.routing_context_from_runtime(
+                source=source,
+                origin_session_key=report_session_key or "",
+            )
+            outcome = await router.deliver(
+                text,
+                DeliveryIntent.PROGRESS,
+                ctx=ctx,
+                connection_manager=_cm,
+                user_facing=True,
+                autonomous=True,
+                source=source,
+            )
+            if outcome.delivered:
+                return
+            home = get_session_router(rt).config().default_home_session_key or "websocket:main"
+            await _cm.broadcast(agent_id, {
+                "type": "communicate",
+                "message": text,
+                "iteration": iteration,
+                "autonomous": True,
+                "mid_loop": mid_loop,
+                "user_facing": not mid_loop,
+                "source": source,
+                "session_key": home,
+            })
 
         async def _on_autonomous_event(event):
             """Forward key agentic-loop events to connected frontends."""
@@ -2123,27 +2166,20 @@ class InnerLoop:
                             _sig = _resp_text[:200]
                             if _sig not in _communicated_texts:
                                 _communicated_texts.add(_sig)
-                                await _cm.broadcast(agent_id, {
-                                    "type": "communicate",
-                                    "message": _resp_text,
-                                    "iteration": data.get("iteration", 0),
-                                    "autonomous": True,
-                                    "mid_loop": True,
-                                    "source": source,
-                                })
+                                await _deliver_autonomous_communicate(
+                                    _resp_text,
+                                    mid_loop=True,
+                                    iteration=data.get("iteration", 0),
+                                )
                 elif etype == "communicate":
                     _comm_msg = data.get("message", "").strip()
                     _comm_sig = _comm_msg[:200]
                     if _comm_sig and _comm_sig not in _communicated_texts:
                         _communicated_texts.add(_comm_sig)
-                        await _cm.broadcast(agent_id, {
-                            "type": "communicate",
-                            "message": _comm_msg,
-                            "iteration": data.get("iteration", 0),
-                            "autonomous": True,
-                            "user_facing": True,
-                            "source": source,
-                        })
+                        await _deliver_autonomous_communicate(
+                            _comm_msg,
+                            iteration=data.get("iteration", 0),
+                        )
                 elif etype == "ask_user":
                     await _cm.broadcast(agent_id, {
                         "type": "ask_user",
@@ -2269,6 +2305,7 @@ class InnerLoop:
                     on_event=_on_autonomous_event,
                     source=source,
                     copilot_queue=_auto_copilot_queue,
+                    session_key=report_session_key or None,
                 )
             finally:
                 unregister_autonomous_copilot_queue(agent_id)
@@ -2372,6 +2409,29 @@ class InnerLoop:
                     record_background_wake(pathlib.Path(rt.agent_dir))
                 except Exception:
                     pass
+
+            try:
+                from nls.runtime.autonomous_completion_delivery import (
+                    deliver_autonomous_completion,
+                    extract_todo_id,
+                )
+
+                await deliver_autonomous_completion(
+                    rt,
+                    source=source,
+                    prompt=_original_prompt,
+                    final_response=final,
+                    exit_reason=getattr(result, "exit_reason", "") or "",
+                    aborted=_aborted,
+                    todo_id=extract_todo_id(_original_prompt),
+                    connection_manager=_cm,
+                )
+            except Exception:
+                logger.debug(
+                    "Agent %s: autonomous completion delivery failed",
+                    agent_id,
+                    exc_info=True,
+                )
 
             return final
 
@@ -2735,8 +2795,9 @@ class InnerLoop:
         if _m:
             todo_id = _m.group(1)
 
-        # Move linked todo to in_progress before executing
+        report_session_key = ""
         if todo_id:
+            report_session_key = await self._ensure_todo_report_session(rt, todo_id)
             await self._update_todo_status(
                 rt, todo_id, "in_progress",
             )
@@ -2771,6 +2832,7 @@ class InnerLoop:
 
         final = await self._dispatch_autonomous_v2(
             rt, dispatch_prompt, source=target.source,
+            report_session_key=report_session_key,
         )
         dispatch_meta = getattr(self, "_last_autonomous_meta", None) or {}
 
@@ -2808,6 +2870,38 @@ class InnerLoop:
                 )
 
         return True
+
+    async def _ensure_todo_report_session(
+        self,
+        rt: Any,
+        todo_id: str,
+    ) -> str:
+        try:
+            from server.main import app as _app
+            from nls.runtime.session_routing import get_session_router
+
+            _sl = getattr(_app.state, "skill_loader", None)
+            if _sl is None:
+                return ""
+            _todo_sk = _sl.skills.get("todo-list")
+            if _todo_sk is None or _todo_sk.context is None:
+                return ""
+            _todo_mgr = getattr(_todo_sk.context, "adapter", None)
+            if _todo_mgr is None:
+                return ""
+            store = _todo_mgr.get_store(rt.agent_id)
+            item = store.get(todo_id)
+            if item is None:
+                return ""
+            return get_session_router(rt).bind_todo_report_session(item) or ""
+        except Exception:
+            logger.debug(
+                "Agent %s: ensure_todo_report_session failed for [%s]",
+                getattr(rt, "agent_id", "?"),
+                todo_id,
+                exc_info=True,
+            )
+            return ""
 
     async def _update_todo_status(
         self,

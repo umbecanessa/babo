@@ -102,6 +102,9 @@ class JobDocument:
     background_enabled: bool = False
     background_interval_seconds: int = 0
     last_background_wake_at: float = 0.0
+    # Explicit outbound report targets — never infer from channel count.
+    # Each entry: {"session_key": "telegram:group:-100…", "label": "…", "purpose": "qa_reports"}
+    report_channels: list[dict[str, Any]] = field(default_factory=list)
     updated_at: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
