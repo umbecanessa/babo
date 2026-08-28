@@ -449,7 +449,7 @@
       @if (localWebhookWarning(); as localWarn) {
         <div class="info-card localhost-webhook">
           <h4 class="subsection-title">{{ 'settings.integrations.localhostTitle' | translate }}</h4>
-          <p class="field-hint">{{ localWarn }}</p>
+          <p class="field-hint">{{ localWarn.key | translate:localWarn.params }}</p>
         </div>
       }
 

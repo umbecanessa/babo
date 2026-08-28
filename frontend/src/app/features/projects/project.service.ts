@@ -1,5 +1,6 @@
 import { Injectable, signal, computed, inject } from '@angular/core';
 import { Subscription } from 'rxjs';
+import { TranslateService } from '@ngx-translate/core';
 import { ApiService } from '../../core/services/api.service';
 import { WebSocketService } from '../../core/services/websocket.service';
 import { RunViewService } from '../../core/services/run-view.service';
@@ -40,6 +41,7 @@ export class ProjectService {
   private loadTimeout?: ReturnType<typeof setTimeout>;
 
   private readonly runView = inject(RunViewService);
+  private readonly translate = inject(TranslateService);
 
   constructor(
     private api: ApiService,
@@ -74,7 +76,7 @@ export class ProjectService {
       if (gen !== this.loadGeneration) return;
       pending = Math.max(0, pending - 1);
       if (opts?.error && !anySuccess && pending === 0) {
-        this.error.set('Could not load project data. Is the agent running?');
+        this.error.set(this.translate.instant('projects.loadError'));
       }
       if (pending === 0 || anySuccess) {
         this.loading.set(false);
@@ -86,7 +88,7 @@ export class ProjectService {
       if (gen !== this.loadGeneration) return;
       this.loading.set(false);
       if (!anySuccess && !this.hasAnyData()) {
-        this.error.set('Could not load project data. Is the agent running?');
+        this.error.set(this.translate.instant('projects.loadError'));
       }
     }, ProjectService.LOAD_TIMEOUT_MS);
 

@@ -1,6 +1,6 @@
-import { Component, Input } from '@angular/core';
+import { Component, Input, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { Team, TodoItem, PlanSummary } from '../project.models';
 import type { RunDelegate } from '../../../core/models/run-view.model';
 
@@ -8,9 +8,12 @@ interface ActivityEntry {
   id: string;
   time: number;
   icon: string;
-  text: string;
+  textKey: string;
+  textParams?: Record<string, string | number>;
   category: 'team' | 'member' | 'todo' | 'plan' | 'delegate';
   detail?: string;
+  detailKey?: string;
+  detailParams?: Record<string, string | number>;
   teamName?: string;
   memberTask?: string;
   resultSummary?: string;
@@ -38,6 +41,8 @@ export class ActivityPanelComponent {
 
   expandedEntries = new Set<string>();
 
+  private readonly translate = inject(TranslateService);
+
   get entries(): ActivityEntry[] {
     let entries = this.buildEntries();
     if (this.maxEntries > 0 && entries.length > this.maxEntries) {
@@ -55,10 +60,17 @@ export class ActivityPanelComponent {
         id: `live-delegate-${d.number}`,
         time: now,
         icon: d.status === 'queued' ? '\u23F3' : '\u21BB',
-        text: `#${d.number >= 0 ? d.number : '?'} ${d.status === 'queued' ? 'queued' : 'working'}: ${taskHeadline(d.task)}`,
+        textKey: d.status === 'queued'
+          ? 'projects.activity.events.delegateQueued'
+          : 'projects.activity.events.delegateWorking',
+        textParams: {
+          number: d.number >= 0 ? d.number : '?',
+          task: taskHeadline(d.task),
+        },
         category: 'delegate',
         memberTask: d.task,
-        detail: d.batchId ? `Batch ${d.batchId}` : undefined,
+        detailKey: d.batchId ? 'projects.activity.events.batch' : undefined,
+        detailParams: d.batchId ? { id: d.batchId } : undefined,
         iterations: d.iterations,
         toolCalls: d.totalToolCalls ?? d.toolCalls?.length,
       });
@@ -70,9 +82,16 @@ export class ActivityPanelComponent {
           id: `t-${team.id}-launched`,
           time: team.created_at,
           icon: '\u25B6',
-          text: `Team "${team.name}" launched (${team.members.length} members)`,
+          textKey: 'projects.activity.events.teamLaunched',
+          textParams: { name: team.name, count: team.members.length },
           category: 'team',
-          detail: team.briefing || (team.mission ? `Mission: ${team.mission}` : undefined),
+          detail: team.briefing || undefined,
+          detailKey: !team.briefing && team.mission
+            ? 'projects.activity.events.mission'
+            : undefined,
+          detailParams: !team.briefing && team.mission
+            ? { mission: team.mission }
+            : undefined,
           teamName: team.name,
         });
       } else {
@@ -80,9 +99,11 @@ export class ActivityPanelComponent {
           id: `t-${team.id}-created`,
           time: team.created_at,
           icon: '\u2699',
-          text: `Team "${team.name}" created (${team.members.length} members)`,
+          textKey: 'projects.activity.events.teamCreated',
+          textParams: { name: team.name, count: team.members.length },
           category: 'team',
-          detail: team.mission ? `Mission: ${team.mission}` : undefined,
+          detailKey: team.mission ? 'projects.activity.events.mission' : undefined,
+          detailParams: team.mission ? { mission: team.mission } : undefined,
           teamName: team.name,
         });
       }
@@ -92,7 +113,8 @@ export class ActivityPanelComponent {
           id: `t-${team.id}-paused`,
           time: team.created_at + 2,
           icon: '\u23F8',
-          text: `Team "${team.name}" paused`,
+          textKey: 'projects.activity.events.teamPaused',
+          textParams: { name: team.name },
           category: 'team',
           teamName: team.name,
         });
@@ -104,9 +126,11 @@ export class ActivityPanelComponent {
           id: `t-${team.id}-completed`,
           time: team.completed_at,
           icon: '\u2713',
-          text: `Team "${team.name}" completed`,
+          textKey: 'projects.activity.events.teamCompleted',
+          textParams: { name: team.name },
           category: 'team',
-          detail: `${doneCount}/${team.members.length} members finished successfully.`,
+          detailKey: 'projects.activity.events.teamCompletedDetail',
+          detailParams: { done: doneCount, total: team.members.length },
           teamName: team.name,
         });
       }
@@ -116,7 +140,8 @@ export class ActivityPanelComponent {
           id: `t-${team.id}-failed`,
           time: team.completed_at,
           icon: '\u2717',
-          text: `Team "${team.name}" disbanded`,
+          textKey: 'projects.activity.events.teamDisbanded',
+          textParams: { name: team.name },
           category: 'team',
           teamName: team.name,
         });
@@ -128,9 +153,14 @@ export class ActivityPanelComponent {
             id: `m-${team.id}-${member.delegate_number}-run`,
             time: team.created_at + 2,
             icon: '\u21BB',
-            text: `#${member.delegate_number} working: ${member.task}`,
+            textKey: 'projects.activity.events.memberWorking',
+            textParams: { number: member.delegate_number, task: member.task },
             category: 'member',
-            detail: `Iteration ${member.iterations}, ${member.tool_calls} tool calls so far.`,
+            detailKey: 'projects.activity.events.memberWorkingDetail',
+            detailParams: {
+              iterations: member.iterations,
+              toolCalls: member.tool_calls,
+            },
             teamName: team.name,
             memberTask: member.task,
             iterations: member.iterations,
@@ -142,7 +172,8 @@ export class ActivityPanelComponent {
             id: `m-${team.id}-${member.delegate_number}-done`,
             time: team.created_at + member.elapsed_seconds,
             icon: '\u2713',
-            text: `#${member.delegate_number} completed: ${member.task}`,
+            textKey: 'projects.activity.events.memberCompleted',
+            textParams: { number: member.delegate_number, task: member.task },
             category: 'member',
             detail: member.result_summary || undefined,
             teamName: team.name,
@@ -158,7 +189,8 @@ export class ActivityPanelComponent {
             id: `m-${team.id}-${member.delegate_number}-fail`,
             time: team.created_at + (member.elapsed_seconds || 1),
             icon: '\u2717',
-            text: `#${member.delegate_number} failed: ${member.task}`,
+            textKey: 'projects.activity.events.memberFailed',
+            textParams: { number: member.delegate_number, task: member.task },
             category: 'member',
             detail: member.result_summary || undefined,
             teamName: team.name,
@@ -181,7 +213,8 @@ export class ActivityPanelComponent {
           id: `todo-${item.id}-done`,
           time: item.completed_at,
           icon: '\u2611',
-          text: `Todo completed: ${item.title}`,
+          textKey: 'projects.activity.events.todoCompleted',
+          textParams: { title: item.title },
           category: 'todo',
           detail: item.description || undefined,
         });
@@ -190,7 +223,8 @@ export class ActivityPanelComponent {
           id: `todo-${item.id}-prog`,
           time: item.updated_at,
           icon: '\u25B6',
-          text: `Todo started: ${item.title}`,
+          textKey: 'projects.activity.events.todoStarted',
+          textParams: { title: item.title },
           category: 'todo',
           detail: item.description || undefined,
         });
@@ -199,7 +233,8 @@ export class ActivityPanelComponent {
           id: `todo-${item.id}-add`,
           time: item.created_at,
           icon: '\u002B',
-          text: `Todo added: ${item.title}`,
+          textKey: 'projects.activity.events.todoAdded',
+          textParams: { title: item.title },
           category: 'todo',
           detail: item.description || undefined,
         });
@@ -215,9 +250,15 @@ export class ActivityPanelComponent {
           id: `plan-${todoId}`,
           time: Date.now() / 1000 - 30,
           icon: '\u2699',
-          text: `Plan "${plan.title}": ${doneSteps.length}/${plan.steps.length} steps done`,
+          textKey: 'projects.activity.events.planProgress',
+          textParams: {
+            title: plan.title,
+            done: doneSteps.length,
+            total: plan.steps.length,
+          },
           category: 'plan',
-          detail: `Recently completed: ${recent}`,
+          detailKey: 'projects.activity.events.planRecent',
+          detailParams: { recent },
         });
       }
     }
@@ -254,11 +295,17 @@ export class ActivityPanelComponent {
     const now = new Date();
     const diffMs = now.getTime() - d.getTime();
     const diffMins = Math.floor(diffMs / 60000);
-    if (diffMins < 1) return 'just now';
-    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffMins < 1) return this.translate.instant('projects.activity.time.justNow');
+    if (diffMins < 60) {
+      return this.translate.instant('projects.activity.time.minutesAgo', { count: diffMins });
+    }
     const diffHrs = Math.floor(diffMins / 60);
-    if (diffHrs < 24) return `${diffHrs}h ago`;
-    return `${Math.floor(diffHrs / 24)}d ago`;
+    if (diffHrs < 24) {
+      return this.translate.instant('projects.activity.time.hoursAgo', { count: diffHrs });
+    }
+    return this.translate.instant('projects.activity.time.daysAgo', {
+      count: Math.floor(diffHrs / 24),
+    });
   }
 
   formatElapsed(seconds: number | undefined): string {

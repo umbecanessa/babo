@@ -962,6 +962,67 @@
     "skillConfig": {
       "loading": "Loading config...",
       "noConfig": "No config.json found for this skill."
+    },
+    "setup": {
+      "common": {
+        "localNestWarn": "NestJS is on {{host}} — Resend and Telegram cannot call localhost. Deploy NestJS to a public HTTPS URL (Railway, VPS, homelab) or use a tunnel, set PUBLIC_API_URL on the server, and point webhooks at that public base URL.",
+        "desktopRelay": "Keep Babo Desktop running so the NestJS relay can deliver inbound mail to your agent."
+      },
+      "email": {
+        "localInboundLimited": "Until NestJS has a public URL, email and Telegram inbound will not work — WhatsApp QR pairing still works locally.",
+        "deployPublic": "Deploy NestJS with a public HTTPS URL (Railway, VPS, etc.) so Resend can reach your webhook.",
+        "resendAccount": "Create a Resend account, verify an inbound domain, and obtain an API key.",
+        "resendWebhook": "Point Resend inbound webhook to: {{url}}",
+        "resendCredentialsServer": "Either set RESEND_API_KEY + RESEND_INBOUND_DOMAIN on your NestJS server,",
+        "resendCredentialsSettings": "or save your Resend credentials under Settings → Integrations.",
+        "unavailable": "Email is not available on this Babo Cloud server yet — contact support.",
+        "activate": "Click Activate Email — Babo provisions an @inbox address for your agent.",
+        "blockedResend": "Configure Resend before activating the email channel."
+      },
+      "google": {
+        "byo1": "Create a Google Cloud project and enable Gmail, Calendar, Drive, and Sheets APIs.",
+        "byo2": "Create OAuth 2.0 credentials (Desktop app or Web application).",
+        "byo3": "Add redirect URI: http://localhost:9222/skills/google-workspace/oauth/callback",
+        "byo4": "In Tools → Google Workspace, save client_id and client_secret, then Connect.",
+        "byo5": "Or ask the agent in chat to help you through Google Cloud setup.",
+        "cloud1": "Click Connect — Babo opens Google sign-in using the built-in OAuth app.",
+        "cloud2": "Grant the requested scopes for Gmail, Calendar, Drive, and Sheets."
+      },
+      "telegram": {
+        "step1": "Open Telegram and message @BotFather — send /newbot and follow the prompts.",
+        "step2": "Copy the bot token BotFather gives you.",
+        "step3Babo": "Use Setup in Chat — the agent validates the token and registers the webhook on Babo Cloud.",
+        "step3Local": "After NestJS has a public HTTPS URL, use Setup in Chat — the agent registers the Telegram webhook on that URL (not localhost).",
+        "step3Self": "Ensure your NestJS server is public ({{url}}) and Babo Desktop is online (relay).",
+        "step4": "Paste the bot token when prompted, then finish owner identity and DM policy in config."
+      },
+      "whatsapp": {
+        "step1": "WhatsApp uses a local Baileys bridge on your desktop — no NestJS webhook needed for inbound.",
+        "step2": "Click Start Pairing and scan the QR code with WhatsApp → Linked devices.",
+        "step3": "Set owner phone number and DM policy after pairing.",
+        "step4": "Keep Babo Desktop running while you expect the agent to receive WhatsApp messages."
+      },
+      "discord": {
+        "step1": "Create a bot in the Discord Developer Portal and copy the bot token.",
+        "step2Babo": "Setup in Chat — Babo Cloud runs the Discord Gateway on NestJS and relays messages to your desktop.",
+        "step2Self": "Ensure NestJS is public ({{url}}) and Babo Desktop relay is online.",
+        "step3": "Invite the bot to your server and channels in Discord — scope syncs back to Babo automatically.",
+        "step4": "Configure owner identity, DM policy, and channel scope in the form below."
+      },
+      "slack": {
+        "step1": "Create a Slack app at api.slack.com/apps with bot scopes (app_mentions:read, chat:write, im:history, channels:history).",
+        "step2": "Enable Event Subscriptions and set Request URL to:",
+        "step3": "{{url}}",
+        "step4": "Copy the bot token (xoxb-…) and signing secret into Setup in Chat or the config form below.",
+        "step5": "Invite the app to channels in Slack — membership syncs back to Babo."
+      },
+      "selfHosted": {
+        "publicApiUrl": "Set PUBLIC_API_URL on your NestJS deployment to the public HTTPS origin so Settings and Tools show the correct webhook URLs.",
+        "desktopRelay": "Babo Desktop must be running — NestJS forwards webhooks to your local agent over the relay WebSocket.",
+        "credentials": "Email and Google use Babo-provided credentials on Babo Cloud; on your own server you configure Resend and Google OAuth yourself.",
+        "whatsappLocal": "WhatsApp pairs locally via QR — it does not use the NestJS webhook relay for inbound messages.",
+        "httpsRequired": "Your NestJS server ({{url}}) must be reachable over HTTPS for Telegram and email webhooks."
+      }
     }
   },
   "memory": {
@@ -1113,7 +1174,37 @@
     },
     "activity": {
       "title": "Activity",
-      "empty": "Activity will appear here as the agent works."
+      "empty": "Activity will appear here as the agent works.",
+      "events": {
+        "delegateQueued": "#{{number}} queued: {{task}}",
+        "delegateWorking": "#{{number}} working: {{task}}",
+        "batch": "Batch {{id}}",
+        "teamLaunched": "Team \"{{name}}\" launched ({{count}} members)",
+        "teamCreated": "Team \"{{name}}\" created ({{count}} members)",
+        "teamPaused": "Team \"{{name}}\" paused",
+        "teamCompleted": "Team \"{{name}}\" completed",
+        "teamCompletedDetail": "{{done}}/{{total}} members finished successfully.",
+        "teamDisbanded": "Team \"{{name}}\" disbanded",
+        "mission": "Mission: {{mission}}",
+        "memberWorking": "#{{number}} working: {{task}}",
+        "memberWorkingDetail": "Iteration {{iterations}}, {{toolCalls}} tool calls so far.",
+        "memberCompleted": "#{{number}} completed: {{task}}",
+        "memberFailed": "#{{number}} failed: {{task}}",
+        "todoCompleted": "Todo completed: {{title}}",
+        "todoStarted": "Todo started: {{title}}",
+        "todoAdded": "Todo added: {{title}}",
+        "planProgress": "Plan \"{{title}}\": {{done}}/{{total}} steps done",
+        "planRecent": "Recently completed: {{recent}}"
+      },
+      "time": {
+        "justNow": "just now",
+        "minutesAgo": "{{count}}m ago",
+        "hoursAgo": "{{count}}h ago",
+        "daysAgo": "{{count}}d ago"
+      },
+      "result": "Result",
+      "iterations": "{{count}} iterations",
+      "toolCalls": "{{count}} tool calls"
     },
     "toggleChat": "Toggle chat sidebar",
     "teamActive": "Team Active",
@@ -1252,7 +1343,8 @@
       "starting": "Starting…",
       "moreInProjects": "+ {{count}} more in Projects",
       "partialSuffix": "· partial"
-    }
+    },
+    "loadError": "Could not load project data. Is the agent running?"
   },
   "auth": {
     "email": "Email",

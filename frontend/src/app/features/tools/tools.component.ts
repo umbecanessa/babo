@@ -179,7 +179,7 @@ type IntegrationConfigCacheEntry = {
         @if (localWebhookWarning(); as localWarn) {
           <div class="localhost-webhook-banner">
             <strong>{{ 'settings.integrations.localhostTitle' | translate }}</strong>
-            <p>{{ localWarn }}</p>
+            <p>{{ localWarn.key | translate:localWarn.params }}</p>
           </div>
         }
 
@@ -188,8 +188,8 @@ type IntegrationConfigCacheEntry = {
             <strong>{{ 'tools.selfHosted.title' | translate }}</strong>
             <p>{{ 'tools.selfHosted.hint' | translate }}</p>
             <ul>
-              @for (step of selfHostedPrereqSteps(); track step) {
-                <li>{{ step }}</li>
+              @for (step of selfHostedPrereqSteps(); track step.key) {
+                <li>{{ step.key | translate:step.params }}</li>
               }
             </ul>
           </div>
@@ -475,15 +475,17 @@ type IntegrationConfigCacheEntry = {
             <div class="modal-action-block">
               <p class="modal-intro">{{ getSkillOnboarding(intName)?.intro_message || ('tools.intro.email' | translate) }}</p>
               <ol class="modal-steps-list">
-                @for (step of getIntegrationContext('email').setupSteps; track step) {
-                  <li>{{ step }}</li>
+                @for (step of getIntegrationContext('email').setupSteps; track step.key) {
+                  <li>{{ step.key | translate:step.params }}</li>
                 }
               </ol>
               @if (!emailChannelReady()) {
+                @if (getIntegrationContext('email').blockedReason; as blocked) {
                 <p class="modal-warning">
-                  {{ getIntegrationContext('email').blockedReason }}
+                  {{ blocked.key | translate:blocked.params }}
                   <a routerLink="/settings" [queryParams]="{ section: 'integrations' }">Open Settings → Integrations</a>
                 </p>
+                }
               }
               <button class="modal-action-btn" (click)="connectEmail(intName)" [disabled]="emailActivating() || !emailChannelReady()">
                 @if (emailActivating()) { <span class="btn-spinner"></span> {{ 'tools.integration.activating' | translate }} }
@@ -496,8 +498,8 @@ type IntegrationConfigCacheEntry = {
             <div class="modal-action-block">
               <p class="modal-intro">{{ getSkillOnboarding(intName)?.intro_message || ('tools.intro.telegram' | translate) }}</p>
               <ol class="modal-steps-list">
-                @for (step of getIntegrationContext('telegram').setupSteps; track step) {
-                  <li>{{ step }}</li>
+                @for (step of getIntegrationContext('telegram').setupSteps; track step.key) {
+                  <li>{{ step.key | translate:step.params }}</li>
                 }
               </ol>
               <button class="modal-action-btn telegram" (click)="connectTelegram()">
@@ -510,8 +512,8 @@ type IntegrationConfigCacheEntry = {
             <div class="modal-action-block">
               <p class="modal-intro">{{ getSkillOnboarding(intName)?.intro_message || ('tools.intro.discord' | translate) }}</p>
               <ol class="modal-steps-list">
-                @for (step of getIntegrationContext('discord').setupSteps; track step) {
-                  <li>{{ step }}</li>
+                @for (step of getIntegrationContext('discord').setupSteps; track step.key) {
+                  <li>{{ step.key | translate:step.params }}</li>
                 }
               </ol>
               <button class="modal-action-btn" (click)="connectDiscord()">{{ 'tools.integration.setupInChat' | translate }}</button>
@@ -521,8 +523,8 @@ type IntegrationConfigCacheEntry = {
             <div class="modal-action-block">
               <p class="modal-intro">{{ getSkillOnboarding(intName)?.intro_message || ('tools.intro.slack' | translate) }}</p>
               <ol class="modal-steps-list">
-                @for (step of getIntegrationContext('slack').setupSteps; track step) {
-                  <li>{{ step }}</li>
+                @for (step of getIntegrationContext('slack').setupSteps; track step.key) {
+                  <li>{{ step.key | translate:step.params }}</li>
                 }
               </ol>
               <button class="modal-action-btn" (click)="connectSlack()">{{ 'tools.integration.setupInChat' | translate }}</button>
@@ -532,8 +534,8 @@ type IntegrationConfigCacheEntry = {
             <div class="modal-action-block">
               <p class="modal-intro">{{ getSkillOnboarding(intName)?.intro_message || ('tools.intro.google' | translate) }}</p>
               <ol class="modal-steps-list">
-                @for (step of getIntegrationContext('google-workspace').setupSteps; track step) {
-                  <li>{{ step }}</li>
+                @for (step of getIntegrationContext('google-workspace').setupSteps; track step.key) {
+                  <li>{{ step.key | translate:step.params }}</li>
                 }
               </ol>
               @if (googleUsesByoCredentials()) {
@@ -552,8 +554,8 @@ type IntegrationConfigCacheEntry = {
             <div class="modal-action-block">
               <p class="modal-intro">{{ getSkillOnboarding(intName)?.intro_message || ('tools.intro.whatsapp' | translate) }}</p>
               <ol class="modal-steps-list compact">
-                @for (step of getIntegrationContext('whatsapp').setupSteps; track step) {
-                  <li>{{ step }}</li>
+                @for (step of getIntegrationContext('whatsapp').setupSteps; track step.key) {
+                  <li>{{ step.key | translate:step.params }}</li>
                 }
               </ol>
               @if (whatsappQR()) {

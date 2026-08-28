@@ -20,7 +20,7 @@
         <div class="entry-row"
              [class]="'cat-' + entry.category"
              [class.expanded]="isExpanded(entry.id)"
-             [class.has-detail]="!!entry.detail || !!entry.resultSummary"
+             [class.has-detail]="!!entry.detail || !!entry.detailKey || !!entry.resultSummary"
              (click)="toggleExpand(entry.id)">
 
           <div class="entry-dot-col">
@@ -33,9 +33,9 @@
           <div class="entry-content">
             <div class="entry-header">
               <span class="entry-icon">{{ entry.icon }}</span>
-              <span class="entry-text">{{ entry.text }}</span>
+              <span class="entry-text">{{ entry.textKey | translate:entry.textParams }}</span>
               <span class="entry-time">{{ formatTime(entry.time) }}</span>
-              @if (entry.detail || entry.resultSummary) {
+              @if (entry.detail || entry.detailKey || entry.resultSummary) {
                 <span class="entry-expand-hint">&#9662;</span>
               }
             </div>
@@ -47,13 +47,15 @@
                   <span class="detail-team-pill" [style.border-color]="categoryColor(entry.category)">{{ entry.teamName }}</span>
                 }
 
-                @if (entry.detail) {
+                @if (entry.detailKey) {
+                  <p class="detail-text">{{ entry.detailKey | translate:entry.detailParams }}</p>
+                } @else if (entry.detail) {
                   <p class="detail-text">{{ entry.detail }}</p>
                 }
 
                 @if (entry.resultSummary && entry.category === 'member') {
                   <div class="detail-result">
-                    <span class="detail-result-label">Result</span>
+                    <span class="detail-result-label">{{ 'projects.activity.result' | translate }}</span>
                     <p class="detail-result-text">{{ entry.resultSummary }}</p>
                   </div>
                 }
@@ -61,10 +63,10 @@
                 @if (entry.iterations || entry.toolCalls || entry.elapsed) {
                   <div class="detail-chips">
                     @if (entry.iterations) {
-                      <span class="detail-chip">{{ entry.iterations }} iterations</span>
+                      <span class="detail-chip">{{ 'projects.activity.iterations' | translate:{ count: entry.iterations } }}</span>
                     }
                     @if (entry.toolCalls) {
-                      <span class="detail-chip">{{ entry.toolCalls }} tool calls</span>
+                      <span class="detail-chip">{{ 'projects.activity.toolCalls' | translate:{ count: entry.toolCalls } }}</span>
                     }
                     @if (entry.elapsed) {
                       <span class="detail-chip detail-chip--mono">{{ formatElapsed(entry.elapsed) }}</span>
