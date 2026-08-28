@@ -1,6 +1,7 @@
 import { Component, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { TranslateModule } from '@ngx-translate/core';
 import { ApiKeyService } from '../../core/services/api-key.service';
 import { ApiKey } from '../../core/models/user.model';
 import { ToastService } from '../../shared/toast/toast.service';
@@ -8,7 +9,7 @@ import { ToastService } from '../../shared/toast/toast.service';
 @Component({
   selector: 'app-api-keys',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, TranslateModule],
   templateUrl: './api-keys.component.html',
   styleUrl: './api-keys.component.scss',
 })

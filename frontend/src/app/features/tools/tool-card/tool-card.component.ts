@@ -1,5 +1,6 @@
 import { Component, input } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { TranslateModule } from '@ngx-translate/core';
 
 export interface AgentTool {
   name: string;
@@ -9,14 +10,14 @@ export interface AgentTool {
 @Component({
   selector: 'app-tool-card',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, TranslateModule],
   template: `
     <div class="tool-card">
       <span class="tool-name">{{ tool().name }}</span>
       @if (tool().description) {
         <span class="tool-desc">{{ tool().description }}</span>
       }
-      <span class="tool-badge">Active</span>
+      <span class="tool-badge">{{ 'tools.toolCard.active' | translate }}</span>
     </div>
   `,
   styles: [`

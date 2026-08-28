@@ -29,17 +29,17 @@
     <div class="auth-header">
       <img src="assets/images/babo.png" alt="Babo" class="auth-logo" />
     </div>
-    <h1>Create account</h1>
-    <p class="lead">Register on your Babo server — same place you sign in from the app.</p>
+    <h1>{{ 'auth.register.title' | translate }}</h1>
+    <p class="lead">{{ 'auth.register.lead' | translate }}</p>
 
     <div class="server-pill" [class]="serverStatus()">
       <span class="dot"></span>
       @if (serverStatus() === 'checking') {
-        <span>Checking server…</span>
+        <span>{{ 'auth.checkingServer' | translate }}</span>
       } @else if (serverStatus() === 'offline') {
-        <span>{{ serverMessage() || 'Server unreachable' }}</span>
+        <span>{{ serverMessage() || ('auth.serverUnreachable' | translate) }}</span>
       } @else {
-        <span>{{ serverMessage() || 'Server reachable' }}</span>
+        <span>{{ serverMessage() || ('auth.serverReachable' | translate) }}</span>
       }
     </div>
 
@@ -49,18 +49,18 @@
       }
 
       <div class="form-group">
-        <label>Display name</label>
+        <label>{{ 'auth.displayName' | translate }}</label>
         <input
           type="text"
           [(ngModel)]="displayName"
           name="displayName"
-          placeholder="Optional"
+          [placeholder]="'auth.optional' | translate"
           autocomplete="name"
         />
       </div>
 
       <div class="form-group">
-        <label>Email</label>
+        <label>{{ 'auth.email' | translate }}</label>
         <input
           type="email"
           [(ngModel)]="email"
@@ -72,7 +72,7 @@
       </div>
 
       <div class="form-group">
-        <label>Password</label>
+        <label>{{ 'auth.password' | translate }}</label>
         <input
           type="password"
           [(ngModel)]="password"
@@ -86,15 +86,15 @@
 
       <button type="submit" class="action-btn" [disabled]="loading() || serverStatus() !== 'online'">
         @if (serverStatus() !== 'online') {
-          Waiting for server…
+          {{ 'auth.waitingServer' | translate }}
         } @else {
-          {{ loading() ? 'Creating…' : 'Create account' }}
+          {{ loading() ? ('auth.register.creating' | translate) : ('auth.register.submit' | translate) }}
         }
       </button>
 
       <p class="switch-link">
-        Already have an account?
-        <a routerLink="/auth/login">Sign in</a>
+        {{ 'auth.register.hasAccount' | translate }}
+        <a routerLink="/auth/login">{{ 'auth.register.signIn' | translate }}</a>
       </p>
     </form>
   </div>

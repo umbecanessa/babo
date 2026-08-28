@@ -146,7 +146,7 @@ import { TranslateModule } from '@ngx-translate/core';
             </div>
 
             <section class="section hormones-section">
-              <h3>Hormone Levels</h3>
+              <h3>{{ 'brain.overview.hormones' | translate }}</h3>
               <div class="hormone-gauges">
                 @for (h of hormoneList(); track h.key) {
                   <div class="hormone-gauge">
@@ -162,7 +162,7 @@ import { TranslateModule } from '@ngx-translate/core';
             </section>
 
             <section class="section ans-section">
-              <h3>ANS State</h3>
+              <h3>{{ 'brain.overview.ans' | translate }}</h3>
               <div class="ans-indicator" [class]="ansState()">
                 <span class="ans-dot"></span>
                 <span class="ans-label">{{ ansState() }}</span>
@@ -175,7 +175,7 @@ import { TranslateModule } from '@ngx-translate/core';
             </section>
 
             <section class="section neural-activity-section">
-              <h3>Neural Activity <span class="live-dot" [class.active]="probeSignals()?.midGeneration"></span></h3>
+              <h3>{{ 'brain.overview.neural' | translate }} <span class="live-dot" [class.active]="probeSignals()?.midGeneration"></span></h3>
               @if (probeSignals()) {
                 <div class="probe-fired-pills">
                   @for (f of probeSignals()!.fired; track f) {
@@ -197,7 +197,7 @@ import { TranslateModule } from '@ngx-translate/core';
                   }
                 </div>
               } @else {
-                <div class="empty-state">Waiting for probe signals...</div>
+                <div class="empty-state">{{ 'brain.empty.probe' | translate }}</div>
               }
             </section>
 
@@ -360,7 +360,7 @@ import { TranslateModule } from '@ngx-translate/core';
                 </div>
               }
               @if (recentSignals().length === 0) {
-                <div class="empty-state">No signals yet</div>
+                <div class="empty-state">{{ 'brain.empty.signals' | translate }}</div>
               }
             </div>
           </div>
@@ -392,7 +392,7 @@ import { TranslateModule } from '@ngx-translate/core';
                 </div>
               }
               @if (events().length === 0) {
-                <div class="empty-state">No events</div>
+                <div class="empty-state">{{ 'brain.empty.events' | translate }}</div>
               }
             </div>
           </div>
@@ -407,11 +407,11 @@ import { TranslateModule } from '@ngx-translate/core';
 
               <div class="schedule-grid">
                 <div class="schedule-field">
-                  <label class="schedule-label">Bedtime</label>
+                  <label class="schedule-label">{{ 'brain.schedule.bedtime' | translate }}</label>
                   <input type="time" class="schedule-input" [(ngModel)]="scheduleBedtime" />
                 </div>
                 <div class="schedule-field">
-                  <label class="schedule-label">Wake Time</label>
+                  <label class="schedule-label">{{ 'brain.schedule.wakeTime' | translate }}</label>
                   <input type="time" class="schedule-input" [(ngModel)]="scheduleWakeTime" />
                 </div>
                 <div class="schedule-field">
@@ -439,7 +439,7 @@ import { TranslateModule } from '@ngx-translate/core';
                 </div>
               </div>
 
-              <h3 class="section-heading" style="margin-top: 1.5rem">Nap Window</h3>
+              <h3 class="section-heading" style="margin-top: 1.5rem">{{ 'brain.schedule.napTitle' | translate }}</h3>
               <p class="section-desc">Optional daytime consolidation window. Leave empty to disable.</p>
 
               <div class="schedule-grid">
@@ -672,7 +672,7 @@ import { TranslateModule } from '@ngx-translate/core';
               }
             }
             @if (!wmData() && !ansContext()?.items?.length) {
-              <div class="empty-state">No working memory data</div>
+              <div class="empty-state">{{ 'brain.empty.wm' | translate }}</div>
             }
           </div>
         }

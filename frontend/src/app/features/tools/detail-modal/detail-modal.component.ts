@@ -1,17 +1,18 @@
 import { Component, input, output, HostListener } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { TranslateModule } from '@ngx-translate/core';
 
 @Component({
   selector: 'app-detail-modal',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, TranslateModule],
   template: `
     @if (open()) {
       <div class="modal-dismiss-scrim" [class.closing]="closing" (click)="dismiss()">
         <div class="modal-panel" (click)="$event.stopPropagation()">
           <div class="modal-top-bar">
             <h2 class="modal-title">{{ title() }}</h2>
-            <button class="modal-close" (click)="dismiss()" aria-label="Close">
+            <button class="modal-close" (click)="dismiss()" [attr.aria-label]="'common.close' | translate">
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
               </svg>

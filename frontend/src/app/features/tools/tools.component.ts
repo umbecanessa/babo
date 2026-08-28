@@ -243,7 +243,7 @@ type IntegrationConfigCacheEntry = {
             </svg>
             {{ 'tools.sections.extensions' | translate }}
           </h2>
-          <p class="section-subtitle">Active MCP server connections</p>
+          <p class="section-subtitle">{{ 'tools.sections.extensionsHint' | translate }}</p>
           <div class="card-grid">
             @for (ext of connectedExtensions(); track ext.name) {
               <div class="extension-status-card">
@@ -270,7 +270,7 @@ type IntegrationConfigCacheEntry = {
           </svg>
           {{ 'tools.sections.community' | translate }}
         </h2>
-        <p class="section-subtitle">Browse skills from ClawHub and extensions from the MCP ecosystem</p>
+        <p class="section-subtitle">{{ 'tools.community.subtitle' | translate }}</p>
 
         <div class="clawhub-search">
           <input type="text" [placeholder]="'tools.community.search' | translate"
@@ -297,7 +297,7 @@ type IntegrationConfigCacheEntry = {
         </div>
 
         @if (clawhubLoading()) {
-          <div class="loading-state"><span class="spinner"></span> Searching...</div>
+          <div class="loading-state"><span class="spinner"></span> {{ 'tools.community.searching' | translate }}</div>
         } @else if (mergedResults().length) {
           <div class="clawhub-results">
             @for (r of mergedResults(); track r._id) {
@@ -327,7 +327,7 @@ type IntegrationConfigCacheEntry = {
                         @else { {{ 'tools.actions.connect' | translate }} }
                       </button>
                     } @else if (r.install_command) {
-                      <span class="ext-install-hint" [title]="r.install_command">Needs setup</span>
+                      <span class="ext-install-hint" [title]="r.install_command">{{ 'tools.community.needsSetup' | translate }}</span>
                     } @else if (r.github_url) {
                       <a class="ext-github-link" [href]="r.github_url" target="_blank" rel="noopener">GitHub</a>
                     } @else {
@@ -451,9 +451,9 @@ type IntegrationConfigCacheEntry = {
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/>
           </svg>
-          Agent Tools
+          {{ 'tools.sections.agentTools' | translate }}
         </h2>
-        <p class="section-subtitle">{{ agentTools().length }} tools enabled for this agent</p>
+        <p class="section-subtitle">{{ 'tools.sections.agentToolsHint' | translate:{ count: agentTools().length } }}</p>
         <div class="card-grid tools-grid">
           @for (tool of agentTools(); track tool.name) {
             <app-tool-card [tool]="tool" />
@@ -486,10 +486,10 @@ type IntegrationConfigCacheEntry = {
                 </p>
               }
               <button class="modal-action-btn" (click)="connectEmail(intName)" [disabled]="emailActivating() || !emailChannelReady()">
-                @if (emailActivating()) { <span class="btn-spinner"></span> Activating... }
-                @else { Activate Email }
+                @if (emailActivating()) { <span class="btn-spinner"></span> {{ 'tools.integration.activating' | translate }} }
+                @else { {{ 'tools.integration.activateEmail' | translate }} }
               </button>
-              <button class="modal-action-btn secondary" type="button" (click)="connectEmailInChat()">Setup in Chat</button>
+              <button class="modal-action-btn secondary" type="button" (click)="connectEmailInChat()">{{ 'tools.integration.setupInChat' | translate }}</button>
             </div>
           }
           @if (getChannelType(intName) === 'telegram') {
@@ -502,7 +502,7 @@ type IntegrationConfigCacheEntry = {
               </ol>
               <button class="modal-action-btn telegram" (click)="connectTelegram()">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-                Setup in Chat
+                {{ 'tools.integration.setupInChat' | translate }}
               </button>
             </div>
           }
@@ -514,7 +514,7 @@ type IntegrationConfigCacheEntry = {
                   <li>{{ step }}</li>
                 }
               </ol>
-              <button class="modal-action-btn" (click)="connectDiscord()">Setup in Chat</button>
+              <button class="modal-action-btn" (click)="connectDiscord()">{{ 'tools.integration.setupInChat' | translate }}</button>
             </div>
           }
           @if (getChannelType(intName) === 'slack') {
@@ -525,7 +525,7 @@ type IntegrationConfigCacheEntry = {
                   <li>{{ step }}</li>
                 }
               </ol>
-              <button class="modal-action-btn" (click)="connectSlack()">Setup in Chat</button>
+              <button class="modal-action-btn" (click)="connectSlack()">{{ 'tools.integration.setupInChat' | translate }}</button>
             </div>
           }
           @if (getChannelType(intName) === 'google-workspace') {
@@ -539,12 +539,12 @@ type IntegrationConfigCacheEntry = {
               @if (googleUsesByoCredentials()) {
                 <button class="modal-action-btn" (click)="connectGoogleInChat()">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-                  Setup in Chat
+                  {{ 'tools.integration.setupInChat' | translate }}
                 </button>
               }
               <button class="modal-action-btn" (click)="connectGoogleWorkspace()">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-                {{ googleUsesByoCredentials() ? 'Connect (after OAuth app saved)' : 'Connect Google Account' }}
+                {{ googleUsesByoCredentials() ? ('tools.integration.connectGoogleAfterOauth' | translate) : ('tools.integration.connectGoogle' | translate) }}
               </button>
             </div>
           }
@@ -559,13 +559,13 @@ type IntegrationConfigCacheEntry = {
               @if (whatsappQR()) {
                 <div class="qr-block">
                   <img [src]="whatsappQR()" alt="WhatsApp QR Code" class="qr-img" />
-                  <p class="qr-hint">Open WhatsApp &rarr; Linked Devices &rarr; Scan this code</p>
-                  <p class="qr-status">{{ whatsappStatus() === 'connecting' ? 'Waiting for scan...' : whatsappStatus() }}</p>
+                  <p class="qr-hint">{{ 'tools.whatsapp.qrHint' | translate }}</p>
+                  <p class="qr-status">{{ whatsappStatus() === 'connecting' ? ('tools.whatsapp.waitingScan' | translate) : whatsappStatus() }}</p>
                 </div>
               } @else {
                 <button class="modal-action-btn whatsapp" (click)="startWhatsAppPairing()" [disabled]="whatsappPairing()">
-                  @if (whatsappPairing()) { <span class="btn-spinner"></span> Starting... }
-                  @else { Start Pairing }
+                  @if (whatsappPairing()) { <span class="btn-spinner"></span> {{ 'tools.whatsapp.starting' | translate }} }
+                  @else { {{ 'tools.whatsapp.startPairing' | translate }} }
                 </button>
               }
             </div>
@@ -757,9 +757,9 @@ type IntegrationConfigCacheEntry = {
 
         <!-- Tabs -->
         <div class="modal-tabs">
-          <button class="modal-tab" [class.active]="skillTab() === 'config'" (click)="skillTab.set('config')">Configuration</button>
-          <button class="modal-tab" [class.active]="skillTab() === 'files'" (click)="skillTab.set('files')">Files</button>
-          <button class="modal-tab" [class.active]="skillTab() === 'brain'" (click)="openBrainTab(skName)">Brain</button>
+          <button class="modal-tab" [class.active]="skillTab() === 'config'" (click)="skillTab.set('config')">{{ 'tools.skill.tabs.config' | translate }}</button>
+          <button class="modal-tab" [class.active]="skillTab() === 'files'" (click)="skillTab.set('files')">{{ 'tools.skill.tabs.files' | translate }}</button>
+          <button class="modal-tab" [class.active]="skillTab() === 'brain'" (click)="openBrainTab(skName)">{{ 'tools.skill.tabs.brain' | translate }}</button>
         </div>
 
         @if (skillTab() === 'config') {
@@ -788,7 +788,7 @@ type IntegrationConfigCacheEntry = {
                 }
                 <button class="modal-action-btn" (click)="saveConfig(skName)" [disabled]="configSaving()">
                   @if (configSaving()) { <span class="btn-spinner"></span> }
-                  {{ configSaveSuccess() ? 'Saved!' : 'Save Configuration' }}
+                  {{ configSaveSuccess() ? ('tools.config.saved' | translate) : ('tools.config.save' | translate) }}
                 </button>
               </div>
             }
@@ -885,11 +885,11 @@ type IntegrationConfigCacheEntry = {
         <!-- Actions -->
         <div class="modal-actions">
           @if (getSkillStatus(skName) === 'loaded') {
-            <button class="action-btn disable" (click)="disableSkill(skName)">Disable</button>
+            <button class="action-btn disable" (click)="disableSkill(skName)">{{ 'tools.skill.disable' | translate }}</button>
           } @else if (getSkillStatus(skName) === 'disabled') {
-            <button class="action-btn enable" (click)="enableSkill(skName)">Enable</button>
+            <button class="action-btn enable" (click)="enableSkill(skName)">{{ 'tools.skill.enable' | translate }}</button>
           }
-          <button class="action-btn delete" (click)="deleteSkill(skName)">Delete</button>
+          <button class="action-btn delete" (click)="deleteSkill(skName)">{{ 'tools.skill.delete' | translate }}</button>
         </div>
       }
     </app-detail-modal>

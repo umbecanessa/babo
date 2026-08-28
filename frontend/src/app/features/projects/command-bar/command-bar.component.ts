@@ -1,11 +1,12 @@
 import { Component, Input, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { TranslateModule } from '@ngx-translate/core';
 
 @Component({
   selector: 'app-command-bar',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, TranslateModule],
   templateUrl: './command-bar.component.html',
   styleUrl: './command-bar.component.scss',
 })

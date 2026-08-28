@@ -1,11 +1,12 @@
 import { Component, EventEmitter, Input, Output } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { TranslateModule } from '@ngx-translate/core';
 import { TodoItem, PlanSummary } from '../project.models';
 
 @Component({
   selector: 'app-overview-board-strip',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, TranslateModule],
   templateUrl: './overview-board-strip.component.html',
   styleUrl: './overview-board-strip.component.scss',
 })

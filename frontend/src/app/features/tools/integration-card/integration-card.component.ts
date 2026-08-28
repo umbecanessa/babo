@@ -5,6 +5,7 @@ import {
   computed,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { TranslateModule } from '@ngx-translate/core';
 
 export type IntegrationChannelType = 'email' | 'telegram' | 'whatsapp' | 'google-workspace' | 'discord' | 'slack';
 
@@ -16,7 +17,7 @@ export interface IntegrationStatus {
 @Component({
   selector: 'app-integration-card',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, TranslateModule],
   template: `
     <div class="int-card" [class.connected]="status()?.connected" (click)="openDetail.emit()">
       <div class="int-icon" [attr.data-channel]="channel()">
@@ -68,13 +69,13 @@ export interface IntegrationStatus {
 
       @if (status()?.connected) {
         <span class="int-value">{{ displayValue() }}</span>
-        <span class="int-badge connected">Connected</span>
+        <span class="int-badge connected">{{ 'tools.actions.connected' | translate }}</span>
       } @else {
         <button class="int-connect-btn" [attr.data-channel]="channel()" (click)="connectClick($event)">
           @if (connecting()) {
             <span class="btn-spinner"></span>
           } @else {
-            Connect
+            {{ 'tools.actions.connect' | translate }}
           }
         </button>
       }

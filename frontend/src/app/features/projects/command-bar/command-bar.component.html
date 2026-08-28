@@ -5,11 +5,15 @@
   <input
     class="cmd-input"
     [(ngModel)]="message"
-    placeholder="Tell the orchestrator what to do..."
+    [placeholder]="'projects.command.placeholder' | translate"
     (keydown)="onKeydown($event)"
     [disabled]="sending"
   />
   <button class="cmd-send" (click)="send()" [disabled]="!message.trim() || sending">
-    @if (sending) { ... } @else { Send }
+    @if (sending) {
+      ...
+    } @else {
+      {{ 'projects.command.send' | translate }}
+    }
   </button>
 </div>

@@ -840,7 +840,9 @@
       "skillsHint": "Pacchetti skill installati",
       "agentTools": "Tool agente",
       "extensions": "Estensioni collegate",
-      "community": "Skill ed estensioni della community"
+      "community": "Skill ed estensioni della community",
+      "agentToolsHint": "{{count}} tool abilitati per questo agente",
+      "extensionsHint": "Connessioni MCP attive"
     },
     "empty": {
       "skills": "Nessuna skill installata.",
@@ -870,7 +872,52 @@
       "search": "Cerca skill ed estensioni...",
       "filterAll": "Tutto",
       "filterSkills": "Skill",
-      "filterExtensions": "Estensioni"
+      "filterExtensions": "Estensioni",
+      "subtitle": "Sfoglia skill da ClawHub ed estensioni dall'ecosistema MCP",
+      "searching": "Ricerca...",
+      "needsSetup": "Serve setup",
+      "askAgent": "Chiedi all'agente",
+      "extension": "Estensione",
+      "skill": "Skill"
+    },
+    "skill": {
+      "enable": "Abilita",
+      "disable": "Disabilita",
+      "delete": "Elimina",
+      "tabs": {
+        "config": "Configurazione",
+        "files": "File",
+        "brain": "Brain"
+      }
+    },
+    "integration": {
+      "activateEmail": "Attiva email",
+      "activating": "Attivazione...",
+      "setupInChat": "Setup in chat",
+      "connectGoogle": "Collega account Google",
+      "connectGoogleAfterOauth": "Collega (dopo aver salvato l'app OAuth)"
+    },
+    "whatsapp": {
+      "startPairing": "Avvia pairing",
+      "starting": "Avvio...",
+      "qrHint": "Apri WhatsApp → Dispositivi collegati → Scansiona questo codice",
+      "waitingScan": "In attesa della scansione..."
+    },
+    "toolCard": {
+      "active": "Attivo"
+    },
+    "skillCard": {
+      "hasErrors": "Ha errori",
+      "readyToUpgrade": "Pronta per l'upgrade",
+      "bundled": "Inclusa",
+      "clawhub": "ClawHub"
+    },
+    "config": {
+      "save": "Salva configurazione",
+      "saved": "Salvato!",
+      "noFields": "Nessun campo di configurazione definito.",
+      "listPlaceholder": "Valori separati da virgola",
+      "optional": "(opzionale)"
     }
   },
   "memory": {
@@ -893,6 +940,39 @@
       "ansSignals": "Segnali ANS",
       "sovereignty": "Sovranità",
       "soulHash": "Hash Soul"
+    },
+    "empty": {
+      "blocks": "Nessun blocco ancora",
+      "facts": "Nessun fatto memorizzato",
+      "signals": "Nessun segnale attivo"
+    },
+    "knowledge": {
+      "searchPlaceholder": "Cerca fatti...",
+      "viewTable": "Tabella",
+      "viewTree": "Albero",
+      "fluidOnly": "Solo fluidi"
+    },
+    "wm": {
+      "professional": "Professionale",
+      "personal": "Personale",
+      "refresh": "Aggiorna",
+      "empty": "Nessun segnale attivo — avvia una conversazione per costruire la memoria di lavoro"
+    },
+    "soul": {
+      "exportTitle": "Esporta pacchetto Soul",
+      "exporting": "Esportazione...",
+      "importTitle": "Importa pacchetto Soul",
+      "import": "Importa",
+      "importing": "Importazione...",
+      "forkTitle": "Duplica agente",
+      "fork": "Duplica",
+      "forking": "Duplicazione...",
+      "snapshotTitle": "Crea snapshot",
+      "creating": "Creazione...",
+      "restore": "Ripristina",
+      "restoring": "Ripristino...",
+      "dropHint": "Trascina qui .soul.zip oppure",
+      "includeHistory": "Includi cronologia conversazioni"
     }
   },
   "brain": {
@@ -928,7 +1008,24 @@
     "schedule": {
       "title": "Programma di sonno",
       "save": "Salva programma",
-      "saved": "Salvato"
+      "saved": "Salvato",
+      "bedtime": "Ora di dormire",
+      "wakeTime": "Sveglia",
+      "napTitle": "Finestra pisolino"
+    },
+    "empty": {
+      "signals": "Nessun segnale ancora",
+      "events": "Nessun evento",
+      "wm": "Nessun dato di memoria di lavoro",
+      "probe": "In attesa di segnali probe..."
+    },
+    "overview": {
+      "hormones": "Livelli ormonali",
+      "ans": "Stato ANS",
+      "neural": "Attività neurale"
+    },
+    "events": {
+      "all": "Tutti gli eventi"
     }
   },
   "tasks": {
@@ -953,5 +1050,79 @@
     "skip": "Salta",
     "clickOrb": "Clicca l'orb per dare inizio alla vita",
     "redirecting": "Reindirizzamento alla chat..."
+  },
+  "projects": {
+    "title": "Progetti",
+    "tabs": {
+      "overview": "Panoramica",
+      "board": "Board",
+      "files": "File"
+    },
+    "loading": "Caricamento dati progetto...",
+    "command": {
+      "placeholder": "Di' all'orchestratore cosa fare...",
+      "send": "Invia"
+    },
+    "empty": {
+      "teams": "Nessuna wave o team ancora. Crea un piano con delega per iniziare.",
+      "queue": "Nessuna attività in corso o bloccata. Aggiungi lavoro dalla scheda Board."
+    },
+    "activity": {
+      "title": "Attività",
+      "empty": "L'attività comparirà qui mentre l'agente lavora."
+    },
+    "toggleChat": "Mostra/nascondi chat",
+    "teamActive": "Team attivo",
+    "teamsActive": "Team attivi",
+    "membersDone": "Membri completati"
+  },
+  "auth": {
+    "email": "Email",
+    "password": "Password",
+    "login": {
+      "title": "Accedi",
+      "lead": "Il tuo account Babo sul server che hai configurato.",
+      "signingIn": "Accesso…",
+      "noAccount": "Non hai ancora un account?",
+      "createOne": "Creane uno",
+      "submit": "Accedi"
+    },
+    "register": {
+      "title": "Crea account",
+      "hasAccount": "Hai già un account?",
+      "signIn": "Accedi",
+      "submit": "Crea account",
+      "creating": "Creazione…",
+      "lead": "Registrati sul tuo server Babo — lo stesso da cui accedi dall'app."
+    },
+    "displayName": "Nome visualizzato",
+    "optional": "Opzionale",
+    "checkingServer": "Controllo server…",
+    "serverUnreachable": "Server non raggiungibile",
+    "serverReachable": "Server raggiungibile",
+    "waitingServer": "In attesa del server…"
+  },
+  "apiKeys": {
+    "title": "API key",
+    "generateTitle": "Genera nuova key",
+    "generate": "Genera",
+    "generating": "Generazione…",
+    "copyWarning": "Copia questa key ora. Non potrai più vederla.",
+    "revoke": "Revoca",
+    "empty": "Nessuna API key. Generane una sopra.",
+    "namePlaceholder": "Nome key (es. production, dev)",
+    "subtitle": "Accesso programmatico ai tuoi agenti",
+    "keyCreated": "Key creata",
+    "copied": "Copiata!",
+    "copy": "Copy",
+    "dismiss": "Chiudi",
+    "name": "Nome",
+    "key": "Key",
+    "requests": "Richieste",
+    "status": "Stato",
+    "actions": "Azioni",
+    "active": "Attiva",
+    "revoked": "Revocata",
+    "delete": "Elimina"
   }
 }

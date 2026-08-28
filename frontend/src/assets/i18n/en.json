@@ -840,7 +840,9 @@
       "skillsHint": "Installed skill packages",
       "agentTools": "Agent Tools",
       "extensions": "Connected Extensions",
-      "community": "Community Skills & Extensions"
+      "community": "Community Skills & Extensions",
+      "agentToolsHint": "{{count}} tools enabled for this agent",
+      "extensionsHint": "Active MCP server connections"
     },
     "empty": {
       "skills": "No skills installed yet.",
@@ -870,7 +872,52 @@
       "search": "Search skills & extensions...",
       "filterAll": "All",
       "filterSkills": "Skills",
-      "filterExtensions": "Extensions"
+      "filterExtensions": "Extensions",
+      "subtitle": "Browse skills from ClawHub and extensions from the MCP ecosystem",
+      "searching": "Searching...",
+      "needsSetup": "Needs setup",
+      "askAgent": "Ask agent",
+      "extension": "Extension",
+      "skill": "Skill"
+    },
+    "skill": {
+      "enable": "Enable",
+      "disable": "Disable",
+      "delete": "Delete",
+      "tabs": {
+        "config": "Configuration",
+        "files": "Files",
+        "brain": "Brain"
+      }
+    },
+    "integration": {
+      "activateEmail": "Activate Email",
+      "activating": "Activating...",
+      "setupInChat": "Setup in Chat",
+      "connectGoogle": "Connect Google Account",
+      "connectGoogleAfterOauth": "Connect (after OAuth app saved)"
+    },
+    "whatsapp": {
+      "startPairing": "Start Pairing",
+      "starting": "Starting...",
+      "qrHint": "Open WhatsApp → Linked Devices → Scan this code",
+      "waitingScan": "Waiting for scan..."
+    },
+    "toolCard": {
+      "active": "Active"
+    },
+    "skillCard": {
+      "hasErrors": "Has errors",
+      "readyToUpgrade": "Ready to Upgrade",
+      "bundled": "Bundled",
+      "clawhub": "ClawHub"
+    },
+    "config": {
+      "save": "Save Configuration",
+      "saved": "Saved!",
+      "noFields": "No configuration fields defined.",
+      "listPlaceholder": "Comma-separated values",
+      "optional": "(optional)"
     }
   },
   "memory": {
@@ -893,6 +940,39 @@
       "ansSignals": "ANS Signals",
       "sovereignty": "Sovereignty",
       "soulHash": "Soul Hash"
+    },
+    "empty": {
+      "blocks": "No blocks yet",
+      "facts": "No facts stored yet",
+      "signals": "No active signals"
+    },
+    "knowledge": {
+      "searchPlaceholder": "Search facts...",
+      "viewTable": "Table",
+      "viewTree": "Tree",
+      "fluidOnly": "Fluid only"
+    },
+    "wm": {
+      "professional": "Professional",
+      "personal": "Personal",
+      "refresh": "Refresh",
+      "empty": "No active signals — start a conversation to build working memory"
+    },
+    "soul": {
+      "exportTitle": "Export Soul Package",
+      "exporting": "Exporting...",
+      "importTitle": "Import Soul Package",
+      "import": "Import",
+      "importing": "Importing...",
+      "forkTitle": "Fork Agent",
+      "fork": "Fork",
+      "forking": "Forking...",
+      "snapshotTitle": "Create Snapshot",
+      "creating": "Creating...",
+      "restore": "Restore",
+      "restoring": "Restoring...",
+      "dropHint": "Drag .soul.zip here or",
+      "includeHistory": "Include conversation history"
     }
   },
   "brain": {
@@ -928,7 +1008,24 @@
     "schedule": {
       "title": "Sleep Schedule",
       "save": "Save Schedule",
-      "saved": "Saved"
+      "saved": "Saved",
+      "bedtime": "Bedtime",
+      "wakeTime": "Wake Time",
+      "napTitle": "Nap Window"
+    },
+    "empty": {
+      "signals": "No signals yet",
+      "events": "No events",
+      "wm": "No working memory data",
+      "probe": "Waiting for probe signals..."
+    },
+    "overview": {
+      "hormones": "Hormone Levels",
+      "ans": "ANS State",
+      "neural": "Neural Activity"
+    },
+    "events": {
+      "all": "All events"
     }
   },
   "tasks": {
@@ -953,5 +1050,79 @@
     "skip": "Skip",
     "clickOrb": "Click the orb to initiate life",
     "redirecting": "Redirecting to chat..."
+  },
+  "projects": {
+    "title": "Projects",
+    "tabs": {
+      "overview": "Overview",
+      "board": "Board",
+      "files": "Files"
+    },
+    "loading": "Loading project data...",
+    "command": {
+      "placeholder": "Tell the orchestrator what to do...",
+      "send": "Send"
+    },
+    "empty": {
+      "teams": "No waves or teams yet. Create a plan with delegation to get started.",
+      "queue": "No in-progress or blocked tasks. Add work from the Board tab."
+    },
+    "activity": {
+      "title": "Activity",
+      "empty": "Activity will appear here as the agent works."
+    },
+    "toggleChat": "Toggle chat sidebar",
+    "teamActive": "Team Active",
+    "teamsActive": "Teams Active",
+    "membersDone": "Members Done"
+  },
+  "auth": {
+    "email": "Email",
+    "password": "Password",
+    "login": {
+      "title": "Sign in",
+      "lead": "Your Babo account on the server you configured.",
+      "signingIn": "Signing in…",
+      "noAccount": "No account yet?",
+      "createOne": "Create one",
+      "submit": "Sign in"
+    },
+    "register": {
+      "title": "Create account",
+      "hasAccount": "Already have an account?",
+      "signIn": "Sign in",
+      "submit": "Create account",
+      "creating": "Creating…",
+      "lead": "Register on your Babo server — same place you sign in from the app."
+    },
+    "displayName": "Display name",
+    "optional": "Optional",
+    "checkingServer": "Checking server…",
+    "serverUnreachable": "Server unreachable",
+    "serverReachable": "Server reachable",
+    "waitingServer": "Waiting for server…"
+  },
+  "apiKeys": {
+    "title": "API Keys",
+    "generateTitle": "Generate New Key",
+    "generate": "Generate",
+    "generating": "Generating…",
+    "copyWarning": "Copy this key now. You won't be able to see it again.",
+    "revoke": "Revoke",
+    "empty": "No API keys yet. Generate one above.",
+    "namePlaceholder": "Key name (e.g. production, dev)",
+    "subtitle": "Programmatic access to your agents",
+    "keyCreated": "Key Created",
+    "copied": "Copied!",
+    "copy": "Copy",
+    "dismiss": "Dismiss",
+    "name": "Name",
+    "key": "Key",
+    "requests": "Requests",
+    "status": "Status",
+    "actions": "Actions",
+    "active": "Active",
+    "revoked": "Revoked",
+    "delete": "Delete"
   }
 }

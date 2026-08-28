@@ -9,20 +9,20 @@
     <!-- Header -->
     <div class="header animate-fade-in">
       <div>
-        <h1 class="title">API Keys</h1>
-        <p class="subtitle">Programmatic access to your agents</p>
+        <h1 class="title">{{ 'apiKeys.title' | translate }}</h1>
+        <p class="subtitle">{{ 'apiKeys.subtitle' | translate }}</p>
       </div>
     </div>
 
     <!-- Create key -->
     <div class="create-card animate-fade-in">
-      <h2 class="card-title">Generate New Key</h2>
+      <h2 class="card-title">{{ 'apiKeys.generateTitle' | translate }}</h2>
       <div class="create-form">
-        <input type="text" [(ngModel)]="newKeyName" placeholder="Key name (e.g. production, dev)"
+        <input type="text" [(ngModel)]="newKeyName" [placeholder]="'apiKeys.namePlaceholder' | translate"
                class="key-input" />
         <button (click)="createKey()" class="generate-btn">
           <span class="gen-dot"></span>
-          Generate
+          {{ 'apiKeys.generate' | translate }}
         </button>
       </div>
     </div>
@@ -32,16 +32,16 @@
       <div class="key-reveal animate-slide-up">
         <div class="reveal-header">
           <div class="reveal-dot"></div>
-          <span class="reveal-title">Key Created</span>
+          <span class="reveal-title">{{ 'apiKeys.keyCreated' | translate }}</span>
         </div>
-        <p class="reveal-warning">Copy this key now. You won't be able to see it again.</p>
+        <p class="reveal-warning">{{ 'apiKeys.copyWarning' | translate }}</p>
         <div class="reveal-key-row">
           <code class="reveal-key">{{ createdKey() }}</code>
           <button (click)="copyKey()" class="copy-btn">
-            {{ copied() ? 'Copied!' : 'Copy' }}
+            {{ copied() ? ('apiKeys.copied' | translate) : ('apiKeys.copy' | translate) }}
           </button>
         </div>
-        <button (click)="closeModal()" class="dismiss-btn">Dismiss</button>
+        <button (click)="closeModal()" class="dismiss-btn">{{ 'apiKeys.dismiss' | translate }}</button>
       </div>
     }
 
@@ -50,11 +50,11 @@
       <table class="keys-table">
         <thead>
           <tr>
-            <th>Name</th>
-            <th>Key</th>
-            <th>Requests</th>
-            <th>Status</th>
-            <th class="text-right">Actions</th>
+            <th>{{ 'apiKeys.name' | translate }}</th>
+            <th>{{ 'apiKeys.key' | translate }}</th>
+            <th>{{ 'apiKeys.requests' | translate }}</th>
+            <th>{{ 'apiKeys.status' | translate }}</th>
+            <th class="text-right">{{ 'apiKeys.actions' | translate }}</th>
           </tr>
         </thead>
         <tbody>
@@ -65,19 +65,19 @@
               <td class="cell-count">{{ key.totalRequests }}</td>
               <td>
                 <span class="status-badge" [class.active]="key.isActive" [class.revoked]="!key.isActive">
-                  {{ key.isActive ? 'Active' : 'Revoked' }}
+                  {{ key.isActive ? ('apiKeys.active' | translate) : ('apiKeys.revoked' | translate) }}
                 </span>
               </td>
               <td class="cell-actions">
                 @if (key.isActive) {
-                  <button (click)="revokeKey(key.id)" class="action-btn revoke">Revoke</button>
+                  <button (click)="revokeKey(key.id)" class="action-btn revoke">{{ 'apiKeys.revoke' | translate }}</button>
                 }
-                <button (click)="deleteKey(key.id)" class="action-btn delete">Delete</button>
+                <button (click)="deleteKey(key.id)" class="action-btn delete">{{ 'apiKeys.delete' | translate }}</button>
               </td>
             </tr>
           } @empty {
             <tr>
-              <td colspan="5" class="empty-cell">No API keys yet. Generate one above.</td>
+              <td colspan="5" class="empty-cell">{{ 'apiKeys.empty' | translate }}</td>
             </tr>
           }
         </tbody>
@@ -99,7 +99,7 @@ client = OpenAI(
 
 response = client.chat.completions.create(
     model="agent:your-agent-id",
-    messages=[&#123;"role": "user", "content": "Hello!"&#125;],
+    messages=[{"role": "user", "content": "Hello!"}],
     stream=True
 )
 for chunk in response:
@@ -111,7 +111,7 @@ for chunk in response:
         <pre class="snippet-code"><code>curl https://nls-api.up.railway.app/v1/chat/completions \
   -H "Authorization: Bearer nlsk_your_key_here" \
   -H "Content-Type: application/json" \
-  -d '&#123;"model":"agent:your-agent-id","messages":[&#123;"role":"user","content":"Hello!"&#125;]&#125;'</code></pre>
+  -d '{"model":"agent:your-agent-id","messages":[{"role":"user","content":"Hello!"}]}'</code></pre>
       </div>
     </div>
   </div>

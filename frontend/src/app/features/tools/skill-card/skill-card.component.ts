@@ -1,5 +1,6 @@
 import { Component, input, output } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { TranslateModule } from '@ngx-translate/core';
 
 export interface SkillCardModel {
   name: string;
@@ -20,7 +21,7 @@ export interface SkillCardModel {
 @Component({
   selector: 'app-skill-card',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, TranslateModule],
   template: `
     <div class="skill-card"
          [class.status-loaded]="skill().status === 'loaded'"
@@ -49,12 +50,12 @@ export interface SkillCardModel {
           <span class="type-badge native">NLS Plugin</span>
         }
         @if (skill().source === 'clawhub') {
-          <span class="source-badge clawhub">ClawHub</span>
+          <span class="source-badge clawhub">{{ 'tools.skillCard.clawhub' | translate }}</span>
         } @else if (skill().source === 'bundled') {
-          <span class="source-badge bundled">Bundled</span>
+          <span class="source-badge bundled">{{ 'tools.skillCard.bundled' | translate }}</span>
         }
         @if (skill().crystallization_ready) {
-          <span class="crystal-badge">Ready to Upgrade</span>
+          <span class="crystal-badge">{{ 'tools.skillCard.readyToUpgrade' | translate }}</span>
         }
         @if (skill().crystallized_from) {
           <span class="lineage-badge">Evolved from: {{ skill().crystallized_from }}</span>
@@ -69,7 +70,7 @@ export interface SkillCardModel {
         <span class="skill-desc">{{ skill().description }}</span>
       }
       @if (skill().error) {
-        <span class="skill-error-hint">Has errors</span>
+        <span class="skill-error-hint">{{ 'tools.skillCard.hasErrors' | translate }}</span>
       }
     </div>
   `,

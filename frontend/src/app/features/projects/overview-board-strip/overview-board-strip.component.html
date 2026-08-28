@@ -7,7 +7,7 @@
   </div>
 
   @if (!hasCards) {
-    <p class="strip-empty">No in-progress or blocked tasks. Add work from the Board tab.</p>
+    <p class="strip-empty">{{ 'projects.empty.queue' | translate }}</p>
   } @else {
     @if (inProgress.length) {
       <div class="strip-row">

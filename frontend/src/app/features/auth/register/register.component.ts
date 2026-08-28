@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { HttpClient } from '@angular/common/http';
+import { TranslateModule } from '@ngx-translate/core';
 import { AuthService } from '../../../core/services/auth.service';
 import { ApiService } from '../../../core/services/api.service';
 import { checkAuthServer } from '../auth-server.util';
@@ -11,7 +12,7 @@ import { ThemeService } from '../../../core/services/theme.service';
 @Component({
   selector: 'app-register',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, TranslateModule],
   templateUrl: './register.component.html',
   styleUrl: './register.component.scss',
 })

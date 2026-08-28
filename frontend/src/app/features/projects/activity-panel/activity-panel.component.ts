@@ -1,5 +1,6 @@
 import { Component, Input } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { TranslateModule } from '@ngx-translate/core';
 import { Team, TodoItem, PlanSummary } from '../project.models';
 import type { RunDelegate } from '../../../core/models/run-view.model';
 
@@ -21,7 +22,7 @@ interface ActivityEntry {
 @Component({
   selector: 'app-activity-panel',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, TranslateModule],
   templateUrl: './activity-panel.component.html',
   styleUrl: './activity-panel.component.scss',
 })

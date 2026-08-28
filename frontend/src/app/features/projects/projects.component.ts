@@ -1,6 +1,7 @@
 import { Component, OnInit, OnDestroy, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
+import { TranslateModule } from '@ngx-translate/core';
 import { ProjectService } from './project.service';
 import { TeamsPanelComponent } from './teams-panel/teams-panel.component';
 import { BoardPanelComponent } from './board-panel/board-panel.component';
@@ -21,6 +22,7 @@ type PanelTab = 'overview' | 'board' | 'files';
   standalone: true,
   imports: [
     CommonModule,
+    TranslateModule,
     TeamsPanelComponent,
     BoardPanelComponent,
     ActivityPanelComponent,

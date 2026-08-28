@@ -1,6 +1,7 @@
 import { Component, input, output, signal, computed } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { TranslateModule } from '@ngx-translate/core';
 
 export interface ConfigFieldSchema {
   key: string;
@@ -16,10 +17,10 @@ export interface ConfigFieldSchema {
 @Component({
   selector: 'app-schema-config-form',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, TranslateModule],
   template: `
     @if (groupedFields().length === 0) {
-      <p class="no-schema">No configuration fields defined.</p>
+      <p class="no-schema">{{ 'tools.config.noFields' | translate }}</p>
     } @else {
       @for (group of groupedFields(); track group.category) {
         <div class="schema-group">
@@ -52,7 +53,7 @@ export interface ConfigFieldSchema {
                       class="schema-input"
                       [value]="getValue(f.key)"
                       (input)="onChange(f.key, $any($event.target).value)"
-                      [placeholder]="f.required ? '' : '(optional)'" />
+                      [placeholder]="f.required ? '' : ('tools.config.optional' | translate)" />
                     <button type="button" class="reveal-btn" (click)="toggleReveal(f.key)" [attr.aria-label]="(revealed()[f.key] ? 'Hide' : 'Show') + ' value'">
                       {{ revealed()[f.key] ? 'Hide' : 'Show' }}
                     </button>
@@ -79,7 +80,7 @@ export interface ConfigFieldSchema {
                   <input type="text" class="schema-input"
                     [value]="formatListValue(getValue(f.key))"
                     (input)="onListInput(f.key, $any($event.target).value)"
-                    placeholder="Comma-separated values" />
+                    [placeholder]="'tools.config.listPlaceholder' | translate" />
                 }
                 @default {
                   @if (isReadOnly(f)) {
@@ -88,7 +89,7 @@ export interface ConfigFieldSchema {
                     <input type="text" class="schema-input"
                       [value]="formatDisplayValue(getValue(f.key))"
                       (input)="onChange(f.key, $any($event.target).value)"
-                      [placeholder]="f.required ? '' : '(optional)'" />
+                      [placeholder]="f.required ? '' : ('tools.config.optional' | translate)" />
                   }
                 }
               }
@@ -100,7 +101,7 @@ export interface ConfigFieldSchema {
         @if (saving()) {
           <span class="btn-spinner"></span>
         }
-        {{ saveSuccess() ? 'Saved!' : 'Save Configuration' }}
+        {{ saveSuccess() ? ('tools.config.saved' | translate) : ('tools.config.save' | translate) }}
       </button>
     }
   `,

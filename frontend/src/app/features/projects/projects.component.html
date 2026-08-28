@@ -8,15 +8,15 @@
 
       <div class="header-left">
 
-        <h2 class="page-title">Projects</h2>
+        <h2 class="page-title">{{ 'projects.title' | translate }}</h2>
 
         <div class="view-tabs">
 
-          <button class="view-tab" [class.active]="activeTab() === 'overview'" (click)="setTab('overview')">Overview</button>
+          <button class="view-tab" [class.active]="activeTab() === 'overview'" (click)="setTab('overview')">{{ 'projects.tabs.overview' | translate }}</button>
 
-          <button class="view-tab" [class.active]="activeTab() === 'board'" (click)="setTab('board')">Board</button>
+          <button class="view-tab" [class.active]="activeTab() === 'board'" (click)="setTab('board')">{{ 'projects.tabs.board' | translate }}</button>
 
-          <button class="view-tab" [class.active]="activeTab() === 'files'" (click)="setTab('files')">Files</button>
+          <button class="view-tab" [class.active]="activeTab() === 'files'" (click)="setTab('files')">{{ 'projects.tabs.files' | translate }}</button>
 
         </div>
 
@@ -32,7 +32,7 @@
 
       />
 
-      <button class="chat-toggle" (click)="toggleChat()" [class.active]="chatOpen()" title="Toggle chat sidebar">
+      <button class="chat-toggle" (click)="toggleChat()" [class.active]="chatOpen()" [attr.title]="'projects.toggleChat' | translate">
 
         <svg viewBox="0 0 20 20" fill="currentColor" width="18" height="18">
 
@@ -56,7 +56,7 @@
 
           <span class="orch-ribbon-val">{{ orchActiveCount() }}</span>
 
-          <span class="orch-ribbon-label">{{ orchActiveCount() === 1 ? 'Team Active' : 'Teams Active' }}</span>
+          <span class="orch-ribbon-label">{{ orchActiveCount() === 1 ? ('projects.teamActive' | translate) : ('projects.teamsActive' | translate) }}</span>
 
         </div>
 
@@ -68,7 +68,7 @@
 
             <span class="orch-ribbon-val">{{ orchDoneMembers() }}/{{ orchTotalMembers() }}</span>
 
-            <span class="orch-ribbon-label">Members Done</span>
+            <span class="orch-ribbon-label">{{ 'projects.membersDone' | translate }}</span>
 
           </div>
 
@@ -174,7 +174,7 @@
 
     @if (svc.loading() && !svc.hasAnyData()) {
 
-      <div class="loading-state">Loading project data...</div>
+      <div class="loading-state">{{ 'projects.loading' | translate }}</div>
 
     } @else if (svc.error() && !svc.hasAnyData()) {
 

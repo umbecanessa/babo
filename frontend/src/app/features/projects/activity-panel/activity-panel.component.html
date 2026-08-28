@@ -1,7 +1,7 @@
 <div class="activity-panel" [class.compact-panel]="compact">
   <div class="panel-header">
     <span class="panel-dot"></span>
-    <span class="panel-title">Activity</span>
+    <span class="panel-title">{{ 'projects.activity.title' | translate }}</span>
     @if (entries.length > 0) {
       <span class="entry-count">{{ entries.length }}</span>
     }
@@ -12,7 +12,7 @@
       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#374151" stroke-width="1.5">
         <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
       </svg>
-      <span>Activity will appear here as the agent works.</span>
+      <span>{{ 'projects.activity.empty' | translate }}</span>
     </div>
   } @else {
     <div class="entry-list">

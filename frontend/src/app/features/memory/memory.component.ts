@@ -158,7 +158,7 @@ import { TranslateModule } from '@ngx-translate/core';
                     }
                   }
                   @if (recentBlocks().length === 0) {
-                    <div class="empty-state-sm">No blocks yet</div>
+                    <div class="empty-state-sm">{{ 'memory.empty.blocks' | translate }}</div>
                   }
                 </div>
               </div>
@@ -194,7 +194,7 @@ import { TranslateModule } from '@ngx-translate/core';
                     </div>
                   }
                   @if (recentFacts().length === 0) {
-                    <div class="empty-state-sm">No facts stored yet</div>
+                    <div class="empty-state-sm">{{ 'memory.empty.facts' | translate }}</div>
                   }
                 </div>
               </div>
@@ -212,7 +212,7 @@ import { TranslateModule } from '@ngx-translate/core';
                   </div>
                 }
                 @if (wmGrouped().length === 0) {
-                  <div class="empty-state-sm">No active signals</div>
+                  <div class="empty-state-sm">{{ 'memory.empty.signals' | translate }}</div>
                 }
               </div>
             </div>
@@ -241,7 +241,7 @@ import { TranslateModule } from '@ngx-translate/core';
               <input
                 class="search-input"
                 type="text"
-                placeholder="Search facts..."
+                [placeholder]="'memory.knowledge.searchPlaceholder' | translate"
                 [ngModel]="factSearch()"
                 (ngModelChange)="onFactSearchChange($event)"
               />
@@ -251,7 +251,7 @@ import { TranslateModule } from '@ngx-translate/core';
                   <span>Fluid only</span>
                 </label>
                 <button class="view-toggle-btn" (click)="toggleFactsView()">
-                  {{ factsViewMode() === 'tree' ? '⊞ Table' : '⊟ Tree' }}
+                  {{ factsViewMode() === 'tree' ? ('memory.knowledge.viewTable' | translate) : ('memory.knowledge.viewTree' | translate) }}
                 </button>
               </div>
             </div>
@@ -489,7 +489,7 @@ import { TranslateModule } from '@ngx-translate/core';
                   <button class="wm-ws-btn"
                     [class.active]="wmDisplayWorkspace() === 'professional'"
                     (click)="wmViewWorkspace.set('professional')">
-                    Professional
+                    {{ 'memory.wm.professional' | translate }}
                     @if (wmActiveWorkspace() === 'professional') {
                       <span class="wm-ws-active-dot"></span>
                     }
@@ -497,17 +497,17 @@ import { TranslateModule } from '@ngx-translate/core';
                   <button class="wm-ws-btn"
                     [class.active]="wmDisplayWorkspace() === 'personal'"
                     (click)="wmViewWorkspace.set('personal')">
-                    Personal
+                    {{ 'memory.wm.personal' | translate }}
                     @if (wmActiveWorkspace() === 'personal') {
                       <span class="wm-ws-active-dot"></span>
                     }
                   </button>
                 </div>
-                <button class="btn-secondary" (click)="loadContext()">Refresh</button>
+                <button class="btn-secondary" (click)="loadContext()">{{ 'memory.wm.refresh' | translate }}</button>
               </div>
 
               @if (wmGrouped().length === 0 && contextItems().length === 0) {
-                <div class="empty-state">No active signals — start a conversation to build working memory</div>
+                <div class="empty-state">{{ 'memory.wm.empty' | translate }}</div>
               }
 
               <div class="wm-columns">
@@ -703,14 +703,14 @@ import { TranslateModule } from '@ngx-translate/core';
             <div class="soul-grid">
               <!-- Export -->
               <div class="soul-card">
-                <h3 class="soul-card-title">Export Soul Package</h3>
+                <h3 class="soul-card-title">{{ 'memory.soul.exportTitle' | translate }}</h3>
                 <p class="soul-desc">Download this agent's full state as a portable .soul.zip file.</p>
                 <label class="fluid-toggle soul-toggle">
                   <input type="checkbox" [checked]="exportIncludeSessions()" (change)="exportIncludeSessions.set(!exportIncludeSessions())" />
-                  <span>Include conversation history</span>
+                  <span>{{ 'memory.soul.includeHistory' | translate }}</span>
                 </label>
                 <button class="btn-primary" [disabled]="soulExporting()" (click)="exportSoul()">
-                  {{ soulExporting() ? 'Exporting...' : 'Export Soul Package' }}
+                  {{ soulExporting() ? ('memory.soul.exporting' | translate) : ('memory.soul.exportTitle' | translate) }}
                 </button>
                 @if (soulExportSuccess()) {
                   <div class="soul-success">Soul package downloaded successfully.</div>
@@ -719,7 +719,7 @@ import { TranslateModule } from '@ngx-translate/core';
 
               <!-- Import -->
               <div class="soul-card">
-                <h3 class="soul-card-title">Import Soul Package</h3>
+                <h3 class="soul-card-title">{{ 'memory.soul.importTitle' | translate }}</h3>
                 <p class="soul-desc">Upload a .soul.zip to replace this agent's state.</p>
                 <div class="soul-warning">This will overwrite the current agent state. Make an export first if needed.</div>
                 <div
@@ -730,7 +730,7 @@ import { TranslateModule } from '@ngx-translate/core';
                   (drop)="onDrop($event)"
                 >
                   <span class="drop-icon">↑</span>
-                  <span>Drag .soul.zip here or</span>
+                  <span>{{ 'memory.soul.dropHint' | translate }}</span>
                   <label class="drop-browse">
                     browse
                     <input type="file" accept=".zip" hidden (change)="onFileSelect($event)" />
@@ -740,7 +740,7 @@ import { TranslateModule } from '@ngx-translate/core';
                   <div class="import-file-info">
                     <span>{{ importFile()!.name }}</span>
                     <button class="btn-primary" [disabled]="soulImporting()" (click)="importSoul()">
-                      {{ soulImporting() ? 'Importing...' : 'Import' }}
+                      {{ soulImporting() ? ('memory.soul.importing' | translate) : ('memory.soul.import' | translate) }}
                     </button>
                   </div>
                 }
@@ -751,7 +751,7 @@ import { TranslateModule } from '@ngx-translate/core';
 
               <!-- Fork -->
               <div class="soul-card">
-                <h3 class="soul-card-title">Fork Agent</h3>
+                <h3 class="soul-card-title">{{ 'memory.soul.forkTitle' | translate }}</h3>
                 <p class="soul-desc">Create a new agent from this agent's memory at a specific chain height.</p>
                 <div class="fork-form">
                   <div class="fork-fields-row">
@@ -778,7 +778,7 @@ import { TranslateModule } from '@ngx-translate/core';
                     </div>
                   </div>
                   <button class="btn-primary" [disabled]="soulForking()" (click)="forkAgent()">
-                    {{ soulForking() ? 'Forking...' : 'Fork' }}
+                    {{ soulForking() ? ('memory.soul.forking' | translate) : ('memory.soul.fork' | translate) }}
                   </button>
                 </div>
                 @if (forkResult()) {
@@ -791,7 +791,7 @@ import { TranslateModule } from '@ngx-translate/core';
 
               <!-- Snapshot -->
               <div class="soul-card">
-                <h3 class="soul-card-title">Create Snapshot</h3>
+                <h3 class="soul-card-title">{{ 'memory.soul.snapshotTitle' | translate }}</h3>
                 <p class="soul-desc">Save a restore point of this agent's current state.</p>
                 <div class="fork-form">
                   <div class="fork-field">
@@ -805,7 +805,7 @@ import { TranslateModule } from '@ngx-translate/core';
                     />
                   </div>
                   <button class="btn-primary" [disabled]="snapshotCreating()" (click)="createSnapshot()">
-                    {{ snapshotCreating() ? 'Creating...' : 'Create Snapshot' }}
+                    {{ snapshotCreating() ? ('memory.soul.creating' | translate) : ('memory.soul.snapshotTitle' | translate) }}
                   </button>
                 </div>
                 @if (snapshotResult()) {
@@ -824,7 +824,7 @@ import { TranslateModule } from '@ngx-translate/core';
                           <span class="snapshot-meta">Height {{ snap.chain_height }} · {{ snap.created_at | date:'short' }}</span>
                         </div>
                         <button class="btn-sm btn-outline" (click)="restoreSnapshot(snap)" [disabled]="snapshotRestoring()">
-                          {{ snapshotRestoring() && restoringSnapshot() === snap.file ? 'Restoring...' : 'Restore' }}
+                          {{ snapshotRestoring() && restoringSnapshot() === snap.file ? ('memory.soul.restoring' | translate) : ('memory.soul.restore' | translate) }}
                         </button>
                       </div>
                     }

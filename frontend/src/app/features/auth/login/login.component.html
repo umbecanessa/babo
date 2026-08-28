@@ -29,17 +29,17 @@
     <div class="auth-header">
       <img src="assets/images/babo.png" alt="Babo" class="auth-logo" />
     </div>
-    <h1>Sign in</h1>
-    <p class="lead">Your Babo account on the server you configured.</p>
+    <h1>{{ 'auth.login.title' | translate }}</h1>
+    <p class="lead">{{ 'auth.login.lead' | translate }}</p>
 
     <div class="server-pill" [class]="serverStatus()">
       <span class="dot"></span>
       @if (serverStatus() === 'checking') {
-        <span>Checking server…</span>
+        <span>{{ 'auth.checkingServer' | translate }}</span>
       } @else if (serverStatus() === 'offline') {
-        <span>{{ serverMessage() || 'Server unreachable' }}</span>
+        <span>{{ serverMessage() || ('auth.serverUnreachable' | translate) }}</span>
       } @else {
-        <span>{{ serverMessage() || 'Server reachable' }}</span>
+        <span>{{ serverMessage() || ('auth.serverReachable' | translate) }}</span>
       }
     </div>
 
@@ -49,7 +49,7 @@
       }
 
       <div class="form-group">
-        <label>Email</label>
+        <label>{{ 'auth.email' | translate }}</label>
         <input
           type="email"
           [(ngModel)]="email"
@@ -61,7 +61,7 @@
       </div>
 
       <div class="form-group">
-        <label>Password</label>
+        <label>{{ 'auth.password' | translate }}</label>
         <input
           type="password"
           [(ngModel)]="password"
@@ -74,15 +74,15 @@
 
       <button type="submit" class="action-btn" [disabled]="loading() || serverStatus() !== 'online'">
         @if (serverStatus() !== 'online') {
-          Waiting for server…
+          {{ 'auth.waitingServer' | translate }}
         } @else {
-          {{ loading() ? 'Signing in…' : 'Sign in' }}
+          {{ loading() ? ('auth.login.signingIn' | translate) : ('auth.login.submit' | translate) }}
         }
       </button>
 
       <p class="switch-link">
-        No account yet?
-        <a routerLink="/auth/register">Create one</a>
+        {{ 'auth.login.noAccount' | translate }}
+        <a routerLink="/auth/register">{{ 'auth.login.createOne' | translate }}</a>
       </p>
     </form>
   </div>
