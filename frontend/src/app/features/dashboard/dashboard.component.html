@@ -9,14 +9,14 @@
     <!-- Header -->
     <div class="header animate-fade-in">
       <div>
-        <h1 class="title">Agents</h1>
-        <p class="subtitle">Your neural fleet</p>
+        <h1 class="title">{{ 'dashboard.title' | translate }}</h1>
+        <p class="subtitle">{{ 'dashboard.subtitle' | translate }}</p>
       </div>
       <div class="header-actions">
         @if (!platform.isRemote || hasOnlineAgent()) {
           <a routerLink="/create" class="create-btn btn-primary">
             <span class="btn-dot"></span>
-            Create Agent
+            {{ 'dashboard.create' | translate }}
           </a>
         }
       </div>
@@ -26,22 +26,22 @@
     <div class="stats-row">
       <div class="stat-card">
         <div class="stat-value">{{ agents().length }}</div>
-        <div class="stat-label">Total</div>
+        <div class="stat-label">{{ 'dashboard.total' | translate }}</div>
         <div class="stat-glow stat-glow-blue"></div>
       </div>
       <div class="stat-card">
         <div class="stat-value stat-green">{{ activeCount }}</div>
-        <div class="stat-label">Active</div>
+        <div class="stat-label">{{ 'dashboard.active' | translate }}</div>
         <div class="stat-glow stat-glow-green"></div>
       </div>
       <div class="stat-card">
         <div class="stat-value stat-orange">{{ pausedCount }}</div>
-        <div class="stat-label">Paused</div>
+        <div class="stat-label">{{ 'dashboard.paused' | translate }}</div>
         <div class="stat-glow stat-glow-orange"></div>
       </div>
       <div class="stat-card">
         <div class="stat-value stat-amber">{{ sleepingCount }}</div>
-        <div class="stat-label">Sleeping</div>
+        <div class="stat-label">{{ 'dashboard.sleeping' | translate }}</div>
         <div class="stat-glow stat-glow-amber"></div>
       </div>
     </div>
@@ -64,7 +64,7 @@
           </div>
         </div>
         <p class="runtime-status">{{ runtimeStatus() }}</p>
-        <p class="runtime-hint">This typically takes 20–40 seconds</p>
+        <p class="runtime-hint">{{ 'dashboard.runtimeHint' | translate }}</p>
       </div>
     } @else if (error()) {
       <div class="empty-state animate-fade-in">
@@ -72,7 +72,7 @@
           <span class="error-dot"></span>
           <span>{{ error() }}</span>
         </div>
-        <button class="retry-btn" (click)="loadAgents()">Retry</button>
+        <button class="retry-btn" (click)="loadAgents()">{{ 'dashboard.retry' | translate }}</button>
       </div>
     } @else if (loading()) {
       <div class="empty-state">
@@ -89,8 +89,8 @@
           <div class="empty-ring ring-2"></div>
           <div class="empty-ring ring-3"></div>
         </div>
-        <p class="empty-title">No agents yet</p>
-        <p class="empty-hint">Click the orb or press <a routerLink="/create">Create Agent</a> to begin</p>
+        <p class="empty-title">{{ 'dashboard.emptyTitle' | translate }}</p>
+        <p class="empty-hint">{{ 'dashboard.emptyHintBefore' | translate }} <a routerLink="/create">{{ 'dashboard.emptyHintLink' | translate }}</a> {{ 'dashboard.emptyHintAfter' | translate }}</p>
       </div>
     } @else {
       <div class="fleet-layout">
@@ -110,7 +110,7 @@
             }
           </div>
         } @else {
-          <p class="fleet-unassigned-hint">All agents are assigned to squads — expand a member below to chat or manage them.</p>
+          <p class="fleet-unassigned-hint">{{ 'dashboard.allInSquads' | translate }}</p>
         }
         <app-squads-panel
           class="fleet-squads"
@@ -132,23 +132,23 @@
     <div class="modal-overlay squad-modal-overlay" role="presentation">
       <div class="modal-scrim squad-modal-backdrop" (click)="squadsPanel!.cancelSquadSettings()" aria-hidden="true"></div>
       <div class="modal-panel squad-settings-modal" role="dialog" aria-modal="true">
-        <h3>Squad checkback</h3>
-        <p class="squad-modal-muted">Wakes the lead on an interval and when inbox proposals exceed the SLA.</p>
+        <h3>{{ 'dashboard.squad.checkbackTitle' | translate }}</h3>
+        <p class="squad-modal-muted">{{ 'dashboard.squad.checkbackLead' | translate }}</p>
         <label class="checkbox-row">
           <input type="checkbox" [(ngModel)]="squadsPanel!.checkbackEnabled" />
-          Enable scheduled checkback
+          {{ 'dashboard.squad.enableCheckback' | translate }}
         </label>
         <label>
-          Interval (minutes)
+          {{ 'dashboard.squad.interval' | translate }}
           <input type="number" min="5" max="1440" [(ngModel)]="squadsPanel!.checkbackIntervalMin" />
         </label>
         <label>
-          Proposal SLA (hours, urgent wake)
+          {{ 'dashboard.squad.sla' | translate }}
           <input type="number" min="1" max="168" [(ngModel)]="squadsPanel!.proposalSlaHours" />
         </label>
         <div class="squad-modal-actions">
-          <button type="button" class="btn-secondary" (click)="squadsPanel!.cancelSquadSettings()">Cancel</button>
-          <button type="button" class="btn-primary" (click)="squadsPanel!.saveSquadSettings()">Save</button>
+          <button type="button" class="btn-secondary" (click)="squadsPanel!.cancelSquadSettings()">{{ 'common.cancel' | translate }}</button>
+          <button type="button" class="btn-primary" (click)="squadsPanel!.saveSquadSettings()">{{ 'common.save' | translate }}</button>
         </div>
       </div>
     </div>
@@ -159,17 +159,17 @@
       <div class="modal-scrim squad-modal-backdrop" (click)="squadsPanel!.closeKanban()" aria-hidden="true"></div>
       <div class="modal-panel squad-kanban-modal" role="dialog" aria-modal="true">
         <header class="squad-kanban-head">
-          <h3>Squad board</h3>
-          <button type="button" class="squad-close-btn" (click)="squadsPanel!.closeKanban()" aria-label="Close">×</button>
+          <h3>{{ 'dashboard.squad.boardTitle' | translate }}</h3>
+          <button type="button" class="squad-close-btn" (click)="squadsPanel!.closeKanban()" [attr.aria-label]="'chat.nav.close' | translate">×</button>
         </header>
         @if (squadsPanel!.kanbanLoading()) {
-          <p class="squad-modal-muted">Loading board…</p>
+          <p class="squad-modal-muted">{{ 'dashboard.squad.loadingBoard' | translate }}</p>
         } @else if (squadsPanel!.kanbanBoard(); as board) {
           <section class="squad-kanban-inbox">
-            <h4>Inbox</h4>
+            <h4>{{ 'dashboard.squad.inbox' | translate }}</h4>
             <div class="squad-kanban-columns">
               <div class="squad-kanban-col">
-                <span class="squad-col-label">Proposed</span>
+                <span class="squad-col-label">{{ 'dashboard.squad.proposed' | translate }}</span>
                 @for (item of board.inbox.proposed; track item.id) {
                   <div class="squad-kanban-card">
                     <strong>{{ item.title }}</strong>

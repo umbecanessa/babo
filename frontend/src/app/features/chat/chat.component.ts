@@ -21,6 +21,8 @@ import {
 } from '../../core/services/workbench-tool-outcome.util';
 import { ApiService, FileAttachment, ProjectProcess } from '../../core/services/api.service';
 import { ChatAttachmentService } from '../../core/services/chat-attachment.service';
+import { LocaleService } from '../../core/locale/locale.service';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { isFolderAttachment } from '../../core/utils/chat-drop.util';
 import { PlatformService } from '../../core/services/platform.service';
 import { VoiceRecorderService } from '../../core/services/voice-recorder.service';
@@ -84,6 +86,7 @@ export { agenticAbortLabel } from './orchestration-ui.util';
     ConversationBreadcrumbComponent,
     ChatInboxComponent,
     ConversationContextComponent,
+    TranslateModule,
   ],
   templateUrl: './chat.component.html',
   styleUrl: './chat.component.scss',
@@ -213,10 +216,14 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     return t;
   });
 
-  composerDest = computed(() => composerDestination(
-    this.activeThreadMeta(),
-    this.conversations.isDefaultHome(this.currentThread(), this.agentId),
-  ));
+  composerDest = computed(() => {
+    this.locale.language();
+    return composerDestination(
+      this.activeThreadMeta(),
+      this.conversations.isDefaultHome(this.currentThread(), this.agentId),
+      (key, params) => this.translate.instant(key, params),
+    );
+  });
 
   private readonly workspaceNav = inject(WorkspaceNavService);
   readonly terminalTabs = inject(WorkspaceTerminalTabsService);
@@ -286,6 +293,8 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     private readonly mainTranscript: ChatMainTranscriptService,
     readonly platformIntegrations: PlatformIntegrationsService,
     private chatAttachments: ChatAttachmentService,
+    private translate: TranslateService,
+    private locale: LocaleService,
   ) {
     effect(() => {
       this.mainTranscript.revision();
@@ -969,7 +978,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       },
       error: (err) => {
         console.error('File upload failed:', err);
-        this.toast.show('File upload failed', 'error');
+        this.toast.show(this.translate.instant('toast.chat.uploadFailed'), 'error');
         this.fileUploading.set(false);
       },
     });
@@ -988,7 +997,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       },
       error: (err) => {
         console.error('File upload failed:', err);
-        this.toast.show('File upload failed', 'error');
+        this.toast.show(this.translate.instant('toast.chat.uploadFailed'), 'error');
         this.fileUploading.set(false);
       },
     });
@@ -3822,11 +3831,11 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       sessionKey: event.sessionKey || this.currentThread(),
     }).subscribe({
       next: () => {
-        this.toast.show('Feedback sent', 'info');
+        this.toast.show(this.translate.instant('toast.chat.feedbackSent'), 'info');
       },
       error: (err) => {
         console.error('Failed to submit feedback:', err);
-        this.toast.show('Failed to send feedback', 'error');
+        this.toast.show(this.translate.instant('toast.chat.feedbackFailed'), 'error');
       },
     });
   }

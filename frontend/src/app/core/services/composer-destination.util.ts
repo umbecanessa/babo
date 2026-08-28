@@ -13,14 +13,27 @@ export interface ComposerDestination {
   surface?: string;
 }
 
+export type ComposerTranslateFn = (
+  key: string,
+  params?: Record<string, string>,
+) => string;
+
 /** Honest composer labels — always state where a send goes. */
 export function composerDestination(
   meta: ThreadMeta | null | undefined,
   isDefaultHome = false,
+  t?: ComposerTranslateFn,
 ): ComposerDestination {
+  const tr = (key: string, params?: Record<string, string>, fallback?: string) =>
+    t ? t(key, params) : (fallback ?? key);
+
   if (!meta || meta.key === 'websocket:main' || isDefaultHome) {
     return {
-      placeholder: 'Message Babo (private — not sent externally)',
+      placeholder: tr(
+        'chat.composer.privatePlaceholder',
+        undefined,
+        'Message Babo (private — not sent externally)',
+      ),
       hint: '',
       mode: 'private',
     };
@@ -28,7 +41,11 @@ export function composerDestination(
 
   if (meta.channel === 'websocket') {
     return {
-      placeholder: 'Message Babo (private branch)',
+      placeholder: tr(
+        'chat.composer.privateBranchPlaceholder',
+        undefined,
+        'Message Babo (private branch)',
+      ),
       hint: '',
       mode: 'private',
     };
@@ -41,7 +58,11 @@ export function composerDestination(
       if (meta.key.includes(':dm:')) {
         const who = meta.sender ? `@${meta.sender}` : meta.label;
         return {
-          placeholder: `Reply on Discord to ${who}`,
+          placeholder: tr(
+            'chat.composer.discordDm',
+            { who },
+            `Reply on Discord to ${who}`,
+          ),
           hint: `Discord DM · ${who}`,
           mode: 'surface',
           surface: 'discord',
@@ -49,7 +70,11 @@ export function composerDestination(
       }
       const ch = meta.label.startsWith('#') ? meta.label : `#${meta.label}`;
       return {
-        placeholder: `Reply in ${ch} on Discord`,
+        placeholder: tr(
+          'chat.composer.discordChannel',
+          { channel: ch },
+          `Reply in ${ch} on Discord`,
+        ),
         hint: `Discord · ${ch}`,
         mode: 'surface',
         surface: 'discord',
@@ -58,7 +83,11 @@ export function composerDestination(
     case 'telegram': {
       if (meta.key.includes(':group:')) {
         return {
-          placeholder: `Reply in ${meta.label} on Telegram`,
+          placeholder: tr(
+            'chat.composer.telegramGroup',
+            { label: meta.label },
+            `Reply in ${meta.label} on Telegram`,
+          ),
           hint: `Telegram group · ${meta.label}`,
           mode: 'surface',
           surface: 'telegram',
@@ -66,7 +95,11 @@ export function composerDestination(
       }
       const who = meta.sender ? `@${meta.sender}` : meta.label;
       return {
-        placeholder: `Reply on Telegram to ${who}`,
+        placeholder: tr(
+          'chat.composer.telegramDm',
+          { who },
+          `Reply on Telegram to ${who}`,
+        ),
         hint: `Telegram DM · ${who}`,
         mode: 'surface',
         surface: 'telegram',
@@ -75,15 +108,24 @@ export function composerDestination(
     case 'whatsapp': {
       if (meta.key.includes(':group:')) {
         return {
-          placeholder: `Reply in ${meta.label} on WhatsApp`,
+          placeholder: tr(
+            'chat.composer.whatsappGroup',
+            { label: meta.label },
+            `Reply in ${meta.label} on WhatsApp`,
+          ),
           hint: `WhatsApp group · ${meta.label}`,
           mode: 'surface',
           surface: 'whatsapp',
         };
       }
+      const who = meta.sender || meta.label;
       return {
-        placeholder: `Reply on WhatsApp to ${meta.sender || meta.label}`,
-        hint: `WhatsApp · ${meta.sender || meta.label}`,
+        placeholder: tr(
+          'chat.composer.whatsappDm',
+          { who },
+          `Reply on WhatsApp to ${who}`,
+        ),
+        hint: `WhatsApp · ${who}`,
         mode: 'surface',
         surface: 'whatsapp',
       };
@@ -91,7 +133,11 @@ export function composerDestination(
     case 'slack': {
       if (meta.key.includes(':dm:')) {
         return {
-          placeholder: `Reply on Slack (DM)`,
+          placeholder: tr(
+            'chat.composer.surfaceReply',
+            { surface: 'Slack' },
+            'Reply on Slack (DM)',
+          ),
           hint: `Slack DM`,
           mode: 'surface',
           surface: 'slack',
@@ -99,7 +145,11 @@ export function composerDestination(
       }
       const ch = meta.label.startsWith('#') ? meta.label : meta.label;
       return {
-        placeholder: `Reply in ${ch} on Slack`,
+        placeholder: tr(
+          'chat.composer.discordChannel',
+          { channel: ch },
+          `Reply in ${ch} on Slack`,
+        ).replace('Discord', 'Slack'),
         hint: `Slack · ${ch}`,
         mode: 'surface',
         surface: 'slack',
@@ -108,7 +158,11 @@ export function composerDestination(
     case 'email': {
       const subj = meta.subject || meta.label || 'email thread';
       return {
-        placeholder: `Reply on email thread: ${subj}`,
+        placeholder: tr(
+          'chat.composer.emailReply',
+          { label: subj },
+          `Reply on email thread: ${subj}`,
+        ),
         hint: `Email · ${subj}`,
         mode: 'surface',
         surface: 'email',
@@ -116,7 +170,11 @@ export function composerDestination(
     }
     default:
       return {
-        placeholder: `Reply via ${surface}`,
+        placeholder: tr(
+          'chat.composer.surfaceReply',
+          { surface },
+          `Reply via ${surface}`,
+        ),
         hint: surface,
         mode: 'surface',
         surface,

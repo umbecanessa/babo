@@ -24,7 +24,7 @@ import { CapabilitySettingsPanelComponent } from '../../shared/capability-settin
 import { AgentModelService } from '../../core/services/agent-model.service';
 import { ApiService } from '../../core/services/api.service';
 import { BillingService } from '../../core/services/billing.service';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import {
   CLOUD_BASIC_PRICE_LABEL,
   formatUsdCents,
@@ -230,7 +230,12 @@ export class SettingsComponent implements OnInit, OnDestroy {
     public themeService: ThemeService,
     public updateService: UpdateService,
     public locale: LocaleService,
+    private translate: TranslateService,
   ) {}
+
+  private t(key: string, params?: Record<string, unknown>): string {
+    return this.translate.instant(key, params);
+  }
 
   async checkForUpdates(): Promise<void> {
     if (!this.platform.isElectron) return;
@@ -239,12 +244,16 @@ export class SettingsComponent implements OnInit, OnDestroy {
       await this.updateService.check();
       const s = this.updateService.state();
       if (s === 'idle') {
-        this.toast.show('You are on the latest version', 'info', 3000);
+        this.toast.show(this.t('toast.settings.latestVersion'), 'info', 3000);
       } else if (s === 'available') {
         const v = this.updateService.updateInfo()?.version;
-        this.toast.show(v ? `Update v${v} available` : 'Update available', 'info', 4000);
+        this.toast.show(
+          v ? this.t('toast.settings.updateAvailableVer', { version: v }) : this.t('toast.settings.updateAvailable'),
+          'info',
+          4000,
+        );
       } else if (s === 'error') {
-        this.toast.show(this.updateService.errorMessage() || 'Update check failed', 'error', 5000);
+        this.toast.show(this.updateService.errorMessage() || this.t('toast.settings.updateCheckFailed'), 'error', 5000);
       }
     } finally {
       this.checkingUpdates.set(false);
@@ -280,9 +289,9 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
     const billingParam = this.route.snapshot.queryParamMap.get('billing');
     if (billingParam === 'success') {
-      this.toast.show('Subscription active — welcome to Babo Cloud!', 'info', 4000);
+      this.toast.show(this.t('toast.settings.subActive'), 'info', 4000);
     } else if (billingParam === 'canceled') {
-      this.toast.show('Checkout canceled', 'info', 3000);
+      this.toast.show(this.t('toast.settings.checkoutCanceled'), 'info', 3000);
     }
 
     void this.loadAppVersion();
@@ -296,7 +305,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
   resetOnboarding(): void {
     this.day1Coach.schedule();
-    this.toast.show('First-run tour reset. Open chat to see it again.', 'info', 3000);
+    this.toast.show(this.t('toast.settings.tourReset'), 'info', 3000);
   }
 
   openSetupWizard(): void {
@@ -339,7 +348,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     const apiKey = this.resendApiKey().trim();
     const domain = this.resendInboundDomain().trim();
     if (!apiKey || !domain) {
-      this.toast.show('Resend API key and inbound domain are required', 'error');
+      this.toast.show(this.t('toast.settings.resendRequired'), 'error');
       return;
     }
     this.resendSaving.set(true);
@@ -347,7 +356,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       await firstValueFrom(this.api.saveResendProvider(apiKey, domain));
       this.resendConfigured.set(true);
       this.resendApiKey.set('');
-      this.toast.show('Resend credentials saved', 'info', 2500);
+      this.toast.show(this.t('toast.settings.resendSaved'), 'info', 2500);
       await this.loadPlatformIntegrations();
     } catch (err: any) {
       this.toast.show(err?.error?.message || 'Failed to save Resend credentials', 'error');
@@ -363,7 +372,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       await firstValueFrom(this.api.clearResendProvider());
       this.resendConfigured.set(false);
       this.resendInboundDomain.set('');
-      this.toast.show('Resend credentials removed', 'info', 2500);
+      this.toast.show(this.t('toast.settings.resendRemoved'), 'info', 2500);
       await this.loadPlatformIntegrations();
     } catch (err: any) {
       this.toast.show(err?.error?.message || 'Failed to clear credentials', 'error');
@@ -428,7 +437,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
         caps: this.platformCaps(),
       });
       if (!opened) {
-        this.toast.show('Could not start checkout', 'error');
+        this.toast.show(this.t('toast.settings.checkoutFailed'), 'error');
       }
     } catch (err: any) {
       this.toast.show(
@@ -448,7 +457,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
         caps: this.platformCaps(),
       });
       if (!opened) {
-        this.toast.show('Could not open billing portal', 'error');
+        this.toast.show(this.t('toast.settings.portalFailed'), 'error');
       }
     } catch (err: any) {
       this.toast.show(
@@ -463,14 +472,14 @@ export class SettingsComponent implements OnInit, OnDestroy {
   async saveSpendCap(): Promise<void> {
     const dollars = this.spendCapInput();
     if (!Number.isFinite(dollars) || dollars < 0) {
-      this.toast.show('Enter a valid spend cap', 'error');
+      this.toast.show(this.t('toast.settings.spendCapInvalid'), 'error');
       return;
     }
     this.billingActionLoading.set(true);
     try {
       await this.billing.updateSpendCap(Math.round(dollars * 100));
       await this.loadSubscription();
-      this.toast.show('Spend cap updated', 'info', 2500);
+      this.toast.show(this.t('toast.settings.spendCapUpdated'), 'info', 2500);
     } catch (err: any) {
       this.toast.show(err?.error?.message || 'Could not update spend cap', 'error');
     } finally {
@@ -504,7 +513,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
   onCapabilitiesSaved(): void {
     void this.agentModels.refreshFromConfig();
-    this.toast.show('Models and capabilities saved.', 'info', 3000);
+    this.toast.show(this.t('toast.settings.modelsSaved'), 'info', 3000);
     void this.refreshRuntimeStatus();
   }
 
@@ -530,11 +539,14 @@ export class SettingsComponent implements OnInit, OnDestroy {
     this.http.put(`${this.API}/settings`, this.webSettings()).subscribe({
       next: () => {
         this.saving.set(false);
-        this.toast.show('Settings saved', 'info', 2000);
+        this.toast.show(this.t('toast.settings.settingsSaved'), 'info', 2000);
       },
       error: (err) => {
         this.saving.set(false);
-        this.toast.show('Failed to save: ' + (err.error?.message || err.message), 'error');
+        this.toast.show(
+          this.t('toast.settings.saveFailed', { message: err.error?.message || err.message }),
+          'error',
+        );
       },
     });
   }
@@ -605,7 +617,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
 
   async saveBackend(): Promise<void> {
     if (!this.canSaveBackend()) {
-      this.toast.show('Enter a valid backend URL', 'error');
+      this.toast.show(this.t('toast.settings.backendUrlInvalid'), 'error');
       return;
     }
     this.backendSaving.set(true);
@@ -615,9 +627,9 @@ export class SettingsComponent implements OnInit, OnDestroy {
       this.nestjsUrl.set(url);
       this.backendChoice.set(matchBackendChoice(url));
       void this.loadPlatformIntegrations();
-      this.toast.show('Account server saved', 'info', 2000);
+      this.toast.show(this.t('toast.settings.accountSaved'), 'info', 2000);
     } catch (err: any) {
-      this.toast.show(err?.message || 'Could not save', 'error');
+      this.toast.show(err?.message || this.t('toast.settings.couldNotSave'), 'error');
     } finally {
       this.backendSaving.set(false);
     }
@@ -628,9 +640,17 @@ export class SettingsComponent implements OnInit, OnDestroy {
     try {
       await this.nls().runtime[action]();
       await this.refreshRuntimeStatus();
-      this.toast.show(`Runtime ${action === 'stop' ? 'stopped' : action + 'ed'}`, 'info', 2000);
+      this.toast.show(
+        action === 'stop'
+          ? this.t('toast.settings.runtimeStopped')
+          : action === 'start'
+            ? this.t('toast.settings.runtimeStarted')
+            : this.t('toast.settings.runtimeRestarted'),
+        'info',
+        2000,
+      );
     } catch (err: any) {
-      this.toast.show(err?.message || `Failed to ${action} runtime`, 'error');
+      this.toast.show(err?.message || this.t('toast.settings.runtimeFailed', { action }), 'error');
     } finally {
       this.runtimeAction.set('idle');
     }
@@ -642,7 +662,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       this.runtimeLogs.set(lines);
       this.showRuntimeLogs.set(true);
     } catch {
-      this.toast.show('Could not load runtime logs', 'error');
+      this.toast.show(this.t('toast.settings.logsFailed'), 'error');
     }
   }
 
@@ -653,10 +673,10 @@ export class SettingsComponent implements OnInit, OnDestroy {
     this.envResetting.set(true);
     try {
       await this.nls().setup.reset();
-      this.toast.show('Environment reset. Opening setup wizard…', 'info', 3000);
+      this.toast.show(this.t('toast.settings.envReset'), 'info', 3000);
       this.router.navigate(['/setup']);
     } catch (err: any) {
-      this.toast.show(err?.message || 'Reset failed', 'error');
+      this.toast.show(err?.message || this.t('toast.settings.resetFailed'), 'error');
     } finally {
       this.envResetting.set(false);
     }
@@ -666,7 +686,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     try {
       await this.nls().permissions.applyProfile(profileId);
       this.activePermissionProfile.set(profileId);
-      this.toast.show('Permission profile applied', 'info', 2000);
+      this.toast.show(this.t('toast.settings.permApplied'), 'info', 2000);
     } catch (err: any) {
       this.toast.show(err?.message || 'Could not apply profile', 'error');
     }
@@ -679,7 +699,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     try {
       await this.nls().permissions.reset();
       this.activePermissionProfile.set(null);
-      this.toast.show('Permissions reset', 'info', 2000);
+      this.toast.show(this.t('toast.settings.permReset'), 'info', 2000);
     } catch (err: any) {
       this.toast.show(err?.message || 'Could not reset permissions', 'error');
     }
@@ -721,7 +741,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       this.debugArtifacts.set(summary.artifacts ?? []);
       this.debugUserDataPath.set(summary.userDataPath ?? '');
     } catch {
-      this.toast.show('Could not load debug information', 'error');
+      this.toast.show(this.t('toast.settings.debugFailed'), 'error');
     } finally {
       this.debugLoading.set(false);
     }
@@ -731,7 +751,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     try {
       await this.nls().debug.revealUserData();
     } catch {
-      this.toast.show('Could not open data folder', 'error');
+      this.toast.show(this.t('toast.settings.dataFolderFailed'), 'error');
     }
   }
 
@@ -745,7 +765,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
         this.toast.show(result.message, 'error', 5000);
       }
     } catch (err: any) {
-      this.toast.show(err?.message || 'Export failed', 'error');
+      this.toast.show(err?.message || this.t('toast.settings.exportFailed'), 'error');
     } finally {
       this.debugExporting.set(false);
     }
@@ -765,7 +785,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
         this.toast.show(result.message, 'error', 5000);
       }
     } catch (err: any) {
-      this.toast.show(err?.message || 'Export failed', 'error');
+      this.toast.show(err?.message || this.t('toast.settings.exportFailed'), 'error');
     } finally {
       this.debugExporting.set(false);
     }

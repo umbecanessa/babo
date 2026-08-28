@@ -1,9 +1,9 @@
-<nav class="conv-nav" [class.collapsed]="collapsed" aria-label="Conversations">
+<nav class="conv-nav" [class.collapsed]="collapsed" [attr.aria-label]="'chat.nav.conversations' | translate">
   @if (!collapsed) {
     @if (panels.inboxBadge() > 0) {
       <button type="button" class="conv-nav-inbox" (click)="openInbox.emit()">
         <span class="conv-nav-icon">📥</span>
-        <span class="conv-nav-label">Inbox</span>
+        <span class="conv-nav-label">{{ 'chat.nav.inbox' | translate }}</span>
         <span class="conv-nav-badge">{{ panels.inboxBadge() }}</span>
       </button>
     }
@@ -51,19 +51,19 @@
               <button
                 type="button"
                 class="conv-nav-branch-menu"
-                title="Thread options"
+                title="{{ 'chat.nav.threadOptions' | translate }}"
                 (click)="toggleBranchMenu($event, t.key)"
               >⋯</button>
               @if (branchMenuKey === t.key) {
                 <div class="conv-nav-branch-actions">
                   @if (conversations.isDefaultHome(t.key, agentId)) {
-                    <button type="button" (click)="onResetHome($event)">Reset Home…</button>
+                    <button type="button" (click)="onResetHome($event)">{{ 'chat.nav.resetHome' | translate }}</button>
                   } @else {
-                    <button type="button" (click)="onPromoteToHome(t.key, $event)">Set as Home</button>
+                    <button type="button" (click)="onPromoteToHome(t.key, $event)">{{ 'chat.nav.setAsHome' | translate }}</button>
                   }
                   @if (isBranch(t)) {
-                    <button type="button" (click)="onRenameBranch(t.key, $event)">Rename</button>
-                    <button type="button" class="danger" (click)="onDeleteBranch(t.key, $event)">Delete</button>
+                    <button type="button" (click)="onRenameBranch(t.key, $event)">{{ 'chat.nav.rename' | translate }}</button>
+                    <button type="button" class="danger" (click)="onDeleteBranch(t.key, $event)">{{ 'chat.nav.delete' | translate }}</button>
                   }
                 </div>
               }
@@ -76,18 +76,18 @@
     <div class="conv-nav-divider"></div>
     <button type="button" class="conv-nav-item conv-nav-new" (click)="newBranch.emit()">
       <span class="conv-nav-icon">+</span>
-      <span class="conv-nav-label">New branch</span>
+      <span class="conv-nav-label">{{ 'chat.nav.newBranch' | translate }}</span>
     </button>
   } @else {
     <button
       type="button"
       class="conv-nav-icon-btn"
       [class.active]="isActive(conversations.defaultHomeKey())"
-      title="Home"
+      [title]="'chat.nav.home' | translate"
       (click)="onSelect(conversations.defaultHomeKey())"
     >◉</button>
     @if (panels.inboxBadge() > 0) {
-      <button type="button" class="conv-nav-icon-btn inbox" title="Inbox" (click)="openInbox.emit()">
+      <button type="button" class="conv-nav-icon-btn inbox" [title]="'chat.nav.inbox' | translate" (click)="openInbox.emit()">
         📥
         <span class="conv-nav-badge-sm">{{ panels.inboxBadge() }}</span>
       </button>

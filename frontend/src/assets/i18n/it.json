@@ -230,6 +230,68 @@
       "appearance": "Aspetto",
       "general": "Generale",
       "keys": "Chiavi API"
+    },
+    "desktopSubtitle": "App desktop e agente locale",
+    "models": {
+      "title": "Modelli e AI",
+      "desc": "Modello chat predefinito, Babo Cloud, sotto-agenti, voce e consapevolezza schermo. Puoi scegliere un modello diverso dal composer della chat."
+    },
+    "account": {
+      "title": "Account e sync",
+      "desc": "Login, agenti e dashboard passano da questo server. Il runtime Python locale è separato.",
+      "serverUrl": "URL del tuo server",
+      "serverUrlHint": "Senza /api alla fine — Babo lo aggiunge automaticamente.",
+      "serverPill": "Server:",
+      "saveUrl": "Salva URL server"
+    },
+    "system": {
+      "title": "Sistema",
+      "desc": "Agente Python locale e ambiente desktop.",
+      "runtime": "Runtime agente",
+      "pythonEnv": "Ambiente Python",
+      "start": "Avvia",
+      "stop": "Ferma",
+      "restart": "Riavvia",
+      "viewLogs": "Vedi log",
+      "resetEnv": "Reimposta ambiente Python"
+    },
+    "support": {
+      "title": "Supporto e debug",
+      "desc": "Diagnostica per il supporto e la risoluzione problemi in locale.",
+      "recentErrors": "Errori recenti",
+      "logsConfig": "Log e config app"
+    },
+    "permissions": {
+      "title": "Permessi",
+      "desc": "Cosa può accedere l'agente locale su questo computer."
+    },
+    "billing": {
+      "title": "Fatturazione",
+      "desc": "Abbonamento Babo Cloud e utilizzo.",
+      "lifetime": "Accesso a vita",
+      "subscribe": "Abbonati per usare i modelli Babo Cloud",
+      "payg": "Modelli pay-as-you-go"
+    },
+    "integrations": {
+      "title": "Integrazioni",
+      "desc": "Credenziali di piattaforma e prerequisiti dei canali.",
+      "email": "Email (Resend)",
+      "google": "Google Workspace",
+      "messaging": "Telegram e WhatsApp"
+    },
+    "keys": {
+      "title": "Chiavi API",
+      "desc": "Chiavi per accesso programmatico al tuo account Babo cloud.",
+      "manage": "Gestisci chiavi API"
+    },
+    "general": {
+      "title": "Generale",
+      "onboarding": "Tutorial di onboarding",
+      "onboardingHint": "Mostra di nuovo i suggerimenti introduttivi su Chat, Strumenti, Memoria e altre pagine.",
+      "resetTour": "Reimposta tour iniziale",
+      "version": "Versione",
+      "checkUpdates": "Controlla aggiornamenti",
+      "checkingUpdates": "Controllo…"
     }
   },
   "info": {
@@ -320,5 +382,186 @@
     "cycleTheme": "Cambia tema: chiaro, scuro o sistema",
     "earlyAccess": "Accesso anticipato",
     "appStatus": "Stato app"
+  },
+  "chat": {
+    "header": {
+      "stopping": "Arresto...",
+      "step": "Passo {{current}}/{{max}}",
+      "stopped": "Fermato",
+      "done": "Fatto",
+      "steps": "{{count}} passi",
+      "workbench": "Workbench — tool e passi",
+      "browser": "Browser",
+      "inbox": "Inbox — messaggi dai canali",
+      "live": "Live — segnali cerebrali e attività",
+      "context": "Contesto",
+      "focus": "Modalità focus",
+      "taskStopped": "Task interrotto — apri il workbench",
+      "taskDone": "Task completato — apri il workbench"
+    },
+    "nav": {
+      "conversations": "Conversazioni",
+      "inbox": "Inbox",
+      "home": "Home",
+      "newBranch": "Nuovo ramo",
+      "threadOptions": "Opzioni thread",
+      "setAsHome": "Imposta come Home",
+      "resetHome": "Reimposta Home…",
+      "rename": "Rinomina",
+      "delete": "Elimina",
+      "close": "Chiudi",
+      "cannotDeleteHome": "Non puoi eliminare il thread Home attuale. Reimposta Home per ripartire, oppure imposta prima un altro thread come Home.",
+      "deleteBranchTitle": "Elimina branch",
+      "deleteBranchMessage": "Eliminare il branch \"{{label}}\" e la sua cronologia?",
+      "setAsHomeMessage": "Impostare \"{{label}}\" come Home? Aprendo questo agente partirai da qui. La cronologia resta su ogni thread — nulla viene spostato.",
+      "resetHomeMessage": "Avviare un nuovo thread Home?\n\nViene creato un nuovo branch e impostato come Home. L'Home attuale resta in elenco come branch. La conoscenza dell'agente (fatti, memoria) non cambia."
+    },
+    "composer": {
+      "dropHere": "Trascina qui file o cartelle",
+      "transcribing": "Trascrizione...",
+      "cancel": "Annulla",
+      "stopTranscribe": "Ferma e trascrivi",
+      "attach": "Allega file (Maiusc+click per cartella)",
+      "send": "Invia",
+      "sendGuidance": "Invia guida",
+      "stop": "Ferma",
+      "voice": "Input vocale",
+      "guidancePlaceholder": "Invia indicazioni all'agente mentre lavora...",
+      "askPlaceholder": "Scrivi la risposta…",
+      "budgetPlaceholder": "Rispondi 10, 20, 40 o stop…",
+      "askBanner": "Rispondi qui sotto — l'agente attende la tua risposta prima di continuare.",
+      "privatePlaceholder": "Messaggio a Babo (privato — non inviato all'esterno)",
+      "privateBranchPlaceholder": "Messaggio a Babo (ramo privato)",
+      "discordDm": "Rispondi su Discord a {{who}}",
+      "discordChannel": "Rispondi in {{channel}} su Discord",
+      "telegramDm": "Rispondi su Telegram a {{who}}",
+      "telegramGroup": "Rispondi in {{label}} su Telegram",
+      "whatsappDm": "Rispondi su WhatsApp a {{who}}",
+      "whatsappGroup": "Rispondi in {{label}} su WhatsApp",
+      "emailReply": "Rispondi a {{label}} via email",
+      "surfaceReply": "Rispondi su {{surface}}",
+      "runningLocally": "In esecuzione in locale",
+      "stopProcess": "Ferma processo",
+      "servers": "{{count}} server"
+    },
+    "empty": {
+      "start": "Inizia una conversazione"
+    },
+    "message": {
+      "newSkill": "Nuova skill",
+      "sendFeedback": "Invia feedback",
+      "sending": "Invio...",
+      "feedbackPlaceholder": "Es. Non usare questo tono, sii più formale...",
+      "stop": "Ferma",
+      "feedbackTitle": "Feedback sulla risposta dell'agente",
+      "thisThread": "Questo thread",
+      "allChannels": "Tutti i canali"
+    },
+    "mobile": {
+      "live": "Live",
+      "context": "Contesto",
+      "conversations": "Conversazioni"
+    }
+  },
+  "dashboard": {
+    "title": "Agenti",
+    "subtitle": "La tua flotta neurale",
+    "create": "Crea agente",
+    "total": "Totale",
+    "active": "Attivi",
+    "paused": "In pausa",
+    "sleeping": "In sonno",
+    "runtimeHint": "Di solito richiede 20–40 secondi",
+    "retry": "Riprova",
+    "emptyTitle": "Nessun agente ancora",
+    "emptyHintLink": "Crea agente",
+    "allInSquads": "Tutti gli agenti sono in squad — espandi un membro sotto per chattare o gestirli.",
+    "connecting": "Connessione al runtime...",
+    "agent": {
+      "pause": "Pausa",
+      "resume": "Riprendi",
+      "delete": "Elimina",
+      "lead": "Lead",
+      "job": "Ruolo",
+      "trust": "Fiducia",
+      "openChat": "Apri chat",
+      "online": "Online",
+      "offline": "Offline",
+      "sleeping": "In sonno",
+      "paused": "In pausa",
+      "chatting": "In chat",
+      "working": "Al lavoro",
+      "dreaming": "Sogno a occhi aperti",
+      "unreachable": "Irraggiungibile",
+      "desktopOffline": "Desktop offline",
+      "defaultJob": "Assistente generico"
+    },
+    "squad": {
+      "checkbackTitle": "Checkback squad",
+      "checkbackLead": "Sveglia il lead a intervalli e quando le proposte in inbox superano lo SLA.",
+      "enableCheckback": "Abilita checkback programmato",
+      "interval": "Intervallo (minuti)",
+      "sla": "SLA proposte (ore, sveglia urgente)",
+      "boardTitle": "Board squad",
+      "loadingBoard": "Caricamento board…",
+      "inbox": "Inbox",
+      "proposed": "Proposte"
+    },
+    "emptyHintBefore": "Clicca l'orb o premi",
+    "emptyHintAfter": "per iniziare",
+    "runtimeFailed": "Avvio del runtime agenti non riuscito. Controlla la connessione al runtime.",
+    "runtime": {
+      "connecting": "Connessione al runtime...",
+      "initPython": "Inizializzazione ambiente Python...",
+      "loadModules": "Caricamento moduli server NLS...",
+      "connectInference": "Connessione all'inference...",
+      "loadAdapters": "Caricamento adapter agenti in VRAM...",
+      "startScheduler": "Avvio dello scheduler di coscienza...",
+      "warmup": "Riscaldamento dei percorsi neurali...",
+      "almost": "Quasi fatto...",
+      "stillLoading": "Ancora in caricamento — un attimo...",
+      "ready": "Runtime pronto — caricamento agenti..."
+    }
+  },
+  "toast": {
+    "chat": {
+      "uploadFailed": "Caricamento file non riuscito",
+      "feedbackSent": "Feedback inviato",
+      "feedbackFailed": "Invio feedback non riuscito"
+    },
+    "settings": {
+      "latestVersion": "Hai già l'ultima versione",
+      "updateAvailable": "Aggiornamento disponibile",
+      "updateAvailableVer": "Aggiornamento v{{version}} disponibile",
+      "updateCheckFailed": "Controllo aggiornamenti non riuscito",
+      "subActive": "Abbonamento attivo — benvenuto in Babo Cloud!",
+      "checkoutCanceled": "Checkout annullato",
+      "tourReset": "Tour iniziale reimpostato. Apri la chat per rivederlo.",
+      "resendRequired": "API key Resend e dominio inbound obbligatori",
+      "resendSaved": "Credenziali Resend salvate",
+      "resendRemoved": "Credenziali Resend rimosse",
+      "checkoutFailed": "Impossibile avviare il checkout",
+      "portalFailed": "Impossibile aprire il portale di fatturazione",
+      "spendCapInvalid": "Inserisci un tetto di spesa valido",
+      "spendCapUpdated": "Tetto di spesa aggiornato",
+      "modelsSaved": "Modelli e capacità salvati.",
+      "settingsSaved": "Impostazioni salvate",
+      "saveFailed": "Salvataggio non riuscito: {{message}}",
+      "backendUrlInvalid": "Inserisci un URL backend valido",
+      "accountSaved": "Server account salvato",
+      "couldNotSave": "Salvataggio non riuscito",
+      "runtimeStopped": "Runtime fermato",
+      "runtimeStarted": "Runtime avviato",
+      "runtimeRestarted": "Runtime riavviato",
+      "runtimeFailed": "Impossibile {{action}} il runtime",
+      "logsFailed": "Impossibile caricare i log del runtime",
+      "envReset": "Ambiente reimpostato. Apertura wizard di setup…",
+      "resetFailed": "Reset non riuscito",
+      "permApplied": "Profilo permessi applicato",
+      "permReset": "Permessi reimpostati",
+      "debugFailed": "Impossibile caricare le info di debug",
+      "dataFolderFailed": "Impossibile aprire la cartella dati",
+      "exportFailed": "Esportazione non riuscita"
+    }
   }
 }

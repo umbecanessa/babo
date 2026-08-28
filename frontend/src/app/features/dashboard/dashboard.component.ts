@@ -14,6 +14,7 @@ import {
   CharterTab,
 } from './agent-charter-modal/agent-charter-modal.component';
 import { ConfirmDialogComponent } from '../../shared/confirm-dialog/confirm-dialog.component';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 
 @Component({
   selector: 'app-dashboard',
@@ -26,6 +27,7 @@ import { ConfirmDialogComponent } from '../../shared/confirm-dialog/confirm-dial
     SquadsPanelComponent,
     AgentCharterModalComponent,
     ConfirmDialogComponent,
+    TranslateModule,
   ],
   templateUrl: './dashboard.component.html',
   styleUrl: './dashboard.component.scss',
@@ -37,7 +39,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   deletingAgentId = signal<string | null>(null);
   pausingAgentId = signal<string | null>(null);
   runtimeStarting = signal(false);
-  runtimeStatus = signal('Connecting to runtime...');
+  runtimeStatus = signal('');
   runtimeAttempts = signal(0);
   relayStatus = signal<Record<string, boolean>>({});
   charterAgentId = signal<string | null>(null);
@@ -52,7 +54,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
     public platform: PlatformService,
     private router: Router,
     private ws: WebSocketService,
-  ) {}
+    private translate: TranslateService,
+  ) {
+    this.runtimeStatus.set(this.t('dashboard.connecting'));
+  }
+
+  private t(key: string, params?: Record<string, unknown>): string {
+    return this.translate.instant(key, params);
+  }
 
   ngOnInit() {
     this.initDashboard();
@@ -82,7 +91,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.runtimeStarting.set(false);
       if (!ready) {
         this.loading.set(false);
-        this.error.set('Agent runtime failed to start. Check your runtime connection.');
+        this.error.set(this.t('dashboard.runtimeFailed'));
         return;
       }
       this.api.markRuntimeReady();
@@ -93,15 +102,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
   private async waitForRuntime(maxWait = 180_000, interval = 2_000): Promise<boolean> {
     const start = Date.now();
     const stages = [
-      { at: 0, msg: 'Connecting to runtime...' },
-      { at: 4_000, msg: 'Initializing Python environment...' },
-      { at: 10_000, msg: 'Loading NLS server modules...' },
-      { at: 20_000, msg: 'Connecting to inference...' },
-      { at: 35_000, msg: 'Loading agent adapters into VRAM...' },
-      { at: 55_000, msg: 'Starting consciousness scheduler...' },
-      { at: 75_000, msg: 'Warming up neural pathways...' },
-      { at: 100_000, msg: 'Almost there...' },
-      { at: 140_000, msg: 'Still loading — hang tight...' },
+      { at: 0, key: 'dashboard.runtime.connecting' },
+      { at: 4_000, key: 'dashboard.runtime.initPython' },
+      { at: 10_000, key: 'dashboard.runtime.loadModules' },
+      { at: 20_000, key: 'dashboard.runtime.connectInference' },
+      { at: 35_000, key: 'dashboard.runtime.loadAdapters' },
+      { at: 55_000, key: 'dashboard.runtime.startScheduler' },
+      { at: 75_000, key: 'dashboard.runtime.warmup' },
+      { at: 100_000, key: 'dashboard.runtime.almost' },
+      { at: 140_000, key: 'dashboard.runtime.stillLoading' },
     ];
     let stageIdx = 0;
     let attempt = 0;
@@ -111,13 +120,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
       while (stageIdx < stages.length - 1 && elapsed >= stages[stageIdx + 1].at) {
         stageIdx++;
       }
-      this.runtimeStatus.set(stages[stageIdx].msg);
+      this.runtimeStatus.set(this.t(stages[stageIdx].key));
       this.runtimeAttempts.set(++attempt);
 
       try {
         await firstValueFrom(this.api.getHealth());
         this.api.markRuntimeReady();
-        this.runtimeStatus.set('Runtime ready — loading agents...');
+        this.runtimeStatus.set(this.t('dashboard.runtime.ready'));
         return true;
       } catch {
         await new Promise(r => setTimeout(r, interval));

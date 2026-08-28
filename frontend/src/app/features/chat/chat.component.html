@@ -37,9 +37,9 @@
           <div class="agentic-progress-dot"></div>
           <span class="agentic-progress-label">
             @if (agenticStopping()) {
-              Stopping...
+              {{ 'chat.header.stopping' | translate }}
             } @else {
-              Step {{ agenticStep() }}/{{ agenticMaxSteps() }}
+              {{ 'chat.header.step' | translate:{ current: agenticStep(), max: agenticMaxSteps() } }}
             }
           </span>
         </div>
@@ -51,12 +51,12 @@
             type="button"
             class="agentic-result-chip"
             (click)="toggleWorkbenchPanel()"
-            [title]="lastAgenticResult()!.aborted ? 'Task was stopped — open workbench' : 'Task completed — open workbench'">
+            [title]="lastAgenticResult()!.aborted ? ('chat.header.taskStopped' | translate) : ('chat.header.taskDone' | translate)">
             <span class="arc-badge" [class.arc-done]="!lastAgenticResult()!.aborted" [class.arc-stopped]="lastAgenticResult()!.aborted">
-              {{ lastAgenticResult()!.aborted ? 'Stopped' : 'Done' }}
+              {{ lastAgenticResult()!.aborted ? ('chat.header.stopped' | translate) : ('chat.header.done' | translate) }}
             </span>
             <span class="arc-text">
-              {{ lastAgenticResult()!.steps }} steps
+              {{ 'chat.header.steps' | translate:{ count: lastAgenticResult()!.steps } }}
               @if (lastAgenticResult()!.durationMs > 0) {
                 · {{ formatMs(lastAgenticResult()!.durationMs) }}
               }
@@ -69,7 +69,7 @@
           class="info-btn panel-header-btn"
           [class.active]="panels.leftDock() === 'workbench'"
           (click)="toggleWorkbenchPanel()"
-          title="Workbench — tools &amp; steps">
+          title="{{ 'chat.header.workbench' | translate }}">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <rect x="3" y="3" width="18" height="18" rx="2"/>
             <line x1="3" y1="17" x2="21" y2="17"/>
@@ -82,7 +82,7 @@
           class="info-btn panel-header-btn desktop-only"
           [class.active]="panels.leftDock() === 'browser'"
           (click)="toggleBrowserPanel()"
-          title="Browser">
+          [title]="'chat.header.browser' | translate">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="3" y="3" width="18" height="18" rx="2"/>
             <line x1="3" y1="9" x2="21" y2="9"/>
@@ -95,8 +95,8 @@
           [class.active]="panels.rightDock() === 'inbox'"
           [class.pulse]="panels.inboxPulse()"
           (click)="toggleInboxPanel()"
-          title="Inbox — channel messages"
-          aria-label="Inbox">
+          [title]="'chat.header.inbox' | translate"
+          [attr.aria-label]="'chat.nav.inbox' | translate">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/>
             <path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>
@@ -111,8 +111,8 @@
           class="info-btn panel-header-btn desktop-only"
           [class.active]="panels.rightDock() === 'live'"
           (click)="toggleSidebar()"
-          title="Live — brain signals &amp; activity"
-          aria-label="Live">
+          [title]="'chat.header.live' | translate"
+          [attr.aria-label]="'chat.mobile.live' | translate">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
           </svg>
@@ -123,8 +123,8 @@
           class="info-btn panel-header-btn desktop-only"
           [class.active]="panels.rightDock() === 'context'"
           (click)="toggleContextPanel()"
-          title="Context — conversation metadata"
-          aria-label="Context">
+          [title]="'chat.header.context' | translate"
+          [attr.aria-label]="'chat.header.context' | translate">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="12" cy="12" r="10"/>
             <line x1="12" y1="16" x2="12" y2="12"/>
@@ -137,8 +137,8 @@
           class="info-btn panel-header-btn desktop-only"
           [class.active]="panels.focusMode()"
           (click)="toggleFocusMode()"
-          title="Focus mode — hide side panels"
-          aria-label="Focus mode">
+          [title]="'chat.header.focus' | translate"
+          [attr.aria-label]="'chat.header.focus' | translate">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M8 3H5a2 2 0 0 0-2 2v3"/>
             <path d="M21 8V5a2 2 0 0 0-2-2h-3"/>
@@ -224,7 +224,7 @@
             class="nav-rail-toggle mobile-only"
             (click)="toggleMobileConvNav()"
             title="Conversations"
-            aria-label="Conversations"
+            [attr.aria-label]="'chat.nav.conversations' | translate"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <line x1="8" y1="6" x2="21" y2="6"/>
@@ -323,13 +323,13 @@
                 <polyline points="17 8 12 3 7 8"></polyline>
                 <line x1="12" y1="3" x2="12" y2="15"></line>
               </svg>
-              <span>Drop files or folders here</span>
+              <span>{{ 'chat.composer.dropHere' | translate }}</span>
             </div>
           }
 
           @if (voice.state() === 'recording') {
             <div class="input-wrapper recording-active">
-              <button (click)="cancelVoice()" class="voice-cancel-btn" title="Cancel">
+              <button (click)="cancelVoice()" class="voice-cancel-btn" [title]="'chat.composer.cancel' | translate">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <line x1="18" y1="6" x2="6" y2="18"></line>
                   <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -339,7 +339,7 @@
                 <canvas #waveformCanvas class="waveform-canvas" width="400" height="40"></canvas>
               </div>
               <span class="recording-timer">{{ formatDuration(voice.duration()) }}</span>
-              <button (click)="stopVoice()" class="stop-btn" title="Stop & Transcribe">
+              <button (click)="stopVoice()" class="stop-btn" [title]="'chat.composer.stopTranscribe' | translate">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
                   <rect x="4" y="4" width="16" height="16" rx="2"></rect>
                 </svg>
@@ -349,7 +349,7 @@
             <div class="input-wrapper transcribing">
               <div class="transcribing-indicator">
                 <div class="transcribing-dot"></div>
-                <span>Transcribing...</span>
+                <span>{{ 'chat.composer.transcribing' | translate }}</span>
               </div>
             </div>
           } @else {
@@ -382,7 +382,7 @@
                     @if (projectProcessesOpen()) {
                       <div class="context-menu-backdrop project-processes-backdrop" (click)="projectProcessesOpen.set(false)"></div>
                       <div class="context-menu-panel project-processes-menu" role="menu">
-                        <div class="context-menu-title">Running locally</div>
+                        <div class="context-menu-title">{{ 'chat.composer.runningLocally' | translate }}</div>
                         @for (proc of projectProcesses(); track proc.pid) {
                           <div class="project-process-row">
                             <div class="project-process-info">
@@ -394,8 +394,8 @@
                               type="button"
                               class="project-process-stop"
                               (click)="killProjectProcess(proc.pid, $event)"
-                              title="Stop process">
-                              Stop
+                              [title]="'chat.composer.stopProcess' | translate">
+                              {{ 'chat.composer.stop' | translate }}
                             </button>
                           </div>
                         }
@@ -448,12 +448,12 @@
                     Step limit reached — reply with <strong>10</strong>, <strong>20</strong>, or <strong>40</strong> for more steps, or <strong>stop</strong> to wrap up.
                   </div>
                 } @else if (askUserPending()) {
-                  <div class="ask-user-composer-banner">
-                    Reply below — the agent is waiting for your answer before it can continue.
+                    <div class="ask-user-composer-banner">
+                    {{ 'chat.composer.askBanner' | translate }}
                   </div>
                 }
                 <div class="input-wrapper agentic-active">
-                  <button (click)="onAttachClick($event)" class="attach-btn" title="Attach files (Shift+click for folder)">
+                  <button (click)="onAttachClick($event)" class="attach-btn" [title]="'chat.composer.attach' | translate">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
                     </svg>
@@ -463,18 +463,18 @@
                     (keydown)="onKeyDown($event)"
                     (input)="adjustTextareaHeight()"
                     rows="1"
-                    placeholder="{{ budgetPromptPending() ? 'Reply 10, 20, 40, or stop…' : (askUserPending() ? 'Type your answer…' : 'Send guidance to the agent while it works...') }}"
+                    [placeholder]="budgetPromptPending() ? ('chat.composer.budgetPlaceholder' | translate) : (askUserPending() ? ('chat.composer.askPlaceholder' | translate) : ('chat.composer.guidancePlaceholder' | translate))"
                     class="chat-textarea"
                   ></textarea>
                   @if (inputText.trim() || pendingAttachments().length) {
-                    <button (click)="sendMessage()" class="send-btn copilot-send" title="Send guidance">
+                    <button (click)="sendMessage()" class="send-btn copilot-send" [title]="'chat.composer.sendGuidance' | translate">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="22" y1="2" x2="11" y2="13"></line>
                         <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
                       </svg>
                     </button>
                   }
-                  <button (click)="stopGeneration()" class="cancel-btn" [class.stopping]="stopInFlight()" title="Stop">
+                  <button (click)="stopGeneration()" class="cancel-btn" [class.stopping]="stopInFlight()" [title]="'chat.composer.stop' | translate">
                     @if (stopInFlight()) {
                       <div class="cancel-spinner"></div>
                     } @else {
@@ -486,7 +486,7 @@
                 </div>
               } @else {
                 <div class="input-wrapper">
-                  <button (click)="onAttachClick($event)" class="attach-btn" title="Attach files (Shift+click for folder)">
+                  <button (click)="onAttachClick($event)" class="attach-btn" [title]="'chat.composer.attach' | translate">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                       <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
                     </svg>
@@ -500,7 +500,7 @@
                     class="chat-textarea"
                   ></textarea>
                   @if (generationActive()) {
-                    <button (click)="stopGeneration()" class="cancel-btn" [class.stopping]="stopInFlight()" title="Stop">
+                    <button (click)="stopGeneration()" class="cancel-btn" [class.stopping]="stopInFlight()" [title]="'chat.composer.stop' | translate">
                       @if (stopInFlight()) {
                         <div class="cancel-spinner"></div>
                       } @else {
@@ -510,14 +510,14 @@
                       }
                     </button>
                   } @else if (inputText.trim() || pendingAttachments().length) {
-                    <button (click)="sendMessage()" class="send-btn has-text">
+                    <button (click)="sendMessage()" class="send-btn has-text" [title]="'chat.composer.send' | translate">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="22" y1="2" x2="11" y2="13"></line>
                         <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
                       </svg>
                     </button>
                   } @else {
-                    <button (click)="startVoice()" class="mic-btn" title="Voice input">
+                    <button (click)="startVoice()" class="mic-btn" [title]="'chat.composer.voice' | translate">
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
                         <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
@@ -551,8 +551,8 @@
     <div class="mobile-conv-backdrop mobile-only" (click)="closeMobileConvNav()" aria-hidden="true"></div>
     <aside class="mobile-conv-drawer mobile-only">
       <div class="mobile-conv-drawer-header">
-        <span>Conversations</span>
-        <button type="button" class="mobile-conv-close" (click)="closeMobileConvNav()" aria-label="Close">&times;</button>
+        <span>{{ 'chat.mobile.conversations' | translate }}</span>
+        <button type="button" class="mobile-conv-close" (click)="closeMobileConvNav()" [attr.aria-label]="'chat.nav.close' | translate">&times;</button>
       </div>
       <app-conversation-nav
         [currentKey]="currentThread()"
@@ -582,7 +582,7 @@
           class="mobile-sheet-tab"
           [class.active]="panels.mobileSheetTab() === 'live'"
           (click)="setMobileSheetTab('live')"
-        >Live</button>
+        >{{ 'chat.mobile.live' | translate }}</button>
         <button
           type="button"
           role="tab"
@@ -590,7 +590,7 @@
           [class.active]="panels.mobileSheetTab() === 'inbox'"
           (click)="setMobileSheetTab('inbox')"
         >
-          Inbox
+          {{ 'chat.nav.inbox' | translate }}
           @if (panels.inboxBadge() > 0) {
             <span class="panel-header-badge">{{ panels.inboxBadge() }}</span>
           }
@@ -601,7 +601,7 @@
           class="mobile-sheet-tab"
           [class.active]="panels.mobileSheetTab() === 'context'"
           (click)="setMobileSheetTab('context')"
-        >Context</button>
+        >{{ 'chat.mobile.context' | translate }}</button>
       </div>
       <div class="sheet-content">
         @if (panels.mobileSheetTab() === 'live') {

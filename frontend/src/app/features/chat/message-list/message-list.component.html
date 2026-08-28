@@ -6,7 +6,7 @@
           <div class="empty-core"></div>
           <div class="empty-ring"></div>
         </div>
-        <p class="empty-text">Start a conversation</p>
+        <p class="empty-text">{{ 'chat.empty.start' | translate }}</p>
       </div>
     }
 
@@ -555,7 +555,7 @@
                   <path d="M2 12l10 5 10-5"></path>
                 </svg>
                 <div class="skill-review-info">
-                  <span class="skill-review-title">New Skill</span>
+                  <span class="skill-review-title">{{ 'chat.message.newSkill' | translate }}</span>
                   <span class="skill-review-reason">{{ $any(msg.toolProgress?.details)?.reason }}</span>
                 </div>
               </div>
@@ -791,24 +791,24 @@
           @if (feedbackMessageIndex() === $index) {
             <div class="feedback-panel">
               <div class="feedback-header">
-                <span class="feedback-title">Feedback on agent reply</span>
+                <span class="feedback-title">{{ 'chat.message.feedbackTitle' | translate }}</span>
                 <button class="feedback-close" (click)="closeFeedback()">
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
                 </button>
               </div>
               <div class="feedback-quoted">"{{ msg.content | slice:0:120 }}{{ msg.content.length > 120 ? '...' : '' }}"</div>
               <div class="feedback-type-toggle">
-                <button class="feedback-type-btn" [class.active]="feedbackType() === 'SPECIFIC'" (click)="feedbackType.set('SPECIFIC')">This thread</button>
-                <button class="feedback-type-btn" [class.active]="feedbackType() === 'GLOBAL'" (click)="feedbackType.set('GLOBAL')">All channels</button>
+                <button class="feedback-type-btn" [class.active]="feedbackType() === 'SPECIFIC'" (click)="feedbackType.set('SPECIFIC')">{{ 'chat.message.thisThread' | translate }}</button>
+                <button class="feedback-type-btn" [class.active]="feedbackType() === 'GLOBAL'" (click)="feedbackType.set('GLOBAL')">{{ 'chat.message.allChannels' | translate }}</button>
               </div>
-              <textarea class="feedback-textarea" [(ngModel)]="feedbackText" placeholder="E.g. Don't use this tone, be more formal..." rows="3"></textarea>
+              <textarea class="feedback-textarea" [(ngModel)]="feedbackText" [placeholder]="'chat.message.feedbackPlaceholder' | translate" rows="3"></textarea>
               <button class="feedback-submit" [disabled]="!feedbackText.trim() || feedbackSubmitting()" (click)="submitFeedback()">
                 @if (feedbackSubmitting()) {
                   <span class="feedback-spinner"></span>
-                  Sending...
+                  {{ 'chat.message.sending' | translate }}
                 } @else {
                   <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
-                  Send Feedback
+                  {{ 'chat.message.sendFeedback' | translate }}
                 }
               </button>
             </div>

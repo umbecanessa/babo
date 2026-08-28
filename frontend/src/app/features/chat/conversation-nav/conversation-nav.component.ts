@@ -14,11 +14,12 @@ import { ChatPanelService } from '../../../core/services/chat-panel.service';
 import { ToastService } from '../../../shared/toast/toast.service';
 import { ConfirmDialogComponent } from '../../../shared/confirm-dialog/confirm-dialog.component';
 import { ThreadConfirmRequest } from '../../../shared/thread-dialog/thread-dialog.types';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 
 @Component({
   selector: 'app-conversation-nav',
   standalone: true,
-  imports: [CommonModule, FormsModule, ConfirmDialogComponent],
+  imports: [CommonModule, FormsModule, ConfirmDialogComponent, TranslateModule],
   templateUrl: './conversation-nav.component.html',
   styleUrl: './conversation-nav.component.scss',
 })
@@ -42,6 +43,11 @@ export class ConversationNavComponent {
   readonly conversations = inject(ConversationService);
   readonly panels = inject(ChatPanelService);
   private readonly toast = inject(ToastService);
+  private readonly translate = inject(TranslateService);
+
+  private t(key: string, params?: Record<string, unknown>): string {
+    return this.translate.instant(key, params);
+  }
 
   @HostListener('document:click')
   closeBranchMenu(): void {
@@ -122,17 +128,14 @@ export class ConversationNavComponent {
     this.branchMenuKey = null;
     if (!this.conversations.isWebsocketBranch(key)) return;
     if (this.conversations.isDefaultHome(key, this.agentId)) {
-      this.toast.show(
-        'Cannot delete the current Home thread. Reset Home to start fresh, or set another thread as Home first.',
-        'error',
-      );
+      this.toast.show(this.t('chat.nav.cannotDeleteHome'), 'error');
       return;
     }
     const current = this.conversations.threads().find((t) => t.key === key);
     this.confirmDialog.set({
-      title: 'Delete branch',
-      message: `Delete branch "${current?.label || key}" and its history?`,
-      confirmLabel: 'Delete',
+      title: this.t('chat.nav.deleteBranchTitle'),
+      message: this.t('chat.nav.deleteBranchMessage', { label: current?.label || key }),
+      confirmLabel: this.t('chat.nav.delete'),
       variant: 'danger',
       action: 'delete_branch',
       sessionKey: key,
@@ -149,11 +152,9 @@ export class ConversationNavComponent {
       this.agentId,
     );
     this.confirmDialog.set({
-      title: 'Set as Home',
-      message:
-        `Set "${label}" as Home? Opening this agent will start here. `
-        + 'Chat history stays on each thread — nothing is moved.',
-      confirmLabel: 'Set as Home',
+      title: this.t('chat.nav.setAsHome'),
+      message: this.t('chat.nav.setAsHomeMessage', { label }),
+      confirmLabel: this.t('chat.nav.setAsHome'),
       variant: 'default',
       action: 'promote_home',
       sessionKey: key,
@@ -164,12 +165,9 @@ export class ConversationNavComponent {
     event.stopPropagation();
     this.branchMenuKey = null;
     this.confirmDialog.set({
-      title: 'Reset Home',
-      message:
-        'Start a fresh Home thread?\n\n'
-        + 'A new branch is created and set as Home. Your current Home stays in the list as a branch. '
-        + 'Agent knowledge (facts, memory) is unchanged.',
-      confirmLabel: 'Reset Home',
+      title: this.t('chat.nav.resetHome'),
+      message: this.t('chat.nav.resetHomeMessage'),
+      confirmLabel: this.t('chat.nav.resetHome'),
       variant: 'default',
       action: 'reset_home',
       sessionKey: '',

@@ -230,6 +230,68 @@
       "appearance": "Appearance",
       "general": "General",
       "keys": "API keys"
+    },
+    "desktopSubtitle": "Desktop app & local agent",
+    "models": {
+      "title": "Models & AI",
+      "desc": "Default chat model, Babo Cloud, sub-agents, voice, and screen awareness. Pick a different model per message from the chat composer."
+    },
+    "account": {
+      "title": "Account & sync",
+      "desc": "Login, agents, and dashboard sync through this server. The local Python runtime is separate.",
+      "serverUrl": "Your server URL",
+      "serverUrlHint": "No /api at the end — Babo adds that automatically.",
+      "serverPill": "Server:",
+      "saveUrl": "Save server URL"
+    },
+    "system": {
+      "title": "System",
+      "desc": "Local Python agent and desktop environment.",
+      "runtime": "Agent runtime",
+      "pythonEnv": "Python environment",
+      "start": "Start",
+      "stop": "Stop",
+      "restart": "Restart",
+      "viewLogs": "View logs",
+      "resetEnv": "Reset Python environment"
+    },
+    "support": {
+      "title": "Support & Debug",
+      "desc": "Diagnostics for support and local troubleshooting.",
+      "recentErrors": "Recent errors",
+      "logsConfig": "App logs & config"
+    },
+    "permissions": {
+      "title": "Permissions",
+      "desc": "What the local agent may access on this computer."
+    },
+    "billing": {
+      "title": "Billing",
+      "desc": "Babo Cloud subscription and usage.",
+      "lifetime": "Lifetime access",
+      "subscribe": "Subscribe to use Babo Cloud models",
+      "payg": "Pay-as-you-go models"
+    },
+    "integrations": {
+      "title": "Integrations",
+      "desc": "Platform credentials and channel prerequisites.",
+      "email": "Email (Resend)",
+      "google": "Google Workspace",
+      "messaging": "Telegram & WhatsApp"
+    },
+    "keys": {
+      "title": "API keys",
+      "desc": "Keys for programmatic access to your Babo cloud account.",
+      "manage": "Manage API keys"
+    },
+    "general": {
+      "title": "General",
+      "onboarding": "Onboarding tutorials",
+      "onboardingHint": "Re-show introductory tips on Chat, Tools, Memory, and other pages.",
+      "resetTour": "Reset first-run tour",
+      "version": "Version",
+      "checkUpdates": "Check for updates",
+      "checkingUpdates": "Checking…"
     }
   },
   "info": {
@@ -320,5 +382,186 @@
     "cycleTheme": "Cycle theme: light, dark, or system",
     "earlyAccess": "Early access",
     "appStatus": "App status"
+  },
+  "chat": {
+    "header": {
+      "stopping": "Stopping...",
+      "step": "Step {{current}}/{{max}}",
+      "stopped": "Stopped",
+      "done": "Done",
+      "steps": "{{count}} steps",
+      "workbench": "Workbench — tools & steps",
+      "browser": "Browser",
+      "inbox": "Inbox — channel messages",
+      "live": "Live — brain signals & activity",
+      "context": "Context",
+      "focus": "Focus mode",
+      "taskStopped": "Task was stopped — open workbench",
+      "taskDone": "Task completed — open workbench"
+    },
+    "nav": {
+      "conversations": "Conversations",
+      "inbox": "Inbox",
+      "home": "Home",
+      "newBranch": "New branch",
+      "threadOptions": "Thread options",
+      "setAsHome": "Set as Home",
+      "resetHome": "Reset Home…",
+      "rename": "Rename",
+      "delete": "Delete",
+      "close": "Close",
+      "cannotDeleteHome": "Cannot delete the current Home thread. Reset Home to start fresh, or set another thread as Home first.",
+      "deleteBranchTitle": "Delete branch",
+      "deleteBranchMessage": "Delete branch \"{{label}}\" and its history?",
+      "setAsHomeMessage": "Set \"{{label}}\" as Home? Opening this agent will start here. Chat history stays on each thread — nothing is moved.",
+      "resetHomeMessage": "Start a fresh Home thread?\n\nA new branch is created and set as Home. Your current Home stays in the list as a branch. Agent knowledge (facts, memory) is unchanged."
+    },
+    "composer": {
+      "dropHere": "Drop files or folders here",
+      "transcribing": "Transcribing...",
+      "cancel": "Cancel",
+      "stopTranscribe": "Stop & Transcribe",
+      "attach": "Attach files (Shift+click for folder)",
+      "send": "Send",
+      "sendGuidance": "Send guidance",
+      "stop": "Stop",
+      "voice": "Voice input",
+      "guidancePlaceholder": "Send guidance to the agent while it works...",
+      "askPlaceholder": "Type your answer…",
+      "budgetPlaceholder": "Reply 10, 20, 40, or stop…",
+      "askBanner": "Reply below — the agent is waiting for your answer before it can continue.",
+      "privatePlaceholder": "Message Babo (private — not sent externally)",
+      "privateBranchPlaceholder": "Message Babo (private branch)",
+      "discordDm": "Reply on Discord to {{who}}",
+      "discordChannel": "Reply in {{channel}} on Discord",
+      "telegramDm": "Reply on Telegram to {{who}}",
+      "telegramGroup": "Reply in {{label}} on Telegram",
+      "whatsappDm": "Reply on WhatsApp to {{who}}",
+      "whatsappGroup": "Reply in {{label}} on WhatsApp",
+      "emailReply": "Reply to {{label}} by email",
+      "surfaceReply": "Reply on {{surface}}",
+      "runningLocally": "Running locally",
+      "stopProcess": "Stop process",
+      "servers": "{{count}} servers"
+    },
+    "empty": {
+      "start": "Start a conversation"
+    },
+    "message": {
+      "newSkill": "New Skill",
+      "sendFeedback": "Send Feedback",
+      "sending": "Sending...",
+      "feedbackPlaceholder": "E.g. Don't use this tone, be more formal...",
+      "stop": "Stop",
+      "feedbackTitle": "Feedback on agent reply",
+      "thisThread": "This thread",
+      "allChannels": "All channels"
+    },
+    "mobile": {
+      "live": "Live",
+      "context": "Context",
+      "conversations": "Conversations"
+    }
+  },
+  "dashboard": {
+    "title": "Agents",
+    "subtitle": "Your neural fleet",
+    "create": "Create Agent",
+    "total": "Total",
+    "active": "Active",
+    "paused": "Paused",
+    "sleeping": "Sleeping",
+    "runtimeHint": "This typically takes 20–40 seconds",
+    "retry": "Retry",
+    "emptyTitle": "No agents yet",
+    "emptyHintLink": "Create Agent",
+    "allInSquads": "All agents are assigned to squads — expand a member below to chat or manage them.",
+    "connecting": "Connecting to runtime...",
+    "agent": {
+      "pause": "Pause",
+      "resume": "Resume",
+      "delete": "Delete",
+      "lead": "Lead",
+      "job": "Job",
+      "trust": "Trust",
+      "openChat": "Open chat",
+      "online": "Online",
+      "offline": "Offline",
+      "sleeping": "Sleeping",
+      "paused": "Paused",
+      "chatting": "Chatting",
+      "working": "Working",
+      "dreaming": "Daydreaming",
+      "unreachable": "Unreachable",
+      "desktopOffline": "Desktop Offline",
+      "defaultJob": "General helpful assistant"
+    },
+    "squad": {
+      "checkbackTitle": "Squad checkback",
+      "checkbackLead": "Wakes the lead on an interval and when inbox proposals exceed the SLA.",
+      "enableCheckback": "Enable scheduled checkback",
+      "interval": "Interval (minutes)",
+      "sla": "Proposal SLA (hours, urgent wake)",
+      "boardTitle": "Squad board",
+      "loadingBoard": "Loading board…",
+      "inbox": "Inbox",
+      "proposed": "Proposed"
+    },
+    "emptyHintBefore": "Click the orb or press",
+    "emptyHintAfter": "to begin",
+    "runtimeFailed": "Agent runtime failed to start. Check your runtime connection.",
+    "runtime": {
+      "connecting": "Connecting to runtime...",
+      "initPython": "Initializing Python environment...",
+      "loadModules": "Loading NLS server modules...",
+      "connectInference": "Connecting to inference...",
+      "loadAdapters": "Loading agent adapters into VRAM...",
+      "startScheduler": "Starting consciousness scheduler...",
+      "warmup": "Warming up neural pathways...",
+      "almost": "Almost there...",
+      "stillLoading": "Still loading — hang tight...",
+      "ready": "Runtime ready — loading agents..."
+    }
+  },
+  "toast": {
+    "chat": {
+      "uploadFailed": "File upload failed",
+      "feedbackSent": "Feedback sent",
+      "feedbackFailed": "Failed to send feedback"
+    },
+    "settings": {
+      "latestVersion": "You are on the latest version",
+      "updateAvailable": "Update available",
+      "updateAvailableVer": "Update v{{version}} available",
+      "updateCheckFailed": "Update check failed",
+      "subActive": "Subscription active — welcome to Babo Cloud!",
+      "checkoutCanceled": "Checkout canceled",
+      "tourReset": "First-run tour reset. Open chat to see it again.",
+      "resendRequired": "Resend API key and inbound domain are required",
+      "resendSaved": "Resend credentials saved",
+      "resendRemoved": "Resend credentials removed",
+      "checkoutFailed": "Could not start checkout",
+      "portalFailed": "Could not open billing portal",
+      "spendCapInvalid": "Enter a valid spend cap",
+      "spendCapUpdated": "Spend cap updated",
+      "modelsSaved": "Models and capabilities saved.",
+      "settingsSaved": "Settings saved",
+      "saveFailed": "Failed to save: {{message}}",
+      "backendUrlInvalid": "Enter a valid backend URL",
+      "accountSaved": "Account server saved",
+      "couldNotSave": "Could not save",
+      "runtimeStopped": "Runtime stopped",
+      "runtimeStarted": "Runtime started",
+      "runtimeRestarted": "Runtime restarted",
+      "runtimeFailed": "Failed to {{action}} runtime",
+      "logsFailed": "Could not load runtime logs",
+      "envReset": "Environment reset. Opening setup wizard…",
+      "resetFailed": "Reset failed",
+      "permApplied": "Permission profile applied",
+      "permReset": "Permissions reset",
+      "debugFailed": "Could not load debug information",
+      "dataFolderFailed": "Could not open data folder",
+      "exportFailed": "Export failed"
+    }
   }
 }

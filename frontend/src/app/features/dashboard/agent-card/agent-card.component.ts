@@ -1,6 +1,7 @@
-import { Component, Input, Output, EventEmitter } from '@angular/core';
+import { Component, Input, Output, EventEmitter, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterLink } from '@angular/router';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { Agent } from '../../../core/models/agent.model';
 import {
   buildAgentSnapshot,
@@ -14,12 +15,13 @@ import {
 @Component({
   selector: 'app-agent-card',
   standalone: true,
-  imports: [CommonModule, RouterLink],
+  imports: [CommonModule, RouterLink, TranslateModule],
   templateUrl: './agent-card.component.html',
   styleUrl: './agent-card.component.scss',
   host: { '[class.accordion-host]': 'accordion' },
 })
 export class AgentCardComponent {
+  private readonly translate = inject(TranslateService);
   @Input({ required: true }) agent!: Agent;
   @Input() online = true;
   @Input() remoteMode = false;
@@ -62,16 +64,16 @@ export class AgentCardComponent {
   }
 
   get statusLabel(): string {
-    if (this.isPaused) return 'Paused';
-    if (this.remoteMode && !this.online) return 'Desktop Offline';
+    if (this.isPaused) return this.translate.instant('dashboard.agent.paused');
+    if (this.remoteMode && !this.online) return this.translate.instant('dashboard.agent.desktopOffline');
     switch (this.status) {
-      case 'alive': return 'Online';
-      case 'sleeping': return 'Sleeping';
-      case 'chatting': return 'Chatting';
-      case 'working': return 'Working';
-      case 'dreaming': return 'Daydreaming';
-      case 'offline': return 'Offline';
-      case 'unreachable': return 'Unreachable';
+      case 'alive': return this.translate.instant('dashboard.agent.online');
+      case 'sleeping': return this.translate.instant('dashboard.agent.sleeping');
+      case 'chatting': return this.translate.instant('dashboard.agent.chatting');
+      case 'working': return this.translate.instant('dashboard.agent.working');
+      case 'dreaming': return this.translate.instant('dashboard.agent.dreaming');
+      case 'offline': return this.translate.instant('dashboard.agent.offline');
+      case 'unreachable': return this.translate.instant('dashboard.agent.unreachable');
       default: return this.status;
     }
   }
@@ -94,7 +96,7 @@ export class AgentCardComponent {
     return (
       this.agent.jobTitle
       || this.agent.runtime?.job_title
-      || 'General helpful assistant'
+      || this.translate.instant('dashboard.agent.defaultJob')
     );
   }
 

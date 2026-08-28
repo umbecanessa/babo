@@ -16,6 +16,7 @@ import {
   parseStreamingThinking,
 } from '../../../shared/signal-utils';
 import { MarkdownPipe } from '../../../shared/pipes/markdown.pipe';
+import { TranslateModule } from '@ngx-translate/core';
 import { ApiService } from '../../../core/services/api.service';
 import { WebSocketService } from '../../../core/services/websocket.service';
 import { ChatWorkbenchService } from '../../../core/services/chat-workbench.service';
@@ -36,7 +37,7 @@ export type { SignalTag };
 @Component({
   selector: 'app-message-list',
   standalone: true,
-  imports: [CommonModule, FormsModule, MarkdownPipe, RouterModule],
+  imports: [CommonModule, FormsModule, MarkdownPipe, RouterModule, TranslateModule],
   templateUrl: './message-list.component.html',
   styleUrl: './message-list.component.scss',
 })

@@ -2,7 +2,7 @@
   <aside class="settings-nav">
     <h2 class="settings-title">{{ 'nav.settings' | translate }}</h2>
     @if (platform.isElectron) {
-      <p class="settings-subtitle">Desktop app &amp; local agent</p>
+      <p class="settings-subtitle">{{ 'settings.desktopSubtitle' | translate }}</p>
     }
     @for (section of sections(); track section.id) {
       <button
@@ -20,10 +20,9 @@
     <!-- Models & AI -->
     @if (activeSection() === 'models') {
       <section class="section">
-        <h3 class="section-title">Models &amp; AI</h3>
+        <h3 class="section-title">{{ 'settings.models.title' | translate }}</h3>
         <p class="section-desc">
-          Default chat model, Babo Cloud, sub-agents, voice, and screen awareness.
-          Pick a different model per message from the chat composer.
+          {{ 'settings.models.desc' | translate }}
         </p>
         <app-capability-settings-panel (saved)="onCapabilitiesSaved()" />
       </section>
@@ -32,9 +31,9 @@
     <!-- Account & sync -->
     @if (activeSection() === 'account') {
       <section class="section">
-        <h3 class="section-title">Account &amp; sync</h3>
+        <h3 class="section-title">{{ 'settings.account.title' | translate }}</h3>
         <p class="section-desc">
-          Login, agents, and dashboard sync through this server. The local Python runtime is separate.
+          {{ 'settings.account.desc' | translate }}
         </p>
 
         <div class="chip-row">
@@ -57,22 +56,22 @@
 
         @if (backendChoice() === 'custom') {
           <div class="field-group">
-            <label class="field-label">Your server URL</label>
+            <label class="field-label">{{ 'settings.account.serverUrl' | translate }}</label>
             <input
               class="field-input"
               [ngModel]="nestjsUrl()"
               (ngModelChange)="setCustomBackendUrl($event)"
               placeholder="https://your-app.up.railway.app"
             />
-            <span class="field-hint">No /api at the end — Babo adds that automatically.</span>
+            <span class="field-hint">{{ 'settings.account.serverUrlHint' | translate }}</span>
           </div>
         } @else {
-          <p class="info-pill">Server: <strong>{{ nestjsUrl() }}</strong></p>
+          <p class="info-pill">{{ 'settings.account.serverPill' | translate }} <strong>{{ nestjsUrl() }}</strong></p>
         }
 
         <div class="action-row">
           <button class="btn-secondary" type="button" (click)="testBackend()" [disabled]="backendTesting()">
-            {{ backendTesting() ? 'Testing…' : 'Test connection' }}
+            {{ backendTesting() ? ('common.testing' | translate) : ('common.test_connection' | translate) }}
           </button>
           @if (backendTestResult()) {
             <span class="status-text" [class.ok]="backendTestResult()!.ok" [class.fail]="!backendTestResult()!.ok">
@@ -83,7 +82,7 @@
         </div>
 
         <button class="btn-primary" type="button" (click)="saveBackend()" [disabled]="backendSaving() || !canSaveBackend()">
-          {{ backendSaving() ? 'Saving…' : 'Save server URL' }}
+          {{ backendSaving() ? ('common.saving' | translate) : ('settings.account.saveUrl' | translate) }}
         </button>
       </section>
     }
@@ -91,10 +90,10 @@
     <!-- System (runtime + environment) -->
     @if (activeSection() === 'system') {
       <section class="section">
-        <h3 class="section-title">System</h3>
-        <p class="section-desc">Local Python agent and desktop environment.</p>
+        <h3 class="section-title">{{ 'settings.system.title' | translate }}</h3>
+        <p class="section-desc">{{ 'settings.system.desc' | translate }}</p>
 
-        <h4 class="subsection-title">Agent runtime</h4>
+        <h4 class="subsection-title">{{ 'settings.system.runtime' | translate }}</h4>
         <p class="field-hint">Process on this machine (port {{ runtimePort() }}).</p>
 
         <div class="status-card">
@@ -139,7 +138,7 @@
           <pre class="log-view">{{ runtimeLogs().join('\n') || '(empty)' }}</pre>
         }
 
-        <h4 class="subsection-title">Python environment</h4>
+        <h4 class="subsection-title">{{ 'settings.system.pythonEnv' | translate }}</h4>
         <div class="status-card">
           <span class="status-dot" [class.running]="venvReady()"></span>
           <div>
@@ -160,11 +159,9 @@
     <!-- Support & Debug -->
     @if (activeSection() === 'support') {
       <section class="section">
-        <h3 class="section-title">Support &amp; Debug</h3>
+        <h3 class="section-title">{{ 'settings.support.title' | translate }}</h3>
         <p class="section-desc">
-          Export logs and agent state for troubleshooting. API keys and secrets are redacted
-          in config exports. When support asks for a debug bundle, use
-          Export full debug bundle below.
+          {{ 'settings.support.desc' | translate }}
         </p>
 
         <div class="action-row">
@@ -193,7 +190,7 @@
           <p class="field-hint mono-hint">{{ debugUserDataPath() }}</p>
         }
 
-        <h4 class="subsection-title">Recent errors</h4>
+        <h4 class="subsection-title">{{ 'settings.support.recentErrors' | translate }}</h4>
         <p class="field-hint">Parsed from runtime, setup, and desktop logs (newest first).</p>
         @if (debugLoading() && !debugErrors().length) {
           <p class="field-hint">Loading…</p>
@@ -213,7 +210,7 @@
           </ul>
         }
 
-        <h4 class="subsection-title">App logs &amp; config</h4>
+        <h4 class="subsection-title">{{ 'settings.support.logsConfig' | translate }}</h4>
         <div class="debug-artifact-list">
           @for (item of debugAppArtifacts(); track item.kind) {
             <div class="debug-artifact-row">
@@ -267,9 +264,9 @@
     <!-- Permissions -->
     @if (activeSection() === 'permissions') {
       <section class="section">
-        <h3 class="section-title">Permissions</h3>
+        <h3 class="section-title">{{ 'settings.permissions.title' | translate }}</h3>
         <p class="section-desc">
-          What the desktop shell may do on your behalf (files, shell, network). Agent tools may request additional access.
+          {{ 'settings.permissions.desc' | translate }}
         </p>
 
         <div class="profile-cards">
@@ -302,10 +299,9 @@
   <!-- Platform integrations (desktop + web) -->
   @if (activeSection() === 'billing' && billingEnabled()) {
     <section class="section">
-      <h3 class="section-title">Billing</h3>
+      <h3 class="section-title">{{ 'settings.billing.title' | translate }}</h3>
       <p class="section-desc">
-        Babo Cloud — <strong>{{ cloudBasicPriceLabel }}</strong> for relay, channels, and hosted integrations.
-        Checkout uses Stripe (Link supported). Model usage is BYOK or optional pay-as-you-go at upstream cost (no Babo markup).
+        {{ 'settings.billing.desc' | translate }}
       </p>
 
       @if (subscriptionLoading()) {
@@ -313,7 +309,7 @@
       } @else if (subscription(); as sub) {
         @if (sub.billingExempt || sub.status === 'lifetime_comp') {
           <div class="info-card babo-provided">
-            <h4 class="subsection-title">Lifetime access</h4>
+            <h4 class="subsection-title">{{ 'settings.billing.lifetime' | translate }}</h4>
             <p class="field-hint">
               You have complimentary Babo Cloud access
               @if (sub.hostedGx10Enabled) {
@@ -324,7 +320,7 @@
           </div>
         } @else if (sub.status === 'none' || sub.status === 'canceled') {
           <div class="info-card prereq">
-            <h4 class="subsection-title">Subscribe to use Babo Cloud models</h4>
+            <h4 class="subsection-title">{{ 'settings.billing.subscribe' | translate }}</h4>
             <p class="field-hint">
               Hosted models require an active subscription. Your API key on this device (BYOK) still works without a sub.
             </p>
@@ -385,7 +381,7 @@
             </button>
           </div>
 
-          <h4 class="subsection-title">Pay-as-you-go models</h4>
+          <h4 class="subsection-title">{{ 'settings.billing.payg' | translate }}</h4>
           <p class="field-hint">
             Optional for Babo-routed models when you are not using BYOK. Billed at upstream cost with no Babo markup (monthly cap applies).
           </p>
@@ -446,10 +442,9 @@
 
   @if (activeSection() === 'integrations') {
     <section class="section">
-      <h3 class="section-title">Integrations</h3>
+      <h3 class="section-title">{{ 'settings.integrations.title' | translate }}</h3>
       <p class="section-desc">
-        Platform credentials for agent channels (Resend email, Google OAuth on self-hosted servers).
-        Per-agent connections — Telegram bots, WhatsApp QR, OAuth sign-in — are under
+        {{ 'settings.integrations.desc' | translate }}
         <a [routerLink]="toolsLink()">Tools → Integrations</a>.
       </p>
 
@@ -487,7 +482,7 @@
           </ol>
         </div>
 
-        <h4 class="subsection-title">Email (Resend)</h4>
+        <h4 class="subsection-title">{{ 'settings.integrations.email' | translate }}</h4>
         <p class="field-hint">
           Inbound mail hits your NestJS webhook, then relays to Babo Desktop.
           Configure Resend here <em>or</em> set <code>RESEND_API_KEY</code> and
@@ -535,7 +530,7 @@
           </button>
         }
 
-        <h4 class="subsection-title">Google Workspace</h4>
+        <h4 class="subsection-title">{{ 'settings.integrations.google' | translate }}</h4>
         <p class="field-hint">
           Create a Google Cloud OAuth app and save <code>client_id</code> /
           <code>client_secret</code> in each agent's Tools → Google Workspace config,
@@ -546,7 +541,7 @@
           <code>http://localhost:{{ runtimePort() }}/skills/google-workspace/oauth/callback</code>
         </p>
 
-        <h4 class="subsection-title">Telegram &amp; WhatsApp</h4>
+        <h4 class="subsection-title">{{ 'settings.integrations.messaging' | translate }}</h4>
         <p class="field-hint">
           Telegram uses your BotFather token and registers webhooks on your NestJS server.
           WhatsApp pairs via QR on Babo Desktop — no NestJS webhook for inbound WhatsApp messages.
@@ -628,16 +623,16 @@
   <!-- API keys (web) -->
   @if (activeSection() === 'keys') {
     <section class="section">
-      <h3 class="section-title">API keys</h3>
-      <p class="section-desc">Keys for programmatic access to your Babo cloud account.</p>
-      <a routerLink="/settings/api-keys" class="btn-primary">Manage API keys</a>
+      <h3 class="section-title">{{ 'settings.keys.title' | translate }}</h3>
+      <p class="section-desc">{{ 'settings.keys.desc' | translate }}</p>
+      <a routerLink="/settings/api-keys" class="btn-primary">{{ 'settings.keys.manage' | translate }}</a>
     </section>
   }
 
   <!-- General -->
   @if (activeSection() === 'general') {
     <section class="section">
-      <h3 class="section-title">General</h3>
+      <h3 class="section-title">{{ 'settings.general.title' | translate }}</h3>
 
       <div class="field-group">
         <label class="field-label">Agent integrations</label>
@@ -650,22 +645,22 @@
       </div>
 
       <div class="field-group">
-        <label class="field-label">Onboarding tutorials</label>
-        <p class="field-hint">Re-show introductory tips on Chat, Tools, Memory, and other pages.</p>
-        <button class="btn-secondary" type="button" (click)="resetOnboarding()">Reset first-run tour</button>
+        <label class="field-label">{{ 'settings.general.onboarding' | translate }}</label>
+        <p class="field-hint">{{ 'settings.general.onboardingHint' | translate }}</p>
+        <button class="btn-secondary" type="button" (click)="resetOnboarding()">{{ 'settings.general.resetTour' | translate }}</button>
       </div>
 
       @if (appVersion()) {
         <div class="field-group">
-          <label class="field-label">Version</label>
-          <p class="info-pill">v{{ appVersion() }} · Early access</p>
+          <label class="field-label">{{ 'settings.general.version' | translate }}</label>
+          <p class="info-pill">v{{ appVersion() }} · {{ 'nav.earlyAccess' | translate }}</p>
           <button
             class="btn-secondary"
             type="button"
             (click)="checkForUpdates()"
             [disabled]="checkingUpdates()"
           >
-            {{ checkingUpdates() ? 'Checking…' : 'Check for updates' }}
+            {{ checkingUpdates() ? ('settings.general.checkingUpdates' | translate) : ('settings.general.checkUpdates' | translate) }}
           </button>
           @if (updateService.state() === 'error') {
             <p class="field-hint error-hint">{{ updateService.errorMessage() }}</p>
