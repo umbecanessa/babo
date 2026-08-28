@@ -1,3 +1,5 @@
+export type TranslateFn = (key: string, params?: Record<string, unknown>) => string;
+
 /** Human-readable workbench titles for orchestration tools. */
 
 const MODE_LABELS: Record<string, string> = {
@@ -9,9 +11,19 @@ const MODE_LABELS: Record<string, string> = {
   responding: 'Responding',
 };
 
-export function formatAgentMode(mode: string): string {
+export function formatAgentMode(mode: string, t?: TranslateFn): string {
   const key = (mode || '').toLowerCase().trim();
-  return MODE_LABELS[key] || (key ? key.charAt(0).toUpperCase() + key.slice(1) : 'Unknown');
+  const i18nKey = `chat.workbench.labels.mode.${key}`;
+  if (t) {
+    const translated = t(i18nKey);
+    if (translated !== i18nKey) return translated;
+  }
+  return MODE_LABELS[key] || (key ? key.charAt(0).toUpperCase() + key.slice(1) : (t ? t('chat.workbench.labels.mode.unknown') : 'Unknown'));
+}
+
+
+function L(key: string, fallback: string, t?: TranslateFn, params?: Record<string, unknown>): string {
+  return t ? t(key, params) : fallback;
 }
 
 function str(v: unknown, max = 80): string {
@@ -83,25 +95,25 @@ function teamAction(args: Record<string, unknown>): string {
 export function toolWorkbenchTitle(
   toolName: string,
   args: Record<string, unknown>,
-  opts?: { lastMode?: string },
+  opts?: { lastMode?: string; t?: TranslateFn },
 ): { title: string; subtitle?: string; toolLabel: string; modeTransition?: string } {
   const toolLabel = toolName || 'tool';
 
   if (toolName === 'switch_mode') {
     const to = str(args['mode'], 24).toLowerCase();
-    const from = opts?.lastMode ? formatAgentMode(opts.lastMode) : '?';
-    const toLabel = formatAgentMode(to);
+    const from = opts?.lastMode ? formatAgentMode(opts.lastMode, opts?.t) : '?';
+    const toLabel = formatAgentMode(to, opts?.t);
     return {
       title: `${from} → ${toLabel}`,
       subtitle: str(args['reason'], 120) || undefined,
-      toolLabel: 'Mode',
+      toolLabel: L('chat.workbench.labels.modeLabel', 'Mode', opts?.t),
       modeTransition: to,
     };
   }
 
   if (toolName === 'plan') {
     const title = planAction(args);
-    return { title, subtitle: str(args['title'], 60) || undefined, toolLabel: 'Plan' };
+    return { title, subtitle: str(args['title'], 60) || undefined, toolLabel: L('chat.workbench.labels.planLabel', 'Plan', opts?.t) };
   }
 
   if (toolName === 'team') {
@@ -110,7 +122,7 @@ export function toolWorkbenchTitle(
     return {
       title: teamAction(args),
       subtitle: hintMsg || undefined,
-      toolLabel: 'Team',
+      toolLabel: L('chat.workbench.labels.teamLabel', 'Team', opts?.t),
     };
   }
 
@@ -119,45 +131,45 @@ export function toolWorkbenchTitle(
     const title = str(args['title'], 60);
     return {
       title: title ? `Todo: ${action} — ${title}` : `Todo: ${action}`,
-      toolLabel: 'Todo',
+      toolLabel: L('chat.workbench.labels.todoLabel', 'Todo', opts?.t),
     };
   }
 
   if (toolName === 'await_delegates') {
     return {
-      title: 'Await delegates',
+      title: L('chat.workbench.labels.awaitDelegates', 'Await delegates', opts?.t),
       subtitle: str(args['summary'], 100) || undefined,
-      toolLabel: 'Orchestrator',
+      toolLabel: L('chat.workbench.labels.orchestrator', 'Orchestrator', opts?.t),
     };
   }
 
   if (toolName === 'write' || toolName === 'write_file' || toolName === 'create_file') {
-    return { title: 'Write file', toolLabel: 'Write' };
+    return { title: L('chat.workbench.labels.writeFile', 'Write file', opts?.t), toolLabel: L('chat.workbench.labels.write', 'Write', opts?.t) };
   }
 
   if (toolName === 'edit') {
-    return { title: 'Edit file', toolLabel: 'Edit' };
+    return { title: L('chat.workbench.labels.editFile', 'Edit file', opts?.t), toolLabel: L('chat.workbench.labels.edit', 'Edit', opts?.t) };
   }
 
   if (toolName === 'read' || toolName === 'read_file') {
-    return { title: 'Read file', toolLabel: 'Read' };
+    return { title: L('chat.workbench.labels.readFile', 'Read file', opts?.t), toolLabel: L('chat.workbench.labels.read', 'Read', opts?.t) };
   }
 
   if (toolName === 'delete_file') {
-    return { title: 'Delete file', toolLabel: 'Delete' };
+    return { title: L('chat.workbench.labels.deleteFile', 'Delete file', opts?.t), toolLabel: L('chat.workbench.labels.delete', 'Delete', opts?.t) };
   }
 
   if (toolName === 'move_file') {
-    return { title: 'Move file', toolLabel: 'Move' };
+    return { title: L('chat.workbench.labels.moveFile', 'Move file', opts?.t), toolLabel: L('chat.workbench.labels.move', 'Move', opts?.t) };
   }
 
   if (toolName === 'bash') {
     const cmd = str(args['command'], 88);
-    return { title: cmd ? `$ ${cmd}` : 'Shell command', toolLabel: 'Bash' };
+    return { title: cmd ? `$ ${cmd}` : L('chat.workbench.labels.shellCommand', 'Shell command', opts?.t), toolLabel: L('chat.workbench.labels.bash', 'Bash', opts?.t) };
   }
 
   if (toolName === 'list_dir') {
-    return { title: 'List folder', toolLabel: 'List' };
+    return { title: L('chat.workbench.labels.listFolder', 'List folder', opts?.t), toolLabel: L('chat.workbench.labels.list', 'List', opts?.t) };
   }
 
   if (toolName === 'glob' || toolName === 'grep') {
@@ -171,32 +183,32 @@ export function toolWorkbenchTitle(
   if (toolName === 'web_search' || toolName === 'search') {
     return {
       title: `Search: ${str(args['query'] || args['term'], 88)}`,
-      toolLabel: 'Search',
+      toolLabel: L('chat.workbench.labels.search', 'Search', opts?.t),
     };
   }
 
   if (toolName === 'web_fetch') {
-    return { title: `Fetch ${str(args['url'], 72)}`, toolLabel: 'Fetch' };
+    return { title: `Fetch ${str(args['url'], 72)}`, toolLabel: L('chat.workbench.labels.fetch', 'Fetch', opts?.t) };
   }
 
   if (toolName === 'delegate') {
     return {
       title: `Delegate: ${str(args['task'], 72)}`,
-      toolLabel: 'Delegate',
+      toolLabel: L('chat.workbench.labels.delegate', 'Delegate', opts?.t),
     };
   }
 
   if (toolName === 'communicate') {
     return {
-      title: 'Stakeholder update',
+      title: L('chat.workbench.labels.stakeholderUpdate', 'Stakeholder update', opts?.t),
       subtitle: str(args['message'] || args['status'], 100),
-      toolLabel: 'Comms',
+      toolLabel: L('chat.workbench.labels.comms', 'Comms', opts?.t),
     };
   }
 
   return {
     title: toolName ? `${toolName}…` : 'Tool',
-    toolLabel: toolName || 'Tool',
+    toolLabel: toolName || L('chat.workbench.labels.tool', 'Tool', opts?.t),
   };
 }
 

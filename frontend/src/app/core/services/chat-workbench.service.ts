@@ -785,6 +785,7 @@ export class ChatWorkbenchService {
         const toolName = msg.tool_name || '';
         const args = (msg.arguments || {}) as Record<string, unknown>;
         const parsed = toolWorkbenchTitle(toolName, args, {
+          t: (k, p) => this.t(k, p),
           lastMode: this._lastAgentMode,
         });
         if (toolName === 'switch_mode' && parsed.modeTransition) {
@@ -918,10 +919,10 @@ export class ChatWorkbenchService {
             : undefined;
           const arrow = (metaTitle || startTitle).match(/^(.+?)\s*→\s*(.+)$/);
           chips = [
-            { label: this.t('chat.workbench.entries.from'), value: arrow?.[1]?.trim() || formatAgentMode(fromMode), tone: 'muted' },
+            { label: this.t('chat.workbench.entries.from'), value: arrow?.[1]?.trim() || formatAgentMode(fromMode, (k, p) => this.t(k, p)), tone: 'muted' },
             {
               label: this.t('chat.workbench.entries.to'),
-              value: arrow?.[2]?.trim() || formatAgentMode(toModeStr),
+              value: arrow?.[2]?.trim() || formatAgentMode(toModeStr, (k, p) => this.t(k, p)),
               tone: 'accent',
             },
           ];

@@ -273,6 +273,59 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
   private readonly agentIdSignal = signal('');
   private waveformAnimFrame = 0;
 
+
+  private bgToolLabel(toolName: string, args: Record<string, unknown>): string {
+    const path = String(args['path'] || args['file_path'] || '');
+    const file = path || this.t('chat.runtime.bgTool.file');
+    const action = String(args['action'] || '');
+    const fallbackAction = this.t('chat.runtime.bgTool.updating');
+    const manage = this.t('chat.runtime.bgTool.managing');
+    switch (toolName) {
+      case 'write':
+      case 'write_file':
+      case 'create_file':
+        return path
+          ? this.t('chat.runtime.bgTool.writing', { path })
+          : this.t('chat.runtime.bgTool.writingFile');
+      case 'read':
+      case 'read_file':
+        return path
+          ? this.t('chat.runtime.bgTool.reading', { path })
+          : this.t('chat.runtime.bgTool.readingFile');
+      case 'edit':
+        return path
+          ? this.t('chat.runtime.bgTool.editing', { path })
+          : this.t('chat.runtime.bgTool.editingFile');
+      case 'plan':
+        return this.t('chat.runtime.bgTool.plan', { action: action || fallbackAction });
+      case 'team':
+        return this.t('chat.runtime.bgTool.team', { action: action || manage });
+      case 'todo':
+        return this.t('chat.runtime.bgTool.todo', { action: action || fallbackAction });
+      case 'delegate':
+        return this.t('chat.runtime.bgTool.delegating');
+      case 'scheduler':
+        return this.t('chat.runtime.bgTool.scheduler', { action: action || manage });
+      case 'web_search':
+      case 'search':
+        return this.t('chat.runtime.bgTool.searching', {
+          query: String(args['query'] || args['term'] || ''),
+        });
+      case 'browser_navigate':
+        return this.t('chat.runtime.bgTool.browsing', {
+          url: String(args['url'] || '').slice(0, 60),
+        });
+      case 'switch_mode': {
+        const parsed = toolWorkbenchTitle('switch_mode', args, {
+          t: (k, p) => this.t(k, p),
+        });
+        return parsed.title;
+      }
+      default:
+        return this.t('chat.runtime.bgTool.runningTool', { tool: toolName });
+    }
+  }
+
   private t(key: string, params?: Record<string, unknown>): string {
     return this.translate.instant(key, params);
   }
@@ -2915,7 +2968,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
             // Only create a new card if this is a genuinely new plan
             // (not a re-broadcast after verify/update).
             this._updateBackgroundCardDetail(
-              `Plan (${labels.length} steps): ${labels.slice(0, 3).join(', ')}${labels.length > 3 ? '…' : ''}`,
+              this.t('chat.runtime.bgTool.planSteps', { count: labels.length, preview: `${labels.slice(0, 3).join(', ')}${labels.length > 3 ? '…' : ''}` }),
             );
 
             // Track plan steps for step-completed cards
@@ -2938,7 +2991,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
             const stepLabel = bgStepIdx < this._bgPlanSteps.length
               ? this._bgPlanSteps[bgStepIdx] : '';
             this._updateBackgroundCardDetail(
-              `Step ${bgStepIdx + 1} done${stepLabel ? ': ' + stepLabel : ''}`,
+              this.t('chat.runtime.bgTool.planStepDone', { num: bgStepIdx + 1, suffix: stepLabel ? ': ' + stepLabel : '' }),
             );
           }
           break;
@@ -2954,36 +3007,12 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         }
 
         if (msg.autonomous) {
-          let bgLabel = toolName;
-          if (toolName === 'write' || toolName === 'write_file' || toolName === 'create_file') {
-            bgLabel = `Writing ${args.path || args.file_path || 'file'}...`;
-          } else if (toolName === 'bash') {
-            bgLabel = args.command ? `$ ${(args.command as string).slice(0, 60)}` : this.t('chat.runtime.runningCommand');
-          } else if (toolName === 'read' || toolName === 'read_file') {
-            bgLabel = `Reading ${args.path || args.file_path || 'file'}...`;
-          } else if (toolName === 'edit') {
-            bgLabel = `Editing ${args.path || args.file_path || 'file'}...`;
-          } else if (toolName === 'plan') {
-            bgLabel = `Plan: ${args.action || 'updating'}...`;
+          const bgLabel = toolName === 'bash'
+            ? (args.command ? `$ ${(args.command as string).slice(0, 60)}` : this.t('chat.runtime.runningCommand'))
+            : this.bgToolLabel(toolName, args as Record<string, unknown>);
+          if (toolName === 'plan') {
             this._updateBackgroundCardDetail(bgLabel);
             break;
-          } else if (toolName === 'team') {
-            bgLabel = `Team: ${args.action || 'managing'}...`;
-          } else if (toolName === 'todo') {
-            bgLabel = `Todo: ${args.action || 'updating'}...`;
-          } else if (toolName === 'delegate') {
-            bgLabel = `Delegating task...`;
-          } else if (toolName === 'scheduler') {
-            bgLabel = `Scheduler: ${args.action || 'managing'}...`;
-          } else if (toolName === 'web_search' || toolName === 'search') {
-            bgLabel = `Searching: ${args.query || args.term || ''}...`;
-          } else if (toolName === 'browser_navigate') {
-            bgLabel = `Browsing: ${(args.url || '').slice(0, 60)}...`;
-          } else if (toolName === 'switch_mode') {
-            const parsed = toolWorkbenchTitle('switch_mode', args as Record<string, unknown>);
-            bgLabel = parsed.title;
-          } else {
-            bgLabel = `Running ${toolName}...`;
           }
           this._updateBackgroundCardDetail(bgLabel);
           break;
@@ -3010,7 +3039,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         if (toolName === 'write' || toolName === 'write_file' || toolName === 'create_file') {
           filePaths = this._enrichFilePaths(collectFilePaths(toolName, normArgs));
           const name = filePaths[0] ? fileDisplayName(filePaths[0]) : 'file';
-          label = `Writing ${name}…`;
+          label = filePaths[0] ? this.t('chat.runtime.bgTool.writing', { path: name }) : this.t('chat.runtime.bgTool.writingFile');
         } else if (toolName === 'bash') {
           label = normArgs['command']
             ? `$ ${normArgs['command']}`
@@ -3018,23 +3047,23 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         } else if (toolName === 'read' || toolName === 'read_file') {
           filePaths = this._enrichFilePaths(collectFilePaths(toolName, normArgs));
           const name = filePaths[0] ? fileDisplayName(filePaths[0]) : 'file';
-          label = `Reading ${name}…`;
+          label = filePaths[0] ? this.t('chat.runtime.bgTool.reading', { path: name }) : this.t('chat.runtime.bgTool.readingFile');
         } else if (toolName === 'edit') {
           filePaths = this._enrichFilePaths(collectFilePaths(toolName, normArgs));
           const name = filePaths[0] ? fileDisplayName(filePaths[0]) : 'file';
-          label = `Editing ${name}…`;
+          label = filePaths[0] ? this.t('chat.runtime.bgTool.editing', { path: name }) : this.t('chat.runtime.bgTool.editingFile');
         } else if (toolName === 'offer_download') {
           label = `Preparing download: ${args.label || args.path || 'file'}...`;
         } else if (toolName === 'wait') {
           label = `Waiting ${args.seconds ?? 30}s…`;
         } else if (toolName === 'team') {
-          label = `Team: ${args.action || 'managing'}...`;
+          label = this.t('chat.runtime.bgTool.team', { action: String(args['action'] || this.t('chat.runtime.bgTool.managing')) });
         } else if (toolName === 'plan') {
-          label = `Plan: ${args.action || 'updating'}...`;
+          label = this.t('chat.runtime.bgTool.plan', { action: String(args['action'] || this.t('chat.runtime.bgTool.updating')) });
         } else if (toolName === 'todo') {
-          label = `Todo: ${args.action || 'updating'}...`;
+          label = this.t('chat.runtime.bgTool.todo', { action: String(args['action'] || this.t('chat.runtime.bgTool.updating')) });
         } else if (toolName === 'delegate') {
-          label = `Delegating task...`;
+          label = this.t('chat.runtime.bgTool.delegating');
         } else if (toolName === 'scheduler') {
           label = `Scheduler: ${args.action || 'managing'}...`;
         } else {
@@ -3189,10 +3218,10 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
                   { label: doneLabel, isError, isWarning },
                 ];
                 const count = newItems.length;
-                const groupLabel = toolName === 'todo' ? `${count} Todos updated`
-                  : toolName === 'plan' ? `${count} Plans updated`
-                  : toolName === 'edit' ? `${count} Files edited`
-                  : `${count}× ${toolName}`;
+                const groupLabel = toolName === 'todo' ? this.t('chat.runtime.groupTodos', { count })
+                  : toolName === 'plan' ? this.t('chat.runtime.groupPlans', { count })
+                  : toolName === 'edit' ? this.t('chat.runtime.groupFilesEdited', { count })
+                  : this.t('chat.runtime.groupToolRepeat', { count, tool: toolName });
                 updated[matchIdx - 1] = {
                   ...prev,
                   content: groupLabel,
