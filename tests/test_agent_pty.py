@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
-from server.services.agent_pty_pool import AgentPtyPool
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+from server.services.agent_pty_pool import AgentPtyPool, reset_agent_pty_pool
 from server.services.pty_session import (
     MARKER_CWD,
     MARKER_EXIT,
@@ -17,6 +21,7 @@ def test_wrap_command_includes_exit_and_cwd_sentinels_windows():
     assert MARKER_EXIT in wrapped
     assert MARKER_CWD in wrapped
     assert "Get-ChildItem" in wrapped
+    assert "$__nls_code" in wrapped or "LASTEXITCODE" in wrapped
 
 
 def test_wrap_command_includes_exit_and_cwd_sentinels_unix():
@@ -41,8 +46,6 @@ def test_parse_cwd_from_output():
 
 
 def test_build_env_export_script_unix():
-    from unittest.mock import patch
-
     with patch("server.services.pty_session.platform.system", return_value="Linux"):
         script = build_env_export_script([("PATH", "/venv/bin:/usr/bin")])
         assert "export PATH=" in script
@@ -50,9 +53,61 @@ def test_build_env_export_script_unix():
 
 
 def test_build_env_export_script_windows():
-    from unittest.mock import patch
-
     with patch("server.services.pty_session.platform.system", return_value="Windows"):
         script = build_env_export_script([("PATH", "C:\\venv\\Scripts")])
         assert "$env:PATH =" in script
         assert "C:\\venv\\Scripts" in script
+
+
+@pytest.mark.asyncio
+async def test_park_long_running_keeps_busy_shell_for_mirror():
+    reset_agent_pty_pool()
+    pool = AgentPtyPool()
+
+    busy = MagicMock()
+    busy.cwd = "/tmp/ws"
+    busy.shell_pid = 111
+    busy.write = AsyncMock()
+    busy.close = AsyncMock()
+    busy.sync_env = AsyncMock()
+    busy.set_cwd = AsyncMock()
+    busy.start = AsyncMock()
+
+    fresh = MagicMock()
+    fresh.cwd = "/tmp/ws"
+    fresh.shell_pid = 222
+    fresh.write = AsyncMock()
+    fresh.close = AsyncMock()
+    fresh.sync_env = AsyncMock()
+    fresh.set_cwd = AsyncMock()
+    fresh.start = AsyncMock()
+
+    with patch(
+        "server.services.agent_pty_pool.normalize_pty_workspace",
+        return_value="/tmp/ws",
+    ):
+        key = pool.session_key("agent-a", "/tmp/ws")
+        pool._sessions[key] = busy
+        pool._mirror[key] = busy
+
+        with patch("server.services.agent_pty_pool.PtySession", return_value=fresh):
+            out = await pool.park_long_running_and_spawn_fresh(
+                agent_id="agent-a",
+                workspace="/tmp/ws",
+                env={"PATH": "/usr/bin"},
+                cwd="/tmp/ws",
+            )
+
+        assert out is fresh
+        assert pool.get_existing("agent-a", "/tmp/ws") is busy
+        assert pool._sessions[key] is fresh
+        busy.write.assert_awaited()
+        fresh.start.assert_awaited()
+
+        cmd = await pool.get_session(
+            agent_id="agent-a",
+            workspace="/tmp/ws",
+            env={"PATH": "/usr/bin"},
+            cwd="/tmp/ws",
+        )
+        assert cmd is fresh

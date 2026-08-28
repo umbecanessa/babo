@@ -1804,13 +1804,24 @@ class BashTool:
         if early == "interactive":
             await asyncio.sleep(3)
             partial = strip_ansi(text)
+            try:
+                fresh = await pool.park_long_running_and_spawn_fresh(
+                    agent_id=self._agent_id,
+                    workspace=workspace,
+                    env=self._isolated_env,
+                    cwd=self._cwd,
+                )
+                if fresh.shell_pid:
+                    self._pty_shell_pid = fresh.shell_pid
+            except Exception as exc:
+                logger.warning("PTY park after interactive failed: %s", exc)
             return ToolResult(
                 content=(
                     "[INTERACTIVE PROMPT DETECTED — command is waiting "
                     "for user action]\n\n"
                     f"The command printed:\n{partial}\n\n"
-                    "The command is still running in the agent PTY shell "
-                    "and will complete once the external action is done."
+                    "The command is still running in the agent terminal. "
+                    "A fresh shell was opened for follow-up bash commands."
                 ),
                 is_error=False,
                 details={"exit_code": None, "interactive": True, "pty": True},
@@ -1850,13 +1861,25 @@ class BashTool:
                 pid_hint = tracked
             else:
                 pid_hint = "unknown (see output)"
+            try:
+                fresh = await pool.park_long_running_and_spawn_fresh(
+                    agent_id=self._agent_id,
+                    workspace=workspace,
+                    env=self._isolated_env,
+                    cwd=self._cwd,
+                )
+                if fresh.shell_pid:
+                    self._pty_shell_pid = fresh.shell_pid
+            except Exception as exc:
+                logger.warning("PTY park after daemon failed: %s", exc)
             return ToolResult(
                 content=(
-                    "[SERVER/DAEMON STARTED — running in agent PTY "
+                    "[SERVER/DAEMON STARTED — running in agent terminal "
                     f"(pid: {pid_hint})]\n\n"
                     f"The command printed:\n{partial}\n\n"
-                    "The server is running in the agent terminal session. "
-                    "Do NOT run the same start command again."
+                    "The server keeps running in that terminal session. "
+                    "A fresh shell was opened for follow-up bash commands — "
+                    "do NOT run the same start command again."
                 ),
                 is_error=False,
                 details={
@@ -1865,6 +1888,7 @@ class BashTool:
                     "pid": tracked if tracked and tracked != shell_pid else None,
                     "pty": True,
                     "timed_out": timed_out,
+                    "shell_rotated": True,
                 },
             )
 
