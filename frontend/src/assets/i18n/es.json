@@ -918,6 +918,46 @@
       "noFields": "No configuration fields defined.",
       "listPlaceholder": "Comma-separated values",
       "optional": "(optional)"
+    },
+    "intro": {
+      "email": "Activate your email channel.",
+      "telegram": "Set up Telegram for your agent.",
+      "discord": "Set up Discord for your agent.",
+      "slack": "Set up Slack for your agent.",
+      "google": "Connect your Google account to let your agent manage Gmail, Calendar, Drive, and Sheets.",
+      "whatsapp": "Pair WhatsApp with your agent."
+    },
+    "discordRoles": {
+      "title": "Moderator roles",
+      "hint": "Members with these server roles can talk to the bot without @mention. Synced live from Discord.",
+      "refresh": "Refresh roles",
+      "saving": "Saving…",
+      "loading": "Loading roles from Discord…"
+    },
+    "channelScope": {
+      "title": "Channel scope",
+      "hint": "Choose which channels this agent listens and replies in. Sync refreshes from {{platform}}. Use Save configuration below to persist your selection.",
+      "selectAll": "Select all",
+      "deselectAll": "Deselect all",
+      "sync": "Sync channels",
+      "syncing": "Syncing...",
+      "loading": "Loading channels...",
+      "empty": "No channels found yet.",
+      "emptyHint": "Click Sync channels — the bot must be in a server with permission to list channels.",
+      "noAccess": "No platform access",
+      "enabled": "Enabled",
+      "mentionOnly": "@mention only"
+    },
+    "completeSetup": "Complete setup:",
+    "completeSetupBody": "fill in the required fields below, then save.",
+    "repair": {
+      "starting": "Starting repair...",
+      "escalate": "Escalate to Chat",
+      "fixWithAgent": "Fix with Agent"
+    },
+    "skillConfig": {
+      "loading": "Loading config...",
+      "noConfig": "No config.json found for this skill."
     }
   },
   "memory": {
@@ -1074,7 +1114,70 @@
     "toggleChat": "Toggle chat sidebar",
     "teamActive": "Team Active",
     "teamsActive": "Teams Active",
-    "membersDone": "Members Done"
+    "membersDone": "Members Done",
+    "retry": "Retry",
+    "ribbon": {
+      "failed": "Failed",
+      "subAgentActive": "Sub-agent Active",
+      "subAgentsActive": "Sub-agents Active",
+      "awaitingLaunch": "Awaiting Launch",
+      "awaitingLaunchTitle": "Wave team exists but delegates were never launched",
+      "planDone": "Plan Done",
+      "skipped": "{{count}} skipped",
+      "planStatsTitle": "{{done}} done, {{skipped}} skipped",
+      "wrapUp": "Wrap-up",
+      "wrapUpLabel": "Steps complete · plan open",
+      "wrapUpTitle": "All plan steps are done — orchestrator should verify and plan(complete), or fix remaining gaps",
+      "recovery": "Recovery",
+      "partialAccepted": "Partial accepted",
+      "recoveryTitle": "Partial step accepted — orchestrator should team(advance) or fix gaps, then continue"
+    },
+    "strip": {
+      "aria": "Task queue snapshot",
+      "queue": "Queue",
+      "openBoard": "Open Board",
+      "inProgress": "In progress",
+      "blocked": "Blocked",
+      "waitingDependency": "Waiting on dependency",
+      "planSteps": "{{progress}} plan steps"
+    },
+    "board": {
+      "expand": "Expand",
+      "collapse": "Collapse",
+      "unblock": "Unblock",
+      "unblockTitle": "Force unblock — move to In Progress",
+      "emptyInbox": "No new tasks",
+      "emptyInProgress": "Nothing in progress",
+      "empty": "Empty"
+    },
+    "teams": {
+      "attempts": "{{count}} attempts",
+      "failed": "Failed",
+      "notLaunched": "Not launched",
+      "notLaunchedTitle": "Team record exists; delegates not launched",
+      "planned": "Planned",
+      "pause": "Pause",
+      "skip": "Skip",
+      "skipTitle": "Skip this wave",
+      "disband": "Disband",
+      "resume": "Resume",
+      "start": "Start",
+      "startTitle": "Force start this wave",
+      "sendHint": "Send Hint",
+      "hintPlaceholder": "Hint for this agent...",
+      "iterations": "Iterations:",
+      "tools": "Tools:",
+      "elapsed": "Elapsed:",
+      "lastResponse": "Last response:",
+      "recentTools": "Recent tools",
+      "status": {
+        "running": "Running",
+        "done": "Done",
+        "failed": "Failed",
+        "cancelled": "Cancelled",
+        "pending": "Pending"
+      }
+    }
   },
   "auth": {
     "email": "Email",

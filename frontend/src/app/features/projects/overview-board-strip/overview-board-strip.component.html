@@ -1,8 +1,8 @@
-<section class="board-strip" aria-label="Task queue snapshot">
+<section class="board-strip" [attr.aria-label]="'projects.strip.aria' | translate">
   <div class="strip-header">
-    <span class="strip-title">Queue</span>
+    <span class="strip-title">{{ 'projects.strip.queue' | translate }}</span>
     @if (hasCards) {
-      <button type="button" class="strip-link" (click)="openBoard.emit()">Open Board</button>
+      <button type="button" class="strip-link" (click)="openBoard.emit()">{{ 'projects.strip.openBoard' | translate }}</button>
     }
   </div>
 
@@ -11,14 +11,14 @@
   } @else {
     @if (inProgress.length) {
       <div class="strip-row">
-        <span class="strip-label">In progress</span>
+        <span class="strip-label">{{ 'projects.strip.inProgress' | translate }}</span>
         <div class="strip-cards">
           @for (item of inProgress; track item.id) {
             <article class="mini-card">
               <span class="mini-priority" [class]="'p-' + item.priority"></span>
               <span class="mini-title">{{ item.title }}</span>
               @if (planProgress(item); as prog) {
-                <span class="mini-plan">{{ prog }} plan steps</span>
+                <span class="mini-plan">{{ 'projects.strip.planSteps' | translate:{ progress: prog } }}</span>
               }
             </article>
           }
@@ -28,13 +28,13 @@
 
     @if (blocked.length) {
       <div class="strip-row">
-        <span class="strip-label strip-label--warn">Blocked</span>
+        <span class="strip-label strip-label--warn">{{ 'projects.strip.blocked' | translate }}</span>
         <div class="strip-cards">
           @for (item of blocked; track item.id) {
             <article class="mini-card mini-card--blocked">
               <span class="mini-priority p-queued"></span>
               <span class="mini-title">{{ item.title }}</span>
-              <span class="mini-meta">Waiting on dependency</span>
+              <span class="mini-meta">{{ 'projects.strip.waitingDependency' | translate }}</span>
             </article>
           }
         </div>

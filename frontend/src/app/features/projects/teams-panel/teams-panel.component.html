@@ -28,7 +28,7 @@
 
           @if (wave.attempts.length > 1) {
 
-            <span class="wave-attempts-badge">{{ wave.attempts.length }} attempts</span>
+            <span class="wave-attempts-badge">{{ 'projects.teams.attempts' | translate:{ count: wave.attempts.length } }}</span>
 
           }
 
@@ -64,15 +64,15 @@
 
           } @else if (wave.state === 'failed') {
 
-            <span class="wave-stat wave-stat--fail">✗ Failed</span>
+            <span class="wave-stat wave-stat--fail">✗ {{ 'projects.teams.failed' | translate }}</span>
 
           } @else if (wave.state === 'awaiting_launch') {
 
-            <span class="wave-stat wave-stat--unlaunched" title="Team record exists; delegates not launched">⏳ Not launched</span>
+            <span class="wave-stat wave-stat--unlaunched" [attr.title]="'projects.teams.notLaunchedTitle' | translate">⏳ {{ 'projects.teams.notLaunched' | translate }}</span>
 
           } @else {
 
-            <span class="wave-stat wave-stat--planned">Planned</span>
+            <span class="wave-stat wave-stat--planned">{{ 'projects.teams.planned' | translate }}</span>
 
           }
 
@@ -82,11 +82,11 @@
 
           <div class="wave-actions">
 
-            <button class="wave-action-btn" (click)="onPause(wave.primaryTeam!.id)" title="Pause">⏸</button>
+            <button class="wave-action-btn" (click)="onPause(wave.primaryTeam!.id)" [attr.title]="'projects.teams.pause' | translate">⏸</button>
 
-            <button class="wave-action-btn" (click)="onSkip(wave.primaryTeam!.id)" title="Skip this wave">Skip</button>
+            <button class="wave-action-btn" (click)="onSkip(wave.primaryTeam!.id)" [attr.title]="'projects.teams.skipTitle' | translate">{{ 'projects.teams.skip' | translate }}</button>
 
-            <button class="wave-action-btn wave-action-btn--danger" (click)="onDisband(wave.primaryTeam!.id)" title="Disband">✕</button>
+            <button class="wave-action-btn wave-action-btn--danger" (click)="onDisband(wave.primaryTeam!.id)" [attr.title]="'projects.teams.disband' | translate">✕</button>
 
           </div>
 
@@ -96,9 +96,9 @@
 
           <div class="wave-actions">
 
-            <button class="wave-action-btn wave-action-btn--primary" (click)="onResume(wave.primaryTeam!.id)" title="Resume">▶</button>
+            <button class="wave-action-btn wave-action-btn--primary" (click)="onResume(wave.primaryTeam!.id)" [attr.title]="'projects.teams.resume' | translate">▶</button>
 
-            <button class="wave-action-btn wave-action-btn--danger" (click)="onDisband(wave.primaryTeam!.id)" title="Disband">✕</button>
+            <button class="wave-action-btn wave-action-btn--danger" (click)="onDisband(wave.primaryTeam!.id)" [attr.title]="'projects.teams.disband' | translate">✕</button>
 
           </div>
 
@@ -108,7 +108,7 @@
 
           <div class="wave-actions">
 
-            <button class="wave-action-btn wave-action-btn--primary" (click)="onForceStart(wave.waveIndex)" title="Force start this wave">▶ Start</button>
+            <button class="wave-action-btn wave-action-btn--primary" (click)="onForceStart(wave.waveIndex)" [attr.title]="'projects.teams.startTitle' | translate">▶ {{ 'projects.teams.start' | translate }}</button>
 
           </div>
 
@@ -238,7 +238,7 @@
 
                       <span class="tile-status-badge" [class]="'badge-' + member.status">
 
-                        {{ memberStatusLabel(member.status) }}
+                        {{ ('projects.teams.status.' + member.status) | translate }}
 
                       </span>
 
@@ -264,11 +264,11 @@
 
                     <div class="tile-stats-row" (click)="$event.stopPropagation()">
 
-                      <span>Iterations: <strong>{{ member.iterations }}</strong></span>
+                      <span>{{ 'projects.teams.iterations' | translate }} <strong>{{ member.iterations }}</strong></span>
 
-                      <span>Tools: <strong>{{ member.tool_calls }}</strong></span>
+                      <span>{{ 'projects.teams.tools' | translate }} <strong>{{ member.tool_calls }}</strong></span>
 
-                      <span>Elapsed: <strong>{{ formatElapsed(member.elapsed_seconds) || '—' }}</strong></span>
+                      <span>{{ 'projects.teams.elapsed' | translate }} <strong>{{ formatElapsed(member.elapsed_seconds) || '—' }}</strong></span>
 
                     </div>
 
@@ -278,7 +278,7 @@
 
                         @if (member.hint_ack) {
 
-                          <p class="tile-hint-ack">Last response: {{ member.hint_ack }}</p>
+                          <p class="tile-hint-ack">{{ 'projects.teams.lastResponse' | translate }} {{ member.hint_ack }}</p>
 
                         }
 
@@ -286,7 +286,7 @@
 
                           <div class="tile-recent">
 
-                            <span class="tile-recent-label">Recent tools</span>
+                            <span class="tile-recent-label">{{ 'projects.teams.recentTools' | translate }}</span>
 
                             <ul class="tile-recent-list">
 
@@ -310,7 +310,7 @@
 
                         @if (member.status === 'running') {
 
-                          <button class="tile-hint-btn" (click)="$event.stopPropagation(); openHint(attempt.team.id, i)">Send Hint</button>
+                          <button class="tile-hint-btn" (click)="$event.stopPropagation(); openHint(attempt.team.id, i)">{{ 'projects.teams.sendHint' | translate }}</button>
 
                         }
 
@@ -330,7 +330,7 @@
 
                           [(ngModel)]="hintText"
 
-                          placeholder="Hint for this agent..."
+                          [placeholder]="'projects.teams.hintPlaceholder' | translate"
 
                           (keydown.enter)="sendHint()"
 

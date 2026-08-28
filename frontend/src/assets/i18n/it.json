@@ -918,6 +918,46 @@
       "noFields": "Nessun campo di configurazione definito.",
       "listPlaceholder": "Valori separati da virgola",
       "optional": "(opzionale)"
+    },
+    "intro": {
+      "email": "Attiva il canale email.",
+      "telegram": "Configura Telegram per il tuo agente.",
+      "discord": "Configura Discord per il tuo agente.",
+      "slack": "Configura Slack per il tuo agente.",
+      "google": "Collega il tuo account Google per far gestire all'agente Gmail, Calendar, Drive e Sheets.",
+      "whatsapp": "Associa WhatsApp al tuo agente."
+    },
+    "discordRoles": {
+      "title": "Ruoli moderatore",
+      "hint": "I membri con questi ruoli del server possono parlare col bot senza @mention. Sincronizzati in tempo reale da Discord.",
+      "refresh": "Aggiorna ruoli",
+      "saving": "Salvataggio…",
+      "loading": "Caricamento ruoli da Discord…"
+    },
+    "channelScope": {
+      "title": "Ambito canali",
+      "hint": "Scegli in quali canali questo agente ascolta e risponde. Sync aggiorna da {{platform}}. Usa Salva configurazione sotto per salvare la selezione.",
+      "selectAll": "Seleziona tutti",
+      "deselectAll": "Deseleziona tutti",
+      "sync": "Sincronizza canali",
+      "syncing": "Sincronizzazione...",
+      "loading": "Caricamento canali...",
+      "empty": "Nessun canale trovato.",
+      "emptyHint": "Clicca Sincronizza canali — il bot deve essere in un server con permesso di elencare i canali.",
+      "noAccess": "Nessun accesso piattaforma",
+      "enabled": "Abilitato",
+      "mentionOnly": "Solo @mention"
+    },
+    "completeSetup": "Completa setup:",
+    "completeSetupBody": "compila i campi obbligatori sotto, poi salva.",
+    "repair": {
+      "starting": "Avvio riparazione...",
+      "escalate": "Scala in Chat",
+      "fixWithAgent": "Ripara con agente"
+    },
+    "skillConfig": {
+      "loading": "Caricamento config...",
+      "noConfig": "Nessun config.json per questa skill."
     }
   },
   "memory": {
@@ -1074,7 +1114,70 @@
     "toggleChat": "Mostra/nascondi chat",
     "teamActive": "Team attivo",
     "teamsActive": "Team attivi",
-    "membersDone": "Membri completati"
+    "membersDone": "Membri completati",
+    "retry": "Riprova",
+    "ribbon": {
+      "failed": "Falliti",
+      "subAgentActive": "Sub-agente attivo",
+      "subAgentsActive": "Sub-agenti attivi",
+      "awaitingLaunch": "In attesa di avvio",
+      "awaitingLaunchTitle": "Il team della wave esiste ma i delegati non sono mai stati avviati",
+      "planDone": "Piano completato",
+      "skipped": "{{count}} saltati",
+      "planStatsTitle": "{{done}} fatti, {{skipped}} saltati",
+      "wrapUp": "Chiusura",
+      "wrapUpLabel": "Passi completati · piano aperto",
+      "wrapUpTitle": "Tutti i passi del piano sono fatti — l'orchestratore dovrebbe verificare e plan(complete), o correggere i gap",
+      "recovery": "Recupero",
+      "partialAccepted": "Parziale accettato",
+      "recoveryTitle": "Passo parziale accettato — l'orchestratore dovrebbe team(advance) o correggere i gap, poi continuare"
+    },
+    "strip": {
+      "aria": "Anteprima coda attività",
+      "queue": "Coda",
+      "openBoard": "Apri Board",
+      "inProgress": "In corso",
+      "blocked": "Bloccate",
+      "waitingDependency": "In attesa di dipendenza",
+      "planSteps": "{{progress}} passi piano"
+    },
+    "board": {
+      "expand": "Espandi",
+      "collapse": "Comprimi",
+      "unblock": "Sblocca",
+      "unblockTitle": "Forza sblocco — sposta in In corso",
+      "emptyInbox": "Nessuna nuova attività",
+      "emptyInProgress": "Niente in corso",
+      "empty": "Vuoto"
+    },
+    "teams": {
+      "attempts": "{{count}} tentativi",
+      "failed": "Fallita",
+      "notLaunched": "Non avviata",
+      "notLaunchedTitle": "Il team esiste; i delegati non sono stati avviati",
+      "planned": "Pianificata",
+      "pause": "Pausa",
+      "skip": "Salta",
+      "skipTitle": "Salta questa wave",
+      "disband": "Sciogli",
+      "resume": "Riprendi",
+      "start": "Avvia",
+      "startTitle": "Forza avvio di questa wave",
+      "sendHint": "Invia suggerimento",
+      "hintPlaceholder": "Suggerimento per questo agente...",
+      "iterations": "Iterazioni:",
+      "tools": "Strumenti:",
+      "elapsed": "Tempo:",
+      "lastResponse": "Ultima risposta:",
+      "recentTools": "Strumenti recenti",
+      "status": {
+        "running": "In esecuzione",
+        "done": "Fatto",
+        "failed": "Fallito",
+        "cancelled": "Annullato",
+        "pending": "In attesa"
+      }
+    }
   },
   "auth": {
     "email": "Email",

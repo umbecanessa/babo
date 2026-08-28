@@ -473,7 +473,7 @@ type IntegrationConfigCacheEntry = {
         @if (!getIntegrationStatus(intName)?.connected) {
           @if (getChannelType(intName) === 'email') {
             <div class="modal-action-block">
-              <p class="modal-intro">{{ getSkillOnboarding(intName)?.intro_message || 'Activate your email channel.' }}</p>
+              <p class="modal-intro">{{ getSkillOnboarding(intName)?.intro_message || ('tools.intro.email' | translate) }}</p>
               <ol class="modal-steps-list">
                 @for (step of getIntegrationContext('email').setupSteps; track step) {
                   <li>{{ step }}</li>
@@ -494,7 +494,7 @@ type IntegrationConfigCacheEntry = {
           }
           @if (getChannelType(intName) === 'telegram') {
             <div class="modal-action-block">
-              <p class="modal-intro">{{ getSkillOnboarding(intName)?.intro_message || 'Set up Telegram for your agent.' }}</p>
+              <p class="modal-intro">{{ getSkillOnboarding(intName)?.intro_message || ('tools.intro.telegram' | translate) }}</p>
               <ol class="modal-steps-list">
                 @for (step of getIntegrationContext('telegram').setupSteps; track step) {
                   <li>{{ step }}</li>
@@ -508,7 +508,7 @@ type IntegrationConfigCacheEntry = {
           }
           @if (getChannelType(intName) === 'discord') {
             <div class="modal-action-block">
-              <p class="modal-intro">{{ getSkillOnboarding(intName)?.intro_message || 'Set up Discord for your agent.' }}</p>
+              <p class="modal-intro">{{ getSkillOnboarding(intName)?.intro_message || ('tools.intro.discord' | translate) }}</p>
               <ol class="modal-steps-list">
                 @for (step of getIntegrationContext('discord').setupSteps; track step) {
                   <li>{{ step }}</li>
@@ -519,7 +519,7 @@ type IntegrationConfigCacheEntry = {
           }
           @if (getChannelType(intName) === 'slack') {
             <div class="modal-action-block">
-              <p class="modal-intro">{{ getSkillOnboarding(intName)?.intro_message || 'Set up Slack for your agent.' }}</p>
+              <p class="modal-intro">{{ getSkillOnboarding(intName)?.intro_message || ('tools.intro.slack' | translate) }}</p>
               <ol class="modal-steps-list">
                 @for (step of getIntegrationContext('slack').setupSteps; track step) {
                   <li>{{ step }}</li>
@@ -530,7 +530,7 @@ type IntegrationConfigCacheEntry = {
           }
           @if (getChannelType(intName) === 'google-workspace') {
             <div class="modal-action-block">
-              <p class="modal-intro">{{ getSkillOnboarding(intName)?.intro_message || 'Connect your Google account to let your agent manage Gmail, Calendar, Drive, and Sheets.' }}</p>
+              <p class="modal-intro">{{ getSkillOnboarding(intName)?.intro_message || ('tools.intro.google' | translate) }}</p>
               <ol class="modal-steps-list">
                 @for (step of getIntegrationContext('google-workspace').setupSteps; track step) {
                   <li>{{ step }}</li>
@@ -550,7 +550,7 @@ type IntegrationConfigCacheEntry = {
           }
           @if (getChannelType(intName) === 'whatsapp') {
             <div class="modal-action-block">
-              <p class="modal-intro">{{ getSkillOnboarding(intName)?.intro_message || 'Pair WhatsApp with your agent.' }}</p>
+              <p class="modal-intro">{{ getSkillOnboarding(intName)?.intro_message || ('tools.intro.whatsapp' | translate) }}</p>
               <ol class="modal-steps-list compact">
                 @for (step of getIntegrationContext('whatsapp').setupSteps; track step) {
                   <li>{{ step }}</li>
@@ -577,10 +577,9 @@ type IntegrationConfigCacheEntry = {
           <div class="discord-roles-panel">
             <div class="channel-scope-header">
               <div>
-                <h4 class="channel-scope-title">Moderator roles</h4>
+                <h4 class="channel-scope-title">{{ 'tools.discordRoles.title' | translate }}</h4>
                 <p class="channel-scope-hint">
-                  Members with these server roles can talk to the bot without @mention.
-                  Synced live from Discord.
+                  {{ 'tools.discordRoles.hint' | translate }}
                 </p>
               </div>
               <button
@@ -589,14 +588,14 @@ type IntegrationConfigCacheEntry = {
                 (click)="loadDiscordRoles()"
                 [disabled]="discordRolesLoading()">
                 @if (discordRolesLoading()) { <span class="btn-spinner"></span> }
-                @else { Refresh roles }
+                @else { {{ 'tools.discordRoles.refresh' | translate }} }
               </button>
             </div>
             @if (discordRolesSaving()) {
-              <p class="channel-scope-hint">Saving…</p>
+              <p class="channel-scope-hint">{{ 'tools.discordRoles.saving' | translate }}</p>
             }
             @if (discordRoles().length === 0 && !discordRolesLoading()) {
-              <p class="channel-scope-empty">Loading roles from Discord…</p>
+              <p class="channel-scope-empty">{{ 'tools.discordRoles.loading' | translate }}</p>
             } @else {
               @for (guild of discordRoles(); track guild.guild_id) {
                 <div class="discord-guild-roles">
@@ -623,11 +622,9 @@ type IntegrationConfigCacheEntry = {
           <div class="channel-scope-panel">
             <div class="channel-scope-header">
               <div>
-                <h4 class="channel-scope-title">Channel scope</h4>
+                <h4 class="channel-scope-title">{{ 'tools.channelScope.title' | translate }}</h4>
                 <p class="channel-scope-hint">
-                  Choose which channels this agent listens and replies in. Sync refreshes from
-                  {{ getChannelType(intName) === 'discord' ? 'Discord' : 'Slack' }}.
-                  Use <strong>Save configuration</strong> below to persist your selection.
+                  {{ 'tools.channelScope.hint' | translate:{ platform: (getChannelType(intName) === 'discord' ? 'Discord' : 'Slack') } }}
                 </p>
               </div>
               <div class="channel-scope-header-actions">
@@ -636,22 +633,22 @@ type IntegrationConfigCacheEntry = {
                   class="channel-scope-link-btn"
                   (click)="selectAllChannelScope(true)"
                   [disabled]="!channelScopeRows().length">
-                  Select all
+                  {{ 'tools.channelScope.selectAll' | translate }}
                 </button>
                 <button
                   type="button"
                   class="channel-scope-link-btn"
                   (click)="selectAllChannelScope(false)"
                   [disabled]="!channelScopeRows().length">
-                  Deselect all
+                  {{ 'tools.channelScope.deselectAll' | translate }}
                 </button>
                 <button
                   type="button"
                   class="modal-action-btn secondary channel-scope-sync"
                   (click)="syncChannelScope(intName)"
                   [disabled]="channelScopeSyncing()">
-                  @if (channelScopeSyncing()) { <span class="btn-spinner"></span> Syncing... }
-                  @else { Sync channels }
+                  @if (channelScopeSyncing()) { <span class="btn-spinner"></span> {{ 'tools.channelScope.syncing' | translate }} }
+                  @else { {{ 'tools.channelScope.sync' | translate }} }
                 </button>
               </div>
             </div>
@@ -662,14 +659,14 @@ type IntegrationConfigCacheEntry = {
               <p class="channel-scope-warning">{{ channelScopeWarning() }}</p>
             }
             @if (channelScopeLoading()) {
-              <div class="panel-loading"><span class="btn-spinner"></span> Loading channels...</div>
+              <div class="panel-loading"><span class="btn-spinner"></span> {{ 'tools.channelScope.loading' | translate }}</div>
             } @else if (!channelScopeRows().length) {
               <p class="channel-scope-empty">
-                No channels found yet.
+                {{ 'tools.channelScope.empty' | translate }}
                 @if (channelScopeSyncHint()) {
                   {{ channelScopeSyncHint() }}
                 } @else {
-                  Click <strong>Sync channels</strong> — the bot must be in a server with permission to list channels.
+                  {{ 'tools.channelScope.emptyHint' | translate }}
                 }
               </p>
             } @else {
@@ -682,7 +679,7 @@ type IntegrationConfigCacheEntry = {
                         <span class="channel-scope-guild">{{ row.guild_name }}</span>
                       }
                       @if (!row.platform_access && row.enabled_desired) {
-                        <span class="channel-scope-badge warn">No platform access</span>
+                        <span class="channel-scope-badge warn">{{ 'tools.channelScope.noAccess' | translate }}</span>
                       }
                     </div>
                     <label class="channel-scope-toggle">
@@ -690,7 +687,7 @@ type IntegrationConfigCacheEntry = {
                         type="checkbox"
                         [checked]="!!row.enabled_desired"
                         (change)="toggleChannelScope(intName, row.id, $any($event.target).checked, !!row.require_mention)" />
-                      <span>Enabled</span>
+                      <span>{{ 'tools.channelScope.enabled' | translate }}</span>
                     </label>
                     <label class="channel-scope-toggle">
                       <input
@@ -698,7 +695,7 @@ type IntegrationConfigCacheEntry = {
                         [checked]="row.require_mention !== false"
                         [disabled]="!row.enabled_desired"
                         (change)="toggleChannelScope(intName, row.id, !!row.enabled_desired, $any($event.target).checked)" />
-                      <span>@mention only</span>
+                      <span>{{ 'tools.channelScope.mentionOnly' | translate }}</span>
                     </label>
                   </div>
                 }
@@ -710,7 +707,7 @@ type IntegrationConfigCacheEntry = {
         <!-- Connected: setup completion prompt -->
         @if (getIntegrationStatus(intName)?.connected && showCompleteSetupPrompt(intName)) {
           <div class="complete-setup-prompt">
-            <strong>Complete setup:</strong> fill in the required fields below, then save.
+            <strong>{{ 'tools.completeSetup' | translate }}</strong> {{ 'tools.completeSetupBody' | translate }}
           </div>
         }
 
@@ -743,13 +740,13 @@ type IntegrationConfigCacheEntry = {
               @if (repairRunning() && repairSkillName() === skName) {
                 <span class="skill-repair-progress">
                   <span class="btn-spinner"></span>
-                  <span>{{ repairStep() || 'Starting repair...' }}</span>
+                  <span>{{ repairStep() || ('tools.repair.starting' | translate) }}</span>
                 </span>
               } @else if (repairResult() === 'failed' && repairSkillName() === skName) {
-                <button class="skill-repair-btn" (click)="startRepair(skName)">Retry</button>
-                <button class="skill-escalate-btn" (click)="escalateToChat(skName, getSkillError(skName) || '')">Escalate to Chat</button>
+                <button class="skill-repair-btn" (click)="startRepair(skName)">{{ 'common.retry' | translate }}</button>
+                <button class="skill-escalate-btn" (click)="escalateToChat(skName, getSkillError(skName) || '')">{{ 'tools.repair.escalate' | translate }}</button>
               } @else {
-                <button class="skill-repair-btn" (click)="startRepair(skName)" [disabled]="repairRunning()">Fix with Agent</button>
+                <button class="skill-repair-btn" (click)="startRepair(skName)" [disabled]="repairRunning()">{{ 'tools.repair.fixWithAgent' | translate }}</button>
               }
             </div>
           </div>
@@ -765,7 +762,7 @@ type IntegrationConfigCacheEntry = {
         @if (skillTab() === 'config') {
           <div class="modal-tab-content">
             @if (skillConfigLoading()) {
-              <div class="panel-loading"><span class="btn-spinner"></span> Loading config...</div>
+              <div class="panel-loading"><span class="btn-spinner"></span> {{ 'tools.skillConfig.loading' | translate }}</div>
             } @else if (skillConfigSchema().length > 0) {
               <app-schema-config-form
                 [schema]="skillConfigSchema()"
@@ -775,7 +772,7 @@ type IntegrationConfigCacheEntry = {
                 (configChange)="onConfigChange($event.key, $event.value)"
                 (save)="saveConfig(skName)" />
             } @else if (skillConfigKeys().length === 0) {
-              <p class="no-config">No config.json found for this skill.</p>
+              <p class="no-config">{{ 'tools.skillConfig.noConfig' | translate }}</p>
             } @else {
               <div class="config-form">
                 @for (key of skillConfigKeys(); track key) {

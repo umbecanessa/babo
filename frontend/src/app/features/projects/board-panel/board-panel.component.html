@@ -3,10 +3,10 @@
     <div class="column" [class.collapsed]="col.id === 'done' && doneCollapsed">
       <div class="column-header">
         <span class="column-dot" [style.background]="col.color"></span>
-        <span class="column-label">{{ col.label }}</span>
+        <span class="column-label">{{ col.labelKey | translate }}</span>
         <span class="column-count">{{ col.items.length }}</span>
         @if (col.id === 'done') {
-          <button class="collapse-btn" (click)="toggleDone()" [title]="doneCollapsed ? 'Expand' : 'Collapse'">
+          <button class="collapse-btn" (click)="toggleDone()" [attr.title]="(doneCollapsed ? 'projects.board.expand' : 'projects.board.collapse') | translate">
             {{ doneCollapsed ? '\u25B6' : '\u25BC' }}
           </button>
         }
@@ -40,8 +40,8 @@
                 (edit)="onEdit($event)"
               />
               @if (col.id === 'queued' && item.depends_on?.length) {
-                <button class="unblock-btn" (click)="onUnblock(item.id)" title="Force unblock — move to In Progress">
-                  Unblock
+                <button class="unblock-btn" (click)="onUnblock(item.id)" [attr.title]="'projects.board.unblockTitle' | translate">
+                  {{ 'projects.board.unblock' | translate }}
                 </button>
               }
             </div>
@@ -49,9 +49,9 @@
 
           @if (col.items.length === 0) {
             <div class="column-empty">
-              @if (col.id === 'inbox') { No new tasks }
-              @else if (col.id === 'in_progress') { Nothing in progress }
-              @else { Empty }
+              @if (col.id === 'inbox') { {{ 'projects.board.emptyInbox' | translate }} }
+              @else if (col.id === 'in_progress') { {{ 'projects.board.emptyInProgress' | translate }} }
+              @else { {{ 'projects.board.empty' | translate }} }
             </div>
           }
         </div>

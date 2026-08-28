@@ -82,7 +82,7 @@
 
             <span class="orch-ribbon-val">{{ orchFailedMembers() }}</span>
 
-            <span class="orch-ribbon-label">Failed</span>
+            <span class="orch-ribbon-label">{{ 'projects.ribbon.failed' | translate }}</span>
 
           </div>
 
@@ -96,7 +96,7 @@
 
             <span class="orch-ribbon-val">{{ orchLiveDelegateCount() }}</span>
 
-            <span class="orch-ribbon-label">{{ orchLiveDelegateCount() === 1 ? 'Sub-agent Active' : 'Sub-agents Active' }}</span>
+            <span class="orch-ribbon-label">{{ orchLiveDelegateCount() === 1 ? ('projects.ribbon.subAgentActive' | translate) : ('projects.ribbon.subAgentsActive' | translate) }}</span>
 
           </div>
 
@@ -106,11 +106,11 @@
 
           <div class="orch-ribbon-divider"></div>
 
-          <div class="orch-ribbon-item orch-ribbon-item--warn" title="Wave team exists but delegates were never launched">
+          <div class="orch-ribbon-item orch-ribbon-item--warn" [attr.title]="'projects.ribbon.awaitingLaunchTitle' | translate">
 
             <span class="orch-ribbon-val">{{ orchUnlaunchedCount() }}</span>
 
-            <span class="orch-ribbon-label">Awaiting Launch</span>
+            <span class="orch-ribbon-label">{{ 'projects.ribbon.awaitingLaunch' | translate }}</span>
 
           </div>
 
@@ -120,15 +120,15 @@
 
           <div class="orch-ribbon-divider"></div>
 
-          <div class="orch-ribbon-item" [title]="orchPlanStats().skipped ? (orchPlanStats().done + ' done, ' + orchPlanStats().skipped + ' skipped') : ''">
+          <div class="orch-ribbon-item" [attr.title]="orchPlanStats().skipped ? ('projects.ribbon.planStatsTitle' | translate:{ done: orchPlanStats().done, skipped: orchPlanStats().skipped }) : ''">
 
             <span class="orch-ribbon-val">{{ orchPlanProgress() }}%</span>
 
-            <span class="orch-ribbon-label">Plan Done</span>
+            <span class="orch-ribbon-label">{{ 'projects.ribbon.planDone' | translate }}</span>
 
             @if (orchPlanStats().skipped > 0) {
 
-              <span class="orch-ribbon-sub">· {{ orchPlanStats().skipped }} skipped</span>
+              <span class="orch-ribbon-sub">· {{ 'projects.ribbon.skipped' | translate:{ count: orchPlanStats().skipped } }}</span>
 
             }
 
@@ -140,11 +140,11 @@
 
           <div class="orch-ribbon-divider"></div>
 
-          <div class="orch-ribbon-item orch-ribbon-item--wrapup" title="All plan steps are done — orchestrator should verify and plan(complete), or fix remaining gaps">
+          <div class="orch-ribbon-item orch-ribbon-item--wrapup" [attr.title]="'projects.ribbon.wrapUpTitle' | translate">
 
-            <span class="orch-ribbon-val">Wrap-up</span>
+            <span class="orch-ribbon-val">{{ 'projects.ribbon.wrapUp' | translate }}</span>
 
-            <span class="orch-ribbon-label">Steps complete · plan open</span>
+            <span class="orch-ribbon-label">{{ 'projects.ribbon.wrapUpLabel' | translate }}</span>
 
           </div>
 
@@ -154,11 +154,11 @@
 
           <div class="orch-ribbon-divider"></div>
 
-          <div class="orch-ribbon-item orch-ribbon-item--warn" title="Partial step accepted — orchestrator should team(advance) or fix gaps, then continue">
+          <div class="orch-ribbon-item orch-ribbon-item--warn" [attr.title]="'projects.ribbon.recoveryTitle' | translate">
 
-            <span class="orch-ribbon-val">Recovery</span>
+            <span class="orch-ribbon-val">{{ 'projects.ribbon.recovery' | translate }}</span>
 
-            <span class="orch-ribbon-label">Partial accepted</span>
+            <span class="orch-ribbon-label">{{ 'projects.ribbon.partialAccepted' | translate }}</span>
 
           </div>
 
@@ -182,7 +182,7 @@
 
         <p>{{ svc.error() }}</p>
 
-        <button class="retry-btn" (click)="svc.loadData()">Retry</button>
+        <button class="retry-btn" (click)="svc.loadData()">{{ 'common.retry' | translate }}</button>
 
       </div>
 

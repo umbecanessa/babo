@@ -1,6 +1,7 @@
 import { Component, Input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { CdkDragDrop, DragDropModule, transferArrayItem } from '@angular/cdk/drag-drop';
+import { TranslateModule } from '@ngx-translate/core';
 import { TaskCardComponent } from '../../tasks/task-card/task-card.component';
 import { TaskCreateComponent } from '../../tasks/task-create/task-create.component';
 type AnyPlanRecord = Record<string, any>;
@@ -8,23 +9,23 @@ import { ProjectService } from '../project.service';
 
 interface BoardColumn {
   id: string;
-  label: string;
+  labelKey: string;
   color: string;
   items: any[];
 }
 
 const COLUMNS = [
-  { id: 'inbox', label: 'Inbox', color: '#94a3b8' },
-  { id: 'queued', label: 'Queued', color: 'var(--accent-primary)' },
-  { id: 'in_progress', label: 'In Progress', color: 'var(--accent-warn)' },
-  { id: 'done', label: 'Done', color: 'var(--accent-success)' },
-  { id: 'deferred', label: 'Deferred', color: '#6b7280' },
+  { id: 'inbox', labelKey: 'tasks.columns.inbox', color: '#94a3b8' },
+  { id: 'queued', labelKey: 'tasks.columns.queued', color: 'var(--accent-primary)' },
+  { id: 'in_progress', labelKey: 'tasks.columns.in_progress', color: 'var(--accent-warn)' },
+  { id: 'done', labelKey: 'tasks.columns.done', color: 'var(--accent-success)' },
+  { id: 'deferred', labelKey: 'tasks.columns.deferred', color: '#6b7280' },
 ];
 
 @Component({
   selector: 'app-board-panel',
   standalone: true,
-  imports: [CommonModule, DragDropModule, TaskCardComponent, TaskCreateComponent],
+  imports: [CommonModule, DragDropModule, TranslateModule, TaskCardComponent, TaskCreateComponent],
   templateUrl: './board-panel.component.html',
   styleUrl: './board-panel.component.scss',
 })
