@@ -11,6 +11,7 @@ import { UpdateModalComponent } from './shared/update-banner/update-modal.compon
 import { ThemeService } from './core/services/theme.service';
 import { Day1CoachComponent } from './shared/onboarding/day1-coach.component';
 import { LocaleService } from './core/locale/locale.service';
+import { TranslateModule } from '@ngx-translate/core';
 import { environment } from '../environments/environment';
 import { openExternalUrl } from './core/services/billing-return.util';
 
@@ -26,6 +27,7 @@ import { openExternalUrl } from './core/services/billing-return.util';
     UpdateBannerComponent,
     UpdateModalComponent,
     Day1CoachComponent,
+    TranslateModule,
   ],
   templateUrl: './app.html',
   styleUrl: './app.scss',

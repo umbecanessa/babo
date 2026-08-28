@@ -755,23 +755,23 @@
   @if (showLanSheet()) {
     <div class="modal-dismiss-scrim setup-sheet-backdrop" (click)="showLanSheet.set(false)">
       <div class="modal-panel sheet sheet-lan" (click)="$event.stopPropagation()">
-        <h3>Network server</h3>
-        <p class="small-muted sheet-lead">vLLM, Whisper, or vision on your LAN. Add SSH to see which models fit that machine’s GPU.</p>
+        <h3>{{ 'setup.lan.title' | translate }}</h3>
+        <p class="small-muted sheet-lead">{{ 'setup.lan.lead' | translate }}</p>
         <div class="form-group sheet-field">
-          <label>Host</label>
+          <label>{{ 'setup.lan.host' | translate }}</label>
           <input type="text" [(ngModel)]="lanHost" placeholder="192.168.68.96 or ubuntu@192.168.68.96" />
         </div>
         <div class="form-group sheet-field">
-          <label>SSH user</label>
+          <label>{{ 'setup.lan.sshUser' | translate }}</label>
           <input type="text" [(ngModel)]="lanSshUser" placeholder="ubuntu" autocomplete="username" />
           <span class="hint">Required for GPU scan. Use user@host above, or set user + password here.</span>
         </div>
         <div class="form-group sheet-field">
-          <label>SSH port</label>
+          <label>{{ 'setup.lan.sshPort' | translate }}</label>
           <input type="text" [(ngModel)]="lanSshPort" placeholder="22" inputmode="numeric" />
         </div>
         <div class="form-group sheet-field">
-          <label>SSH password</label>
+          <label>{{ 'setup.lan.sshPassword' | translate }}</label>
           <input
             type="password"
             [(ngModel)]="lanSshPassword"
@@ -781,7 +781,7 @@
           <span class="hint">Use when this PC doesn’t have an SSH key on the server. Not saved to disk.</span>
         </div>
         <div class="form-group sheet-field">
-          <label>GPU worker secret</label>
+          <label>{{ 'setup.lan.gpuSecret' | translate }}</label>
           <input
             type="password"
             [(ngModel)]="lanGpuSecret"
@@ -797,7 +797,7 @@
             (click)="runLanProbe()"
             [disabled]="lanProbing() || lanModelFitLoading() || !lanHost.trim()"
           >
-            {{ lanProbing() ? 'Looking…' : 'Find services' }}
+            {{ lanProbing() ? ('setup.lan.looking' | translate) : ('setup.lan.findServices' | translate) }}
           </button>
           <button
             class="action-btn secondary full"
@@ -805,11 +805,11 @@
             (click)="runLanModelFitOnly()"
             [disabled]="lanProbing() || lanModelFitLoading() || !lanHost.trim() || !resolvedLanSshUser()"
           >
-            {{ lanModelFitLoading() ? 'Scanning GPU…' : 'Scan GPU & model fit' }}
+            {{ lanModelFitLoading() ? ('setup.lan.scanningGpu' | translate) : ('setup.lan.scanGpu' | translate) }}
           </button>
           @if (lanServiceCards().length) {
             <div class="lan-services-panel">
-              <p class="lan-services-title">Services on this host</p>
+              <p class="lan-services-title">{{ 'setup.lan.servicesTitle' | translate }}</p>
               <div class="lan-service-chips">
                 @for (s of lanServiceCards(); track s.port + s.kind) {
                   <div class="lan-service-chip" [class.ok]="s.healthy" [class.fail]="!s.healthy">
@@ -820,7 +820,7 @@
                         <span class="lan-chip-sub">{{ lanServiceSubtitle(s) }}</span>
                       </div>
                       <span class="lan-chip-badge" [class.ok]="s.healthy" [class.fail]="!s.healthy">
-                        {{ s.healthy ? 'Online' : 'Offline' }}
+                        {{ s.healthy ? ('common.online' | translate) : ('common.offline' | translate) }}
                       </span>
                     </div>
                     @if (lanServiceModelLine(s); as modelLine) {
@@ -997,7 +997,7 @@
   @if (showVoiceSheet()) {
     <div class="modal-dismiss-scrim setup-sheet-backdrop" (click)="closeVoiceSheet()">
       <div class="modal-panel sheet sheet-voice" (click)="$event.stopPropagation()">
-        <h3>Voice input</h3>
+        <h3>{{ 'setup.voice.title' | translate }}</h3>
         <div class="chip-row voice-chips">
           @for (opt of voiceOptions; track opt.tier) {
             <button
@@ -1005,10 +1005,10 @@
               class="chip"
               [class.active]="voiceTier() === opt.tier"
               (click)="onVoiceTierChange(opt.tier)"
-            >{{ opt.shortLabel }}</button>
+            >{{ opt.shortLabelKey | translate }}</button>
           }
         </div>
-        <button class="action-btn full" type="button" (click)="closeVoiceSheet()">Done</button>
+        <button class="action-btn full" type="button" (click)="closeVoiceSheet()">{{ 'common.done' | translate }}</button>
       </div>
     </div>
   }

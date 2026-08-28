@@ -172,28 +172,29 @@ export class SettingsComponent implements OnInit, OnDestroy {
   });
 
   sections = computed(() => {
+    this.locale.language();
     const billingSection = this.billingEnabled()
-      ? [{ id: 'billing', label: 'Billing' }]
+      ? [{ id: 'billing', labelKey: 'settings.nav.billing' }]
       : [];
     if (this.platform.isElectron) {
       return [
-        { id: 'models', label: 'Models & AI' },
-        { id: 'account', label: 'Account' },
+        { id: 'models', labelKey: 'settings.nav.models' },
+        { id: 'account', labelKey: 'settings.nav.account' },
         ...billingSection,
-        { id: 'integrations', label: 'Integrations' },
-        { id: 'system', label: 'System' },
-        { id: 'support', label: 'Support & Debug' },
-        { id: 'permissions', label: 'Permissions' },
-        { id: 'appearance', label: 'Appearance' },
-        { id: 'general', label: 'General' },
+        { id: 'integrations', labelKey: 'settings.nav.integrations' },
+        { id: 'system', labelKey: 'settings.nav.system' },
+        { id: 'support', labelKey: 'settings.nav.support' },
+        { id: 'permissions', labelKey: 'settings.nav.permissions' },
+        { id: 'appearance', labelKey: 'settings.nav.appearance' },
+        { id: 'general', labelKey: 'settings.nav.general' },
       ];
     }
     return [
-      { id: 'appearance', label: 'Appearance' },
+      { id: 'appearance', labelKey: 'settings.nav.appearance' },
       ...billingSection,
-      { id: 'integrations', label: 'Integrations' },
-      { id: 'keys', label: 'API keys' },
-      { id: 'general', label: 'General' },
+      { id: 'integrations', labelKey: 'settings.nav.integrations' },
+      { id: 'keys', labelKey: 'settings.nav.keys' },
+      { id: 'general', labelKey: 'settings.nav.general' },
     ];
   });
 

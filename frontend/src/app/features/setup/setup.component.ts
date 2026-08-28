@@ -251,11 +251,12 @@ export class SetupComponent implements OnInit, OnDestroy {
   lanModelFit = computed(() => this.scan()?.modelFit?.lan ?? null);
 
   deviceTagline = computed(() => {
+    this.locale.language();
     const vram = this.scan()?.device.vramGb ?? 0;
     if (vram >= 6) {
-      return 'Your computer looks ready. Next you’ll choose where chat runs — Babo Cloud is the easiest path.';
+      return this.translate.instant('setup.device.taglineReady');
     }
-    return 'Your computer looks ready. Babo Cloud is the easiest path; local models stay available as an advanced option.';
+    return this.translate.instant('setup.device.taglineCloud');
   });
 
   localVisionReady = computed(() => (this.scan()?.device.vramGb ?? 0) >= 6);
@@ -266,6 +267,7 @@ export class SetupComponent implements OnInit, OnDestroy {
 
   /** Screen-awareness placement options depend on where chat runs. */
   visualPlacementOptions = computed(() => {
+    this.locale.language();
     const brain = this.brainTier();
     const opts: { tier: CapabilityTier; label: string; disabled: boolean }[] = [];
 
@@ -276,77 +278,85 @@ export class SetupComponent implements OnInit, OnDestroy {
     };
 
     if (brain === 'hosted_babo') {
-      add('hosted_babo', 'Babo Cloud', false);
-      if (this.hasLanVision()) add('self_lan', 'Your LAN server', false);
-      if (this.canLocalVision()) add('self_local', 'This PC (Moondream)', false);
+      add('hosted_babo', this.translate.instant('setup.thinking.placeCloud'), false);
+      if (this.hasLanVision()) add('self_lan', this.translate.instant('setup.thinking.placeLan'), false);
+      if (this.canLocalVision()) add('self_local', this.translate.instant('setup.thinking.placePcMoondream'), false);
     } else if (brain === 'self_lan') {
-      if (this.hasLanVision()) add('self_lan', 'Same LAN server', false);
-      add('hosted_babo', 'Babo Cloud', false);
-      if (this.canLocalVision()) add('self_local', 'This PC', false);
+      if (this.hasLanVision()) add('self_lan', this.translate.instant('setup.thinking.placeLanSame'), false);
+      add('hosted_babo', this.translate.instant('setup.thinking.placeCloud'), false);
+      if (this.canLocalVision()) add('self_local', this.translate.instant('setup.thinking.placePc'), false);
     } else {
-      if (this.canLocalVision()) add('self_local', 'This PC', false);
-      if (this.hasLanVision()) add('self_lan', 'LAN server', false);
-      add('hosted_babo', 'Babo Cloud', false);
+      if (this.canLocalVision()) add('self_local', this.translate.instant('setup.thinking.placePc'), false);
+      if (this.hasLanVision()) add('self_lan', this.translate.instant('setup.thinking.placeLanShort'), false);
+      add('hosted_babo', this.translate.instant('setup.thinking.placeCloud'), false);
     }
 
     return opts;
   });
 
   readySummary = computed(() => {
+    this.locale.language();
     const p = this.profile();
     if (!p) return [];
     const thinking =
       p.inference.tier === 'hosted_babo'
-        ? 'Babo Cloud'
+        ? this.translate.instant('setup.ready.baboCloud')
         : p.inference.tier === 'byok_cloud'
-          ? 'Your API key'
+          ? this.translate.instant('setup.ready.yourApiKey')
           : p.inference.model || tierLabel(p.inference.tier);
-    const extras = `Code search ${this.codeSearchOn() ? 'on' : 'off'} · Screen ${this.ambientVisionOn() ? 'on' : 'off'}`;
+    const extras = this.translate.instant('setup.ready.extrasLine', {
+      code: this.codeSearchOn()
+        ? this.translate.instant('setup.ready.on')
+        : this.translate.instant('setup.ready.off'),
+      screen: this.ambientVisionOn()
+        ? this.translate.instant('setup.ready.on')
+        : this.translate.instant('setup.ready.off'),
+    });
     const account = this.auth.isAuthenticated()
-      ? `${this.backendSummaryLabel()} (signed in)`
+      ? this.translate.instant('setup.ready.signedIn', { server: this.backendSummaryLabel() })
       : this.backendSummaryLabel();
     return [
-      { icon: '🧠', label: 'Thinking', value: thinking },
-      { icon: '✦', label: 'Extras', value: extras },
-      { icon: '☁', label: 'Account', value: account },
+      { icon: '🧠', label: this.translate.instant('setup.ready.thinking'), value: thinking },
+      { icon: '✦', label: this.translate.instant('setup.ready.extras'), value: extras },
+      { icon: '☁', label: this.translate.instant('setup.ready.account'), value: account },
     ];
   });
 
   /** Where models run (step 3) — separate from NestJS account (steps 5–6). */
   inferenceRunLocation = computed(() => {
+    this.locale.language();
     switch (this.brainTier()) {
       case 'hosted_babo':
-        return 'Babo Cloud';
+        return this.translate.instant('setup.placement.locCloud');
       case 'byok_cloud':
-        return 'your API provider';
+        return this.translate.instant('setup.placement.locByok');
       case 'self_local':
-        return 'this computer';
+        return this.translate.instant('setup.placement.locLocal');
       case 'self_lan':
-        return 'your LAN server';
+        return this.translate.instant('setup.placement.locLan');
       default:
-        return 'your chosen provider';
+        return this.translate.instant('setup.placement.locOther');
     }
   });
 
   placementStepLead = computed(() => {
+    this.locale.language();
     const tier = this.brainTier();
     if (tier === 'byok_cloud') {
-      return (
-        'Your API keys can relay through Babo Cloud (recommended) or a NestJS server you run. ' +
-        'Pick where your Babo account syncs — agents still run locally.'
-      );
+      return this.translate.instant('setup.placement.leadByok');
     }
-    return (
-      `Pick where your Babo account syncs. Chat runs on ${this.inferenceRunLocation()}; agents stay on your devices.`
-    );
+    return this.translate.instant('setup.placement.leadDefault', {
+      location: this.inferenceRunLocation(),
+    });
   });
 
   signInStepLead = computed(() => {
+    this.locale.language();
     const server = this.backendSummaryLabel();
     if (this.authAccountMode() === 'signup') {
-      return `Create your account on ${server}. You’ll finish setup right after.`;
+      return this.translate.instant('setup.auth.leadSignup', { server });
     }
-    return `Sign in on ${server} — required for agents and sync.`;
+    return this.translate.instant('setup.auth.leadSignin', { server });
   });
 
   backendChoice = signal<BackendChoiceId>('babo_cloud');
@@ -359,9 +369,9 @@ export class SetupComponent implements OnInit, OnDestroy {
   readonly backendChoices = BACKEND_CHOICES;
 
   voiceOptions = [
-    { tier: 'self_local' as CapabilityTier, label: 'This computer', shortLabel: 'This PC' },
-    { tier: 'self_lan' as CapabilityTier, label: 'My server', shortLabel: 'My server' },
-    { tier: 'off' as CapabilityTier, label: 'Off', shortLabel: 'Off' },
+    { tier: 'self_local' as CapabilityTier, labelKey: 'setup.voice.thisComputer', shortLabelKey: 'setup.voice.thisPc' },
+    { tier: 'self_lan' as CapabilityTier, labelKey: 'setup.voice.myServer', shortLabelKey: 'setup.voice.myServer' },
+    { tier: 'off' as CapabilityTier, labelKey: 'setup.voice.off', shortLabelKey: 'setup.voice.off' },
   ];
 
   /** Chat → Vision → Voice, one card per role. */
@@ -1110,7 +1120,7 @@ export class SetupComponent implements OnInit, OnDestroy {
 
   voiceSummary(): string {
     const opt = this.voiceOptions.find((o) => o.tier === this.voiceTier());
-    return opt?.label ?? 'Off';
+    return opt ? this.translate.instant(opt.labelKey) : this.translate.instant('setup.voice.off');
   }
 
   async goToScan(): Promise<void> {
@@ -1272,11 +1282,11 @@ export class SetupComponent implements OnInit, OnDestroy {
   fitLevelLabel(level: string): string {
     switch (level) {
       case 'perfect':
-        return 'Perfect fit';
+        return this.translate.instant('setup.fit.perfect');
       case 'good':
-        return 'Good fit';
+        return this.translate.instant('setup.fit.good');
       case 'marginal':
-        return 'Tight fit';
+        return this.translate.instant('setup.fit.marginal');
       default:
         return level;
     }
@@ -1792,11 +1802,15 @@ export class SetupComponent implements OnInit, OnDestroy {
   }
 
   authSubmitLabel(): string {
-    if (this.auth.isAuthenticated()) return 'Continue';
+    if (this.auth.isAuthenticated()) return this.translate.instant('common.continue');
     if (this.signingIn() || this.savingBackend()) {
-      return this.authAccountMode() === 'signup' ? 'Creating account…' : 'Signing in…';
+      return this.authAccountMode() === 'signup'
+        ? this.translate.instant('setup.auth.creating')
+        : this.translate.instant('setup.auth.signingIn');
     }
-    return this.authAccountMode() === 'signup' ? 'Create account' : 'Sign in';
+    return this.authAccountMode() === 'signup'
+      ? this.translate.instant('setup.auth.signup')
+      : this.translate.instant('setup.auth.signin');
   }
 
   async saveSignInAndContinue(): Promise<void> {
@@ -1978,11 +1992,11 @@ export class SetupComponent implements OnInit, OnDestroy {
 
   billingPrimaryLabel(): string {
     const sub = this.billing.subscription();
-    if (sub && isPaidOrComp(sub)) return 'Continue';
-    if (this.billingCheckoutLoading()) return 'Opening checkout…';
-    if (this.billingConfirming()) return 'Confirming…';
-    if (this.billingAwaitingPayment()) return 'Check subscription';
-    return 'Continue with Babo Cloud';
+    if (sub && isPaidOrComp(sub)) return this.translate.instant('common.continue');
+    if (this.billingCheckoutLoading()) return this.translate.instant('setup.billing.opening');
+    if (this.billingConfirming()) return this.translate.instant('setup.billing.confirming');
+    if (this.billingAwaitingPayment()) return this.translate.instant('setup.billing.checkSub');
+    return this.translate.instant('setup.billing.continueCloud');
   }
 
   billingPrimaryDisabled(): boolean {

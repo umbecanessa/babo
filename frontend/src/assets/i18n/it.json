@@ -13,7 +13,12 @@
     "advanced": "Avanzato",
     "ready": "Pronto",
     "optional": "Opzionale",
-    "easier_setup": "Più semplice"
+    "easier_setup": "Più semplice",
+    "on": "attivo",
+    "off": "Off",
+    "done": "Fatto",
+    "online": "Online",
+    "offline": "Offline"
   },
   "setup": {
     "welcome": {
@@ -55,7 +60,9 @@
       "limited": "Limitata",
       "nextHint": "Nella schermata successiva, scegli <strong>Babo Cloud</strong> per la via più semplice, oppure un'opzione locale avanzata per privacy o modelli offline.",
       "haveServer": "Ho un server sulla mia rete",
-      "venvWait": "Installazione dipendenze Python ancora in corso — attendi che il passo di preparazione finisca."
+      "venvWait": "Installazione dipendenze Python ancora in corso — attendi che il passo di preparazione finisca.",
+      "taglineReady": "Il computer sembra pronto. Poi scegli dove gira la chat — Babo Cloud è la via più semplice.",
+      "taglineCloud": "Il computer sembra pronto. Babo Cloud è la via più semplice; i modelli locali restano un'opzione avanzata."
     },
     "thinking": {
       "needScan": "Completa prima il passo sul dispositivo così possiamo consigliarti una configurazione.",
@@ -87,7 +94,13 @@
           "title": "Il mio server",
           "subtitle": "Avanzato — server vLLM o OpenAI-compatible sulla rete di casa."
         }
-      }
+      },
+      "placeCloud": "Babo Cloud",
+      "placeLan": "Il tuo server LAN",
+      "placeLanSame": "Stesso server LAN",
+      "placeLanShort": "Server LAN",
+      "placePcMoondream": "Questo PC (Moondream)",
+      "placePc": "Questo PC"
     },
     "features": {
       "title": "Funzioni opzionali",
@@ -104,7 +117,14 @@
       "chatRuns": "La chat gira su <strong>{{location}}</strong> — separato da questo server NestJS.",
       "nestjsUrl": "URL server NestJS",
       "testOptional": "Opzionale — verifica che api.babo.agency sia raggiungibile",
-      "venvWait": "Termina l'installazione di Babo su questo computer (passo di preparazione) prima di continuare."
+      "venvWait": "Termina l'installazione di Babo su questo computer (passo di preparazione) prima di continuare.",
+      "leadByok": "Le tue API key possono passare da Babo Cloud (consigliato) o da un server NestJS che gestisci tu. Scegli dove sincronizzare l'account Babo — gli agenti restano in locale.",
+      "leadDefault": "Scegli dove sincronizzare l'account Babo. La chat gira su {{location}}; gli agenti restano sui tuoi dispositivi.",
+      "locCloud": "Babo Cloud",
+      "locByok": "il tuo provider API",
+      "locLocal": "questo computer",
+      "locLan": "il tuo server LAN",
+      "locOther": "il provider scelto"
     },
     "auth": {
       "signin": "Accedi",
@@ -118,7 +138,11 @@
       "passwordSignupPh": "Almeno 8 caratteri",
       "passwordSigninPh": "La tua password",
       "signedIn": "Accesso effettuato — continua per finire l'installazione.",
-      "connecting": "Connessione a Babo Cloud…"
+      "connecting": "Connessione a Babo Cloud…",
+      "leadSignup": "Crea l'account su {{server}}. Finirai l'installazione subito dopo.",
+      "leadSignin": "Accedi su {{server}} — necessario per agenti e sync.",
+      "creating": "Creazione account…",
+      "signingIn": "Accesso in corso…"
     },
     "billing": {
       "title": "Attiva Babo Cloud",
@@ -133,16 +157,55 @@
       "waitingPayment": "Completa il pagamento nel browser — lo rileveremo automaticamente.",
       "allSet": "Tutto pronto — creiamo il tuo agente.",
       "altHint": "Preferisci le tue API key?",
-      "altLink": "Sceglilo in Pensiero"
+      "altLink": "Sceglilo in Pensiero",
+      "opening": "Apertura checkout…",
+      "confirming": "Conferma in corso…",
+      "checkSub": "Controlla abbonamento",
+      "continueCloud": "Continua con Babo Cloud"
     },
     "ready": {
       "title": "Sei pronto",
-      "changeHint": "Puoi cambiare tutto in Impostazioni."
+      "changeHint": "Puoi cambiare tutto in Impostazioni.",
+      "thinking": "Pensiero",
+      "extras": "Extra",
+      "account": "Account",
+      "baboCloud": "Babo Cloud",
+      "yourApiKey": "La tua API key",
+      "extrasLine": "Ricerca codice {{code}} · Schermo {{screen}}",
+      "signedIn": "{{server}} (accesso effettuato)",
+      "on": "attivo",
+      "off": "spento"
     },
     "name": {
       "title": "Dai un nome al tuo agente",
       "lead": "Così apparirà Babo nel tuo spazio di lavoro.",
       "open": "Apri Babo"
+    },
+    "fit": {
+      "perfect": "Adatto al meglio",
+      "good": "Buon adattamento",
+      "marginal": "Al limite"
+    },
+    "voice": {
+      "title": "Input vocale",
+      "thisPc": "Questo PC",
+      "thisComputer": "Questo computer",
+      "myServer": "Il mio server",
+      "off": "Off"
+    },
+    "lan": {
+      "title": "Server di rete",
+      "lead": "vLLM, Whisper o visione sulla LAN. Aggiungi SSH per vedere quali modelli stanno sulla GPU di quella macchina.",
+      "host": "Host",
+      "sshUser": "Utente SSH",
+      "sshPort": "Porta SSH",
+      "sshPassword": "Password SSH",
+      "gpuSecret": "Secret worker GPU",
+      "findServices": "Trova servizi",
+      "looking": "Ricerca…",
+      "scanGpu": "Scansiona GPU e modelli",
+      "scanningGpu": "Scansione GPU…",
+      "servicesTitle": "Servizi su questo host"
     }
   },
   "settings": {
@@ -155,6 +218,18 @@
       "themeSystem": "Sistema",
       "language": "Lingua",
       "languageHint": "Solo lingua dell'interfaccia. L'agente risponde nella lingua in cui scrivi. Auto segue il dispositivo."
+    },
+    "nav": {
+      "models": "Modelli e AI",
+      "account": "Account",
+      "billing": "Fatturazione",
+      "integrations": "Integrazioni",
+      "system": "Sistema",
+      "support": "Supporto e debug",
+      "permissions": "Permessi",
+      "appearance": "Aspetto",
+      "general": "Generale",
+      "keys": "Chiavi API"
     }
   },
   "info": {
@@ -231,5 +306,19 @@
   "locale": {
     "auto": "Auto",
     "autoHint": "Segue la lingua del dispositivo"
+  },
+  "nav": {
+    "agents": "Agenti",
+    "chat": "Chat",
+    "projects": "Progetti",
+    "tools": "Strumenti",
+    "memory": "Memoria",
+    "brain": "Cervello",
+    "settings": "Impostazioni",
+    "signOut": "Esci",
+    "discordHelp": "Aiuto su Discord",
+    "cycleTheme": "Cambia tema: chiaro, scuro o sistema",
+    "earlyAccess": "Accesso anticipato",
+    "appStatus": "Stato app"
   }
 }

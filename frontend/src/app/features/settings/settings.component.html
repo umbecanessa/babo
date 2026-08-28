@@ -1,6 +1,6 @@
 <div class="settings-page">
   <aside class="settings-nav">
-    <h2 class="settings-title">Settings</h2>
+    <h2 class="settings-title">{{ 'nav.settings' | translate }}</h2>
     @if (platform.isElectron) {
       <p class="settings-subtitle">Desktop app &amp; local agent</p>
     }
@@ -10,7 +10,7 @@
         [class.active]="activeSection() === section.id"
         (click)="onSectionChange(section.id)"
       >
-        <span class="nav-label">{{ section.label }}</span>
+        <span class="nav-label">{{ section.labelKey | translate }}</span>
       </button>
     }
   </aside>

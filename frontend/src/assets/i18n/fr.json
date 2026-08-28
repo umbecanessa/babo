@@ -13,7 +13,12 @@
     "advanced": "Advanced",
     "ready": "Ready",
     "optional": "Optional",
-    "easier_setup": "Easier setup"
+    "easier_setup": "Easier setup",
+    "on": "on",
+    "off": "Off",
+    "done": "Done",
+    "online": "Online",
+    "offline": "Offline"
   },
   "setup": {
     "welcome": {
@@ -55,7 +60,9 @@
       "limited": "Limited",
       "nextHint": "On the next screen, pick <strong>Babo Cloud</strong> for the easiest setup, or choose an advanced local option if you prefer privacy or offline models.",
       "haveServer": "I have a server on my network",
-      "venvWait": "Still installing Python dependencies — wait for the prepare step to finish."
+      "venvWait": "Still installing Python dependencies — wait for the prepare step to finish.",
+      "taglineReady": "Your computer looks ready. Next you'll choose where chat runs — Babo Cloud is the easiest path.",
+      "taglineCloud": "Your computer looks ready. Babo Cloud is the easiest path; local models stay available as an advanced option."
     },
     "thinking": {
       "needScan": "Finish the device step first so we can recommend a setup.",
@@ -87,7 +94,13 @@
           "title": "My server",
           "subtitle": "Advanced — vLLM or OpenAI-compatible server on your home network."
         }
-      }
+      },
+      "placeCloud": "Babo Cloud",
+      "placeLan": "Your LAN server",
+      "placeLanSame": "Same LAN server",
+      "placeLanShort": "LAN server",
+      "placePcMoondream": "This PC (Moondream)",
+      "placePc": "This PC"
     },
     "features": {
       "title": "Optional features",
@@ -104,7 +117,14 @@
       "chatRuns": "Chat runs on <strong>{{location}}</strong> — separate from this NestJS server.",
       "nestjsUrl": "NestJS server URL",
       "testOptional": "Optional — verifies api.babo.agency is reachable",
-      "venvWait": "Finish installing Babo on this computer (prepare step) before continuing."
+      "venvWait": "Finish installing Babo on this computer (prepare step) before continuing.",
+      "leadByok": "Your API keys can relay through Babo Cloud (recommended) or a NestJS server you run. Pick where your Babo account syncs — agents still run locally.",
+      "leadDefault": "Pick where your Babo account syncs. Chat runs on {{location}}; agents stay on your devices.",
+      "locCloud": "Babo Cloud",
+      "locByok": "your API provider",
+      "locLocal": "this computer",
+      "locLan": "your LAN server",
+      "locOther": "your chosen provider"
     },
     "auth": {
       "signin": "Sign in",
@@ -118,7 +138,11 @@
       "passwordSignupPh": "At least 8 characters",
       "passwordSigninPh": "Your password",
       "signedIn": "Signed in — continue to finish setup.",
-      "connecting": "Connecting to Babo Cloud…"
+      "connecting": "Connecting to Babo Cloud…",
+      "leadSignup": "Create your account on {{server}}. You'll finish setup right after.",
+      "leadSignin": "Sign in on {{server}} — required for agents and sync.",
+      "creating": "Creating account…",
+      "signingIn": "Signing in…"
     },
     "billing": {
       "title": "Power up Babo Cloud",
@@ -133,16 +157,55 @@
       "waitingPayment": "Complete payment in your browser — we will detect it automatically.",
       "allSet": "You're all set — let's create your agent.",
       "altHint": "Using your own API keys instead?",
-      "altLink": "Pick that in Thinking"
+      "altLink": "Pick that in Thinking",
+      "opening": "Opening checkout…",
+      "confirming": "Confirming…",
+      "checkSub": "Check subscription",
+      "continueCloud": "Continue with Babo Cloud"
     },
     "ready": {
       "title": "You're ready",
-      "changeHint": "Change anytime in Settings."
+      "changeHint": "Change anytime in Settings.",
+      "thinking": "Thinking",
+      "extras": "Extras",
+      "account": "Account",
+      "baboCloud": "Babo Cloud",
+      "yourApiKey": "Your API key",
+      "extrasLine": "Code search {{code}} · Screen {{screen}}",
+      "signedIn": "{{server}} (signed in)",
+      "on": "on",
+      "off": "off"
     },
     "name": {
       "title": "Name your agent",
       "lead": "This is how Babo will appear in your workspace.",
       "open": "Open Babo"
+    },
+    "fit": {
+      "perfect": "Perfect fit",
+      "good": "Good fit",
+      "marginal": "Tight fit"
+    },
+    "voice": {
+      "title": "Voice input",
+      "thisPc": "This PC",
+      "thisComputer": "This computer",
+      "myServer": "My server",
+      "off": "Off"
+    },
+    "lan": {
+      "title": "Network server",
+      "lead": "vLLM, Whisper, or vision on your LAN. Add SSH to see which models fit that machine's GPU.",
+      "host": "Host",
+      "sshUser": "SSH user",
+      "sshPort": "SSH port",
+      "sshPassword": "SSH password",
+      "gpuSecret": "GPU worker secret",
+      "findServices": "Find services",
+      "looking": "Looking…",
+      "scanGpu": "Scan GPU & model fit",
+      "scanningGpu": "Scanning GPU…",
+      "servicesTitle": "Services on this host"
     }
   },
   "settings": {
@@ -155,6 +218,18 @@
       "themeSystem": "System",
       "language": "Language",
       "languageHint": "Interface language only. Your agent still replies in the language you write in. Auto follows your device."
+    },
+    "nav": {
+      "models": "Models & AI",
+      "account": "Account",
+      "billing": "Billing",
+      "integrations": "Integrations",
+      "system": "System",
+      "support": "Support & Debug",
+      "permissions": "Permissions",
+      "appearance": "Appearance",
+      "general": "General",
+      "keys": "API keys"
     }
   },
   "info": {
@@ -231,5 +306,19 @@
   "locale": {
     "auto": "Auto",
     "autoHint": "Match your device language"
+  },
+  "nav": {
+    "agents": "Agents",
+    "chat": "Chat",
+    "projects": "Projects",
+    "tools": "Tools",
+    "memory": "Memory",
+    "brain": "Brain",
+    "settings": "Settings",
+    "signOut": "Sign out",
+    "discordHelp": "Get help on Discord",
+    "cycleTheme": "Cycle theme: light, dark, or system",
+    "earlyAccess": "Early access",
+    "appStatus": "App status"
   }
 }
