@@ -223,7 +223,7 @@
             type="button"
             class="nav-rail-toggle mobile-only"
             (click)="toggleMobileConvNav()"
-            title="Conversations"
+            [title]="'chat.nav.conversations' | translate"
             [attr.aria-label]="'chat.nav.conversations' | translate"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -271,7 +271,7 @@
               {{ activeThreadMeta()?.isGroup ? ('chat.context.group' | translate) : ('chat.context.direct' | translate) }}
             </span>
             @if (activeThreadMeta()!.sender) {
-              <span class="channel-thread-sender">last from {{ activeThreadMeta()!.sender }}</span>
+              <span class="channel-thread-sender">{{ 'chat.toolbar.lastFrom' | translate:{ sender: activeThreadMeta()!.sender } }}</span>
             }
           </div>
         }
@@ -375,7 +375,7 @@
                       class="project-processes-trigger"
                       (click)="toggleProjectProcessesMenu($event)"
                       [attr.aria-expanded]="projectProcessesOpen()"
-                      title="Project servers running in the background">
+                      [title]="'chat.toolbar.projectServers' | translate">
                       <span class="project-processes-dot"></span>
                       {{ projectProcesses().length === 1 ? projectProcesses()[0].label : (projectProcesses().length + ' servers') }}
                     </button>
@@ -424,7 +424,7 @@
                       </svg>
                     }
                     <span class="attachment-name">{{ att.name }}</span>
-                    <button class="attachment-remove" (click)="removeAttachment(att.path)" title="Remove">
+                    <button class="attachment-remove" (click)="removeAttachment(att.path)" [title]="'projects.chat.removeAttachment' | translate">
                       <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
                         <line x1="18" y1="6" x2="6" y2="18"></line>
                         <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -445,7 +445,7 @@
               @if (agenticActive()) {
                 @if (budgetPromptPending()) {
                   <div class="ask-user-composer-banner budget-composer-banner">
-                    Step limit reached — reply with <strong>10</strong>, <strong>20</strong>, or <strong>40</strong> for more steps, or <strong>stop</strong> to wrap up.
+                    <span [innerHTML]="'chat.composer.budgetBanner' | translate"></span>
                   </div>
                 } @else if (askUserPending()) {
                     <div class="ask-user-composer-banner">

@@ -275,7 +275,7 @@
               <div class="profile-head">
                 <span class="profile-name">{{ profile.name }}</span>
                 @if (activePermissionProfile() === profile.id) {
-                  <span class="profile-badge">Active</span>
+                  <span class="profile-badge">{{ 'settings.profileActive' | translate }}</span>
                 }
               </div>
               <p class="profile-desc">{{ profile.description }}</p>

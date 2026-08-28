@@ -234,7 +234,8 @@
       "enterCredentials": "Inserisci email e password, o crea un account.",
       "signInFailed": "Accesso fallito",
       "checkoutFailed": "Impossibile avviare il checkout",
-      "saveApiKeyFailed": "Impossibile salvare la API key"
+      "saveApiKeyFailed": "Impossibile salvare la API key",
+      "chooseAccountServer": "Scegli prima un server account (passo precedente)."
     },
     "test": {
       "signInNext": "Accedi nel passo successivo per connetterti",
@@ -323,6 +324,10 @@
       "sshHint": "Richiesto per la scansione GPU. Usa user@host sopra, o imposta utente + password qui.",
       "passwordHint": "Usa quando questo PC non ha una chiave SSH sul server. Non salvato su disco.",
       "gpuSecretHint": "Richiesto per Vision sulla porta 8443. Usa lo stesso valore di BABO_VISION_SECRET sul server (es. nls-dev-secret)."
+    },
+    "billingToast": {
+      "subActive": "Abbonamento attivo — tutto pronto.",
+      "checkoutCanceled": "Checkout annullato — riprova quando vuoi."
     }
   },
   "settings": {
@@ -499,7 +504,8 @@
       "connected": "Connesso ({{code}})",
       "unreachable": "Impossibile raggiungere il server",
       "failed": "Test fallito"
-    }
+    },
+    "profileActive": "Attivo"
   },
   "info": {
     "neural_state": {
@@ -654,7 +660,8 @@
       "runningLocally": "In esecuzione in locale",
       "stopProcess": "Ferma processo",
       "servers": "{{count}} server",
-      "openShell": "Apri shell agente nel workspace"
+      "openShell": "Apri shell agente nel workspace",
+      "budgetBanner": "Limite passi raggiunto — rispondi con <strong>10</strong>, <strong>20</strong> o <strong>40</strong> per altri passi, oppure <strong>stop</strong> per concludere."
     },
     "empty": {
       "start": "Inizia una conversazione"
@@ -671,7 +678,18 @@
       "searching": "Ricerca",
       "wikipedia": "Wikipedia",
       "resultPreview": "Anteprima risultato",
-      "success": "Successo"
+      "success": "Successo",
+      "tagsMore": "+{{count}} altri",
+      "tagsCollapse": "comprimi",
+      "driveDomain": "Dominio: {{domain}}",
+      "reachOutSentVia": "inviato via {{channel}}",
+      "reachOutMotive": "reach out — drive {{drive}}",
+      "skillDeps": "dip.: {{deps}}",
+      "channelGroupNotReplied": "gruppo · senza risposta",
+      "channelSkipped": "saltato su {{channel}}",
+      "channelRepliedVia": "risposto via {{channel}}",
+      "feedbackBtnTitle": "Invia feedback su questa risposta",
+      "failed": "Fallito"
     },
     "mobile": {
       "live": "Live",
@@ -964,7 +982,8 @@
       "primaryReach": "Reachability primaria — Babo riporta qui di default",
       "setPrimaryReach": "Imposta come reachability primaria",
       "subject": "Oggetto",
-      "lastSpeaker": "Ultimo speaker"
+      "lastSpeaker": "Ultimo speaker",
+      "thread": "Thread"
     },
     "browser": {
       "workbench": "Workbench",
@@ -1073,8 +1092,10 @@
         "managing": "gestione",
         "file": "file",
         "planSteps": "Piano ({{count}} passi): {{preview}}",
-        "planStepDone": "Passo {{num}} completato{{suffix}}"
-      }
+        "planStepDone": "Passo {{num}} completato{{suffix}}",
+        "preparingDownload": "Preparazione download: {{label}}..."
+      },
+      "loopInterrupted": "Attività precedente interrotta al passo {{step}}. Usa Continua per riprendere."
     },
     "tools": {
       "browser": "Browser",
@@ -1131,6 +1152,10 @@
     "thread": {
       "emailThread": "Thread email",
       "fromSender": "da {{sender}}"
+    },
+    "toolbar": {
+      "projectServers": "Server di progetto in esecuzione in background",
+      "lastFrom": "ultimo da {{sender}}"
     }
   },
   "dashboard": {
@@ -1248,7 +1273,8 @@
       "boardLoadError": "Impossibile caricare la board",
       "deleteFailed": "Eliminazione squad non riuscita",
       "updateFailed": "Aggiornamento non riuscito"
-    }
+    },
+    "removeFromSquad": "Rimuovi dallo squad"
   },
   "toast": {
     "chat": {
@@ -2280,7 +2306,8 @@
       "notConnected": "Non connesso all'agente. Riprova tra un momento.",
       "privateDesk": "Scrivania privata",
       "branchDefault": "Branch",
-      "somethingWrong": "Qualcosa è andato storto."
+      "somethingWrong": "Qualcosa è andato storto.",
+      "branchNumber": "Branch {{n}}"
     },
     "workspace": {
       "root": "Workspace",
@@ -2372,7 +2399,10 @@
     "waitingServerStart": "In attesa dell'avvio del server...",
     "connectionLost": "Connessione al server persa. Nuovo tentativo...",
     "loginFailed": "Accesso fallito",
-    "registerFailed": "Registrazione fallita"
+    "registerFailed": "Registrazione fallita",
+    "emailPlaceholder": "tu@esempio.com",
+    "passwordLoginPlaceholder": "Inserisci password",
+    "passwordSignupPh": "Almeno 8 caratteri"
   },
   "apiKeys": {
     "title": "API key",
@@ -2398,7 +2428,11 @@
     "delete": "Elimina",
     "usageExamples": "Esempi d'uso",
     "pythonSdk": "Python (OpenAI SDK)",
-    "curl": "curl"
+    "curl": "curl",
+    "loadFailed": "Impossibile caricare le chiavi API. Controlla la connessione al backend.",
+    "generateFailed": "Impossibile generare la chiave API. Controlla la connessione al backend.",
+    "revokeFailed": "Impossibile revocare la chiave.",
+    "deleteFailed": "Impossibile eliminare la chiave."
   },
   "cryptex": {
     "empty": "Nessun anello caricato",

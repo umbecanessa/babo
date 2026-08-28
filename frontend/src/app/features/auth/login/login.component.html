@@ -55,7 +55,7 @@
           [(ngModel)]="email"
           name="email"
           required
-          placeholder="you@example.com"
+          [placeholder]="'auth.emailPlaceholder' | translate"
           autocomplete="email"
         />
       </div>
@@ -67,7 +67,7 @@
           [(ngModel)]="password"
           name="password"
           required
-          placeholder="Enter password"
+          [placeholder]="'auth.passwordLoginPlaceholder' | translate"
           autocomplete="current-password"
         />
       </div>

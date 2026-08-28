@@ -113,10 +113,10 @@
                   </span>
                 }
                 @if (hiddenCount > 0 && !isTagsExpanded($index)) {
-                  <button class="signal-pill signal-more" (click)="toggleTags($index)">+{{ hiddenCount }} more</button>
+                  <button class="signal-pill signal-more" (click)="toggleTags($index)">{{ 'chat.message.tagsMore' | translate:{ count: hiddenCount } }}</button>
                 }
                 @if (isTagsExpanded($index) && hiddenCount > 0) {
-                  <button class="signal-pill signal-more" (click)="toggleTags($index)">collapse</button>
+                  <button class="signal-pill signal-more" (click)="toggleTags($index)">{{ 'chat.message.tagsCollapse' | translate }}</button>
                 }
               </div>
             }
@@ -175,7 +175,7 @@
             @if (isDriveExpanded($index)) {
               <div class="drive-details">
                 @if (msg.drive?.domain) {
-                  <div class="drive-domain">Domain: {{ msg.drive?.domain }}</div>
+                  <div class="drive-domain">{{ 'chat.message.driveDomain' | translate:{ domain: msg.drive?.domain } }}</div>
                 }
                 @if (msg.drive?.resultPreview) {
                   <div class="drive-preview">{{ msg.drive?.resultPreview }}</div>
@@ -184,7 +184,7 @@
                   @if (msg.drive?.success) {
                     <span class="drive-dot success"></span> <span>{{ 'chat.message.success' | translate }}</span>
                   } @else {
-                    <span class="drive-dot fail"></span> <span>Failed</span>
+                    <span class="drive-dot fail"></span> <span>{{ 'chat.message.failed' | translate }}</span>
                   }
                 </div>
               </div>
@@ -198,10 +198,10 @@
             <p>{{ msg.content }}</p>
             <div class="reach-out-meta">
               @if (msg.metadata && msg.metadata['channel'] && msg.metadata['channel'] !== 'chat') {
-                <span class="reach-out-channel">sent via {{ msg.metadata['channel'] }}</span>
+                <span class="reach-out-channel">{{ 'chat.message.reachOutSentVia' | translate:{ channel: msg.metadata['channel'] } }}</span>
               }
               @if (msg.drive?.name) {
-                <span class="reach-out-motive">reach out — {{ msg.drive?.name }} drive</span>
+                <span class="reach-out-motive">{{ 'chat.message.reachOutMotive' | translate:{ drive: msg.drive?.name } }}</span>
               }
             </div>
           </div>
@@ -573,7 +573,7 @@
                       <span class="skill-review-file">{{ f.path }}</span>
                     }
                     @if (sk.dependencies?.length) {
-                      <span class="skill-deps">deps: {{ sk.dependencies.join(', ') }}</span>
+                      <span class="skill-deps">{{ 'chat.message.skillDeps' | translate:{ deps: sk.dependencies.join(', ') } }}</span>
                     }
                   </div>
                 }
@@ -758,7 +758,7 @@
             <div class="channel-indicator">
               <span class="channel-icon">👁</span>
               <span class="channel-sender">{{ msg.sender }}</span>
-              <span class="channel-ambient-badge">group · not replied</span>
+              <span class="channel-ambient-badge">{{ 'chat.message.channelGroupNotReplied' | translate }}</span>
             </div>
             <div class="channel-content">{{ msg.content }}</div>
           </div>
@@ -767,7 +767,7 @@
           <div class="channel-bubble channel-skipped">
             <div class="channel-indicator">
               <span class="channel-icon">⏭</span>
-              <span class="channel-reply-label">skipped on {{ msg.channel }}</span>
+              <span class="channel-reply-label">{{ 'chat.message.channelSkipped' | translate:{ channel: msg.channel } }}</span>
             </div>
             <div class="channel-content">{{ msg.content }}</div>
           </div>
@@ -778,10 +778,10 @@
               <span class="channel-icon reply">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>
               </span>
-              <span class="channel-reply-label">replied via {{ msg.channel }}</span>
+              <span class="channel-reply-label">{{ 'chat.message.channelRepliedVia' | translate:{ channel: msg.channel } }}</span>
             </div>
             <div class="channel-content">{{ msg.content }}</div>
-            <button class="feedback-btn" (click)="openFeedback($index, $event)" title="Give feedback on this reply">
+            <button class="feedback-btn" (click)="openFeedback($index, $event)" [title]="'chat.message.feedbackBtnTitle' | translate">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
               </svg>

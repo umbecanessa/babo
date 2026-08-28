@@ -1,7 +1,7 @@
 import { Component, OnInit, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { ApiKeyService } from '../../core/services/api-key.service';
 import { ApiKey } from '../../core/models/user.model';
 import { ToastService } from '../../shared/toast/toast.service';
@@ -20,7 +20,11 @@ export class ApiKeysComponent implements OnInit {
   createdKey = signal<string | null>(null);
   copied = signal(false);
 
-  constructor(private apiKeyService: ApiKeyService, private toast: ToastService) {}
+  constructor(
+    private apiKeyService: ApiKeyService,
+    private toast: ToastService,
+    private translate: TranslateService,
+  ) {}
 
   ngOnInit() {
     this.loadKeys();
@@ -31,7 +35,7 @@ export class ApiKeysComponent implements OnInit {
       next: (keys) => this.keys.set(keys),
       error: (err) => {
         console.error('Failed to load API keys:', err);
-        this.toast.show('Failed to load API keys. Check backend connection.', 'error');
+        this.toast.show(this.translate.instant('apiKeys.loadFailed'), 'error');
       },
     });
   }
@@ -47,7 +51,7 @@ export class ApiKeysComponent implements OnInit {
       },
       error: (err) => {
         console.error('Failed to create API key:', err);
-        this.toast.show('Failed to generate API key. Check backend connection.', 'error');
+        this.toast.show(this.translate.instant('apiKeys.generateFailed'), 'error');
       },
     });
   }
@@ -57,7 +61,7 @@ export class ApiKeysComponent implements OnInit {
       next: () => this.loadKeys(),
       error: (err) => {
         console.error('Failed to revoke key:', err);
-        this.toast.show('Failed to revoke key.', 'error');
+        this.toast.show(this.translate.instant('apiKeys.revokeFailed'), 'error');
       },
     });
   }
@@ -67,7 +71,7 @@ export class ApiKeysComponent implements OnInit {
       next: () => this.loadKeys(),
       error: (err) => {
         console.error('Failed to delete key:', err);
-        this.toast.show('Failed to delete key.', 'error');
+        this.toast.show(this.translate.instant('apiKeys.deleteFailed'), 'error');
       },
     });
   }

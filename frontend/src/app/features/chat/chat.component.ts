@@ -1935,7 +1935,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         }
         const interruptText =
           msg.content
-          || `Previous task was interrupted at step ${msg.iteration ?? '?'}. Use Continue to resume.`;
+          || this.t('chat.runtime.loopInterrupted', { step: msg.iteration ?? '?' });
         const resumeToken = String(msg.resume_token || msg.interrupted_at || '');
         const storageKey = `loop_interrupt_seen_${this.agentId}_${resumeToken}`;
         if (resumeToken && sessionStorage.getItem(storageKey)) {
@@ -3053,9 +3053,11 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
           const name = filePaths[0] ? fileDisplayName(filePaths[0]) : 'file';
           label = filePaths[0] ? this.t('chat.runtime.bgTool.editing', { path: name }) : this.t('chat.runtime.bgTool.editingFile');
         } else if (toolName === 'offer_download') {
-          label = `Preparing download: ${args.label || args.path || 'file'}...`;
+          label = this.t('chat.runtime.bgTool.preparingDownload', {
+            label: args.label || args.path || this.t('chat.runtime.bgTool.file'),
+          });
         } else if (toolName === 'wait') {
-          label = `Waiting ${args.seconds ?? 30}s…`;
+          label = this.t('chat.tool.waiting', { seconds: args.seconds ?? 30 });
         } else if (toolName === 'team') {
           label = this.t('chat.runtime.bgTool.team', { action: String(args['action'] || this.t('chat.runtime.bgTool.managing')) });
         } else if (toolName === 'plan') {
@@ -3065,9 +3067,11 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         } else if (toolName === 'delegate') {
           label = this.t('chat.runtime.bgTool.delegating');
         } else if (toolName === 'scheduler') {
-          label = `Scheduler: ${args.action || 'managing'}...`;
+          label = this.t('chat.runtime.bgTool.scheduler', {
+            action: String(args.action || this.t('chat.runtime.bgTool.managing')),
+          });
         } else {
-          label = `Running ${toolName}...`;
+          label = this.t('chat.runtime.bgTool.runningTool', { tool: toolName });
         }
 
         // Flush any unclaimed pre-tool reasoning as a thinking message
@@ -3890,7 +3894,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     const id = Date.now().toString(36);
     const key = `websocket:thread:${id}`;
     const count = this.conversations.threads().filter(t => t.channel === 'websocket').length;
-    const label = `Branch ${count}`;
+    const label = this.t('projects.chat.branchNumber', { n: count });
     this.conversations.addBranch(label, key);
     this.switchThread(key);
     if (this.agentId) {
@@ -3938,7 +3942,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     const id = Date.now().toString(36);
     const key = `websocket:thread:${id}`;
     const count = this.conversations.threads().filter((t) => this.conversations.isWebsocketBranch(t.key)).length;
-    const label = `Branch ${count + 1}`;
+    const label = this.t('projects.chat.branchNumber', { n: count + 1 });
     this.conversations.addBranch(label, key);
     this.api.renameSession(this.agentId, key, label).subscribe({ error: () => {} });
     this.api.setDefaultHomeSession(this.agentId, key).subscribe({

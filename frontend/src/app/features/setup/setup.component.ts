@@ -1843,7 +1843,7 @@ export class SetupComponent implements OnInit, OnDestroy {
     }
     const url = normalizeNestjsUrl(this.config.nestjsUrl);
     if (!url) {
-      this.authError.set('Choose an account server first (previous step).');
+      this.authError.set(this.t('setup.errors.chooseAccountServer'));
       return;
     }
     this.savingBackend.set(true);
@@ -2048,7 +2048,7 @@ export class SetupComponent implements OnInit, OnDestroy {
       this.billingConfirming.set(false);
       this.billingAlert.set(null);
       if (autoAdvance && this.step() === 7) {
-        this.toast.show('Subscription active — you\'re all set.', 'info');
+        this.toast.show(this.t('setup.billingToast.subActive'), 'info');
         this.clearWizardDraft();
         this.goToStep(8);
       }
@@ -2114,7 +2114,7 @@ export class SetupComponent implements OnInit, OnDestroy {
       this.analytics.track('setup_billing_canceled');
       this.billingAwaitingPayment.set(false);
       this.stopBillingSubscriptionPoll();
-      this.toast.show('Checkout canceled — you can try again when ready.', 'info');
+      this.toast.show(this.t('setup.billingToast.checkoutCanceled'), 'info');
       this.billingAlert.set(null);
       this.goToStep(7);
     }

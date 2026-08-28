@@ -234,7 +234,8 @@
       "enterCredentials": "Enter your email and password, or create an account.",
       "signInFailed": "Could not sign in",
       "checkoutFailed": "Could not start checkout",
-      "saveApiKeyFailed": "Could not save API key"
+      "saveApiKeyFailed": "Could not save API key",
+      "chooseAccountServer": "Choose an account server first (previous step)."
     },
     "test": {
       "signInNext": "Sign in on the next step to connect",
@@ -323,6 +324,10 @@
       "sshHint": "Required for GPU scan. Use user@host above, or set user + password here.",
       "passwordHint": "Use when this PC doesn't have an SSH key on the server. Not saved to disk.",
       "gpuSecretHint": "Required for Vision on port 8443. Use the same value as BABO_VISION_SECRET on the server (e.g. nls-dev-secret)."
+    },
+    "billingToast": {
+      "subActive": "Subscription active — you're all set.",
+      "checkoutCanceled": "Checkout canceled — you can try again when ready."
     }
   },
   "settings": {
@@ -499,7 +504,8 @@
       "connected": "Connected ({{code}})",
       "unreachable": "Could not reach server",
       "failed": "Test failed"
-    }
+    },
+    "profileActive": "Active"
   },
   "info": {
     "neural_state": {
@@ -654,7 +660,8 @@
       "runningLocally": "Running locally",
       "stopProcess": "Stop process",
       "servers": "{{count}} servers",
-      "openShell": "Open agent shell in workspace"
+      "openShell": "Open agent shell in workspace",
+      "budgetBanner": "Step limit reached — reply with <strong>10</strong>, <strong>20</strong>, or <strong>40</strong> for more steps, or <strong>stop</strong> to wrap up."
     },
     "empty": {
       "start": "Start a conversation"
@@ -671,7 +678,18 @@
       "searching": "Searching",
       "wikipedia": "Wikipedia",
       "resultPreview": "Result preview",
-      "success": "Success"
+      "success": "Success",
+      "tagsMore": "+{{count}} more",
+      "tagsCollapse": "collapse",
+      "driveDomain": "Domain: {{domain}}",
+      "reachOutSentVia": "sent via {{channel}}",
+      "reachOutMotive": "reach out — {{drive}} drive",
+      "skillDeps": "deps: {{deps}}",
+      "channelGroupNotReplied": "group · not replied",
+      "channelSkipped": "skipped on {{channel}}",
+      "channelRepliedVia": "replied via {{channel}}",
+      "feedbackBtnTitle": "Give feedback on this reply",
+      "failed": "Failed"
     },
     "mobile": {
       "live": "Live",
@@ -964,7 +982,8 @@
       "primaryReach": "Primary reachability — Babo reports here by default",
       "setPrimaryReach": "Set as primary reachability",
       "subject": "Subject",
-      "lastSpeaker": "Last speaker"
+      "lastSpeaker": "Last speaker",
+      "thread": "Thread"
     },
     "browser": {
       "workbench": "Workbench",
@@ -1073,8 +1092,10 @@
         "managing": "managing",
         "file": "file",
         "planSteps": "Plan ({{count}} steps): {{preview}}",
-        "planStepDone": "Step {{num}} done{{suffix}}"
-      }
+        "planStepDone": "Step {{num}} done{{suffix}}",
+        "preparingDownload": "Preparing download: {{label}}..."
+      },
+      "loopInterrupted": "Previous task was interrupted at step {{step}}. Use Continue to resume."
     },
     "tools": {
       "browser": "Browser",
@@ -1131,6 +1152,10 @@
     "thread": {
       "emailThread": "Email thread",
       "fromSender": "from {{sender}}"
+    },
+    "toolbar": {
+      "projectServers": "Project servers running in the background",
+      "lastFrom": "last from {{sender}}"
     }
   },
   "dashboard": {
@@ -1248,7 +1273,8 @@
       "boardLoadError": "Failed to load board",
       "deleteFailed": "Delete squad failed",
       "updateFailed": "Update failed"
-    }
+    },
+    "removeFromSquad": "Remove from squad"
   },
   "toast": {
     "chat": {
@@ -2280,7 +2306,8 @@
       "notConnected": "Not connected to agent. Try again in a moment.",
       "privateDesk": "Private desk",
       "branchDefault": "Branch",
-      "somethingWrong": "Something went wrong."
+      "somethingWrong": "Something went wrong.",
+      "branchNumber": "Branch {{n}}"
     },
     "workspace": {
       "root": "Workspace",
@@ -2372,7 +2399,10 @@
     "waitingServerStart": "Waiting for server to start...",
     "connectionLost": "Server connection lost. Retrying...",
     "loginFailed": "Login failed",
-    "registerFailed": "Registration failed"
+    "registerFailed": "Registration failed",
+    "emailPlaceholder": "you@example.com",
+    "passwordLoginPlaceholder": "Enter password",
+    "passwordSignupPh": "At least 8 characters"
   },
   "apiKeys": {
     "title": "API Keys",
@@ -2398,7 +2428,11 @@
     "delete": "Delete",
     "usageExamples": "Usage Examples",
     "pythonSdk": "Python (OpenAI SDK)",
-    "curl": "curl"
+    "curl": "curl",
+    "loadFailed": "Failed to load API keys. Check backend connection.",
+    "generateFailed": "Failed to generate API key. Check backend connection.",
+    "revokeFailed": "Failed to revoke key.",
+    "deleteFailed": "Failed to delete key."
   },
   "cryptex": {
     "empty": "No rings loaded",
