@@ -481,6 +481,8 @@
       "threadOptions": "Opzioni thread",
       "setAsHome": "Imposta come Home",
       "resetHome": "Reimposta Home…",
+      "resetHomeTitle": "Reimposta Home",
+      "resetHomeConfirm": "Reimposta Home",
       "rename": "Rinomina",
       "delete": "Elimina",
       "close": "Chiudi",
@@ -785,7 +787,9 @@
       "budgetNotConnected": "Non connesso — impossibile inviare la risposta sul budget. Riapri la chat e riprova.",
       "channelSendFailed": "Invio sul canale non riuscito",
       "budgetFailed": "Risposta budget non riuscita.",
-      "sleepFailed": "Risposta sul sonno non applicabile."
+      "sleepFailed": "Risposta sul sonno non applicabile.",
+      "micDenied": "Accesso al microfono negato",
+      "transcriptionFailed": "Trascrizione fallita"
     },
     "settings": {
       "latestVersion": "Hai già l'ultima versione",
@@ -1177,6 +1181,77 @@
         "cancelled": "Annullato",
         "pending": "In attesa"
       }
+    },
+    "chat": {
+      "loadingHistory": "Caricamento conversazione...",
+      "emptyDesk": "Chat privata — il contesto del progetto viene iniettato automaticamente.",
+      "surfaceBannerOne": "{{count}} thread canale — apri in Chat",
+      "surfaceBannerMany": "{{count}} thread canale — apri in Chat",
+      "uploading": "Caricamento...",
+      "recording": "Registrazione {{duration}}",
+      "removeAttachment": "Rimuovi",
+      "notConnected": "Non connesso all'agente. Riprova tra un momento.",
+      "privateDesk": "Scrivania privata",
+      "branchDefault": "Branch"
+    },
+    "workspace": {
+      "root": "Workspace",
+      "newFile": "Nuovo file",
+      "newFolder": "Nuova cartella",
+      "uploadFiles": "Carica file",
+      "uploadFolder": "Carica cartella",
+      "toggleShell": "Mostra/nascondi shell",
+      "refresh": "Aggiorna",
+      "loading": "Caricamento…",
+      "empty": "Nessun file — creane uno sopra.",
+      "rename": "Rinomina",
+      "delete": "Elimina",
+      "selectFile": "Seleziona un file dall'explorer per aprirlo.",
+      "loadingFile": "Caricamento file…",
+      "save": "Salva",
+      "dragResize": "Trascina per ridimensionare",
+      "closeTerminal": "Chiudi terminale",
+      "newTerminal": "Nuovo terminale",
+      "closeShell": "Chiudi shell",
+      "shell": "Shell",
+      "toast": {
+        "invalidPath": "Percorso file non valido",
+        "fileNotFound": "File non trovato nel workspace",
+        "notAFile": "Il percorso non è un file",
+        "openFailed": "Impossibile aprire il percorso",
+        "readFailed": "Impossibile leggere il file",
+        "saved": "Salvato",
+        "saveFailed": "Impossibile salvare il file",
+        "uploadFailed": "Caricamento fallito"
+      },
+      "errors": {
+        "renameFailed": "Rinomina fallita",
+        "deleteFailed": "Eliminazione fallita",
+        "createFileFailed": "Impossibile creare il file",
+        "createFolderFailed": "Impossibile creare la cartella",
+        "loadFailed": "Impossibile caricare il workspace"
+      }
+    },
+    "run": {
+      "background": "in background",
+      "archived": "archiviato",
+      "dismiss": "Chiudi",
+      "projectsLink": "Progetti",
+      "recoveryBanner": "Passo parziale accettato. L'orchestratore dovrebbe ispezionare la wave, avanzare se pronta, correggere i gap o avviare un altro team.",
+      "wrapUpBanner": "Tutti i passi completati — esegui plan(verify) poi plan(complete), o delega le correzioni per i gap noti (es. errori di build).",
+      "agentsOne": "{{count}} agente",
+      "agentsMany": "{{count}} agenti",
+      "subAgents": "Sub-agenti",
+      "batch": "batch {{count}}",
+      "queued": "in coda",
+      "working": "in lavorazione…",
+      "iters": "{{current}}/{{max}} iter",
+      "toolsPartial": "{{count}} strumenti · parziale",
+      "toolsCount": "{{count}} strumenti",
+      "waitingSlot": "In attesa di uno slot delegato…",
+      "starting": "Avvio…",
+      "moreInProjects": "+ {{count}} altri in Progetti",
+      "partialSuffix": "· parziale"
     }
   },
   "auth": {

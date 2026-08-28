@@ -4,7 +4,7 @@
     @if (cwd) {
       <span class="terminal-cwd">{{ cwd }}</span>
     }
-    <button type="button" class="close-btn" title="Close shell" (click)="closePanel()">&times;</button>
+    <button type="button" class="close-btn" [attr.title]="'projects.workspace.closeShell' | translate" (click)="closePanel()">&times;</button>
   </div>
   <div
     #host

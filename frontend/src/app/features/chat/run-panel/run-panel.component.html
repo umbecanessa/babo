@@ -22,19 +22,19 @@
           <span class="run-panel-summary">{{ run.headerSummary() }}</span>
         </span>
         @if (run.background()) {
-          <span class="run-panel-badge">background</span>
+          <span class="run-panel-badge">{{ 'projects.run.background' | translate }}</span>
         }
         @if (run.archived()) {
-          <span class="run-panel-badge run-panel-badge--archived">archived</span>
+          <span class="run-panel-badge run-panel-badge--archived">{{ 'projects.run.archived' | translate }}</span>
         }
         @if (!run.expanded() && run.isLive()) {
           <span class="run-panel-spinner" aria-hidden="true"></span>
         }
         @if (!run.expanded() && run.needsWrapUp()) {
-          <button type="button" class="run-panel-dismiss" (click)="dismissWrapUp($event)" title="Dismiss">×</button>
+          <button type="button" class="run-panel-dismiss" (click)="dismissWrapUp($event)" [attr.title]="'projects.run.dismiss' | translate">×</button>
         }
         @if (mode === 'chat' && agentId) {
-          <a class="run-panel-link" [routerLink]="projectsLink()" (click)="$event.stopPropagation()">Projects</a>
+          <a class="run-panel-link" [routerLink]="projectsLink()" (click)="$event.stopPropagation()">{{ 'projects.run.projectsLink' | translate }}</a>
         }
         <span class="run-panel-chevron" [class.expanded]="run.expanded()" aria-hidden="true">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -64,11 +64,11 @@
         <div class="run-panel-body">
           @if (run.recoveryPending()) {
             <p class="run-recovery-banner">
-              Partial step accepted. Orchestrator should inspect the wave, advance if ready, fix gaps directly, or spin another team.
+              {{ 'projects.run.recoveryBanner' | translate }}
             </p>
           } @else if (run.needsWrapUp()) {
             <p class="run-recovery-banner run-recovery-banner--wrapup">
-              All steps done — run plan(verify) then plan(complete), or delegate fixes for known gaps (e.g. build errors).
+              {{ 'projects.run.wrapUpBanner' | translate }}
             </p>
           }
           @if (run.waves().length > 0) {
@@ -112,7 +112,9 @@
                 </span>
                 <span class="run-step-label">{{ step.label }}</span>
                 @if (stepDelegates(step).length > 0) {
-                  <span class="run-step-meta">{{ stepDelegates(step).length }} agent{{ stepDelegates(step).length === 1 ? '' : 's' }}</span>
+                  <span class="run-step-meta">{{ stepDelegates(step).length === 1
+                    ? ('projects.run.agentsOne' | translate:{ count: stepDelegates(step).length })
+                    : ('projects.run.agentsMany' | translate:{ count: stepDelegates(step).length }) }}</span>
                 }
               </button>
 
@@ -129,9 +131,9 @@
           @if (run.unassignedDelegates().length > 0) {
             <div class="run-unassigned">
               <span class="run-unassigned-label">
-                Sub-agents
+                {{ 'projects.run.subAgents' | translate }}
                 @if (run.batchCount() && run.steps().length === 0) {
-                  <span class="run-batch-label">· batch {{ run.batchCount() }}</span>
+                  <span class="run-batch-label">· {{ 'projects.run.batch' | translate:{ count: run.batchCount() } }}</span>
                 }
               </span>
               @for (d of run.unassignedDelegates(); track delegateTrackKey(d)) {
@@ -157,15 +159,17 @@
       <span class="run-delegate-title">{{ delegateTitle(d) }}</span>
       <span class="run-delegate-meta">
         @if (d.status === 'queued') {
-          queued
+          {{ 'projects.run.queued' | translate }}
         } @else if (d.status === 'running') {
           @if (d.iterations && d.maxIterations) {
-            {{ d.iterations }}/{{ d.maxIterations }} iters
+            {{ 'projects.run.iters' | translate:{ current: d.iterations, max: d.maxIterations } }}
           } @else {
-            working…
+            {{ 'projects.run.working' | translate }}
           }
         } @else {
-          {{ d.totalToolCalls ?? d.toolCalls.length }} tools@if (d.partialTimeout) { · partial}
+          {{ d.partialTimeout
+            ? ('projects.run.toolsPartial' | translate:{ count: (d.totalToolCalls ?? d.toolCalls.length) })
+            : ('projects.run.toolsCount' | translate:{ count: (d.totalToolCalls ?? d.toolCalls.length) }) }}
         }
       </span>
       <span class="run-delegate-chevron" [class.expanded]="d.expanded" aria-hidden="true">
@@ -175,10 +179,10 @@
     @if (d.expanded) {
       <div class="run-delegate-body">
         @if (d.status === 'queued') {
-          <div class="run-delegate-empty">Waiting for a delegate slot…</div>
+          <div class="run-delegate-empty">{{ 'projects.run.waitingSlot' | translate }}</div>
         }
         @if (!d.toolCalls.length && d.status === 'running') {
-          <div class="run-delegate-empty">Starting…</div>
+          <div class="run-delegate-empty">{{ 'projects.run.starting' | translate }}</div>
         }
         @for (tc of visibleTools(d); track $index) {
           <div class="run-tool-row" [class.error]="tc.isError">
@@ -200,7 +204,7 @@
           </div>
         }
         @if (hiddenToolCount(d) > 0 && mode === 'chat') {
-          <a class="run-tool-more" [routerLink]="projectsLink()">+ {{ hiddenToolCount(d) }} more in Projects</a>
+          <a class="run-tool-more" [routerLink]="projectsLink()">{{ 'projects.run.moreInProjects' | translate:{ count: hiddenToolCount(d) } }}</a>
         }
         @if (d.summary && d.status !== 'running') {
           <div class="run-delegate-summary">{{ d.summary.split('\n\n[DELEGATE')[0] }}</div>

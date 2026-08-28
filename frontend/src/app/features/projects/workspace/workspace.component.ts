@@ -12,6 +12,7 @@ import {
   inject,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { FilesystemService } from '../../../core/services/filesystem.service';
 import { ToastService } from '../../../shared/toast/toast.service';
 import { WorkspaceExplorerComponent } from './workspace-explorer/workspace-explorer.component';
@@ -35,11 +36,12 @@ import { languageFromFileName } from './language.util';
 @Component({
   selector: 'app-workspace',
   standalone: true,
-  imports: [CommonModule, WorkspaceExplorerComponent, WorkspaceEditorComponent, WorkspaceTerminalComponent],
+  imports: [CommonModule, TranslateModule, WorkspaceExplorerComponent, WorkspaceEditorComponent, WorkspaceTerminalComponent],
   templateUrl: './workspace.component.html',
   styleUrl: './workspace.component.scss',
 })
 export class WorkspaceComponent implements OnInit, OnChanges {
+  private translate = inject(TranslateService);
   @Input({ required: true }) agentId = '';
   @Input() workspacePath = '';
   @Input() initialFilePath = '';
@@ -144,7 +146,7 @@ export class WorkspaceComponent implements OnInit, OnChanges {
         projectDir ? [] : projectDirs,
       );
       if (!candidates.length) {
-        this.toast.show('Invalid file path', 'error');
+        this.toast.show(this.translate.instant('projects.workspace.toast.invalidPath'), 'error');
         return;
       }
       this._openFileCandidate(candidates, 0);
@@ -168,7 +170,7 @@ export class WorkspaceComponent implements OnInit, OnChanges {
 
   private _openFileCandidate(candidates: string[], index: number): void {
     if (index >= candidates.length) {
-      this.toast.show('File not found in workspace', 'error');
+      this.toast.show(this.translate.instant('projects.workspace.toast.fileNotFound'), 'error');
       return;
     }
     const absPath = candidates[index];
@@ -184,7 +186,7 @@ export class WorkspaceComponent implements OnInit, OnChanges {
             this._openFileCandidate(candidates, index + 1);
             return;
           }
-          this.toast.show('Path is not a file', 'error');
+          this.toast.show(this.translate.instant('projects.workspace.toast.notAFile'), 'error');
           return;
         }
         this._readFileAt(absPath, candidates, index);
@@ -198,7 +200,7 @@ export class WorkspaceComponent implements OnInit, OnChanges {
           this._openFileCandidate(candidates, index + 1);
           return;
         }
-        this.toast.show(detail || 'Failed to open path', 'error');
+        this.toast.show(detail || this.translate.instant('projects.workspace.toast.openFailed'), 'error');
       },
     });
   }
@@ -259,7 +261,7 @@ export class WorkspaceComponent implements OnInit, OnChanges {
           this._openFileCandidate(candidates, index + 1);
           return;
         }
-        this.toast.show(detail || 'Failed to read file', 'error');
+        this.toast.show(detail || this.translate.instant('projects.workspace.toast.readFailed'), 'error');
       },
     });
   }
@@ -347,10 +349,10 @@ export class WorkspaceComponent implements OnInit, OnChanges {
               : t,
           ),
         );
-        this.toast.show('Saved', 'info');
+        this.toast.show(this.translate.instant('projects.workspace.toast.saved'), 'info');
       },
       error: (err) => {
-        const detail = err?.error?.detail || err?.message || 'Failed to save file';
+        const detail = err?.error?.detail || err?.message || this.translate.instant('projects.workspace.toast.saveFailed');
         this.toast.show(detail, 'error');
       },
     });
@@ -411,7 +413,7 @@ export class WorkspaceComponent implements OnInit, OnChanges {
       },
       error: (err) => {
         this.uploading.set(false);
-        this.toast.show(err?.error?.detail || err?.message || 'Upload failed', 'error');
+        this.toast.show(err?.error?.detail || err?.message || this.translate.instant('projects.workspace.toast.uploadFailed'), 'error');
       },
     });
   }

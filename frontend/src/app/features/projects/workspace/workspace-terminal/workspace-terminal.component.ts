@@ -13,6 +13,7 @@ import {
   inject,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { TranslateModule } from '@ngx-translate/core';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebLinksAddon } from '@xterm/addon-web-links';
@@ -25,7 +26,7 @@ import { WorkspaceTerminalTabsService } from '../../../../core/services/workspac
 @Component({
   selector: 'app-workspace-terminal',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, TranslateModule],
   templateUrl: './workspace-terminal.component.html',
   styleUrl: './workspace-terminal.component.scss',
 })

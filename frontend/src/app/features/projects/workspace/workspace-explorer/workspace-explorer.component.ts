@@ -15,6 +15,7 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { FilesystemService } from '../../../../core/services/filesystem.service';
 import { ExplorerNode } from '../workspace.models';
 import { sanitizeWorkspaceEntryName } from '../workspace-path.util';
@@ -41,7 +42,7 @@ interface ContextMenuState {
 @Component({
   selector: 'app-workspace-explorer',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, TranslateModule],
   templateUrl: './workspace-explorer.component.html',
   styleUrl: './workspace-explorer.component.scss',
 })
@@ -74,6 +75,7 @@ export class WorkspaceExplorerComponent implements OnInit, OnChanges, AfterViewC
     private fs: FilesystemService,
     private cdr: ChangeDetectorRef,
     private host: ElementRef<HTMLElement>,
+    private translate: TranslateService,
   ) {}
 
   ngOnInit(): void {
@@ -180,9 +182,10 @@ export class WorkspaceExplorerComponent implements OnInit, OnChanges, AfterViewC
   }
 
   rootLabel(): string {
-    if (!this.rootPath) return 'Workspace';
+    const fallback = this.translate.instant('projects.workspace.root');
+    if (!this.rootPath) return fallback;
     const parts = this.rootPath.replace(/\\/g, '/').split('/').filter(Boolean);
-    return parts[parts.length - 1] || 'Workspace';
+    return parts[parts.length - 1] || fallback;
   }
 
   trackNode(_index: number, node: ExplorerNode): string {
@@ -330,7 +333,7 @@ export class WorkspaceExplorerComponent implements OnInit, OnChanges, AfterViewC
         });
       },
       error: () => {
-        this.error.set('Failed to rename');
+        this.error.set(this.translate.instant('projects.workspace.errors.renameFailed'));
         this.cdr.detectChanges();
       },
     });
@@ -349,7 +352,7 @@ export class WorkspaceExplorerComponent implements OnInit, OnChanges, AfterViewC
         });
       },
       error: () => {
-        this.error.set('Failed to delete');
+        this.error.set(this.translate.instant('projects.workspace.errors.deleteFailed'));
         this.cdr.detectChanges();
       },
     });
@@ -391,7 +394,7 @@ export class WorkspaceExplorerComponent implements OnInit, OnChanges, AfterViewC
           });
         },
         error: () => {
-          this.error.set('Failed to create file');
+          this.error.set(this.translate.instant('projects.workspace.errors.createFileFailed'));
           this.cdr.detectChanges();
         },
       });
@@ -405,7 +408,7 @@ export class WorkspaceExplorerComponent implements OnInit, OnChanges, AfterViewC
         });
       },
       error: () => {
-        this.error.set('Failed to create folder');
+        this.error.set(this.translate.instant('projects.workspace.errors.createFolderFailed'));
         this.cdr.detectChanges();
       },
     });
@@ -547,7 +550,7 @@ export class WorkspaceExplorerComponent implements OnInit, OnChanges, AfterViewC
           resolve();
         },
         error: (err) => {
-          this.error.set(err?.error?.detail || err?.message || 'Failed to load workspace');
+          this.error.set(err?.error?.detail || err?.message || this.translate.instant('projects.workspace.errors.loadFailed'));
           this.loading.set(false);
           resolve();
         },

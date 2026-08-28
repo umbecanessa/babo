@@ -488,7 +488,9 @@
       "deleteBranchTitle": "Delete branch",
       "deleteBranchMessage": "Delete branch \"{{label}}\" and its history?",
       "setAsHomeMessage": "Set \"{{label}}\" as Home? Opening this agent will start here. Chat history stays on each thread — nothing is moved.",
-      "resetHomeMessage": "Start a fresh Home thread?\n\nA new branch is created and set as Home. Your current Home stays in the list as a branch. Agent knowledge (facts, memory) is unchanged."
+      "resetHomeMessage": "Start a fresh Home thread?\n\nA new branch is created and set as Home. Your current Home stays in the list as a branch. Agent knowledge (facts, memory) is unchanged.",
+      "resetHomeTitle": "Reset Home",
+      "resetHomeConfirm": "Reset Home"
     },
     "composer": {
       "dropHere": "Drop files or folders here",
@@ -785,7 +787,9 @@
       "budgetNotConnected": "Not connected — could not send budget response. Reopen chat and try again.",
       "channelSendFailed": "Failed to send on channel",
       "budgetFailed": "Budget response failed.",
-      "sleepFailed": "Sleep response could not be applied."
+      "sleepFailed": "Sleep response could not be applied.",
+      "micDenied": "Microphone access denied",
+      "transcriptionFailed": "Transcription failed"
     },
     "settings": {
       "latestVersion": "You are on the latest version",
@@ -1177,6 +1181,77 @@
         "cancelled": "Cancelled",
         "pending": "Pending"
       }
+    },
+    "chat": {
+      "loadingHistory": "Loading conversation...",
+      "emptyDesk": "Private desk chat — project context is injected automatically.",
+      "surfaceBannerOne": "{{count}} channel thread — open in Chat",
+      "surfaceBannerMany": "{{count}} channel threads — open in Chat",
+      "uploading": "Uploading...",
+      "recording": "Recording {{duration}}",
+      "removeAttachment": "Remove",
+      "notConnected": "Not connected to agent. Try again in a moment.",
+      "privateDesk": "Private desk",
+      "branchDefault": "Branch"
+    },
+    "workspace": {
+      "root": "Workspace",
+      "newFile": "New file",
+      "newFolder": "New folder",
+      "uploadFiles": "Upload files",
+      "uploadFolder": "Upload folder",
+      "toggleShell": "Toggle shell",
+      "refresh": "Refresh",
+      "loading": "Loading…",
+      "empty": "No files yet — create one above.",
+      "rename": "Rename",
+      "delete": "Delete",
+      "selectFile": "Select a file from the explorer to open it.",
+      "loadingFile": "Loading file…",
+      "save": "Save",
+      "dragResize": "Drag to resize",
+      "closeTerminal": "Close terminal",
+      "newTerminal": "New terminal",
+      "closeShell": "Close shell",
+      "shell": "Shell",
+      "toast": {
+        "invalidPath": "Invalid file path",
+        "fileNotFound": "File not found in workspace",
+        "notAFile": "Path is not a file",
+        "openFailed": "Failed to open path",
+        "readFailed": "Failed to read file",
+        "saved": "Saved",
+        "saveFailed": "Failed to save file",
+        "uploadFailed": "Upload failed"
+      },
+      "errors": {
+        "renameFailed": "Failed to rename",
+        "deleteFailed": "Failed to delete",
+        "createFileFailed": "Failed to create file",
+        "createFolderFailed": "Failed to create folder",
+        "loadFailed": "Failed to load workspace"
+      }
+    },
+    "run": {
+      "background": "background",
+      "archived": "archived",
+      "dismiss": "Dismiss",
+      "projectsLink": "Projects",
+      "recoveryBanner": "Partial step accepted. Orchestrator should inspect the wave, advance if ready, fix gaps directly, or spin another team.",
+      "wrapUpBanner": "All steps done — run plan(verify) then plan(complete), or delegate fixes for known gaps (e.g. build errors).",
+      "agentsOne": "{{count}} agent",
+      "agentsMany": "{{count}} agents",
+      "subAgents": "Sub-agents",
+      "batch": "batch {{count}}",
+      "queued": "queued",
+      "working": "working…",
+      "iters": "{{current}}/{{max}} iters",
+      "toolsPartial": "{{count}} tools · partial",
+      "toolsCount": "{{count}} tools",
+      "waitingSlot": "Waiting for a delegate slot…",
+      "starting": "Starting…",
+      "moreInProjects": "+ {{count}} more in Projects",
+      "partialSuffix": "· partial"
     }
   },
   "auth": {

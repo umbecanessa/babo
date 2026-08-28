@@ -14,6 +14,7 @@ import {
   effect,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { TranslateModule } from '@ngx-translate/core';
 import { Compartment, EditorState, Extension } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
 import {
@@ -32,7 +33,7 @@ import { ThemeService } from '../../../../core/services/theme.service';
 @Component({
   selector: 'app-workspace-editor',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, TranslateModule],
   templateUrl: './workspace-editor.component.html',
   styleUrl: './workspace-editor.component.scss',
 })

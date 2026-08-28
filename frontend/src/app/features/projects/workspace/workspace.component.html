@@ -38,7 +38,7 @@
 
       (mousedown)="onResizeStart($event)"
 
-      title="Drag to resize"
+      [attr.title]="'projects.workspace.dragResize' | translate"
 
     ></div>
 
@@ -82,14 +82,14 @@
             <span
               class="shell-tab-close"
               (click)="closeTerminalTab(tab.id); $event.stopPropagation()"
-              title="Close terminal"
+              [attr.title]="'projects.workspace.closeTerminal' | translate"
             >&times;</span>
           </button>
         }
         <button
           type="button"
           class="shell-tab shell-tab-add"
-          title="New terminal"
+          [attr.title]="'projects.workspace.newTerminal' | translate"
           (click)="addTerminalTab()"
         >
           +

@@ -21,7 +21,7 @@
       <div class="editor-toolbar">
         <span class="file-path" [title]="tab.path">{{ tab.path }}</span>
         @if (isDirty(tab.path)) {
-          <button class="save-btn" type="button" (click)="save.emit(tab.path)">Save</button>
+          <button class="save-btn" type="button" (click)="save.emit(tab.path)">{{ 'projects.workspace.save' | translate }}</button>
         }
       </div>
     }
@@ -37,10 +37,10 @@
             <path d="M17.25 6.75L22.5 12l-5.25 5.25M6.75 17.25L1.5 12l5.25-5.25M14.25 3.75l-4.5 16.5"/>
           </svg>
         </div>
-        <p>Select a file from the explorer to open it.</p>
+        <p>{{ 'projects.workspace.selectFile' | translate }}</p>
       </div>
     } @else if (activeTab()?.loading) {
-      <div class="editor-overlay editor-loading">Loading file…</div>
+      <div class="editor-overlay editor-loading">{{ 'projects.workspace.loadingFile' | translate }}</div>
     }
   </div>
 </div>

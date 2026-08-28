@@ -1,13 +1,14 @@
 import { Component, Input, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
+import { TranslateModule } from '@ngx-translate/core';
 import { RunViewService } from '../../../core/services/run-view.service';
 import type { RunDelegate, RunDelegateToolCall, RunStep } from '../../../core/models/run-view.model';
 
 @Component({
   selector: 'app-run-panel',
   standalone: true,
-  imports: [CommonModule, RouterModule],
+  imports: [CommonModule, RouterModule, TranslateModule],
   templateUrl: './run-panel.component.html',
   styleUrl: './run-panel.component.scss',
 })

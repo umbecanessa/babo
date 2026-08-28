@@ -18,6 +18,7 @@ import {
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { HttpClient } from '@angular/common/http';
 import { Subscription } from 'rxjs';
 import { WebSocketService, ChatMessage } from '../../../core/services/websocket.service';
@@ -50,6 +51,7 @@ import { agenticAbortLabel } from '../../chat/orchestration-ui.util';
     CommonModule,
     FormsModule,
     RouterLink,
+    TranslateModule,
     MessageListComponent,
     ChatModelPickerComponent,
     ChatOrchestrationProfilePickerComponent,
@@ -108,7 +110,7 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
     const meta = this.websocketThreads().find((t) => t.key === this.activeThread());
     const isHome = this.conversations.isDefaultHome(this.activeThread(), this.agentId);
     return composerDestination(
-      meta ?? { key: 'websocket:main', label: 'Private desk', channel: 'websocket' },
+      meta ?? { key: 'websocket:main', label: this.translate.instant('projects.chat.privateDesk'), channel: 'websocket' },
       isHome,
     );
   });
@@ -141,6 +143,7 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
     private api: ApiService,
     private http: HttpClient,
     private platform: PlatformService,
+    private translate: TranslateService,
     public voice: VoiceRecorderService,
     private chatAttachments: ChatAttachmentService,
     private toast: ToastService,
@@ -188,7 +191,7 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
     if (!this.conversations.isWebsocketBranch(key)) return;
     this.branchMenuOpen.set(false);
     const current = this.conversations.threads().find((t) => t.key === key);
-    this.renameDraft.set(current?.label || 'Branch');
+    this.renameDraft.set(current?.label || this.translate.instant('projects.chat.branchDefault'));
     this.renamingBranch.set(true);
   }
 
@@ -233,18 +236,17 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
     const key = this.activeThread();
     if (!this.conversations.isWebsocketBranch(key)) return;
     if (this.conversations.isDefaultHome(key, this.agentId)) {
-      this.toast.show(
-        'Cannot delete the current Home thread. Reset Home or set another thread as Home first.',
-        'error',
-      );
+      this.toast.show(this.translate.instant('chat.nav.cannotDeleteHome'), 'error');
       return;
     }
     this.branchMenuOpen.set(false);
     const current = this.conversations.threads().find((t) => t.key === key);
     this.threadConfirm.set({
-      title: 'Delete branch',
-      message: `Delete branch "${current?.label || key}" and its history?`,
-      confirmLabel: 'Delete',
+      title: this.translate.instant('chat.nav.deleteBranchTitle'),
+      message: this.translate.instant('chat.nav.deleteBranchMessage', {
+        label: current?.label || key,
+      }),
+      confirmLabel: this.translate.instant('chat.nav.delete'),
       variant: 'danger',
       action: 'delete_branch',
       sessionKey: key,
@@ -261,11 +263,9 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
       this.agentId,
     );
     this.threadConfirm.set({
-      title: 'Set as Home',
-      message:
-        `Set "${label}" as Home? Opening this agent will start here. `
-        + 'Chat history stays on each thread — nothing is moved.',
-      confirmLabel: 'Set as Home',
+      title: this.translate.instant('chat.nav.setAsHome'),
+      message: this.translate.instant('chat.nav.setAsHomeMessage', { label }),
+      confirmLabel: this.translate.instant('chat.nav.setAsHome'),
       variant: 'default',
       action: 'promote_home',
       sessionKey: key,
@@ -276,12 +276,9 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
     if (!this.agentId) return;
     this.branchMenuOpen.set(false);
     this.threadConfirm.set({
-      title: 'Reset Home',
-      message:
-        'Start a fresh Home thread?\n\n'
-        + 'A new branch is created and set as Home. Your current Home stays in the list as a branch. '
-        + 'Agent knowledge (facts, memory) is unchanged.',
-      confirmLabel: 'Reset Home',
+      title: this.translate.instant('chat.nav.resetHomeTitle'),
+      message: this.translate.instant('chat.nav.resetHomeMessage'),
+      confirmLabel: this.translate.instant('chat.nav.resetHomeConfirm'),
       variant: 'default',
       action: 'reset_home',
       sessionKey: '',
@@ -379,7 +376,7 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
     if (!this.ws.connected()) {
       this.appendMessages([{
         type: 'status',
-        content: 'Not connected to agent. Try again in a moment.',
+        content: this.translate.instant('projects.chat.notConnected'),
         timestamp: new Date(),
       }]);
       return;
@@ -479,7 +476,7 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
       await this.voice.startRecording();
     } catch (err) {
       console.error('Microphone access denied:', err);
-      this.toast.show('Microphone access denied', 'error');
+      this.toast.show(this.translate.instant('toast.chat.micDenied'), 'error');
     }
   }
 
@@ -494,7 +491,7 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
         },
         error: (err) => {
           console.error('Transcription failed:', err);
-          this.toast.show('Transcription failed', 'error');
+          this.toast.show(this.translate.instant('toast.chat.transcriptionFailed'), 'error');
           this.voice.finishTranscribing();
         },
       });
@@ -575,7 +572,7 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
       },
       error: (err) => {
         console.error('File upload failed:', err);
-        this.toast.show('File upload failed', 'error');
+        this.toast.show(this.translate.instant('toast.chat.uploadFailed'), 'error');
         this.fileUploading.set(false);
       },
     });
@@ -594,7 +591,7 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
       },
       error: (err) => {
         console.error('File upload failed:', err);
-        this.toast.show('File upload failed', 'error');
+        this.toast.show(this.translate.instant('toast.chat.uploadFailed'), 'error');
         this.fileUploading.set(false);
       },
     });

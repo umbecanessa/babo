@@ -23,40 +23,42 @@
         <button
           type="button"
           class="branch-menu-btn"
-          title="Thread options"
+          [attr.title]="'chat.nav.threadOptions' | translate"
           (click)="toggleBranchMenu($event)"
         >⋯</button>
         @if (branchMenuOpen()) {
           <div class="branch-actions" (click)="$event.stopPropagation()">
             @if (conversations.isDefaultHome(activeThread(), agentId)) {
-              <button type="button" (click)="resetHome()">Reset Home…</button>
+              <button type="button" (click)="resetHome()">{{ 'chat.nav.resetHome' | translate }}</button>
             } @else {
-              <button type="button" (click)="promoteToHome()">Set as Home</button>
+              <button type="button" (click)="promoteToHome()">{{ 'chat.nav.setAsHome' | translate }}</button>
             }
             @if (conversations.isWebsocketBranch(activeThread())) {
-              <button type="button" (click)="renameActiveBranch()">Rename</button>
-              <button type="button" class="danger" (click)="deleteActiveBranch()">Delete</button>
+              <button type="button" (click)="renameActiveBranch()">{{ 'chat.nav.rename' | translate }}</button>
+              <button type="button" class="danger" (click)="deleteActiveBranch()">{{ 'chat.nav.delete' | translate }}</button>
             }
           </div>
         }
       }
     </div>
-    <button class="icon-btn" type="button" title="New branch" (click)="createNewBranch()">+</button>
-    <button class="close-btn" (click)="close.emit()" title="Close">&times;</button>
+    <button class="icon-btn" type="button" [attr.title]="'chat.nav.newBranch' | translate" (click)="createNewBranch()">+</button>
+    <button class="close-btn" (click)="close.emit()" [attr.title]="'chat.nav.close' | translate">&times;</button>
   </div>
 
   @if (surfaceThreadCount() > 0) {
     <a class="surface-banner" [routerLink]="['/chat', agentId]">
-      {{ surfaceThreadCount() }} channel thread{{ surfaceThreadCount() === 1 ? '' : 's' }} — open in Chat
+      {{ surfaceThreadCount() === 1
+        ? ('projects.chat.surfaceBannerOne' | translate:{ count: surfaceThreadCount() })
+        : ('projects.chat.surfaceBannerMany' | translate:{ count: surfaceThreadCount() }) }}
     </a>
   }
 
   <div class="messages">
     @if (loadingHistory()) {
-      <div class="empty-chat">Loading conversation...</div>
+      <div class="empty-chat">{{ 'projects.chat.loadingHistory' | translate }}</div>
     } @else if (visibleMessages().length === 0 && !streamingText() && !agenticActive()) {
       <div class="empty-chat">
-        Private desk chat — project context is injected automatically.
+        {{ 'projects.chat.emptyDesk' | translate }}
         @if (composerHint().hint) {
           <span class="composer-hint">{{ composerHint().hint }}</span>
         }
@@ -83,7 +85,7 @@
     <input #folderInput type="file" webkitdirectory multiple style="display:none" (change)="onFilesSelected($event)" />
 
     @if (isDragOver()) {
-      <div class="drop-overlay">Drop files or folders here</div>
+      <div class="drop-overlay">{{ 'chat.composer.dropHere' | translate }}</div>
     }
 
     <div class="composer-toolbar">
@@ -117,13 +119,13 @@
               </svg>
             }
             <span class="attachment-name">{{ att.name }}</span>
-            <button class="attachment-remove" type="button" (click)="removeAttachment(att.path)" title="Remove">&times;</button>
+            <button class="attachment-remove" type="button" (click)="removeAttachment(att.path)" [attr.title]="'projects.chat.removeAttachment' | translate">&times;</button>
           </div>
         }
         @if (fileUploading()) {
           <div class="attachment-chip uploading">
             <span class="upload-spinner"></span>
-            <span class="attachment-name">Uploading...</span>
+            <span class="attachment-name">{{ 'projects.chat.uploading' | translate }}</span>
           </div>
         }
       </div>
@@ -131,17 +133,17 @@
 
     @if (voice.state() === 'recording') {
       <div class="input-row voice-row">
-        <button type="button" class="icon-btn voice-cancel" (click)="cancelVoice()" title="Cancel">&times;</button>
-        <span class="recording-label">Recording {{ formatDuration(voice.duration()) }}</span>
-        <button type="button" class="stop-btn" (click)="stopVoice()" title="Stop & Transcribe">Stop</button>
+        <button type="button" class="icon-btn voice-cancel" (click)="cancelVoice()" [attr.title]="'chat.composer.cancel' | translate">&times;</button>
+        <span class="recording-label">{{ 'projects.chat.recording' | translate:{ duration: formatDuration(voice.duration()) } }}</span>
+        <button type="button" class="stop-btn" (click)="stopVoice()" [attr.title]="'chat.composer.stopTranscribe' | translate">{{ 'chat.composer.stopTranscribe' | translate }}</button>
       </div>
     } @else if (voice.state() === 'transcribing') {
       <div class="input-row transcribing-row">
-        <span class="transcribing-label">Transcribing...</span>
+        <span class="transcribing-label">{{ 'chat.composer.transcribing' | translate }}</span>
       </div>
     } @else {
       <div class="input-row">
-        <button type="button" class="icon-btn attach-btn" (click)="onAttachClick($event)" title="Attach files (Shift+click for folder)">
+        <button type="button" class="icon-btn attach-btn" (click)="onAttachClick($event)" [attr.title]="'chat.composer.attach' | translate">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
           </svg>
@@ -157,10 +159,10 @@
         />
         @if (canSend()) {
           <button class="send-btn" type="button" (click)="send()" [disabled]="sending()">
-            @if (sending()) { &hellip; } @else { Send }
+            @if (sending()) { &hellip; } @else { {{ 'chat.composer.send' | translate }} }
           </button>
         } @else {
-          <button type="button" class="icon-btn mic-btn" (click)="startVoice()" title="Voice input">
+          <button type="button" class="icon-btn mic-btn" (click)="startVoice()" [attr.title]="'chat.composer.voice' | translate">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
               <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
