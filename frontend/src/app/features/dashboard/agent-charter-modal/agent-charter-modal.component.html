@@ -4,24 +4,18 @@
     <div class="modal-panel charter-modal" role="dialog" aria-modal="true" (click)="$event.stopPropagation()">
       <header class="modal-header">
         <div>
-          <h3>Agent charter</h3>
+          <h3>{{ 'charter.title' | translate }}</h3>
           <p class="modal-agent">{{ agentLabel || agentId }}</p>
         </div>
-        <button type="button" class="modal-close close-btn" (click)="cancel()" aria-label="Close">×</button>
+        <button type="button" class="modal-close close-btn" (click)="cancel()" [attr.aria-label]="'charter.close' | translate">×</button>
       </header>
 
       <nav class="tab-bar">
-        <button
-          type="button"
-          [class.active]="activeTab() === 'job'"
-          (click)="setTab('job')">
-          Job
+        <button type="button" [class.active]="activeTab() === 'job'" (click)="setTab('job')">
+          {{ 'charter.jobTab' | translate }}
         </button>
-        <button
-          type="button"
-          [class.active]="activeTab() === 'trust'"
-          (click)="setTab('trust')">
-          Trust
+        <button type="button" [class.active]="activeTab() === 'trust'" (click)="setTab('trust')">
+          {{ 'charter.trustTab' | translate }}
         </button>
       </nav>
 
@@ -30,86 +24,75 @@
       }
 
       @if (!loaded()) {
-        <p class="modal-muted">Loading…</p>
+        <p class="modal-muted">{{ 'charter.loading' | translate }}</p>
       } @else if (activeTab() === 'job') {
         <div class="tab-body">
-          <label>Title <input type="text" [(ngModel)]="jobTitle" /></label>
-          <label>Mission <textarea rows="3" [(ngModel)]="jobMission"></textarea></label>
-          <label>Persona <textarea rows="2" [(ngModel)]="jobPersona"></textarea></label>
-          <label>Playbook <textarea rows="3" [(ngModel)]="jobPlaybook"></textarea></label>
+          <label>{{ 'charter.titleField' | translate }} <input type="text" [(ngModel)]="jobTitle" /></label>
+          <label>{{ 'charter.mission' | translate }} <textarea rows="3" [(ngModel)]="jobMission"></textarea></label>
+          <label>{{ 'charter.persona' | translate }} <textarea rows="2" [(ngModel)]="jobPersona"></textarea></label>
+          <label>{{ 'charter.playbook' | translate }} <textarea rows="3" [(ngModel)]="jobPlaybook"></textarea></label>
           <label>
-            Default profile
+            {{ 'charter.defaultProfile' | translate }}
             <select [(ngModel)]="jobDefaultProfile">
               @for (p of profileCapOptions; track p) {
-                <option [value]="p">{{ p || '(auto)' }}</option>
+                <option [value]="p">{{ p || ('charter.autoProfile' | translate) }}</option>
               }
             </select>
           </label>
-          <label>In scope (one per line) <textarea rows="2" [(ngModel)]="jobInScope"></textarea></label>
-          <label>Out of scope (one per line) <textarea rows="2" [(ngModel)]="jobOutOfScope"></textarea></label>
-          <label>Refusal template <textarea rows="2" [(ngModel)]="jobRefusalTemplate"></textarea></label>
-          <label>Strategic priorities (one per line)
-            <textarea rows="2" [(ngModel)]="jobStrategicPriorities" placeholder="Monitor Discord mod queue&#10;Weekly owner summary"></textarea>
+          <label>{{ 'charter.inScope' | translate }} <textarea rows="2" [(ngModel)]="jobInScope"></textarea></label>
+          <label>{{ 'charter.outOfScope' | translate }} <textarea rows="2" [(ngModel)]="jobOutOfScope"></textarea></label>
+          <label>{{ 'charter.refusalTemplate' | translate }} <textarea rows="2" [(ngModel)]="jobRefusalTemplate"></textarea></label>
+          <label>{{ 'charter.strategicPriorities' | translate }}
+            <textarea rows="2" [(ngModel)]="jobStrategicPriorities" [placeholder]="'charter.prioritiesPlaceholder' | translate"></textarea>
           </label>
           <label class="checkbox-row">
             <input type="checkbox" [(ngModel)]="jobBackgroundEnabled" />
-            Background work enabled
+            {{ 'charter.backgroundEnabled' | translate }}
           </label>
           @if (jobBackgroundEnabled) {
             <label>
-              Background interval (seconds, min 300)
-              <input
-                type="number"
-                min="300"
-                step="60"
-                [(ngModel)]="jobBackgroundIntervalSeconds" />
+              {{ 'charter.backgroundInterval' | translate }}
+              <input type="number" min="300" step="60" [(ngModel)]="jobBackgroundIntervalSeconds" />
             </label>
-            <p class="hint">When enabled, the agent may run idle Job check-backs using this charter.</p>
+            <p class="hint">{{ 'charter.backgroundHint' | translate }}</p>
           }
         </div>
       } @else {
         <div class="tab-body">
-          <p class="hint">Tools: one name per line. Empty allowlist = all tools allowed except denials.</p>
-          <label>Tools allow <textarea rows="2" [(ngModel)]="toolsAllow" placeholder="read&#10;web_search"></textarea></label>
-          <label>Tools deny <textarea rows="3" [(ngModel)]="toolsDeny" placeholder="bash&#10;write"></textarea></label>
-          <label>Forbidden action classes <textarea rows="2" [(ngModel)]="actionClassesDeny"></textarea></label>
+          <p class="hint">{{ 'charter.trustHint' | translate }}</p>
+          <label>{{ 'charter.toolsAllow' | translate }} <textarea rows="2" [(ngModel)]="toolsAllow" [placeholder]="'charter.toolsAllowPlaceholder' | translate"></textarea></label>
+          <label>{{ 'charter.toolsDeny' | translate }} <textarea rows="3" [(ngModel)]="toolsDeny" [placeholder]="'charter.toolsDenyPlaceholder' | translate"></textarea></label>
+          <label>{{ 'charter.actionClassesDeny' | translate }} <textarea rows="2" [(ngModel)]="actionClassesDeny"></textarea></label>
 
           <div class="overlays-section">
             <div class="overlays-head">
-              <span>Channel overlays</span>
-              <button type="button" class="link-quiet" (click)="addChannelOverlay()">+ Add channel</button>
+              <span>{{ 'charter.channelOverlays' | translate }}</span>
+              <button type="button" class="link-quiet" (click)="addChannelOverlay()">{{ 'charter.addChannel' | translate }}</button>
             </div>
             @for (ov of channelOverlays; track $index) {
               <div class="overlay-card">
-                <label>Channel key <input type="text" [(ngModel)]="ov.channel_key" placeholder="discord-general" /></label>
+                <label>{{ 'charter.channelKey' | translate }} <input type="text" [(ngModel)]="ov.channel_key" [placeholder]="'charter.channelKeyPlaceholder' | translate" /></label>
                 <label>
-                  Profile cap
+                  {{ 'charter.profileCap' | translate }}
                   <select [(ngModel)]="ov.profile_cap">
                     @for (p of profileCapOptions; track p) {
-                      <option [value]="p">{{ p || '(none)' }}</option>
+                      <option [value]="p">{{ p || ('charter.noneProfile' | translate) }}</option>
                     }
                   </select>
                 </label>
                 <label class="checkbox-row">
                   <input type="checkbox" [(ngModel)]="ov.public_channel" />
-                  Public channel (stricter refusal)
+                  {{ 'charter.publicChannel' | translate }}
                 </label>
                 <label>
-                  Tools allow on channel
-                  <textarea
-                    rows="2"
-                    [ngModel]="overlayToolsAllowText(ov)"
-                    (ngModelChange)="setOverlayToolsAllow(ov, $event)"
-                    placeholder="Optional allowlist"></textarea>
+                  {{ 'charter.toolsAllowChannel' | translate }}
+                  <textarea rows="2" [ngModel]="overlayToolsAllowText(ov)" (ngModelChange)="setOverlayToolsAllow(ov, $event)" [placeholder]="'charter.optionalAllowlist' | translate"></textarea>
                 </label>
                 <label>
-                  Tools deny on channel
-                  <textarea
-                    rows="2"
-                    [ngModel]="overlayToolsDenyText(ov)"
-                    (ngModelChange)="setOverlayToolsDeny(ov, $event)"></textarea>
+                  {{ 'charter.toolsDenyChannel' | translate }}
+                  <textarea rows="2" [ngModel]="overlayToolsDenyText(ov)" (ngModelChange)="setOverlayToolsDeny(ov, $event)"></textarea>
                 </label>
-                <button type="button" class="link-danger" (click)="removeChannelOverlay($index)">Remove</button>
+                <button type="button" class="link-danger" (click)="removeChannelOverlay($index)">{{ 'charter.remove' | translate }}</button>
               </div>
             }
           </div>
@@ -117,14 +100,14 @@
       }
 
       <footer class="modal-actions">
-        <button type="button" class="btn-secondary" (click)="cancel()" [disabled]="saving()">Cancel</button>
+        <button type="button" class="btn-secondary" (click)="cancel()" [disabled]="saving()">{{ 'common.cancel' | translate }}</button>
         @if (activeTab() === 'job') {
           <button type="button" class="btn-primary" (click)="saveJob()" [disabled]="saving() || !loaded()">
-            @if (saving()) { Saving… } @else { Save job }
+            @if (saving()) { {{ 'common.saving' | translate }} } @else { {{ 'charter.saveJob' | translate }} }
           </button>
         } @else {
           <button type="button" class="btn-primary" (click)="saveTrust()" [disabled]="saving() || !loaded()">
-            @if (saving()) { Saving… } @else { Save trust }
+            @if (saving()) { {{ 'common.saving' | translate }} } @else { {{ 'charter.saveTrust' | translate }} }
           </button>
         }
       </footer>

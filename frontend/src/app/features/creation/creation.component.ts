@@ -7,7 +7,7 @@ import { AgentModelService } from '../../core/services/agent-model.service';
 import { PlatformService } from '../../core/services/platform.service';
 import { ChatModelPickerComponent } from '../chat/chat-model-picker/chat-model-picker.component';
 import { GenesisTemplate } from '../../core/models/agent.model';
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 
 /** Describes a selectable model size option in the UI. */
 interface ModelOption {
@@ -289,24 +289,24 @@ export class CreationComponent implements OnInit, OnDestroy {
   /** Soul wish suggestions for the selected template */
   soulWishSuggestions = computed<string[]>(() => {
     const ver = this.selectedVersion();
-    if (!ver) return SOUL_WISH_SUGGESTIONS['base'] || [];
     const templates = this.allTemplates();
-    const tpl = templates.find(t => t.version === ver);
-    if (!tpl) return SOUL_WISH_SUGGESTIONS['base'] || [];
-    const slug = this.resolveSchoolSlug(tpl);
+    const tpl = ver ? templates.find(t => t.version === ver) : null;
+    const slug = tpl ? this.resolveSchoolSlug(tpl) : 'base';
+    const translated = this.translate.instant(`creation.soulWish.${slug}`);
+    if (Array.isArray(translated)) return translated as string[];
     return SOUL_WISH_SUGGESTIONS[slug] || SOUL_WISH_SUGGESTIONS['base'] || [];
   });
 
   particleCount = Array.from({ length: 30 }, (_, i) => i);
 
-  private phases = [
-    'Awakening neural substrate...',
-    'Loading soul geometry...',
-    'Inscribing soul wish...',
-    'Hydrating memory lattice...',
-    'Calibrating thalamus...',
-    'Initializing autonomic system...',
-    'Ready.',
+  private readonly phaseKeys = [
+    'creation.phases.awakening',
+    'creation.phases.loadingSoul',
+    'creation.phases.inscribing',
+    'creation.phases.hydrating',
+    'creation.phases.calibrating',
+    'creation.phases.initializing',
+    'creation.phases.ready',
   ];
 
   constructor(
@@ -314,6 +314,7 @@ export class CreationComponent implements OnInit, OnDestroy {
     private router: Router,
     readonly modelService: AgentModelService,
     private platform: PlatformService,
+    private translate: TranslateService,
   ) {}
 
   async ngOnInit(): Promise<void> {
@@ -398,17 +399,25 @@ export class CreationComponent implements OnInit, OnDestroy {
 
   getPathMeta(template: GenesisTemplate) {
     const slug = this.resolveSchoolSlug(template);
-    return PATH_META[slug] || {
-      icon: 'orb',
-      title: template.version,
-      bio: template.description || 'A genesis template.',
-      strengths: {},
+    const fallback = PATH_META[slug] || PATH_META['base'];
+    const titleKey = `creation.paths.${slug}.title`;
+    const bioKey = `creation.paths.${slug}.bio`;
+    const title = this.translate.instant(titleKey);
+    const bio = this.translate.instant(bioKey);
+    return {
+      icon: fallback?.icon || 'orb',
+      title: title !== titleKey ? title : (fallback?.title || template.version),
+      bio: bio !== bioKey ? bio : (fallback?.bio || template.description || this.translate.instant('creation.fallbackBio')),
+      strengths: fallback?.strengths || {},
     };
   }
 
   getStrengthEntries(template: GenesisTemplate): { name: string; value: number }[] {
     const meta = this.getPathMeta(template);
-    return Object.entries(meta.strengths).map(([name, value]) => ({ name, value }));
+    return Object.entries(meta.strengths).map(([name, value]) => ({
+      name: this.translate.instant('creation.strengths.' + name) || name,
+      value,
+    }));
   }
 
   strengthBarWidth(value: number): string {
@@ -505,8 +514,8 @@ export class CreationComponent implements OnInit, OnDestroy {
     this.error.set('');
 
     // Animate phases
-    for (const text of this.phases.slice(0, -1)) {
-      this.phaseText.set(text);
+    for (const key of this.phaseKeys.slice(0, -1)) {
+      this.phaseText.set(this.translate.instant(key));
       await this.delay(800 + Math.random() * 400);
     }
 
@@ -524,7 +533,7 @@ export class CreationComponent implements OnInit, OnDestroy {
         } catch {
           /* model defaults are optional; chat still works with install default */
         }
-        this.phaseText.set('Ready.');
+        this.phaseText.set(this.translate.instant('creation.phases.ready'));
         this.agentId.set(agent.id);
         this.phase.set('done');
 
@@ -534,7 +543,7 @@ export class CreationComponent implements OnInit, OnDestroy {
         }, 1500);
       },
       error: (err) => {
-        this.error.set(err.error?.message || 'Creation failed');
+        this.error.set(err.error?.message || this.translate.instant('creation.createFailed'));
         this.phase.set('waiting');
       },
     });
@@ -589,7 +598,7 @@ export class CreationComponent implements OnInit, OnDestroy {
   getGenesisTag(template: GenesisTemplate): string {
     const ver = template.version || '';
     const m = ver.match(/v(\d+)/i);
-    return m ? `Genesis v${m[1]}` : ver;
+    return m ? this.translate.instant('creation.genesisTag', { version: m[1] }) : ver;
   }
 
   /**

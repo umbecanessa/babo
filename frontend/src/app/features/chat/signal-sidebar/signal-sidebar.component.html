@@ -63,9 +63,9 @@
             @if (moodLabel) {
               <span class="heartbeat-mood">{{ moodLabel }}</span>
             }
-            <span class="heartbeat-beats">beat #{{ beatCount }}
+            <span class="heartbeat-beats">{{ 'chat.live.beat' | translate:{ count: beatCount } }}
               @if (momentum) {
-                <span class="momentum-indicator" [title]="'momentum: ' + momentum">{{ momentumIcon }}</span>
+                <span class="momentum-indicator" [title]="('chat.live.momentum' | translate:{ value: momentum })>{{ momentumIcon }}</span>
               }
             </span>
           </div>
@@ -74,7 +74,7 @@
 
         <!-- Energy bar (show at 0% too — low energy is meaningful) -->
         @if (hasEnergyReading) {
-          <div class="energy-bar-wrap" title="Energy: {{ energyPercent }}%">
+          <div class="energy-bar-wrap" [title]="('chat.live.energy' | translate:{ percent: energyPercent }})">
             <span class="energy-icon">&#9889;</span>
             <div class="energy-bar-track">
               <div class="energy-bar-fill"
@@ -147,7 +147,7 @@
         </div>
 
         @if (feltIdle) {
-          <div class="felt-idle-label">felt idle: {{ feltIdle }}</div>
+          <div class="felt-idle-label">{{ 'chat.live.feltIdle' | translate:{ value: feltIdle } }}</div>
         }
       </div>
     }
@@ -165,22 +165,22 @@
           <span class="network-dominant-value">{{ dominantNetwork }}</span>
         </div>
         <div class="network-bars">
-          <div class="network-bar" title="Executive Control Network – task-focused attention and reasoning">
-            <span class="network-bar-label">ECN <span class="network-bar-hint">Executive</span></span>
+          <div class="network-bar" [title]="'chat.live.networkEcnTitle' | translate">
+            <span class="network-bar-label">ECN <span class="network-bar-hint">{{ 'chat.live.networkExecutive' | translate }}</span></span>
             <div class="network-bar-track">
               <div class="network-bar-fill ecn-fill" [style.width.%]="networkEcn * 100"></div>
             </div>
             <span class="network-bar-pct">{{ (networkEcn * 100) | number:'1.0-0' }}%</span>
           </div>
-          <div class="network-bar" title="Salience Network – detects important events and switches attention">
-            <span class="network-bar-label">SN <span class="network-bar-hint">Salience</span></span>
+          <div class="network-bar" [title]="'chat.live.networkSnTitle' | translate">
+            <span class="network-bar-label">SN <span class="network-bar-hint">{{ 'chat.live.networkSalience' | translate }}</span></span>
             <div class="network-bar-track">
               <div class="network-bar-fill sn-fill" [style.width.%]="networkSn * 100"></div>
             </div>
             <span class="network-bar-pct">{{ (networkSn * 100) | number:'1.0-0' }}%</span>
           </div>
-          <div class="network-bar" title="Default Mode Network – mind-wandering, reflection and daydreaming">
-            <span class="network-bar-label">DMN <span class="network-bar-hint">Default</span></span>
+          <div class="network-bar" [title]="'chat.live.networkDmnTitle' | translate">
+            <span class="network-bar-label">DMN <span class="network-bar-hint">{{ 'chat.live.networkDefault' | translate }}</span></span>
             <div class="network-bar-track">
               <div class="network-bar-fill dmn-fill" [style.width.%]="networkDmn * 100"></div>
             </div>
@@ -242,17 +242,17 @@
         <div class="episode-header-row">
           <span class="episode-dot" [style.background]="episodeMoodColor"></span>
           <span class="episode-label">{{ currentEpisode.title }}</span>
-          <span class="episode-live-badge">LIVE</span>
+          <span class="episode-live-badge">{{ 'chat.live.episodeLive' | translate }}</span>
         </div>
         <div class="episode-detail-grid">
           @if (episodeArc) {
-            <span class="episode-detail"><span class="episode-detail-key">Arc</span> {{ episodeArc }}</span>
+            <span class="episode-detail"><span class="episode-detail-key">{{ 'chat.live.episodeArc' | translate }}</span> {{ episodeArc }}</span>
           }
           @if (currentEpisode.turns > 0) {
-            <span class="episode-detail"><span class="episode-detail-key">Turns</span> {{ currentEpisode.turns }}</span>
+            <span class="episode-detail"><span class="episode-detail-key">{{ 'chat.live.episodeTurns' | translate }}</span> {{ currentEpisode.turns }}</span>
           }
           @if (currentEpisode.peak_resonance > 0) {
-            <span class="episode-detail"><span class="episode-detail-key">Resonance</span> {{ currentEpisode.peak_resonance.toFixed(2) }}</span>
+            <span class="episode-detail"><span class="episode-detail-key">{{ 'chat.live.episodeResonance' | translate }}</span> {{ currentEpisode.peak_resonance.toFixed(2) }}</span>
           }
           @if (currentEpisode.peak_engagement > 0) {
             <span class="episode-detail"><span class="episode-detail-key">{{ 'chat.live.stat.engagement' | translate }}</span> {{ currentEpisode.peak_engagement.toFixed(2) }}</span>
@@ -400,7 +400,7 @@
                     <div class="activity-drive-info">
                       @if (item.drive.query) {
                         <div class="drive-query">
-                          <span class="drive-label">Query:</span> {{ item.drive.query }}
+                          <span class="drive-label">{{ 'chat.live.driveQuery' | translate }}</span> {{ item.drive.query }}
                         </div>
                       }
                       @if (item.drive.resultPreview) {
@@ -410,7 +410,7 @@
                         <span class="drive-domain-pill">{{ item.drive.domain }}</span>
                       }
                       <span class="drive-status-pill" [class.success]="item.drive.success" [class.fail]="!item.drive.success">
-                        {{ item.drive.success ? 'OK' : 'Failed' }}
+                        {{ item.drive.success ? ('chat.live.driveOk' | translate) : ('chat.live.driveFailed' | translate) }}
                       </span>
                     </div>
                   }
@@ -434,7 +434,7 @@
                     }
                     @if (item.relevance != null) {
                       <div class="activity-relevance">
-                        <span class="relevance-label">Relevance</span>
+                        <span class="relevance-label">{{ 'chat.live.relevance' | translate }}</span>
                         <div class="relevance-bar">
                           <div class="relevance-fill" [style.width.%]="item.relevance * 100"></div>
                         </div>
@@ -601,7 +601,7 @@
                       </div>
                     }
                     @if (pos.slots.length === 0) {
-                      <div class="cryptex-slot-empty">No slots in this position</div>
+                      <div class="cryptex-slot-empty">{{ 'chat.live.cryptexSlotEmpty' | translate }}</div>
                     }
                   </div>
                 }

@@ -37,7 +37,7 @@
                       [class.active]="!opt.disabled"
                       [class.disabled]="opt.disabled"
                       [disabled]="opt.disabled"
-                      [attr.title]="opt.disabled ? opt.label + ' (currently disabled)' : opt.label">
+                      [attr.title]="opt.disabled ? ('creation.modelDisabled' | translate:{ label: opt.label }) : opt.label">
                 {{ opt.label }}
               </button>
             }
@@ -97,19 +97,19 @@
                   @if (template.education.total_facts > 0) {
                     <div class="stat-pill">
                       <span class="stat-value">{{ template.education.total_facts }}</span>
-                      <span class="stat-label">facts</span>
+                      <span class="stat-label">{{ 'creation.statFacts' | translate }}</span>
                     </div>
                   }
                   @if (template.education.total_sleeps > 0) {
                     <div class="stat-pill">
                       <span class="stat-value">{{ template.education.total_sleeps }}</span>
-                      <span class="stat-label">sleeps</span>
+                      <span class="stat-label">{{ 'creation.statSleeps' | translate }}</span>
                     </div>
                   }
                   @if (template.has_epochs) {
                     <div class="stat-pill">
                       <span class="stat-value">&#10003;</span>
-                      <span class="stat-label">epochs</span>
+                      <span class="stat-label">{{ 'creation.statEpochs' | translate }}</span>
                     </div>
                   }
                 </div>
@@ -122,14 +122,14 @@
 
               <!-- Education badge -->
               @if (template.educated) {
-                <div class="edu-badge">Graduated</div>
+                <div class="edu-badge">{{ 'creation.graduated' | translate }}</div>
               } @else if (!template.educated && template.base_model) {
-                <div class="edu-badge blank">Blank Slate</div>
+                <div class="edu-badge blank">{{ 'creation.blankSlate' | translate }}</div>
               }
 
               <!-- Minted date -->
               @if (getMintedDate(template)) {
-                <div class="minted-date">Minted {{ getMintedDate(template) }}</div>
+                <div class="minted-date">{{ 'creation.minted' | translate:{ date: getMintedDate(template) } }}</div>
               }
             </div>
           }
@@ -147,14 +147,14 @@
   <!-- ═══ Phase: Soul Wish ═══ -->
   @if (phase() === 'soul-wish') {
     <div class="soul-wish-stage animate-fade-in">
-      <h1 class="soul-wish-title">Give your agent a calling</h1>
-      <p class="soul-wish-subtitle">What should this mind care about most deeply?</p>
+      <h1 class="soul-wish-title">{{ 'creation.soulWishTitle' | translate }}</h1>
+      <p class="soul-wish-subtitle">{{ 'creation.soulWishSubtitle' | translate }}</p>
 
       <div class="soul-wish-input-wrap">
         <textarea class="soul-wish-input"
                   [ngModel]="soulWish()"
                   (ngModelChange)="soulWish.set($event)"
-                  placeholder="e.g. Understand the world through rigorous inquiry..."
+                  [placeholder]="'creation.soulWishPlaceholder' | translate"
                   rows="3"
                   maxlength="500"></textarea>
       </div>
@@ -174,7 +174,7 @@
       </div>
     </div>
 
-    <div class="creation-model-corner" aria-label="Inference model">
+    <div class="creation-model-corner" [attr.aria-label]="'creation.inferenceModel' | translate">
       @if (modelService.showPicker()) {
         <app-chat-model-picker
           mode="creation"
@@ -187,7 +187,7 @@
           @if (modelService.defaultModelLabel()) {
             {{ modelService.defaultModelLabel() }}
           } @else {
-            Loading models…
+            {{ 'creation.loadingModels' | translate }}
           }
         </div>
       }

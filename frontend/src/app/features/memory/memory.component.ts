@@ -1,4 +1,4 @@
-import { Component, OnInit, signal, computed } from '@angular/core';
+import { Component, OnInit, signal, computed, inject } from '@angular/core';
 import { CommonModule, KeyValuePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -53,7 +53,7 @@ interface ContextGroup {
   items: ContextItem[];
 }
 
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 
 @Component({
   selector: 'app-memory',
@@ -131,7 +131,7 @@ import { TranslateModule } from '@ngx-translate/core';
             <!-- Mini chain preview -->
             @if (chainState(); as cs) {
               <div class="overview-section">
-                <h3 class="section-heading section-heading-link" (click)="selectTab('chain')">Recent Chain Blocks <span class="heading-arrow">→</span></h3>
+                <h3 class="section-heading section-heading-link" (click)="selectTab('chain')">{{ 'memory.overview.recentBlocks' | translate }} <span class="heading-arrow">→</span></h3>
                 <div class="mini-chain">
                   @for (block of recentBlocks(); track block.height) {
                     <div
@@ -148,7 +148,7 @@ import { TranslateModule } from '@ngx-translate/core';
                       @if (overviewExpandedBlock() === block.height) {
                         <div class="mb-details">
                           <div class="mb-detail-row"><span class="mb-detail-label">Hash</span><code>{{ truncate(block.block_hash, 20) }}</code></div>
-                          <div class="mb-detail-row"><span class="mb-detail-label">Parent</span><code>{{ truncate(block.parent_hash, 20) }}</code></div>
+                          <div class="mb-detail-row"><span class="mb-detail-label">{{ 'memory.overview.parent' | translate }}</span><code>{{ truncate(block.parent_hash, 20) }}</code></div>
                           <div class="mb-detail-row"><span class="mb-detail-label">Delta</span><code>{{ block.delta_path || '—' }}</code></div>
                         </div>
                       }
@@ -167,7 +167,7 @@ import { TranslateModule } from '@ngx-translate/core';
             <!-- Recent facts -->
             @if (facts(); as f) {
               <div class="overview-section">
-                <h3 class="section-heading section-heading-link" (click)="selectTab('knowledge')">Recent Facts <span class="heading-arrow">→</span></h3>
+                <h3 class="section-heading section-heading-link" (click)="selectTab('knowledge')">{{ 'memory.overview.recentFacts' | translate }} <span class="heading-arrow">→</span></h3>
                 <div class="recent-facts">
                   @for (fact of recentFacts(); track fact.id) {
                     <div class="rf-item" [class.rf-expanded]="overviewExpandedFact() === fact.id" (click)="toggleOverviewFact(fact.id)">
@@ -181,10 +181,10 @@ import { TranslateModule } from '@ngx-translate/core';
                         <div class="rf-detail">
                           <div class="rf-detail-full">{{ fact.current_value }}</div>
                           <div class="rf-detail-meta">
-                            <span><strong>Domain:</strong> {{ fact.domain_path }}</span>
-                            <span><strong>Question:</strong> {{ fact.canonical_question || '—' }}</span>
-                            <span><strong>Block:</strong> {{ fact.block_height }}</span>
-                            <span><strong>Flips:</strong> {{ fact.flip_count }}</span>
+                            <span><strong>{{ 'memory.overview.domain' | translate }}:</strong> {{ fact.domain_path }}</span>
+                            <span><strong>{{ 'memory.overview.question' | translate }}:</strong> {{ fact.canonical_question || '—' }}</span>
+                            <span><strong>{{ 'memory.overview.block' | translate }}:</strong> {{ fact.block_height }}</span>
+                            <span><strong>{{ 'memory.overview.flips' | translate }}:</strong> {{ fact.flip_count }}</span>
                             @if (fact.is_fluid) {
                               <span class="fluid-badge">fluid</span>
                             }
@@ -202,7 +202,7 @@ import { TranslateModule } from '@ngx-translate/core';
 
             <!-- Working Memory summary -->
             <div class="overview-section">
-              <h3 class="section-heading section-heading-link" (click)="selectTab('working-memory')">Working Memory <span class="heading-arrow">→</span></h3>
+              <h3 class="section-heading section-heading-link" (click)="selectTab('working-memory')">{{ 'memory.overview.workingMemory' | translate }} <span class="heading-arrow">→</span></h3>
               <div class="wm-summary">
                 @for (group of wmGrouped(); track group.type) {
                   <div class="wm-summary-pill clickable" [style.border-color]="group.color" (click)="selectTab('working-memory')">
@@ -248,7 +248,7 @@ import { TranslateModule } from '@ngx-translate/core';
               <div class="toolbar-right">
                 <label class="fluid-toggle">
                   <input type="checkbox" [checked]="fluidOnly()" (change)="toggleFluidOnly()" />
-                  <span>Fluid only</span>
+                  <span>{{ 'memory.knowledge.fluidOnly' | translate }}</span>
                 </label>
                 <button class="view-toggle-btn" (click)="toggleFactsView()">
                   {{ factsViewMode() === 'tree' ? ('memory.knowledge.viewTable' | translate) : ('memory.knowledge.viewTree' | translate) }}
@@ -278,14 +278,14 @@ import { TranslateModule } from '@ngx-translate/core';
                             <div class="tree-fact" [class.selected]="selectedFact() === fact" (click)="selectFact(fact)">
                               <div class="tree-fact-top">
                                 <span class="tree-fact-value">{{ fact.current_value }}</span>
-                                <div class="strength-bar-wrap" [title]="'Strength: ' + fact.flip_count + '/' + flipThreshold()">
+                                <div class="strength-bar-wrap" [title]="('memory.knowledge.strength' | translate:{ current: fact.flip_count, max: flipThreshold() })">
                                   <div class="strength-bar">
                                     <div class="strength-fill" [style.width.%]="strengthPercent(fact)"></div>
                                   </div>
                                 </div>
                               </div>
                               <div class="tree-fact-meta">
-                                <button class="fluid-toggle-btn" [class.is-fluid]="fact.is_fluid" (click)="toggleFactFluid(fact, $event)" [title]="fact.is_fluid ? 'Click to mark as static' : 'Click to mark as fluid'">
+                                <button class="fluid-toggle-btn" [class.is-fluid]="fact.is_fluid" (click)="toggleFactFluid(fact, $event)" [title]="fact.is_fluid ? ('memory.knowledge.markStatic' | translate) : ('memory.knowledge.markFluid' | translate)">
                                   {{ fact.is_fluid ? 'fluid' : 'static' }}
                                 </button>
                                 @if (fact.flip_count > 0) {
@@ -295,14 +295,14 @@ import { TranslateModule } from '@ngx-translate/core';
                               </div>
                               @if (selectedFact() === fact) {
                                 <div class="tree-fact-detail">
-                                  <div class="detail-row"><span class="detail-label">Domain</span><code>{{ fact.domain_path }}</code></div>
-                                  <div class="detail-row"><span class="detail-label">Question</span><span>{{ fact.canonical_question || '—' }}</span></div>
+                                  <div class="detail-row"><span class="detail-label">{{ 'memory.overview.domain' | translate }}</span><code>{{ fact.domain_path }}</code></div>
+                                  <div class="detail-row"><span class="detail-label">{{ 'memory.overview.question' | translate }}</span><span>{{ fact.canonical_question || '—' }}</span></div>
                                   <div class="detail-row"><span class="detail-label">Block</span><span>{{ fact.block_height }}</span></div>
-                                  <div class="detail-row"><span class="detail-label">Meta Layer</span><span>{{ fact.meta_layer || 'base' }}</span></div>
-                                  <div class="detail-row"><span class="detail-label">Created</span><span>{{ fact.created_at | timeAgo }}</span></div>
+                                  <div class="detail-row"><span class="detail-label">{{ 'memory.knowledge.metaLayer' | translate }}</span><span>{{ fact.meta_layer || 'base' }}</span></div>
+                                  <div class="detail-row"><span class="detail-label">{{ 'memory.knowledge.created' | translate }}</span><span>{{ fact.created_at | timeAgo }}</span></div>
                                   @if (parseHormonalFingerprint(fact.hormonal_fingerprint); as fp) {
                                     @if (hasKeys(fp)) {
-                                      <div class="detail-row"><span class="detail-label">Hormonal State</span></div>
+                                      <div class="detail-row"><span class="detail-label">{{ 'memory.knowledge.hormonalState' | translate }}</span></div>
                                       <div class="hormone-mini-bars">
                                         @for (h of fp | keyvalue; track h.key) {
                                           <div class="hormone-mini">
@@ -330,14 +330,14 @@ import { TranslateModule } from '@ngx-translate/core';
                   <table class="fact-table">
                     <thead>
                       <tr>
-                        <th>Domain Path</th>
+                        <th>{{ 'memory.knowledge.domainPath' | translate }}</th>
                         <th>Value</th>
-                        <th>Strength</th>
+                        <th>{{ 'memory.knowledge.strengthCol' | translate }}</th>
                         <th>Flips</th>
                         <th>Fluid</th>
-                        <th>Meta Layer</th>
+                        <th>{{ 'memory.knowledge.metaLayer' | translate }}</th>
                         <th>Block</th>
-                        <th>Modified</th>
+                        <th>{{ 'memory.knowledge.modified' | translate }}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -352,7 +352,7 @@ import { TranslateModule } from '@ngx-translate/core';
                           </td>
                           <td>{{ fact.flip_count }}</td>
                           <td>
-                            <button class="fluid-toggle-btn" [class.is-fluid]="fact.is_fluid" (click)="toggleFactFluid(fact, $event)" [title]="fact.is_fluid ? 'Click to mark as static' : 'Click to mark as fluid'">
+                            <button class="fluid-toggle-btn" [class.is-fluid]="fact.is_fluid" (click)="toggleFactFluid(fact, $event)" [title]="fact.is_fluid ? ('memory.knowledge.markStatic' | translate) : ('memory.knowledge.markFluid' | translate)">
                               {{ fact.is_fluid ? 'fluid' : 'static' }}
                             </button>
                           </td>
@@ -367,7 +367,7 @@ import { TranslateModule } from '@ngx-translate/core';
               }
               <div class="table-footer">{{ filteredFacts().length }} of {{ facts()?.total ?? 0 }} facts</div>
             } @else {
-              <div class="empty-state">Loading facts...</div>
+              <div class="empty-state">{{ 'memory.knowledge.loading' | translate }}</div>
             }
           }
 
@@ -375,40 +375,40 @@ import { TranslateModule } from '@ngx-translate/core';
           @case ('chain') {
             @if (chainState(); as cs) {
               <div class="chain-meta">
-                <span><strong>Height:</strong> {{ chainDisplayHeight(cs) }}</span>
-                <span><strong>Base Model:</strong> {{ cs.base_model_label || cs.base_model }}</span>
-                <span><strong>Sovereignty:</strong> {{ cs.sovereignty_mode }}</span>
-                <span class="mono"><strong>Soul Hash:</strong> {{ truncate(cs.soul_hash, 16) }}</span>
+                <span><strong>{{ 'memory.chain.height' | translate }}</strong> {{ chainDisplayHeight(cs) }}</span>
+                <span><strong>{{ 'memory.chain.baseModel' | translate }}</strong> {{ cs.base_model_label || cs.base_model }}</span>
+                <span><strong>{{ 'memory.chain.sovereignty' | translate }}</strong> {{ cs.sovereignty_mode }}</span>
+                <span class="mono"><strong>{{ 'memory.chain.soulHash' | translate }}</strong> {{ truncate(cs.soul_hash, 16) }}</span>
               </div>
 
               <div class="chain-timeline">
                 @if (genesisBlocks(cs).length) {
-                  <div class="tier-label">Genesis</div>
+                  <div class="tier-label">{{ 'memory.chain.genesis' | translate }}</div>
                   @for (block of genesisBlocks(cs); track block.height) {
                     <ng-container *ngTemplateOutlet="blockNode; context: { $implicit: block, active: false }"></ng-container>
                   }
                 }
                 @if (otherConsolidated(cs).length) {
-                  <div class="tier-label">Consolidated</div>
+                  <div class="tier-label">{{ 'memory.chain.consolidated' | translate }}</div>
                   @for (block of otherConsolidated(cs); track block.height) {
                     <ng-container *ngTemplateOutlet="blockNode; context: { $implicit: block, active: false }"></ng-container>
                   }
                 }
 
                 @if (cs.frozen_epochs.length) {
-                  <div class="tier-label">Frozen Epochs</div>
+                  <div class="tier-label">{{ 'memory.chain.frozenEpochs' | translate }}</div>
                   @for (block of cs.frozen_epochs; track block.height) {
                     <ng-container *ngTemplateOutlet="blockNode; context: { $implicit: block, active: false }"></ng-container>
                   }
                 }
 
                 @if (cs.active_epoch; as ae) {
-                  <div class="tier-label active-tier">Active Epoch</div>
+                  <div class="tier-label active-tier">{{ 'memory.chain.activeEpoch' | translate }}</div>
                   <ng-container *ngTemplateOutlet="blockNode; context: { $implicit: ae, active: true }"></ng-container>
                 }
 
                 @if (cs.active_deltas.length) {
-                  <div class="tier-label active-tier">Active Deltas</div>
+                  <div class="tier-label active-tier">{{ 'memory.chain.activeDeltas' | translate }}</div>
                   @for (block of cs.active_deltas; track block.height) {
                     <ng-container *ngTemplateOutlet="blockNode; context: { $implicit: block, active: true }"></ng-container>
                   }
@@ -436,40 +436,40 @@ import { TranslateModule } from '@ngx-translate/core';
                       <div class="tl-details">
                         <div class="tl-detail-grid">
                           <div class="tl-detail-item">
-                            <span class="tl-detail-label">Block Hash</span>
+                            <span class="tl-detail-label">{{ 'memory.chain.blockHash' | translate }}</span>
                             <code class="tl-detail-value">{{ block.block_hash }}</code>
                           </div>
                           <div class="tl-detail-item">
-                            <span class="tl-detail-label">Parent Hash</span>
+                            <span class="tl-detail-label">{{ 'memory.chain.parentHash' | translate }}</span>
                             <code class="tl-detail-value">{{ block.parent_hash }}</code>
                           </div>
                           <div class="tl-detail-item">
-                            <span class="tl-detail-label">Delta Path</span>
+                            <span class="tl-detail-label">{{ 'memory.chain.deltaPath' | translate }}</span>
                             <code class="tl-detail-value">{{ block.delta_path || '—' }}</code>
                           </div>
                           <div class="tl-detail-item">
-                            <span class="tl-detail-label">AKU Count</span>
+                            <span class="tl-detail-label">{{ 'memory.chain.akuCount' | translate }}</span>
                             <span class="tl-detail-value">{{ block.aku_count }}</span>
                           </div>
                           <div class="tl-detail-item">
-                            <span class="tl-detail-label">Timestamp</span>
+                            <span class="tl-detail-label">{{ 'memory.chain.timestamp' | translate }}</span>
                             <span class="tl-detail-value">{{ block.timestamp }}</span>
                           </div>
                           @if (block.metadata && hasKeys(block.metadata)) {
                             <div class="tl-detail-item tl-detail-full">
-                              <span class="tl-detail-label">Metadata</span>
+                              <span class="tl-detail-label">{{ 'memory.chain.metadata' | translate }}</span>
                               <code class="tl-detail-value tl-detail-json">{{ block.metadata | json }}</code>
                             </div>
                           }
                         </div>
-                        <button class="fork-here-btn" (click)="forkFromChain(block.height, $event)">Fork at height {{ block.height }}</button>
+                        <button class="fork-here-btn" (click)="forkFromChain(block.height, $event)">{{ 'memory.chain.forkAt' | translate:{ height: block.height } }}</button>
                       </div>
                     }
                   </div>
                 </div>
               </ng-template>
             } @else {
-              <div class="empty-state">Loading chain data...</div>
+              <div class="empty-state">{{ 'memory.chain.loading' | translate }}</div>
             }
           }
 
@@ -534,14 +534,14 @@ import { TranslateModule } from '@ngx-translate/core';
                               (keydown)="onWmEditKeydown($event, item)"
                             />
                             <button class="btn-sm btn-save" (click)="saveWmEdit(item)">Save</button>
-                            <button class="btn-sm btn-cancel" (click)="cancelWmEdit()">Cancel</button>
+                            <button class="btn-sm btn-cancel" (click)="cancelWmEdit()">{{ 'memory.wm.cancel' | translate }}</button>
                           </div>
                         } @else {
                           <div class="wm-content-row">
                             <span class="wm-content">{{ item.content }}</span>
                             <div class="wm-actions">
-                              <button class="btn-icon" title="Edit" (click)="startWmEdit(item)">✎</button>
-                              <button class="btn-icon btn-danger" title="Delete" (click)="deleteWmItem(item)">✕</button>
+                              <button class="btn-icon" [title]="'memory.wm.edit' | translate" (click)="startWmEdit(item)">✎</button>
+                              <button class="btn-icon btn-danger" [title]="'memory.wm.delete' | translate" (click)="deleteWmItem(item)">✕</button>
                             </div>
                           </div>
                         }
@@ -557,12 +557,12 @@ import { TranslateModule } from '@ngx-translate/core';
           @case ('episodes') {
             @if (narrativeData(); as narr) {
               <div class="episodes-header">
-                <span class="episodes-stat">Coherence: {{ ((narr.narrative_coherence ?? 0) * 100).toFixed(0) }}%
+                <span class="episodes-stat">{{ 'memory.episodes.coherence' | translate:{ value: ((narr.narrative_coherence ?? 0) * 100).toFixed(0) } }}
                   @if (narr.coherence_label) { ({{ narr.coherence_label }}) }
                 </span>
                 <span class="episodes-stat">{{ narr.episode_count ?? (narr.episodes ?? narr.recent_episodes ?? []).length }} episodes</span>
                 @if (narr.active_strategy) {
-                  <span class="episodes-stat">Strategy: {{ narr.active_strategy }}</span>
+                  <span class="episodes-stat">{{ 'memory.episodes.strategy' | translate:{ value: narr.active_strategy } }}</span>
                 }
               </div>
               @if (narr.current_episode; as cur) {
@@ -581,8 +581,8 @@ import { TranslateModule } from '@ngx-translate/core';
                   <div class="mem-ep-detail-row">
                     <span>{{ cur.turns }} turns</span>
                     <span>Arc: {{ cur.arc_summary || cur.arc || 'building...' }}</span>
-                    <span>Resonance: {{ (cur.peak_resonance ?? 0).toFixed(2) }}</span>
-                    @if (cur.peak_engagement) { <span>Engagement: {{ cur.peak_engagement.toFixed(2) }}</span> }
+                    <span>{{ 'memory.episodes.resonance' | translate:{ value: (cur.peak_resonance ?? 0).toFixed(2) } }}</span>
+                    @if (cur.peak_engagement) { <span>{{ 'memory.episodes.engagement' | translate:{ value: cur.peak_engagement.toFixed(2) } }}</span> }
                   </div>
                   @if (cur.topics?.length) {
                     <div class="mem-ep-topics">
@@ -596,11 +596,11 @@ import { TranslateModule } from '@ngx-translate/core';
                   }
                   @if (cur.arc_snapshots?.length) {
                     <div class="mem-ep-arc-visual">
-                      <div class="mem-ep-arc-label">Mood Journey</div>
+                      <div class="mem-ep-arc-label">{{ 'brain.narrative.moodJourney' | translate }}</div>
                       <div class="mem-ep-arc-track">
                         @for (snap of cur.arc_snapshots; track snap.turn) {
                           <div class="mem-ep-arc-dot"
-                               [title]="'Turn ' + snap.turn + ': ' + snap.mood + ' (v=' + snap.v + ', a=' + snap.a + ')'"
+                               [title]="moodArcTitle(snap)"
                                [style.background]="moodColor(snap.v)"
                                [style.bottom.%]="(snap.v + 1) * 50">
                           </div>
@@ -616,7 +616,7 @@ import { TranslateModule } from '@ngx-translate/core';
                 </div>
               }
               @if ((narr.episodes ?? narr.recent_episodes)?.length) {
-                <div class="episode-section-heading">Episode History</div>
+                <div class="episode-section-heading">{{ 'brain.narrative.episodeHistory' | translate }}</div>
                 @for (ep of (narr.episodes ?? narr.recent_episodes)!.slice().reverse(); track ep.index ?? $index) {
                   <div class="mem-episode-card" [class.mem-ep-expanded]="expandedMemEpisode === (ep.index ?? $index)"
                        (click)="expandedMemEpisode = expandedMemEpisode === (ep.index ?? $index) ? null : (ep.index ?? $index)">
@@ -641,19 +641,19 @@ import { TranslateModule } from '@ngx-translate/core';
                         <div class="mem-ep-detail-row">
                           <span>Arc: {{ ep.arc_summary || ep.arc }}</span>
                           <span>{{ ep.opening_mood }} → {{ ep.closing_mood }}</span>
-                          <span>Resonance: {{ (ep.peak_resonance ?? 0).toFixed(3) }}</span>
-                          @if (ep.peak_engagement) { <span>Engagement: {{ ep.peak_engagement.toFixed(3) }}</span> }
-                          @if (ep.peak_cortisol) { <span>Cortisol: {{ ep.peak_cortisol.toFixed(3) }}</span> }
+                          <span>{{ 'memory.episodes.resonance' | translate:{ value: (ep.peak_resonance ?? 0).toFixed(3) } }}</span>
+                          @if (ep.peak_engagement) { <span>{{ 'memory.episodes.engagement' | translate:{ value: ep.peak_engagement.toFixed(3) } }}</span> }
+                          @if (ep.peak_cortisol) { <span>{{ 'memory.episodes.cortisol' | translate:{ value: ep.peak_cortisol.toFixed(3) } }}</span> }
                         </div>
                         @if (ep.coherence_contribution) {
                           <div class="mem-ep-detail-row">
-                            <span>Coherence Contribution: {{ (ep.coherence_contribution * 100).toFixed(0) }}%</span>
+                            <span>{{ 'memory.episodes.coherenceContribution' | translate:{ value: (ep.coherence_contribution * 100).toFixed(0) } }}</span>
                           </div>
                         }
                         @if (ep.start_time) {
                           <div class="mem-ep-detail-row">
-                            <span>Started: {{ ep.start_time * 1000 | date:'medium' }}</span>
-                            @if (ep.end_time) { <span>Ended: {{ ep.end_time * 1000 | date:'medium' }}</span> }
+                            <span>{{ 'memory.episodes.started' | translate:{ date: (ep.start_time * 1000 | date:'medium') } }}</span>
+                            @if (ep.end_time) { <span>{{ 'memory.episodes.ended' | translate:{ date: (ep.end_time * 1000 | date:'medium') } }}</span> }
                           </div>
                         }
                         @if (ep.topics?.length) {
@@ -668,11 +668,11 @@ import { TranslateModule } from '@ngx-translate/core';
                         }
                         @if (ep.arc_snapshots?.length) {
                           <div class="mem-ep-arc-visual">
-                            <div class="mem-ep-arc-label">Turn-by-Turn Mood</div>
+                            <div class="mem-ep-arc-label">{{ 'brain.narrative.turnByTurnMood' | translate }}</div>
                             <div class="mem-ep-arc-track">
                               @for (snap of ep.arc_snapshots; track snap.turn) {
                                 <div class="mem-ep-arc-dot"
-                                     [title]="'Turn ' + snap.turn + ': ' + snap.mood + ' (v=' + snap.v + ', a=' + snap.a + ')'"
+                                     [title]="moodArcTitle(snap)"
                                      [style.background]="moodColor(snap.v)"
                                      [style.bottom.%]="(snap.v + 1) * 50">
                                 </div>
@@ -691,10 +691,10 @@ import { TranslateModule } from '@ngx-translate/core';
                 }
               }
               @if (!narr.current_episode && !(narr.episodes ?? narr.recent_episodes)?.length) {
-                <div class="empty-state">No episodes recorded yet — episodes are created automatically during conversations</div>
+                <div class="empty-state">{{ 'brain.narrative.emptyEpisodes' | translate }}</div>
               }
             } @else {
-              <div class="empty-state">Loading narrative data...</div>
+              <div class="empty-state">{{ 'memory.episodes.loading' | translate }}</div>
             }
           }
 
@@ -704,7 +704,7 @@ import { TranslateModule } from '@ngx-translate/core';
               <!-- Export -->
               <div class="soul-card">
                 <h3 class="soul-card-title">{{ 'memory.soul.exportTitle' | translate }}</h3>
-                <p class="soul-desc">Download this agent's full state as a portable .soul.zip file.</p>
+                <p class="soul-desc">{{ 'memory.soul.exportDesc' | translate }}</p>
                 <label class="fluid-toggle soul-toggle">
                   <input type="checkbox" [checked]="exportIncludeSessions()" (change)="exportIncludeSessions.set(!exportIncludeSessions())" />
                   <span>{{ 'memory.soul.includeHistory' | translate }}</span>
@@ -713,15 +713,15 @@ import { TranslateModule } from '@ngx-translate/core';
                   {{ soulExporting() ? ('memory.soul.exporting' | translate) : ('memory.soul.exportTitle' | translate) }}
                 </button>
                 @if (soulExportSuccess()) {
-                  <div class="soul-success">Soul package downloaded successfully.</div>
+                  <div class="soul-success">{{ 'memory.soul.exportSuccess' | translate }}</div>
                 }
               </div>
 
               <!-- Import -->
               <div class="soul-card">
                 <h3 class="soul-card-title">{{ 'memory.soul.importTitle' | translate }}</h3>
-                <p class="soul-desc">Upload a .soul.zip to replace this agent's state.</p>
-                <div class="soul-warning">This will overwrite the current agent state. Make an export first if needed.</div>
+                <p class="soul-desc">{{ 'memory.soul.importDesc' | translate }}</p>
+                <div class="soul-warning">{{ 'memory.soul.importWarning' | translate }}</div>
                 <div
                   class="drop-zone"
                   [class.dragover]="importDragover()"
@@ -745,35 +745,35 @@ import { TranslateModule } from '@ngx-translate/core';
                   </div>
                 }
                 @if (importResult()) {
-                  <div class="soul-success">Import complete: {{ importResult()!.status }}</div>
+                  <div class="soul-success">{{ 'memory.soul.importSuccess' | translate:{ status: importResult()!.status } }}</div>
                 }
               </div>
 
               <!-- Fork -->
               <div class="soul-card">
                 <h3 class="soul-card-title">{{ 'memory.soul.forkTitle' | translate }}</h3>
-                <p class="soul-desc">Create a new agent from this agent's memory at a specific chain height.</p>
+                <p class="soul-desc">{{ 'memory.soul.forkDesc' | translate }}</p>
                 <div class="fork-form">
                   <div class="fork-fields-row">
                     <div class="fork-field">
-                      <label class="fork-label">Fork Height</label>
+                      <label class="fork-label">{{ 'memory.soul.forkHeight' | translate }}</label>
                       <input
                         class="fork-input"
                         type="number"
                         [ngModel]="forkHeight()"
                         (ngModelChange)="forkHeight.set($event)"
-                        placeholder="Chain height"
+                        [placeholder]="'memory.soul.forkHeightPlaceholder' | translate"
                         min="0"
                       />
                     </div>
                     <div class="fork-field">
-                      <label class="fork-label">New Agent Name</label>
+                      <label class="fork-label">{{ 'memory.soul.newAgentName' | translate }}</label>
                       <input
                         class="fork-input"
                         type="text"
                         [ngModel]="forkName()"
                         (ngModelChange)="forkName.set($event)"
-                        placeholder="Optional name"
+                        [placeholder]="'memory.soul.newAgentNamePlaceholder' | translate"
                       />
                     </div>
                   </div>
@@ -792,14 +792,14 @@ import { TranslateModule } from '@ngx-translate/core';
               <!-- Snapshot -->
               <div class="soul-card">
                 <h3 class="soul-card-title">{{ 'memory.soul.snapshotTitle' | translate }}</h3>
-                <p class="soul-desc">Save a restore point of this agent's current state.</p>
+                <p class="soul-desc">{{ 'memory.soul.snapshotDesc' | translate }}</p>
                 <div class="fork-form">
                   <div class="fork-field">
-                    <label class="fork-label">Label (optional)</label>
+                    <label class="fork-label">{{ 'memory.soul.labelOptional' | translate }}</label>
                     <input
                       type="text"
                       class="fork-input"
-                      placeholder="e.g. pre-sleep baseline"
+                      [placeholder]="'memory.soul.labelPlaceholder' | translate"
                       [value]="snapshotLabel()"
                       (input)="snapshotLabel.set($any($event.target).value)"
                     />
@@ -810,18 +810,17 @@ import { TranslateModule } from '@ngx-translate/core';
                 </div>
                 @if (snapshotResult()) {
                   <div class="soul-success">
-                    Snapshot created at height {{ snapshotResult().chain_height }}
-                    — {{ snapshotResult().snapshot_name }}
+                    {{ 'memory.soul.snapshotSuccess' | translate:{ height: snapshotResult().chain_height, name: snapshotResult().snapshot_name } }}
                   </div>
                 }
                 @if (snapshots().length) {
                   <div class="snapshot-list">
-                    <h4 class="snapshot-list-title">Previous snapshots</h4>
+                    <h4 class="snapshot-list-title">{{ 'memory.soul.previousSnapshots' | translate }}</h4>
                     @for (snap of snapshots(); track snap.snapshot_name) {
                       <div class="snapshot-item">
                         <div class="snapshot-info">
                           <span class="snapshot-name">{{ snap.label || snap.snapshot_name }}</span>
-                          <span class="snapshot-meta">Height {{ snap.chain_height }} · {{ snap.created_at | date:'short' }}</span>
+                          <span class="snapshot-meta">{{ 'memory.soul.snapshotHeight' | translate:{ height: snap.chain_height, date: (snap.created_at | date:'short') } }}</span>
                         </div>
                         <button class="btn-sm btn-outline" (click)="restoreSnapshot(snap)" [disabled]="snapshotRestoring()">
                           {{ snapshotRestoring() && restoringSnapshot() === snap.file ? ('memory.soul.restoring' | translate) : ('memory.soul.restore' | translate) }}
@@ -835,7 +834,7 @@ import { TranslateModule } from '@ngx-translate/core';
               <!-- Conversation history (collapsible, full width) -->
               <div class="soul-card soul-card-full">
                 <h3 class="soul-card-title soul-collapse-header" (click)="convExpanded.set(!convExpanded())">
-                  Conversation History
+                  {{ 'memory.soul.conversationHistory' | translate }}
                   <span class="collapse-arrow" [class.expanded]="convExpanded()">▸</span>
                 </h3>
                 @if (convExpanded()) {
@@ -868,11 +867,11 @@ import { TranslateModule } from '@ngx-translate/core';
                         </div>
                       }
                       @if (!conv.messages.length) {
-                        <div class="empty-state">No conversation history.</div>
+                        <div class="empty-state">{{ 'memory.soul.noConversation' | translate }}</div>
                       }
                     </div>
                   } @else {
-                    <div class="empty-state">Loading conversation...</div>
+                    <div class="empty-state">{{ 'memory.soul.loadingConversation' | translate }}</div>
                   }
                 }
               </div>
@@ -883,12 +882,13 @@ import { TranslateModule } from '@ngx-translate/core';
     }
 
     @if (!loading() && !agent()) {
-      <div class="empty-state">Agent not found.</div>
+      <div class="empty-state">{{ 'memory.agentNotFound' | translate }}</div>
     }
   `,
   styleUrl: './memory.component.scss',
 })
 export class MemoryComponent implements OnInit {
+  private readonly translate = inject(TranslateService);
   agent = signal<Agent | null>(null);
   chainState = signal<ChainState | null>(null);
   facts = signal<FactsResponse | null>(null);
@@ -1140,7 +1140,7 @@ export class MemoryComponent implements OnInit {
 
       if (wm.instructions?.length) {
         groups.push({
-          type: 'instruction', label: 'Instructions', color: 'var(--accent-primary)',
+          type: 'instruction', label: this.translate.instant('memory.wm.instructions'), color: 'var(--accent-primary)',
           items: wm.instructions.map((inst, i) => ({
             index: 40000 + i, signal_type: 'instruction',
             domain: inst.source || 'task', content: inst.content || '',
@@ -1150,7 +1150,7 @@ export class MemoryComponent implements OnInit {
       }
       if (primaryGoals?.length) {
         groups.push({
-          type: 'goal', label: 'Goals', color: 'var(--accent-warn)',
+          type: 'goal', label: this.translate.instant('memory.wm.goals'), color: 'var(--accent-warn)',
           items: primaryGoals.map((g: any, i: number) => ({
             index: 10000 + i, signal_type: 'goal',
             domain: g.level || 'goal', content: g.content || '',
@@ -1159,11 +1159,11 @@ export class MemoryComponent implements OnInit {
         });
       }
       const slotTypeDefs: { key: string; label: string; color: string }[] = [
-        { key: 'fact', label: 'Active Facts', color: 'var(--accent-success)' },
-        { key: 'feeling', label: 'Feelings', color: 'var(--accent-primary)' },
-        { key: 'schema', label: 'Schemas', color: '#c084fc' },
-        { key: 'user_state', label: 'User State', color: 'var(--accent-primary)' },
-        { key: 'prediction', label: 'Predictions', color: 'var(--accent-warn)' },
+        { key: 'fact', label: this.translate.instant('memory.wm.activeFacts'), color: 'var(--accent-success)' },
+        { key: 'feeling', label: this.translate.instant('memory.wm.feelings'), color: 'var(--accent-primary)' },
+        { key: 'schema', label: this.translate.instant('memory.wm.schemas'), color: '#c084fc' },
+        { key: 'user_state', label: this.translate.instant('memory.wm.userState'), color: 'var(--accent-primary)' },
+        { key: 'prediction', label: this.translate.instant('memory.wm.predictions'), color: 'var(--accent-warn)' },
       ];
       for (const def of slotTypeDefs) {
         const matched = primarySlots.filter(s => s.type === def.key);
@@ -1180,7 +1180,7 @@ export class MemoryComponent implements OnInit {
       }
       if (wm.intentions?.length) {
         groups.push({
-          type: 'intention', label: 'Intentions', color: '#2dd4bf',
+          type: 'intention', label: this.translate.instant('memory.wm.intentions'), color: '#2dd4bf',
           items: wm.intentions.map((it, i) => ({
             index: 30000 + i, signal_type: 'intention',
             domain: 'prospective', content: it.content || '',
@@ -1192,7 +1192,7 @@ export class MemoryComponent implements OnInit {
         const chunks = wm.consolidation_context.split('\n').filter(l => l.trim());
         if (chunks.length) {
           groups.push({
-            type: 'consolidation', label: 'Session Consolidation', color: 'var(--accent-primary)',
+            type: 'consolidation', label: this.translate.instant('memory.wm.consolidation'), color: 'var(--accent-primary)',
             items: chunks.map((c, i) => ({
               index: 50000 + i, signal_type: 'consolidation',
               domain: 'session', content: c.trim(),
@@ -1202,9 +1202,9 @@ export class MemoryComponent implements OnInit {
         }
       }
       if (otherSlots.length) {
-        const otherLabel = otherWs.charAt(0).toUpperCase() + otherWs.slice(1);
+        const otherLabel = this.translate.instant('memory.wm.' + otherWs);
         groups.push({
-          type: `other-${otherWs}`, label: `${otherLabel} WM`, color: '#64748b',
+          type: `other-${otherWs}`, label: this.translate.instant('memory.wm.otherWm', { label: otherLabel }), color: '#64748b',
           items: otherSlots.map((s, i) => ({
             index: 60000 + i, signal_type: s.type || 'fact',
             domain: s.domain || '', content: s.content || '',
@@ -1216,9 +1216,9 @@ export class MemoryComponent implements OnInit {
 
     // Always include ANS context (LEARN/BOND/EVALUATE)
     const ansDefs: { key: string; label: string; color: string; match: (t: string) => boolean }[] = [
-      { key: 'LEARN', label: 'Learn', color: 'var(--accent-success)', match: t => t === 'LEARN' },
-      { key: 'BOND', label: 'Bond', color: 'var(--accent-primary)', match: t => t === 'BOND' || t === 'BONDING' },
-      { key: 'EVALUATE', label: 'Eval', color: 'var(--accent-warn)', match: t => t === 'EVALUATE' },
+      { key: 'LEARN', label: this.translate.instant('memory.wm.learn'), color: 'var(--accent-success)', match: t => t === 'LEARN' },
+      { key: 'BOND', label: this.translate.instant('memory.wm.bond'), color: 'var(--accent-primary)', match: t => t === 'BOND' || t === 'BONDING' },
+      { key: 'EVALUATE', label: this.translate.instant('memory.wm.eval'), color: 'var(--accent-warn)', match: t => t === 'EVALUATE' },
     ];
     const items = this.contextItems();
     for (const def of ansDefs) {
@@ -1649,6 +1649,15 @@ export class MemoryComponent implements OnInit {
 
   msgHumanType(type: string): string {
     return _humanType(type);
+  }
+
+  moodArcTitle(snap: { turn: number; mood: string; v: number; a: number }): string {
+    return this.translate.instant('brain.narrative.moodArcTitle', {
+      turn: snap.turn,
+      mood: snap.mood,
+      v: snap.v,
+      a: snap.a,
+    });
   }
 
   moodColor(valence: number): string {

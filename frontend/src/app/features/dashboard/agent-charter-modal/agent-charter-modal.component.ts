@@ -15,13 +15,14 @@ import {
   TrustDocument,
   ChannelTrustOverlay,
 } from '../../../core/services/api.service';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 
 export type CharterTab = 'job' | 'trust';
 
 @Component({
   selector: 'app-agent-charter-modal',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, TranslateModule],
   templateUrl: './agent-charter-modal.component.html',
   styleUrl: './agent-charter-modal.component.scss',
 })
@@ -63,7 +64,10 @@ export class AgentCharterModalComponent implements OnChanges {
     'squad_lead',
   ];
 
-  constructor(private api: ApiService) {}
+  constructor(
+    private api: ApiService,
+    private translate: TranslateService,
+  ) {}
 
   ngOnChanges(changes: SimpleChanges): void {
     const opened = changes['visible']?.currentValue === true;
@@ -224,6 +228,6 @@ export class AgentCharterModalComponent implements OnChanges {
 
   private errMsg(err: unknown): string {
     const e = err as { error?: { detail?: string }; message?: string };
-    return e?.error?.detail || e?.message || 'Request failed';
+    return e?.error?.detail || e?.message || this.translate.instant('charter.requestFailed');
   }
 }

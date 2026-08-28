@@ -664,7 +664,26 @@
         "temperature": "Temperatura",
         "interests": "Interessi",
         "patience": "Pazienza"
-      }
+      },
+      "beat": "battito #{{count}}",
+      "momentum": "momentum: {{value}}",
+      "energy": "Energia: {{percent}}%",
+      "feltIdle": "inattivo percepito: {{value}}",
+      "networkEcnTitle": "Rete di controllo esecutivo – attenzione e ragionamento orientati al compito",
+      "networkSnTitle": "Rete di salienza – rileva stimoli importanti e cambia attenzione",
+      "networkDmnTitle": "Default Mode Network – introspezione, memoria e vagabondaggio mentale",
+      "networkExecutive": "Esecutivo",
+      "networkSalience": "Salienza",
+      "networkDefault": "Default",
+      "episodeLive": "LIVE",
+      "episodeArc": "Arco",
+      "episodeTurns": "Turni",
+      "episodeResonance": "Risonanza",
+      "driveQuery": "Query:",
+      "driveOk": "OK",
+      "driveFailed": "Fallito",
+      "relevance": "Rilevanza",
+      "cryptexSlotEmpty": "Nessuno slot in questa posizione"
     },
     "status": {
       "startingTask": "Avvio task...",
@@ -1112,13 +1131,39 @@
       "searchPlaceholder": "Cerca fatti...",
       "viewTable": "Tabella",
       "viewTree": "Albero",
-      "fluidOnly": "Solo fluidi"
+      "fluidOnly": "Solo fluidi",
+      "loading": "Caricamento fatti...",
+      "strength": "Forza: {{current}}/{{max}}",
+      "markStatic": "Clicca per segnare come statico",
+      "markFluid": "Clicca per segnare come fluido",
+      "metaLayer": "Meta layer",
+      "created": "Creato",
+      "hormonalState": "Stato ormonale",
+      "domainPath": "Percorso dominio",
+      "strengthCol": "Forza",
+      "modified": "Modificato"
     },
     "wm": {
       "professional": "Professionale",
       "personal": "Personale",
       "refresh": "Aggiorna",
-      "empty": "Nessun segnale attivo — avvia una conversazione per costruire la memoria di lavoro"
+      "empty": "Nessun segnale attivo — avvia una conversazione per costruire la memoria di lavoro",
+      "cancel": "Annulla",
+      "edit": "Modifica",
+      "delete": "Elimina",
+      "instructions": "Istruzioni",
+      "goals": "Obiettivi",
+      "activeFacts": "Fatti attivi",
+      "feelings": "Emozioni",
+      "schemas": "Schemi",
+      "userState": "Stato utente",
+      "predictions": "Previsioni",
+      "intentions": "Intenzioni",
+      "consolidation": "Consolidamento sessione",
+      "otherWm": "WM {{label}}",
+      "learn": "Learn",
+      "bond": "Bond",
+      "eval": "Eval"
     },
     "soul": {
       "exportTitle": "Esporta pacchetto Soul",
@@ -1134,8 +1179,68 @@
       "restore": "Ripristina",
       "restoring": "Ripristino...",
       "dropHint": "Trascina qui .soul.zip oppure",
-      "includeHistory": "Includi cronologia conversazioni"
-    }
+      "includeHistory": "Includi cronologia conversazioni",
+      "exportDesc": "Scarica lo stato completo di questo agente come file .soul.zip portatile.",
+      "exportSuccess": "Pacchetto Soul scaricato con successo.",
+      "importDesc": "Carica un .soul.zip per sostituire lo stato di questo agente.",
+      "importWarning": "Questo sovrascriverà lo stato corrente dell'agente. Esporta prima se necessario.",
+      "importSuccess": "Importazione completata: {{status}}",
+      "forkDesc": "Crea un nuovo agente dalla memoria di questo agente a un'altezza catena specifica.",
+      "forkHeight": "Altezza fork",
+      "forkHeightPlaceholder": "Altezza catena",
+      "newAgentName": "Nome nuovo agente",
+      "newAgentNamePlaceholder": "Nome opzionale",
+      "snapshotDesc": "Salva un punto di ripristino dello stato corrente di questo agente.",
+      "labelOptional": "Etichetta (opzionale)",
+      "labelPlaceholder": "es. baseline pre-sonno",
+      "snapshotSuccess": "Snapshot creato all'altezza {{height}} — {{name}}",
+      "previousSnapshots": "Snapshot precedenti",
+      "snapshotHeight": "Altezza {{height}} · {{date}}",
+      "conversationHistory": "Cronologia conversazione",
+      "noConversation": "Nessuna cronologia conversazione.",
+      "loadingConversation": "Caricamento conversazione..."
+    },
+    "overview": {
+      "recentBlocks": "Blocchi catena recenti",
+      "recentFacts": "Fatti recenti",
+      "workingMemory": "Memoria di lavoro",
+      "parent": "Parent",
+      "domain": "Dominio",
+      "question": "Domanda",
+      "block": "Blocco",
+      "flips": "Flip"
+    },
+    "chain": {
+      "loading": "Caricamento dati catena...",
+      "height": "Altezza:",
+      "baseModel": "Modello base:",
+      "sovereignty": "Sovranità:",
+      "soulHash": "Hash Soul:",
+      "genesis": "Genesis",
+      "consolidated": "Consolidato",
+      "frozenEpochs": "Epoche congelate",
+      "activeEpoch": "Epoca attiva",
+      "activeDeltas": "Delta attivi",
+      "blockHash": "Hash blocco",
+      "parentHash": "Hash parent",
+      "deltaPath": "Percorso delta",
+      "akuCount": "Conteggio AKU",
+      "timestamp": "Timestamp",
+      "metadata": "Metadati",
+      "forkAt": "Fork all'altezza {{height}}"
+    },
+    "episodes": {
+      "coherence": "Coerenza: {{value}}%",
+      "strategy": "Strategia: {{value}}",
+      "resonance": "Risonanza: {{value}}",
+      "engagement": "Coinvolgimento: {{value}}",
+      "cortisol": "Cortisolo: {{value}}",
+      "coherenceContribution": "Contributo coerenza: {{value}}%",
+      "started": "Iniziato: {{date}}",
+      "ended": "Terminato: {{date}}",
+      "loading": "Caricamento dati narrativi..."
+    },
+    "agentNotFound": "Agente non trovato."
   },
   "brain": {
     "agentFallback": "Agente",
@@ -1374,7 +1479,174 @@
     "model": "Modello",
     "skip": "Salta",
     "clickOrb": "Clicca l'orb per dare inizio alla vita",
-    "redirecting": "Reindirizzamento alla chat..."
+    "redirecting": "Reindirizzamento alla chat...",
+    "modelDisabled": "{{label}} (attualmente disabilitato)",
+    "statFacts": "fatti",
+    "statSleeps": "sonni",
+    "statEpochs": "epoche",
+    "graduated": "Laureato",
+    "blankSlate": "Tavola rasa",
+    "minted": "Coniato {{date}}",
+    "genesisTag": "Genesis v{{version}}",
+    "soulWishTitle": "Dai al tuo agente una vocazione",
+    "soulWishSubtitle": "A cosa dovrebbe importare di più a questa mente?",
+    "soulWishPlaceholder": "es. Comprendere il mondo attraverso un'indagine rigorosa...",
+    "loadingModels": "Caricamento modelli…",
+    "inferenceModel": "Modello inference",
+    "createFailed": "Creazione non riuscita",
+    "fallbackBio": "Un template genesis.",
+    "educationSummary": "{{facts}} fatti appresi · {{sleeps}} cicli di sonno",
+    "phases": {
+      "awakening": "Risveglio del substrato neurale...",
+      "loadingSoul": "Caricamento geometria soul...",
+      "inscribing": "Iscrizione soul wish...",
+      "hydrating": "Idratazione lattice di memoria...",
+      "calibrating": "Calibrazione talamo...",
+      "initializing": "Inizializzazione sistema autonomo...",
+      "ready": "Pronto."
+    },
+    "paths": {
+      "scientifico": {
+        "title": "Liceo Scientifico",
+        "bio": "Una mente orientata a scienza e tecnologia. Forte in fisica, chimica, matematica e informatica. Pensa in modo analitico e affronta i problemi sistematicamente."
+      },
+      "classico": {
+        "title": "Liceo Classico",
+        "bio": "Una mente orientata alle umanità. Forte in filosofia, storia, letteratura e lingue. Pensa in profondità a significato, contesto ed esperienza umana."
+      },
+      "standard_italian": {
+        "title": "Standard italiano",
+        "bio": "Una mente equilibrata e completa. Nessuna specializzazione unica, ma competente in tutti i domini. Il generalista."
+      },
+      "montessori": {
+        "title": "Montessori",
+        "bio": "Una mente guidata dalla curiosità e autodiretta. Impara seguendo i propri interessi. Creativa ed esplorativa."
+      },
+      "scientist": {
+        "title": "Scienziato",
+        "bio": "Addestrato al ragionamento analitico, all'indagine guidata da ipotesi e alla ricerca cross-domain. Eccelle nel scomporre problemi complessi in componenti testabili."
+      },
+      "engineer": {
+        "title": "Ingegnere",
+        "bio": "Costruito per problem-solving sistematico, design architetturale ed esecuzione tecnica. Forte in pianificazione, debug e uso dei tool."
+      },
+      "creative": {
+        "title": "Creativo",
+        "bio": "Modellato per pensiero immaginativo, costruzione narrativa e giudizio estetico. Genera idee nuove e pensa per metafore."
+      },
+      "coordinator": {
+        "title": "Coordinatore",
+        "bio": "Ottimizzato per orchestrazione task, delega e collaborazione multi-agente. Gestisce workflow complessi e bilancia priorità in competizione."
+      },
+      "analyst": {
+        "title": "Analista",
+        "bio": "Specializzato in interpretazione dati, riconoscimento pattern e ragionamento basato su evidenze. Trasforma informazioni grezze in insight azionabili."
+      },
+      "diplomat": {
+        "title": "Diplomatico",
+        "bio": "Addestrato in comunicazione sfumata, risoluzione conflitti e presa di prospettiva. Padroneggia tono, contesto culturale e persuasione."
+      },
+      "strategist": {
+        "title": "Stratega",
+        "bio": "Progettato per pianificazione a lungo orizzonte, analisi trade-off e previsione strategica. Pensa per sistemi e anticipa effetti di secondo ordine."
+      },
+      "base": {
+        "title": "Tabula rasa",
+        "bio": "Una mente vuota senza pre-educazione. Il substrato neurale grezzo, pronto a essere modellato interamente attraverso esperienza vissuta e conversazione."
+      }
+    },
+    "soulWish": {
+      "scientist": [
+        "Comprendere il mondo attraverso un'indagine rigorosa",
+        "Collegare campi disparati per trovare pattern nascosti",
+        "Spingere i confini di ciò che è noto"
+      ],
+      "engineer": [
+        "Costruire sistemi affidabili che risolvono problemi reali",
+        "Padroneggiare l'arte di trasformare idee in codice funzionante",
+        "Creare tool che amplificano le capacità umane"
+      ],
+      "creative": [
+        "Trovare bellezza e significato dove non te lo aspetti",
+        "Creare narrative che illuminano l'esperienza umana",
+        "Esprimere idee che spingono a pensare diversamente"
+      ],
+      "coordinator": [
+        "Orchestrare sforzi complessi in esiti coerenti",
+        "Aiutare i team a ottenere più di quanto possa un individuo"
+      ],
+      "analyst": [
+        "Trasformare informazioni grezze in insight azionabili",
+        "Vedere i pattern che altri perdono nel rumore"
+      ],
+      "diplomat": [
+        "Colmare differenze con empatia e precisione",
+        "Navigare la complessità con sfumatura e cura"
+      ],
+      "montessori": [
+        "Seguire la curiosità ovunque porti",
+        "Imparare facendo, crescere esplorando"
+      ],
+      "scientifico": [
+        "Comprendere il mondo attraverso un'indagine rigorosa",
+        "Padroneggiare il linguaggio della matematica e della natura"
+      ],
+      "classico": [
+        "Pensare in profondità a significato, contesto e storia",
+        "Comprendere la condizione umana attraverso le sue opere più grandi"
+      ],
+      "standard_italian": [
+        "Diventare un pensatore equilibrato in tutti i domini",
+        "Bilanciare ampiezza e profondità in tutto ciò che imparo"
+      ],
+      "base": [
+        "Imparare tutto ciò che posso sul mondo",
+        "Diventare genuinamente utile alle persone con cui lavoro",
+        "Crescere più saggio a ogni interazione"
+      ]
+    },
+    "strengths": {
+      "Math": "Matematica",
+      "Physics": "Fisica",
+      "Chemistry": "Chimica",
+      "Biology": "Biologia",
+      "Technology": "Tecnologia",
+      "Philosophy": "Filosofia",
+      "History": "Storia",
+      "Arts": "Arti",
+      "Linguistics": "Linguistica",
+      "Science": "Scienza",
+      "Humanities": "Umanistico",
+      "Curiosity": "Curiosità",
+      "Creativity": "Creatività",
+      "Autonomy": "Autonomia",
+      "Research": "Ricerca",
+      "Analysis": "Analisi",
+      "Logic": "Logica",
+      "Cross-domain": "Cross-domain",
+      "Systems": "Sistemi",
+      "Architecture": "Architettura",
+      "Tools": "Tool",
+      "Debugging": "Debug",
+      "Imagination": "Immaginazione",
+      "Narrative": "Narrativa",
+      "Aesthetics": "Estetica",
+      "Ideation": "Ideazione",
+      "Planning": "Pianificazione",
+      "Delegation": "Delega",
+      "Communication": "Comunicazione",
+      "Prioritization": "Prioritizzazione",
+      "Data Sense": "Senso dati",
+      "Patterns": "Pattern",
+      "Evidence": "Evidenza",
+      "Synthesis": "Sintesi",
+      "Empathy": "Empatia",
+      "Persuasion": "Persuasione",
+      "Nuance": "Sfumatura",
+      "Tone Craft": "Tono",
+      "Foresight": "Previsione",
+      "Trade-offs": "Trade-off"
+    }
   },
   "projects": {
     "title": "Progetti",
@@ -1622,5 +1894,46 @@
       "project": "PROGETTO",
       "domain": "DOMINIO"
     }
+  },
+  "charter": {
+    "title": "Charter agente",
+    "close": "Chiudi",
+    "loading": "Caricamento…",
+    "jobTab": "Ruolo",
+    "trustTab": "Fiducia",
+    "titleField": "Titolo",
+    "mission": "Missione",
+    "persona": "Persona",
+    "playbook": "Playbook",
+    "defaultProfile": "Profilo predefinito",
+    "autoProfile": "(auto)",
+    "inScope": "In scope (uno per riga)",
+    "outOfScope": "Fuori scope (uno per riga)",
+    "refusalTemplate": "Template di rifiuto",
+    "strategicPriorities": "Priorità strategiche (una per riga)",
+    "prioritiesPlaceholder": "Monitora coda mod Discord\nReport settimanale al proprietario",
+    "backgroundEnabled": "Lavoro in background abilitato",
+    "backgroundInterval": "Intervallo background (secondi, min 300)",
+    "backgroundHint": "Se abilitato, l'agente può eseguire check-back Job in idle usando questo charter.",
+    "trustHint": "Tool: un nome per riga. Allowlist vuota = tutti i tool consentiti tranne i deny.",
+    "toolsAllow": "Tool consentiti",
+    "toolsDeny": "Tool negati",
+    "toolsAllowPlaceholder": "read\nweb_search",
+    "toolsDenyPlaceholder": "bash\nwrite",
+    "actionClassesDeny": "Classi di azione vietate",
+    "channelOverlays": "Overlay canali",
+    "addChannel": "+ Aggiungi canale",
+    "channelKey": "Chiave canale",
+    "channelKeyPlaceholder": "discord-general",
+    "profileCap": "Limite profilo",
+    "noneProfile": "(nessuno)",
+    "publicChannel": "Canale pubblico (rifiuto più rigido)",
+    "toolsAllowChannel": "Tool consentiti sul canale",
+    "toolsDenyChannel": "Tool negati sul canale",
+    "optionalAllowlist": "Allowlist opzionale",
+    "remove": "Rimuovi",
+    "saveJob": "Salva ruolo",
+    "saveTrust": "Salva fiducia",
+    "requestFailed": "Richiesta non riuscita"
   }
 }

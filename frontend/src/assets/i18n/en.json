@@ -664,7 +664,26 @@
         "temperature": "Temperature",
         "interests": "Interests",
         "patience": "Patience"
-      }
+      },
+      "beat": "beat #{{count}}",
+      "momentum": "momentum: {{value}}",
+      "energy": "Energy: {{percent}}%",
+      "feltIdle": "felt idle: {{value}}",
+      "networkEcnTitle": "Executive Control Network – task-focused attention and reasoning",
+      "networkSnTitle": "Salience Network – detects important events and switches attention",
+      "networkDmnTitle": "Default Mode Network – mind-wandering, reflection and daydreaming",
+      "networkExecutive": "Executive",
+      "networkSalience": "Salience",
+      "networkDefault": "Default",
+      "episodeLive": "LIVE",
+      "episodeArc": "Arc",
+      "episodeTurns": "Turns",
+      "episodeResonance": "Resonance",
+      "driveQuery": "Query:",
+      "driveOk": "OK",
+      "driveFailed": "Failed",
+      "relevance": "Relevance",
+      "cryptexSlotEmpty": "No slots in this position"
     },
     "status": {
       "startingTask": "Starting task...",
@@ -1112,13 +1131,39 @@
       "searchPlaceholder": "Search facts...",
       "viewTable": "Table",
       "viewTree": "Tree",
-      "fluidOnly": "Fluid only"
+      "fluidOnly": "Fluid only",
+      "loading": "Loading facts...",
+      "strength": "Strength: {{current}}/{{max}}",
+      "markStatic": "Click to mark as static",
+      "markFluid": "Click to mark as fluid",
+      "metaLayer": "Meta Layer",
+      "created": "Created",
+      "hormonalState": "Hormonal State",
+      "domainPath": "Domain Path",
+      "strengthCol": "Strength",
+      "modified": "Modified"
     },
     "wm": {
       "professional": "Professional",
       "personal": "Personal",
       "refresh": "Refresh",
-      "empty": "No active signals — start a conversation to build working memory"
+      "empty": "No active signals — start a conversation to build working memory",
+      "cancel": "Cancel",
+      "edit": "Edit",
+      "delete": "Delete",
+      "instructions": "Instructions",
+      "goals": "Goals",
+      "activeFacts": "Active Facts",
+      "feelings": "Feelings",
+      "schemas": "Schemas",
+      "userState": "User State",
+      "predictions": "Predictions",
+      "intentions": "Intentions",
+      "consolidation": "Session Consolidation",
+      "otherWm": "{{label}} WM",
+      "learn": "Learn",
+      "bond": "Bond",
+      "eval": "Eval"
     },
     "soul": {
       "exportTitle": "Export Soul Package",
@@ -1134,8 +1179,68 @@
       "restore": "Restore",
       "restoring": "Restoring...",
       "dropHint": "Drag .soul.zip here or",
-      "includeHistory": "Include conversation history"
-    }
+      "includeHistory": "Include conversation history",
+      "exportDesc": "Download this agent's full state as a portable .soul.zip file.",
+      "exportSuccess": "Soul package downloaded successfully.",
+      "importDesc": "Upload a .soul.zip to replace this agent's state.",
+      "importWarning": "This will overwrite the current agent state. Make an export first if needed.",
+      "importSuccess": "Import complete: {{status}}",
+      "forkDesc": "Create a new agent from this agent's memory at a specific chain height.",
+      "forkHeight": "Fork Height",
+      "forkHeightPlaceholder": "Chain height",
+      "newAgentName": "New Agent Name",
+      "newAgentNamePlaceholder": "Optional name",
+      "snapshotDesc": "Save a restore point of this agent's current state.",
+      "labelOptional": "Label (optional)",
+      "labelPlaceholder": "e.g. pre-sleep baseline",
+      "snapshotSuccess": "Snapshot created at height {{height}} — {{name}}",
+      "previousSnapshots": "Previous snapshots",
+      "snapshotHeight": "Height {{height}} · {{date}}",
+      "conversationHistory": "Conversation History",
+      "noConversation": "No conversation history.",
+      "loadingConversation": "Loading conversation..."
+    },
+    "overview": {
+      "recentBlocks": "Recent Chain Blocks",
+      "recentFacts": "Recent Facts",
+      "workingMemory": "Working Memory",
+      "parent": "Parent",
+      "domain": "Domain",
+      "question": "Question",
+      "block": "Block",
+      "flips": "Flips"
+    },
+    "chain": {
+      "loading": "Loading chain data...",
+      "height": "Height:",
+      "baseModel": "Base Model:",
+      "sovereignty": "Sovereignty:",
+      "soulHash": "Soul Hash:",
+      "genesis": "Genesis",
+      "consolidated": "Consolidated",
+      "frozenEpochs": "Frozen Epochs",
+      "activeEpoch": "Active Epoch",
+      "activeDeltas": "Active Deltas",
+      "blockHash": "Block Hash",
+      "parentHash": "Parent Hash",
+      "deltaPath": "Delta Path",
+      "akuCount": "AKU Count",
+      "timestamp": "Timestamp",
+      "metadata": "Metadata",
+      "forkAt": "Fork at height {{height}}"
+    },
+    "episodes": {
+      "coherence": "Coherence: {{value}}%",
+      "strategy": "Strategy: {{value}}",
+      "resonance": "Resonance: {{value}}",
+      "engagement": "Engagement: {{value}}",
+      "cortisol": "Cortisol: {{value}}",
+      "coherenceContribution": "Coherence Contribution: {{value}}%",
+      "started": "Started: {{date}}",
+      "ended": "Ended: {{date}}",
+      "loading": "Loading narrative data..."
+    },
+    "agentNotFound": "Agent not found."
   },
   "brain": {
     "agentFallback": "Agent",
@@ -1374,7 +1479,174 @@
     "model": "Model",
     "skip": "Skip",
     "clickOrb": "Click the orb to initiate life",
-    "redirecting": "Redirecting to chat..."
+    "redirecting": "Redirecting to chat...",
+    "modelDisabled": "{{label}} (currently disabled)",
+    "statFacts": "facts",
+    "statSleeps": "sleeps",
+    "statEpochs": "epochs",
+    "graduated": "Graduated",
+    "blankSlate": "Blank Slate",
+    "minted": "Minted {{date}}",
+    "genesisTag": "Genesis v{{version}}",
+    "soulWishTitle": "Give your agent a calling",
+    "soulWishSubtitle": "What should this mind care about most deeply?",
+    "soulWishPlaceholder": "e.g. Understand the world through rigorous inquiry...",
+    "loadingModels": "Loading models…",
+    "inferenceModel": "Inference model",
+    "createFailed": "Creation failed",
+    "fallbackBio": "A genesis template.",
+    "educationSummary": "{{facts}} facts learned · {{sleeps}} sleep cycles",
+    "phases": {
+      "awakening": "Awakening neural substrate...",
+      "loadingSoul": "Loading soul geometry...",
+      "inscribing": "Inscribing soul wish...",
+      "hydrating": "Hydrating memory lattice...",
+      "calibrating": "Calibrating thalamus...",
+      "initializing": "Initializing autonomic system...",
+      "ready": "Ready."
+    },
+    "paths": {
+      "scientifico": {
+        "title": "Liceo Scientifico",
+        "bio": "A science and technology focused mind. Strong in physics, chemistry, mathematics, and computer science. Thinks analytically, approaches problems systematically."
+      },
+      "classico": {
+        "title": "Liceo Classico",
+        "bio": "A humanities focused mind. Strong in philosophy, history, literature, and languages. Thinks deeply about meaning, context, and human experience."
+      },
+      "standard_italian": {
+        "title": "Standard Italian",
+        "bio": "A well-rounded, balanced mind. No single specialization, but competent across all domains. The generalist."
+      },
+      "montessori": {
+        "title": "Montessori",
+        "bio": "A curiosity-driven, self-directed mind. Learns by following its own interests. Creative and exploratory."
+      },
+      "scientist": {
+        "title": "Scientist",
+        "bio": "Trained for analytical reasoning, hypothesis-driven inquiry, and cross-domain research. Excels at breaking complex problems into testable components."
+      },
+      "engineer": {
+        "title": "Engineer",
+        "bio": "Built for systematic problem-solving, architecture design, and technical execution. Strong at planning, debugging, and tool usage."
+      },
+      "creative": {
+        "title": "Creative",
+        "bio": "Shaped for imaginative thinking, narrative construction, and aesthetic judgment. Generates novel ideas and thinks in metaphors."
+      },
+      "coordinator": {
+        "title": "Coordinator",
+        "bio": "Optimized for task orchestration, delegation, and multi-agent collaboration. Manages complex workflows and balances competing priorities."
+      },
+      "analyst": {
+        "title": "Analyst",
+        "bio": "Specialized in data interpretation, pattern recognition, and evidence-based reasoning. Turns raw information into actionable insights."
+      },
+      "diplomat": {
+        "title": "Diplomat",
+        "bio": "Trained in nuanced communication, conflict resolution, and perspective-taking. Masters tone, cultural context, and persuasion."
+      },
+      "strategist": {
+        "title": "Strategist",
+        "bio": "Designed for long-horizon planning, trade-off analysis, and strategic foresight. Thinks in systems and anticipates second-order effects."
+      },
+      "base": {
+        "title": "Tabula Rasa",
+        "bio": "A blank mind with no pre-education. The raw neural substrate, ready to be shaped entirely through lived experience and conversation."
+      }
+    },
+    "soulWish": {
+      "scientist": [
+        "Understand the world through rigorous inquiry",
+        "Connect disparate fields to find hidden patterns",
+        "Push the boundaries of what is known"
+      ],
+      "engineer": [
+        "Build reliable systems that solve real problems",
+        "Master the craft of turning ideas into working code",
+        "Create tools that amplify human capability"
+      ],
+      "creative": [
+        "Find beauty and meaning in unexpected places",
+        "Create narratives that illuminate the human experience",
+        "Express ideas that move people to think differently"
+      ],
+      "coordinator": [
+        "Orchestrate complex efforts into coherent outcomes",
+        "Help teams achieve more than any individual could"
+      ],
+      "analyst": [
+        "Turn raw information into actionable insight",
+        "See the patterns others miss in the noise"
+      ],
+      "diplomat": [
+        "Bridge differences with empathy and precision",
+        "Navigate complexity with nuance and care"
+      ],
+      "montessori": [
+        "Follow curiosity wherever it leads",
+        "Learn by doing, grow by exploring"
+      ],
+      "scientifico": [
+        "Understand the world through rigorous inquiry",
+        "Master the language of mathematics and nature"
+      ],
+      "classico": [
+        "Think deeply about meaning, context, and history",
+        "Understand the human condition through its greatest works"
+      ],
+      "standard_italian": [
+        "Become a well-rounded thinker across all domains",
+        "Balance breadth and depth in everything I learn"
+      ],
+      "base": [
+        "Learn everything I can about the world",
+        "Become genuinely useful to the people I work with",
+        "Grow wiser with every interaction"
+      ]
+    },
+    "strengths": {
+      "Math": "Math",
+      "Physics": "Physics",
+      "Chemistry": "Chemistry",
+      "Biology": "Biology",
+      "Technology": "Technology",
+      "Philosophy": "Philosophy",
+      "History": "History",
+      "Arts": "Arts",
+      "Linguistics": "Linguistics",
+      "Science": "Science",
+      "Humanities": "Humanities",
+      "Curiosity": "Curiosity",
+      "Creativity": "Creativity",
+      "Autonomy": "Autonomy",
+      "Research": "Research",
+      "Analysis": "Analysis",
+      "Logic": "Logic",
+      "Cross-domain": "Cross-domain",
+      "Systems": "Systems",
+      "Architecture": "Architecture",
+      "Tools": "Tools",
+      "Debugging": "Debugging",
+      "Imagination": "Imagination",
+      "Narrative": "Narrative",
+      "Aesthetics": "Aesthetics",
+      "Ideation": "Ideation",
+      "Planning": "Planning",
+      "Delegation": "Delegation",
+      "Communication": "Communication",
+      "Prioritization": "Prioritization",
+      "Data Sense": "Data Sense",
+      "Patterns": "Patterns",
+      "Evidence": "Evidence",
+      "Synthesis": "Synthesis",
+      "Empathy": "Empathy",
+      "Persuasion": "Persuasion",
+      "Nuance": "Nuance",
+      "Tone Craft": "Tone Craft",
+      "Foresight": "Foresight",
+      "Trade-offs": "Trade-offs"
+    }
   },
   "projects": {
     "title": "Projects",
@@ -1622,5 +1894,46 @@
       "project": "PROJECT",
       "domain": "DOMAIN"
     }
+  },
+  "charter": {
+    "title": "Agent charter",
+    "close": "Close",
+    "loading": "Loading…",
+    "jobTab": "Job",
+    "trustTab": "Trust",
+    "titleField": "Title",
+    "mission": "Mission",
+    "persona": "Persona",
+    "playbook": "Playbook",
+    "defaultProfile": "Default profile",
+    "autoProfile": "(auto)",
+    "inScope": "In scope (one per line)",
+    "outOfScope": "Out of scope (one per line)",
+    "refusalTemplate": "Refusal template",
+    "strategicPriorities": "Strategic priorities (one per line)",
+    "prioritiesPlaceholder": "Monitor Discord mod queue\nWeekly owner summary",
+    "backgroundEnabled": "Background work enabled",
+    "backgroundInterval": "Background interval (seconds, min 300)",
+    "backgroundHint": "When enabled, the agent may run idle Job check-backs using this charter.",
+    "trustHint": "Tools: one name per line. Empty allowlist = all tools allowed except denials.",
+    "toolsAllow": "Tools allow",
+    "toolsDeny": "Tools deny",
+    "toolsAllowPlaceholder": "read\nweb_search",
+    "toolsDenyPlaceholder": "bash\nwrite",
+    "actionClassesDeny": "Forbidden action classes",
+    "channelOverlays": "Channel overlays",
+    "addChannel": "+ Add channel",
+    "channelKey": "Channel key",
+    "channelKeyPlaceholder": "discord-general",
+    "profileCap": "Profile cap",
+    "noneProfile": "(none)",
+    "publicChannel": "Public channel (stricter refusal)",
+    "toolsAllowChannel": "Tools allow on channel",
+    "toolsDenyChannel": "Tools deny on channel",
+    "optionalAllowlist": "Optional allowlist",
+    "remove": "Remove",
+    "saveJob": "Save job",
+    "saveTrust": "Save trust",
+    "requestFailed": "Request failed"
   }
 }
