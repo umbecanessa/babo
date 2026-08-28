@@ -359,14 +359,14 @@ export class SettingsComponent implements OnInit, OnDestroy {
       this.toast.show(this.t('toast.settings.resendSaved'), 'info', 2500);
       await this.loadPlatformIntegrations();
     } catch (err: any) {
-      this.toast.show(err?.error?.message || 'Failed to save Resend credentials', 'error');
+      this.toast.show(err?.error?.message || this.t('toast.settings.resendSaveFailed'), 'error');
     } finally {
       this.resendSaving.set(false);
     }
   }
 
   async clearResendCredentials(): Promise<void> {
-    if (!confirm('Remove saved Resend credentials?')) return;
+    if (!confirm(this.t('settings.confirm.removeResend'))) return;
     this.resendSaving.set(true);
     try {
       await firstValueFrom(this.api.clearResendProvider());
@@ -375,7 +375,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       this.toast.show(this.t('toast.settings.resendRemoved'), 'info', 2500);
       await this.loadPlatformIntegrations();
     } catch (err: any) {
-      this.toast.show(err?.error?.message || 'Failed to clear credentials', 'error');
+      this.toast.show(err?.error?.message || this.t('toast.settings.clearCredentialsFailed'), 'error');
     } finally {
       this.resendSaving.set(false);
     }
@@ -417,15 +417,15 @@ export class SettingsComponent implements OnInit, OnDestroy {
   subscriptionStatusLabel(status: CloudSubscriptionView['status']): string {
     switch (status) {
       case 'active':
-        return 'Active';
+        return this.t('settings.billingStatus.active');
       case 'past_due':
-        return 'Payment issue';
+        return this.t('settings.billingStatus.past_due');
       case 'canceled':
-        return 'Canceled';
+        return this.t('settings.billingStatus.canceled');
       case 'lifetime_comp':
-        return 'Lifetime';
+        return this.t('settings.billingStatus.lifetime_comp');
       default:
-        return 'Not subscribed';
+        return this.t('settings.billingStatus.not_subscribed');
     }
   }
 
@@ -441,7 +441,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       }
     } catch (err: any) {
       this.toast.show(
-        err?.error?.message || 'Could not start checkout',
+        err?.error?.message || this.t('toast.settings.checkoutFailed'),
         'error',
       );
     } finally {
@@ -461,7 +461,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       }
     } catch (err: any) {
       this.toast.show(
-        err?.error?.message || 'Could not open billing portal',
+        err?.error?.message || this.t('toast.settings.portalFailed'),
         'error',
       );
     } finally {
@@ -481,7 +481,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       await this.loadSubscription();
       this.toast.show(this.t('toast.settings.spendCapUpdated'), 'info', 2500);
     } catch (err: any) {
-      this.toast.show(err?.error?.message || 'Could not update spend cap', 'error');
+      this.toast.show(err?.error?.message || this.t('toast.settings.spendCapUpdated'), 'error');
     } finally {
       this.billingActionLoading.set(false);
     }
@@ -500,12 +500,12 @@ export class SettingsComponent implements OnInit, OnDestroy {
       this.onDemandEnabled.set(next);
       await this.loadSubscription();
       this.toast.show(
-        next ? 'On-demand usage enabled' : 'On-demand usage disabled',
+        next ? this.t('toast.settings.onDemandEnabled') : this.t('toast.settings.onDemandDisabled'),
         'info',
         2500,
       );
     } catch (err: any) {
-      this.toast.show(err?.error?.message || 'Could not update setting', 'error');
+      this.toast.show(err?.error?.message || this.t('toast.settings.settingUpdateFailed'), 'error');
     } finally {
       this.billingActionLoading.set(false);
     }
@@ -588,7 +588,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     if (!url) {
       this.backendTestResult.set({
         ok: false,
-        message: 'Enter a server address first',
+        message: this.t('settings.backendTest.enterServer'),
         latency: 0,
       });
       return;
@@ -600,14 +600,14 @@ export class SettingsComponent implements OnInit, OnDestroy {
       this.backendTestResult.set({
         ok: result.ok,
         message: result.ok
-          ? `Connected (${result.statusCode})`
-          : result.message || 'Could not reach server',
+          ? this.t('settings.backendTest.connected', { code: result.statusCode })
+          : result.message || this.t('settings.backendTest.unreachable'),
         latency: result.latency,
       });
     } catch (err: any) {
       this.backendTestResult.set({
         ok: false,
-        message: err?.message || 'Test failed',
+        message: err?.message || this.t('settings.backendTest.failed'),
         latency: 0,
       });
     } finally {
@@ -667,7 +667,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
   }
 
   async resetPythonEnvironment(): Promise<void> {
-    if (!confirm('Reset the Python environment? You will need to run setup again.')) {
+    if (!confirm(this.t('settings.confirm.resetPython'))) {
       return;
     }
     this.envResetting.set(true);
@@ -688,12 +688,12 @@ export class SettingsComponent implements OnInit, OnDestroy {
       this.activePermissionProfile.set(profileId);
       this.toast.show(this.t('toast.settings.permApplied'), 'info', 2000);
     } catch (err: any) {
-      this.toast.show(err?.message || 'Could not apply profile', 'error');
+      this.toast.show(err?.message || this.t('toast.settings.applyProfileFailed'), 'error');
     }
   }
 
   async resetPermissions(): Promise<void> {
-    if (!confirm('Clear all saved permission decisions? You will be prompted again when needed.')) {
+    if (!confirm(this.t('settings.confirm.resetPermissions'))) {
       return;
     }
     try {
@@ -701,7 +701,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       this.activePermissionProfile.set(null);
       this.toast.show(this.t('toast.settings.permReset'), 'info', 2000);
     } catch (err: any) {
-      this.toast.show(err?.message || 'Could not reset permissions', 'error');
+      this.toast.show(err?.message || this.t('toast.settings.resetPermissionsFailed'), 'error');
     }
   }
 
@@ -777,7 +777,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
       const result = await this.nls().debug.exportFullBundle();
       if (result.ok) {
         this.toast.show(
-          'Debug bundle saved. You can attach it when contacting support.',
+          this.t('toast.settings.debugBundleSaved'),
           'info',
           5000,
         );

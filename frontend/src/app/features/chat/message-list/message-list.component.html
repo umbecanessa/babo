@@ -132,7 +132,7 @@
                 }
               </span>
               <span class="tool-label">
-                {{ msg.tool?.source === 'wikipedia' ? 'Wikipedia' : 'Searching' }}:
+                {{ msg.tool?.source === 'wikipedia' ? ('chat.message.wikipedia' | translate) : ('chat.message.searching' | translate) }}:
                 <strong>{{ msg.tool?.query }}</strong>
               </span>
               <span class="tool-status">

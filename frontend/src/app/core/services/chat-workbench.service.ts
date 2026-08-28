@@ -1,4 +1,5 @@
 import { Injectable, inject, signal, computed } from '@angular/core';
+import { TranslateService } from '@ngx-translate/core';
 import { AgentOrchestrationProfileService } from './agent-orchestration-profile.service';
 import {
   delegateNumberFromMessage,
@@ -101,6 +102,12 @@ function surfaceFromRuntimeMsg(msg: any): string | undefined {
  */
 @Injectable({ providedIn: 'root' })
 export class ChatWorkbenchService {
+  private readonly translate = inject(TranslateService);
+
+  private t(key: string, params?: Record<string, unknown>): string {
+    return this.translate.instant(key, params);
+  }
+
   private readonly workspaceCtx = inject(AgentWorkspaceContextService);
   private readonly conversations = inject(ConversationService);
   private readonly orchProfiles = inject(AgentOrchestrationProfileService);
@@ -460,16 +467,16 @@ export class ChatWorkbenchService {
     const title =
       delegateNumber != null && delegateNumber >= 0
         ? `Shell output (sub-agent #${delegateNumber})`
-        : 'Shell output';
+        : this.t('chat.workbench.entries.shellOutput');
 
     this._upsert(corr, {
       lane: this._streamLane,
       kind: 'tool',
       title,
-      subtitle: tail || '(streaming…)',
+      subtitle: tail || this.t('chat.workbench.entries.streaming'),
       detail,
       status: 'running',
-      toolLabel: 'Bash',
+      toolLabel: this.t('chat.workbench.entries.bash'),
       correlationKey: corr,
       delegateNumber,
     });
@@ -483,7 +490,7 @@ export class ChatWorkbenchService {
 
     this._upsert(corr, {
       status: isError ? 'error' : 'ok',
-      subtitle: tail || (isError ? 'Stream ended (error)' : 'Done'),
+      subtitle: tail || (isError ? this.t('chat.workbench.entries.streamError') : this.t('chat.workbench.entries.done')),
       detail: buf.slice(-DETAIL_KEEP) || undefined,
     });
 
@@ -540,7 +547,7 @@ export class ChatWorkbenchService {
         id: newId(),
         ts: Date.now(),
         status: partial.status ?? 'running',
-        title: partial.title ?? 'Event',
+        title: partial.title ?? this.t('chat.workbench.entries.event'),
         kind: partial.kind ?? 'tool',
         lane: partial.lane ?? 'chat',
         ...partial,
@@ -577,12 +584,12 @@ export class ChatWorkbenchService {
         this._upsert(`${corrNs}agentic`, {
           lane,
           kind: 'agentic',
-          title: msg.autonomous ? 'Background task' : 'Agent task started',
+          title: msg.autonomous ? this.t('chat.workbench.entries.backgroundTask') : this.t('chat.workbench.entries.agentTaskStarted'),
           subtitle: msg.autonomous
-            ? (msg.task_preview || 'Working…').slice(0, 120)
+            ? (msg.task_preview || this.t('chat.workbench.entries.working')).slice(0, 120)
             : `Up to ${msg.max_steps || 15} steps`,
           status: 'running',
-          toolLabel: 'Task',
+          toolLabel: this.t('chat.workbench.entries.task'),
           ...ctxFields,
         });
         break;
@@ -598,10 +605,10 @@ export class ChatWorkbenchService {
           this._upsert(`${corrNs}agentic`, {
             lane: 'background',
             kind: 'agentic',
-            title: 'Background task',
+            title: this.t('chat.workbench.entries.backgroundTask'),
             subtitle: bgSubtitle,
             status: 'running',
-            toolLabel: 'Task',
+            toolLabel: this.t('chat.workbench.entries.task'),
             ...ctxFields,
           });
           break;
@@ -622,10 +629,10 @@ export class ChatWorkbenchService {
           this._upsert(groupKey, {
             lane: 'chat',
             kind: 'agentic',
-            title: `Step ${step}/${maxSteps}`,
-            subtitle: 'Thinking…',
+            title: this.t('chat.workbench.entries.stepOf', { step, max: maxSteps }),
+            subtitle: this.t('chat.workbench.entries.thinking'),
             status: 'ok',
-            toolLabel: 'Step',
+            toolLabel: this.t('chat.workbench.entries.step'),
             delegateNumber: dlgNum,
             ...ctxFields,
           });
@@ -644,10 +651,10 @@ export class ChatWorkbenchService {
         this._upsert(`${corrNs}ask-user`, {
           lane,
           kind: 'activity',
-          title: 'Waiting for your answer',
-          subtitle: question.slice(0, 200) || 'Agent needs input to continue',
+          title: this.t('chat.workbench.entries.waitingAnswer'),
+          subtitle: question.slice(0, 200) || this.t('chat.workbench.entries.needsInput'),
           status: 'running',
-          toolLabel: 'Input',
+          toolLabel: this.t('chat.workbench.entries.input'),
           ...ctxFields,
         });
         break;
@@ -660,10 +667,10 @@ export class ChatWorkbenchService {
         this._upsert(`${corrNs}budget-prompt`, {
           lane,
           kind: 'activity',
-          title: 'Step limit reached',
-          subtitle: question.slice(0, 200) || 'Reply 10, 20, 40, or stop',
+          title: this.t('chat.workbench.entries.stepLimit'),
+          subtitle: question.slice(0, 200) || this.t('chat.workbench.entries.budgetReplyHint'),
           status: 'running',
-          toolLabel: 'Budget',
+          toolLabel: this.t('chat.workbench.entries.budget'),
           ...ctxFields,
         });
         break;
@@ -676,10 +683,10 @@ export class ChatWorkbenchService {
           this._upsert(`${corrNs}budget-extended`, {
             lane,
             kind: 'activity',
-            title: 'Budget extended',
+            title: this.t('chat.workbench.entries.budgetExtended'),
             subtitle: `+${msg.extra_iterations || 0} steps (max ${msg.max_iterations || '?'})`,
             status: 'ok',
-            toolLabel: 'Budget',
+            toolLabel: this.t('chat.workbench.entries.budget'),
             ...ctxFields,
           });
         } else {
@@ -708,7 +715,7 @@ export class ChatWorkbenchService {
           chips: formatted.chips.length ? formatted.chips : undefined,
           detail: text.length > 200 ? text.slice(0, DETAIL_KEEP) : undefined,
           status: 'ok',
-          toolLabel: msg.milestone ? 'Wave' : 'Comms',
+          toolLabel: msg.milestone ? this.t('chat.workbench.entries.wave') : this.t('chat.workbench.entries.comms'),
         });
         break;
       }
@@ -725,10 +732,10 @@ export class ChatWorkbenchService {
           this._upsert('bg-agentic-done', {
             lane: 'background',
             kind: 'agentic',
-            title: bgAborted ? 'Background task stopped' : 'Background task completed',
+            title: bgAborted ? this.t('chat.workbench.entries.bgTaskStopped') : this.t('chat.workbench.entries.bgTaskCompleted'),
             subtitle: doneSubtitle,
             status: bgAborted ? 'error' : 'ok',
-            toolLabel: 'Task',
+            toolLabel: this.t('chat.workbench.entries.task'),
           });
           break;
         }
@@ -740,22 +747,22 @@ export class ChatWorkbenchService {
         const totalSteps = msg.total_steps || 0;
         const totalToolCalls = msg.total_tool_calls || 0;
         const durationMs = msg.duration_ms || 0;
-        let abortTitle = 'Task completed';
+        let abortTitle = this.t('chat.workbench.entries.taskCompleted');
         if (silentYield) {
-          abortTitle = orchestratorYieldLabel(exitReason) || 'Coordinator check-in complete';
+          abortTitle = orchestratorYieldLabel(exitReason, (k, p) => this.t(k, p)) || this.t('chat.orchestration.coordinatorCheckIn');
         } else if (aborted) {
           abortTitle = msg.autonomous
-            ? 'Check-in cancelled'
-            : (exitReason === 'user_abort' ? 'Stopped by user' : 'Task stopped');
+            ? this.t('chat.workbench.entries.checkInCancelled')
+            : (exitReason === 'user_abort' ? this.t('chat.orchestration.stoppedByUser') : this.t('chat.workbench.entries.taskStopped'));
         }
         this._removeEntry(`${corrNs}activity-status`);
         this._upsert(`${corrNs}agentic`, {
           lane: 'chat',
           kind: 'agentic',
           title: abortTitle,
-          subtitle: `${totalSteps} steps, ${totalToolCalls} tools, ${(durationMs / 1000).toFixed(1)}s`,
+          subtitle: this.t('chat.workbench.entries.taskSummary', { steps: totalSteps, tools: totalToolCalls, duration: (durationMs / 1000).toFixed(1) }),
           status: aborted ? 'error' : 'ok',
-          toolLabel: 'Task',
+          toolLabel: this.t('chat.workbench.entries.task'),
         });
         if (!msg.autonomous) {
           const exitReason = String(
@@ -827,14 +834,14 @@ export class ChatWorkbenchService {
         const startChips =
           toolName === 'switch_mode' && modeParts
             ? [
-                { label: 'From', value: modeParts[1].trim(), tone: 'muted' as const },
-                { label: 'To', value: modeParts[2].trim(), tone: 'accent' as const },
+                { label: this.t('chat.workbench.entries.from'), value: modeParts[1].trim(), tone: 'muted' as const },
+                { label: this.t('chat.workbench.entries.to'), value: modeParts[2].trim(), tone: 'accent' as const },
               ]
             : undefined;
         this._upsert(corr, {
           lane,
           kind: 'tool',
-          title: toolName === 'switch_mode' ? 'Switch mode' : title,
+          title: toolName === 'switch_mode' ? this.t('chat.workbench.entries.switchMode') : title,
           subtitle: parsed.subtitle,
           status: 'running',
           toolLabel: parsed.toolLabel,
@@ -869,7 +876,7 @@ export class ChatWorkbenchService {
         const startTitle =
           this._stripSubAgentTitlePrefix(this._toolStartTitles.get(corr) || '')
           || toolName
-          || 'Tool';
+          || this.t('chat.workbench.entries.tool');
         this._toolStartTitles.delete(corr);
         const endTitle = this._stripSubAgentTitlePrefix(
           toolWorkbenchEndTitle(toolName, isError, startTitle, isWarn),
@@ -911,9 +918,9 @@ export class ChatWorkbenchService {
             : undefined;
           const arrow = (metaTitle || startTitle).match(/^(.+?)\s*→\s*(.+)$/);
           chips = [
-            { label: 'From', value: arrow?.[1]?.trim() || formatAgentMode(fromMode), tone: 'muted' },
+            { label: this.t('chat.workbench.entries.from'), value: arrow?.[1]?.trim() || formatAgentMode(fromMode), tone: 'muted' },
             {
-              label: 'To',
+              label: this.t('chat.workbench.entries.to'),
               value: arrow?.[2]?.trim() || formatAgentMode(toModeStr),
               tone: 'accent',
             },
@@ -934,7 +941,7 @@ export class ChatWorkbenchService {
             chips = [
               ...(chips ?? []),
               {
-                label: 'Error',
+                label: this.t('chat.workbench.entries.error'),
                 value: preview.slice(0, 2400),
                 tone: 'warn' as const,
                 variant: 'block' as const,
@@ -990,7 +997,7 @@ export class ChatWorkbenchService {
         this._upsert(corr, {
           title:
             toolName === 'switch_mode'
-              ? 'Switch mode'
+              ? this.t('chat.workbench.entries.switchMode')
               : this._stripSubAgentTitlePrefix(endTitle),
           subtitle:
             toolName === 'switch_mode'
@@ -1035,14 +1042,14 @@ export class ChatWorkbenchService {
           typeof msg.delegate_number === 'number' && msg.delegate_number >= 0
             ? msg.delegate_number
             : 0;
-        const dTask = (msg.delegate_task || 'Sub-task').slice(0, 120);
+        const dTask = (msg.delegate_task || this.t('chat.workbench.entries.subTaskDefault')).slice(0, 120);
         this._upsert(`delegate-${dNum}`, {
           lane,
           kind: 'agentic',
-          title: `Sub-agent #${dNum} spawned`,
+          title: this.t('chat.workbench.entries.subAgentSpawned', { n: dNum }),
           subtitle: dTask,
           status: 'running',
-          toolLabel: 'Delegate',
+          toolLabel: this.t('chat.workbench.entries.delegate'),
           delegateNumber: dNum,
         });
         break;
@@ -1068,7 +1075,7 @@ export class ChatWorkbenchService {
               : `Sub-agent #${dNum} completed`,
           subtitle: summary || `${iters} steps, ${tc} tools`,
           status: partial ? 'warn' : (aborted ? 'error' : 'ok'),
-          toolLabel: 'Delegate',
+          toolLabel: this.t('chat.workbench.entries.delegate'),
           delegateNumber: dNum,
         });
         break;
@@ -1085,10 +1092,10 @@ export class ChatWorkbenchService {
         this._upsert(`delegate-progress-${dNum}`, {
           lane,
           kind: 'activity',
-          title: `Sub #${dNum}: ${iter}/${maxIter} (${elapsed}s)`,
+          title: this.t('chat.workbench.entries.subAgentProgress', { n: dNum, iter, max: maxIter, elapsed }),
           subtitle: (msg.task || '').slice(0, 80) || undefined,
           status: 'running',
-          toolLabel: 'Delegate',
+          toolLabel: this.t('chat.workbench.entries.delegate'),
           delegateNumber: dNum,
         });
         break;
@@ -1103,10 +1110,10 @@ export class ChatWorkbenchService {
         this._upsert(`delegate-batch-${batchId}`, {
           lane,
           kind: 'agentic',
-          title: `${count} sub-agents launched`,
-          subtitle: 'Monitor in Run panel / Projects',
+          title: this.t('chat.workbench.entries.subAgentsLaunched', { count }),
+          subtitle: this.t('chat.workbench.entries.monitorRunPanel'),
           status: 'running',
-          toolLabel: 'Delegate',
+          toolLabel: this.t('chat.workbench.entries.delegate'),
           correlationKey: `batch-${batchId}`,
         });
         break;
@@ -1117,10 +1124,10 @@ export class ChatWorkbenchService {
         this._push({
           lane,
           kind: 'agentic',
-          title: `All ${count} sub-agents completed`,
-          subtitle: 'Compiling results…',
+          title: this.t('chat.workbench.entries.allSubAgentsCompleted', { count }),
+          subtitle: this.t('chat.workbench.entries.compilingResults'),
           status: 'ok',
-          toolLabel: 'Team',
+          toolLabel: this.t('chat.workbench.entries.team'),
           correlationKey: `batch-${msg.batch_id || 'done'}`,
         });
         break;
@@ -1150,10 +1157,10 @@ export class ChatWorkbenchService {
           this._upsert(`${corrNs}budget-prompt`, {
             lane,
             kind: 'activity',
-            title: 'Waiting for your decision',
+            title: this.t('chat.workbench.entries.waitingDecision'),
             subtitle: text.slice(0, 160),
             status: 'running',
-            toolLabel: 'Budget',
+            toolLabel: this.t('chat.workbench.entries.budget'),
           });
           break;
         }
@@ -1163,10 +1170,10 @@ export class ChatWorkbenchService {
           this._upsert(`${corrNs}activity-status`, {
             lane,
             kind: 'activity',
-            title: 'Waiting for your answer',
+            title: this.t('chat.workbench.entries.waitingAnswer'),
             subtitle: text.slice(0, 160),
             status: 'running',
-            toolLabel: 'Input',
+            toolLabel: this.t('chat.workbench.entries.input'),
           });
           break;
         }
@@ -1180,9 +1187,9 @@ export class ChatWorkbenchService {
           this._upsert(`${corrNs}agentic`, {
             lane,
             kind: 'agentic',
-            subtitle: 'Thinking…',
+            subtitle: this.t('chat.workbench.entries.thinking'),
             status: 'running',
-            toolLabel: 'Task',
+            toolLabel: this.t('chat.workbench.entries.task'),
           });
           break;
         }
@@ -1192,11 +1199,11 @@ export class ChatWorkbenchService {
           this._upsert(`${corrNs}agentic`, {
             lane,
             kind: 'agentic',
-            title: formatted.headline || 'Background task',
+            title: formatted.headline || this.t('chat.workbench.entries.backgroundTask'),
             subtitle: text.slice(0, 160),
             chips: formatted.chips.length ? formatted.chips : undefined,
             status: 'running',
-            toolLabel: 'Task',
+            toolLabel: this.t('chat.workbench.entries.task'),
           });
           break;
         }
@@ -1220,10 +1227,10 @@ export class ChatWorkbenchService {
           title: formatted.headline || text.slice(0, 120),
           subtitle:
             formatted.body?.slice(0, 160)
-            || (msg.autonomous ? 'Background' : undefined),
+            || (msg.autonomous ? this.t('chat.workbench.entries.background') : undefined),
           chips: formatted.chips.length ? formatted.chips : undefined,
           status: 'running',
-          toolLabel: 'Activity',
+          toolLabel: this.t('chat.workbench.entries.activity'),
         });
         break;
       }

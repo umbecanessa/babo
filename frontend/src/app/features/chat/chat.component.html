@@ -239,7 +239,7 @@
             type="button"
             class="nav-rail-toggle desktop-only"
             (click)="panels.toggleNavRail()"
-            [title]="panels.navRail() === 'expanded' ? 'Collapse sidebar' : 'Expand sidebar'"
+            [title]="panels.navRail() === 'expanded' ? ('chat.nav.collapseSidebar' | translate) : ('chat.nav.expandSidebar' | translate)"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               @if (panels.navRail() === 'expanded') {
@@ -256,9 +256,9 @@
           <div class="email-thread-banner">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
             <div class="email-thread-info">
-              <span class="email-thread-subject">{{ activeThreadMeta()!.subject || activeThreadMeta()!.label || 'Email thread' }}</span>
+              <span class="email-thread-subject">{{ activeThreadMeta()!.subject || activeThreadMeta()!.label || ('chat.thread.emailThread' | translate) }}</span>
               @if (activeThreadMeta()!.sender) {
-                <span class="email-thread-from">from {{ activeThreadMeta()!.sender }}</span>
+                <span class="email-thread-from">{{ 'chat.thread.fromSender' | translate:{ sender: activeThreadMeta()!.sender } }}</span>
               }
             </div>
           </div>
@@ -268,7 +268,7 @@
           <div class="channel-thread-banner" [attr.data-channel]="activeThreadMeta()!.channel">
             <span class="channel-thread-label">{{ activeThreadMeta()!.label }}</span>
             <span class="channel-thread-kind">
-              {{ activeThreadMeta()?.isGroup ? 'Group' : 'Direct message' }}
+              {{ activeThreadMeta()?.isGroup ? ('chat.context.group' | translate) : ('chat.context.direct' | translate) }}
             </span>
             @if (activeThreadMeta()!.sender) {
               <span class="channel-thread-sender">last from {{ activeThreadMeta()!.sender }}</span>
@@ -363,7 +363,7 @@
                     class="composer-terminal-chip"
                     (click)="openAgentTerminal()"
                     [title]="terminalTabs.agentMirrorSupported
-                      ? 'Open agent shell in workspace'
+                      ? ('chat.composer.openShell' | translate)
                       : 'Open standalone terminal in workspace (desktop required for agent mirror)'">
                     {{ terminalChipLabel() }}
                   </button>

@@ -366,6 +366,24 @@
       "integrationsHintMid": ". Self-hosted Resend and platform prerequisites are under",
       "integrationsHintAfter": ".",
       "settingsIntegrations": "Settings → Integrations"
+    },
+    "confirm": {
+      "removeResend": "Remove saved Resend credentials?",
+      "resetPython": "Reset the Python environment? You will need to run setup again.",
+      "resetPermissions": "Clear all saved permission decisions? You will be prompted again when needed."
+    },
+    "billingStatus": {
+      "active": "Active",
+      "past_due": "Payment issue",
+      "canceled": "Canceled",
+      "lifetime_comp": "Lifetime",
+      "not_subscribed": "Not subscribed"
+    },
+    "backendTest": {
+      "enterServer": "Enter a server address first",
+      "connected": "Connected ({{code}})",
+      "unreachable": "Could not reach server",
+      "failed": "Test failed"
     }
   },
   "info": {
@@ -490,7 +508,9 @@
       "setAsHomeMessage": "Set \"{{label}}\" as Home? Opening this agent will start here. Chat history stays on each thread — nothing is moved.",
       "resetHomeMessage": "Start a fresh Home thread?\n\nA new branch is created and set as Home. Your current Home stays in the list as a branch. Agent knowledge (facts, memory) is unchanged.",
       "resetHomeTitle": "Reset Home",
-      "resetHomeConfirm": "Reset Home"
+      "resetHomeConfirm": "Reset Home",
+      "collapseSidebar": "Collapse sidebar",
+      "expandSidebar": "Expand sidebar"
     },
     "composer": {
       "dropHere": "Drop files or folders here",
@@ -518,7 +538,8 @@
       "surfaceReply": "Reply on {{surface}}",
       "runningLocally": "Running locally",
       "stopProcess": "Stop process",
-      "servers": "{{count}} servers"
+      "servers": "{{count}} servers",
+      "openShell": "Open agent shell in workspace"
     },
     "empty": {
       "start": "Start a conversation"
@@ -531,7 +552,9 @@
       "stop": "Stop",
       "feedbackTitle": "Feedback on agent reply",
       "thisThread": "This thread",
-      "allChannels": "All channels"
+      "allChannels": "All channels",
+      "searching": "Searching",
+      "wikipedia": "Wikipedia"
     },
     "mobile": {
       "live": "Live",
@@ -603,6 +626,54 @@
         "focused": "Focused",
         "standard": "Standard",
         "debug": "Debug"
+      },
+      "entries": {
+        "shellOutput": "Shell output",
+        "backgroundTask": "Background task",
+        "agentTaskStarted": "Agent task started",
+        "working": "Working…",
+        "task": "Task",
+        "step": "Step",
+        "thinking": "Thinking…",
+        "waitingAnswer": "Waiting for your answer",
+        "needsInput": "Agent needs input to continue",
+        "stepLimit": "Step limit reached",
+        "budgetReplyHint": "Reply 10, 20, 40, or stop",
+        "budgetExtended": "Budget extended",
+        "budgetSteps": "+{{extra}} steps (max {{max}})",
+        "wave": "Wave",
+        "comms": "Comms",
+        "bgTaskStopped": "Background task stopped",
+        "bgTaskCompleted": "Background task completed",
+        "taskCompleted": "Task completed",
+        "checkInCancelled": "Check-in cancelled",
+        "taskStopped": "Task stopped",
+        "taskSummary": "{{steps}} steps, {{tools}} tools, {{duration}}s",
+        "switchMode": "Switch mode",
+        "tool": "Tool",
+        "from": "From",
+        "to": "To",
+        "error": "Error",
+        "subAgentSpawned": "Sub-agent #{{n}} spawned",
+        "subTaskDefault": "Sub-task",
+        "delegate": "Delegate",
+        "subAgentProgress": "Sub #{{n}}: {{iter}}/{{max}} ({{elapsed}}s)",
+        "subAgentsLaunched": "{{count}} sub-agents launched",
+        "monitorRunPanel": "Monitor in Run panel / Projects",
+        "allSubAgentsCompleted": "All {{count}} sub-agents completed",
+        "compilingResults": "Compiling results…",
+        "team": "Team",
+        "waitingDecision": "Waiting for your decision",
+        "input": "Input",
+        "budget": "Budget",
+        "activity": "Activity",
+        "background": "Background",
+        "event": "Event",
+        "streaming": "(streaming…)",
+        "streamError": "Stream ended (error)",
+        "done": "Done",
+        "bash": "Bash",
+        "stepOf": "Step {{step}}/{{max}}"
       }
     },
     "inbox": {
@@ -871,6 +942,10 @@
       "norepinephrine": "Nor",
       "cortisol": "Cor",
       "oxytocin": "Oxy"
+    },
+    "thread": {
+      "emailThread": "Email thread",
+      "fromSender": "from {{sender}}"
     }
   },
   "dashboard": {
@@ -1035,7 +1110,15 @@
       "permReset": "Permissions reset",
       "debugFailed": "Could not load debug information",
       "dataFolderFailed": "Could not open data folder",
-      "exportFailed": "Export failed"
+      "exportFailed": "Export failed",
+      "resendSaveFailed": "Failed to save Resend credentials",
+      "clearCredentialsFailed": "Failed to clear credentials",
+      "onDemandEnabled": "On-demand usage enabled",
+      "onDemandDisabled": "On-demand usage disabled",
+      "settingUpdateFailed": "Could not update setting",
+      "applyProfileFailed": "Could not apply profile",
+      "resetPermissionsFailed": "Could not reset permissions",
+      "debugBundleSaved": "Debug bundle saved. You can attach it when contacting support."
     }
   },
   "tools": {
@@ -1911,7 +1994,8 @@
       "removeAttachment": "Remove",
       "notConnected": "Not connected to agent. Try again in a moment.",
       "privateDesk": "Private desk",
-      "branchDefault": "Branch"
+      "branchDefault": "Branch",
+      "somethingWrong": "Something went wrong."
     },
     "workspace": {
       "root": "Workspace",

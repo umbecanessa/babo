@@ -366,6 +366,24 @@
       "integrationsHintMid": ". Resend self-hosted e i prerequisiti di piattaforma sono in",
       "integrationsHintAfter": ".",
       "settingsIntegrations": "Impostazioni → Integrazioni"
+    },
+    "confirm": {
+      "removeResend": "Rimuovere le credenziali Resend salvate?",
+      "resetPython": "Reimpostare l'ambiente Python? Dovrai eseguire di nuovo la configurazione.",
+      "resetPermissions": "Cancellare tutte le decisioni sui permessi salvate? Ti verrà chiesto di nuovo quando serve."
+    },
+    "billingStatus": {
+      "active": "Attivo",
+      "past_due": "Problema di pagamento",
+      "canceled": "Annullato",
+      "lifetime_comp": "Lifetime",
+      "not_subscribed": "Non abbonato"
+    },
+    "backendTest": {
+      "enterServer": "Inserisci prima un indirizzo server",
+      "connected": "Connesso ({{code}})",
+      "unreachable": "Impossibile raggiungere il server",
+      "failed": "Test fallito"
     }
   },
   "info": {
@@ -490,7 +508,9 @@
       "deleteBranchTitle": "Elimina branch",
       "deleteBranchMessage": "Eliminare il branch \"{{label}}\" e la sua cronologia?",
       "setAsHomeMessage": "Impostare \"{{label}}\" come Home? Aprendo questo agente partirai da qui. La cronologia resta su ogni thread — nulla viene spostato.",
-      "resetHomeMessage": "Avviare un nuovo thread Home?\n\nViene creato un nuovo branch e impostato come Home. L'Home attuale resta in elenco come branch. La conoscenza dell'agente (fatti, memoria) non cambia."
+      "resetHomeMessage": "Avviare un nuovo thread Home?\n\nViene creato un nuovo branch e impostato come Home. L'Home attuale resta in elenco come branch. La conoscenza dell'agente (fatti, memoria) non cambia.",
+      "collapseSidebar": "Comprimi barra laterale",
+      "expandSidebar": "Espandi barra laterale"
     },
     "composer": {
       "dropHere": "Trascina qui file o cartelle",
@@ -518,7 +538,8 @@
       "surfaceReply": "Rispondi su {{surface}}",
       "runningLocally": "In esecuzione in locale",
       "stopProcess": "Ferma processo",
-      "servers": "{{count}} server"
+      "servers": "{{count}} server",
+      "openShell": "Apri shell agente nel workspace"
     },
     "empty": {
       "start": "Inizia una conversazione"
@@ -531,7 +552,9 @@
       "stop": "Ferma",
       "feedbackTitle": "Feedback sulla risposta dell'agente",
       "thisThread": "Questo thread",
-      "allChannels": "Tutti i canali"
+      "allChannels": "Tutti i canali",
+      "searching": "Ricerca",
+      "wikipedia": "Wikipedia"
     },
     "mobile": {
       "live": "Live",
@@ -603,6 +626,54 @@
         "focused": "Focalizzata",
         "standard": "Standard",
         "debug": "Debug"
+      },
+      "entries": {
+        "shellOutput": "Output shell",
+        "backgroundTask": "Task in background",
+        "agentTaskStarted": "Task agente avviato",
+        "working": "In corso…",
+        "task": "Task",
+        "step": "Passo",
+        "thinking": "Sto pensando…",
+        "waitingAnswer": "In attesa della tua risposta",
+        "needsInput": "L'agente ha bisogno di input per continuare",
+        "stepLimit": "Limite passi raggiunto",
+        "budgetReplyHint": "Rispondi 10, 20, 40 o stop",
+        "budgetExtended": "Budget esteso",
+        "budgetSteps": "+{{extra}} passi (max {{max}})",
+        "wave": "Ondata",
+        "comms": "Comunicazioni",
+        "bgTaskStopped": "Task in background fermato",
+        "bgTaskCompleted": "Task in background completato",
+        "taskCompleted": "Task completato",
+        "checkInCancelled": "Check-in annullato",
+        "taskStopped": "Task fermato",
+        "taskSummary": "{{steps}} passi, {{tools}} tool, {{duration}}s",
+        "switchMode": "Cambia modalità",
+        "tool": "Tool",
+        "from": "Da",
+        "to": "A",
+        "error": "Errore",
+        "subAgentSpawned": "Sub-agente #{{n}} avviato",
+        "subTaskDefault": "Sub-task",
+        "delegate": "Delega",
+        "subAgentProgress": "Sub #{{n}}: {{iter}}/{{max}} ({{elapsed}}s)",
+        "subAgentsLaunched": "{{count}} sub-agenti avviati",
+        "monitorRunPanel": "Monitora in Run panel / Projects",
+        "allSubAgentsCompleted": "Tutti i {{count}} sub-agenti completati",
+        "compilingResults": "Compilazione risultati…",
+        "team": "Team",
+        "waitingDecision": "In attesa della tua decisione",
+        "input": "Input",
+        "budget": "Budget",
+        "activity": "Attività",
+        "background": "Background",
+        "event": "Evento",
+        "streaming": "(streaming…)",
+        "streamError": "Stream terminato (errore)",
+        "done": "Fatto",
+        "bash": "Bash",
+        "stepOf": "Passo {{step}}/{{max}}"
       }
     },
     "inbox": {
@@ -871,6 +942,10 @@
       "norepinephrine": "Nor",
       "cortisol": "Cor",
       "oxytocin": "Oxy"
+    },
+    "thread": {
+      "emailThread": "Thread email",
+      "fromSender": "da {{sender}}"
     }
   },
   "dashboard": {
@@ -1035,7 +1110,15 @@
       "permReset": "Permessi reimpostati",
       "debugFailed": "Impossibile caricare le info di debug",
       "dataFolderFailed": "Impossibile aprire la cartella dati",
-      "exportFailed": "Esportazione non riuscita"
+      "exportFailed": "Esportazione non riuscita",
+      "resendSaveFailed": "Salvataggio credenziali Resend fallito",
+      "clearCredentialsFailed": "Impossibile cancellare le credenziali",
+      "onDemandEnabled": "Uso on-demand abilitato",
+      "onDemandDisabled": "Uso on-demand disabilitato",
+      "settingUpdateFailed": "Impossibile aggiornare l'impostazione",
+      "applyProfileFailed": "Impossibile applicare il profilo",
+      "resetPermissionsFailed": "Impossibile reimpostare i permessi",
+      "debugBundleSaved": "Bundle di debug salvato. Puoi allegarlo quando contatti il supporto."
     }
   },
   "tools": {
@@ -1911,7 +1994,8 @@
       "removeAttachment": "Rimuovi",
       "notConnected": "Non connesso all'agente. Riprova tra un momento.",
       "privateDesk": "Scrivania privata",
-      "branchDefault": "Branch"
+      "branchDefault": "Branch",
+      "somethingWrong": "Qualcosa è andato storto."
     },
     "workspace": {
       "root": "Workspace",

@@ -154,6 +154,10 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
     });
   }
 
+  private t(key: string, params?: Record<string, unknown>): string {
+    return this.translate.instant(key, params);
+  }
+
   ngOnInit(): void {
     this.bootstrap();
   }
@@ -406,7 +410,7 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
     if (attachments.length > 0) {
       this.ws.send({
         type: 'message',
-        content: msg || 'Please examine the attached files.',
+        content: msg || this.t('chat.runtime.examineAttached'),
         attachments,
         session_key: threadKey,
         ...(branchLabel ? { branch_label: branchLabel } : {}),
@@ -973,7 +977,7 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
 
         this.appendMessages([{
           type: 'agentic_complete' as any,
-          content: agenticAbortLabel(aborted, msg.abort_reason || msg.exit_reason, false),
+          content: agenticAbortLabel(aborted, msg.abort_reason || msg.exit_reason, false, (k, p) => this.t(k, p)),
           timestamp: new Date(),
           sessionKey: this.conversations.resolveDeskSessionKey(sk, this.activeThread(), this.agentId),
           agenticComplete: {
@@ -1004,7 +1008,7 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
         if (!this.matchesActiveThread(sk, msg)) return;
         this.appendMessages([{
           type: 'status',
-          content: msg.message || msg.content || 'Something went wrong.',
+          content: msg.message || msg.content || this.t('projects.chat.somethingWrong'),
           timestamp: new Date(),
         }]);
         this.streamingText.set('');
