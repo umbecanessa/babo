@@ -8,9 +8,9 @@ Babo’s “full experience” (chat, agentic loop, voice, desktop awareness, co
 
 | Goal | Meaning |
 |------|---------|
-| **Local-first** | Prefer running on the user’s machine or their own LAN server (GX10, homelab vLLM, Ollama on NAS). |
+| **Cloud-easy default** | Everyday users start on **Babo Cloud**; local/LAN are explicit advanced choices. |
 | **Composable** | Inference, screen VLM, Whisper, and embeddings are **separate choices**. |
-| **Honest tiers** | Recommend smaller local models when VRAM/RAM is tight; offer hosted upgrade when local is insufficient. |
+| **Honest tiers** | When someone opts into local, recommend smaller models when VRAM/RAM is tight; keep Cloud as the easy upgrade. |
 | **Full experience** | Every feature has a defined minimum placement; onboarding never silently drops voice/vision without explaining. |
 | **BYOK + hosted** | Users can use their API keys (OpenRouter, OpenAI) or Babo-hosted endpoints when we offer them. |
 

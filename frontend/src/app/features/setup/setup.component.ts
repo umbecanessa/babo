@@ -118,19 +118,20 @@ export class SetupComponent implements OnInit, OnDestroy {
     {
       tier: 'hosted_babo',
       title: 'Babo Cloud',
-      subtitle: 'Hosted models + account sync — your agents still run on this computer',
+      subtitle: 'Easiest path — hosted models and account sync. Your agent still runs on this computer.',
       glyph: '☁',
     },
     {
       tier: 'self_local',
       title: 'This computer',
-      subtitle: 'Ollama on this PC',
+      subtitle:
+        'Advanced — we’ll check whether this PC can run a reliable local model (Ollama). Best for privacy or offline use.',
       glyph: '◻',
     },
     {
       tier: 'self_lan',
       title: 'My server',
-      subtitle: 'vLLM or OpenAI-compatible server on your LAN',
+      subtitle: 'Advanced — vLLM or OpenAI-compatible server on your home network.',
       glyph: '⎔',
     },
   ];
@@ -246,18 +247,11 @@ export class SetupComponent implements OnInit, OnDestroy {
   lanModelFit = computed(() => this.scan()?.modelFit?.lan ?? null);
 
   deviceTagline = computed(() => {
-    const fit = this.localModelFit();
-    if (fit?.localViable && fit.recommendations[0]) {
-      return `This PC can run ${fit.recommendations[0].displayName} locally.`;
-    }
-    if (fit && !fit.localViable) {
-      return 'Local chat models are a tight fit — Babo Cloud is recommended.';
-    }
     const vram = this.scan()?.device.vramGb ?? 0;
     if (vram >= 6) {
-      return 'Good for running helpers on this computer.';
+      return 'Your computer looks ready. Next you’ll choose where chat runs — Babo Cloud is the easiest path.';
     }
-    return 'Best with Babo Cloud or a network server for heavy models.';
+    return 'Your computer looks ready. Babo Cloud is the easiest path; local models stay available as an advanced option.';
   });
 
   localVisionReady = computed(() => (this.scan()?.device.vramGb ?? 0) >= 6);
@@ -966,6 +960,27 @@ export class SetupComponent implements OnInit, OnDestroy {
     return tier === this.recommendedBrainTier;
   }
 
+  /** Chip on the Thinking cards — everyday users see Cloud as the easy path. */
+  brainCardBadge(tier: CapabilityTier): string | null {
+    if (tier === 'hosted_babo') {
+      return 'Easier setup';
+    }
+    if (this.isBrainSuggested(tier)) {
+      return 'Suggested';
+    }
+    if (tier === 'self_local' || tier === 'self_lan') {
+      return 'Advanced';
+    }
+    return null;
+  }
+
+  brainCardBadgeKind(tier: CapabilityTier): 'suggested' | 'advanced' | null {
+    const label = this.brainCardBadge(tier);
+    if (!label) return null;
+    if (label === 'Advanced') return 'advanced';
+    return 'suggested';
+  }
+
   isBrainCardActive(card: { tier: CapabilityTier; gx10?: boolean }): boolean {
     if (this.brainTier() !== card.tier) return false;
     const resolved = resolveBaboCloudModelId(this.profile()?.inference.model);
@@ -1103,11 +1118,8 @@ export class SetupComponent implements OnInit, OnDestroy {
           lan: prev?.modelFit?.lan,
         },
       });
-      if (scan.modelFit?.local?.localViable) {
-        this.recommendedBrainTier = 'self_local';
-      } else if (scan.modelFit?.local && !scan.modelFit.local.localViable) {
-        this.recommendedBrainTier = 'hosted_babo';
-      }
+      // Fit data is kept for the advanced local path; product default stays Cloud.
+      this.recommendedBrainTier = 'hosted_babo';
       const vram = scan.device?.vramGb ?? 0;
       this.analytics.track('setup_device_scanned', {
         ok: true,
@@ -1388,15 +1400,12 @@ export class SetupComponent implements OnInit, OnDestroy {
     if (!s) return;
     const gpuSecret = this.lanGpuSecret.trim() || this.config.gpuWorkerSecret || '';
     const recommended = await this.nls().capabilities.recommend(s, gpuSecret);
-    const picked = this.selectedLocalModelId()?.trim();
-    if (picked) {
-      recommended.inference.tier = 'self_local';
-      recommended.inference.url = 'http://127.0.0.1:11434';
-      recommended.inference.model = picked;
-      recommended.inference.reason = `You chose ${picked} for this PC`;
-    }
+    // Device step no longer picks a local model — Cloud (or LAN if found) is the default.
+    // Users opt into local on the Thinking step.
     this.profile.set(recommended);
     this.applyProfileToUi(recommended);
+    this.recommendedBrainTier =
+      recommended.inference.tier === 'self_lan' ? 'self_lan' : 'hosted_babo';
     if (recommended.inference.tier === 'self_lan') {
       this.showLanAdvanced.set(true);
     }
@@ -1457,7 +1466,18 @@ export class SetupComponent implements OnInit, OnDestroy {
       }
     } else if (tier === 'self_local') {
       p.inference.url = 'http://127.0.0.1:11434';
-      p.inference.model = p.inference.model || 'llama3.2';
+      const fit = this.localModelFit();
+      const pick =
+        fit?.recommendations.find((m) => m.fitLevel === 'perfect' || m.fitLevel === 'good') ??
+        fit?.recommendations[0];
+      if (pick) {
+        p.inference.model = pick.modelId;
+        p.inference.reason = `Advanced local setup — ${pick.displayName}`;
+        this.selectedLocalModelId.set(pick.modelId);
+      } else {
+        p.inference.model = p.inference.model || 'llama3.2';
+        p.inference.reason = 'Advanced local setup — install Ollama and pick a model';
+      }
     } else if (tier === 'byok_cloud') {
       this.selectCloudProvider(this.cloudProviderId());
     } else if (tier === 'hosted_babo') {

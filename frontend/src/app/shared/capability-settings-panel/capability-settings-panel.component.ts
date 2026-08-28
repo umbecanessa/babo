@@ -87,19 +87,19 @@ export class CapabilitySettingsPanelComponent implements OnInit {
     {
       tier: 'hosted_babo' as CapabilityTier,
       title: 'Babo Cloud',
-      subtitle: 'Qwen, GPT, Claude via your Babo account',
+      subtitle: 'Easiest path — hosted models via your Babo account',
       glyph: '☁',
     },
     {
       tier: 'self_local' as CapabilityTier,
       title: 'This computer',
-      subtitle: 'Ollama on this PC',
+      subtitle: 'Advanced — Ollama on this PC',
       glyph: '◻',
     },
     {
       tier: 'self_lan' as CapabilityTier,
       title: 'My server',
-      subtitle: 'vLLM or compatible server on your LAN',
+      subtitle: 'Advanced — vLLM or compatible server on your LAN',
       glyph: '⎔',
     },
     {

@@ -29,12 +29,12 @@ Decision dots on steps 3–6 mark choices that affect your capability profile.
 
 | Tier | Inference | Best for |
 |------|-----------|----------|
-| **Babo Cloud** | Hosted relay through NestJS | No local GPU; fastest start |
-| **This computer** | Local Ollama / vLLM | Privacy; offline-capable |
-| **My server (LAN)** | Remote OpenAI-compatible box on your network | Weak laptop + home GPU server |
+| **Babo Cloud** (default / easier setup) | Hosted relay through NestJS | Everyday users; fastest start |
+| **This computer** (advanced) | Local Ollama / vLLM | Privacy; offline-capable — wizard checks whether a reliable model fits |
+| **My server (LAN)** (advanced) | Remote OpenAI-compatible box on your network | Weak laptop + home GPU server |
 | **BYOK cloud** | Your OpenRouter/Azure/etc. key through Babo relay | Own provider billing |
 
-Hybrid installs (local/LAN **plus** Babo Cloud) enable the [model picker](chat.md#model-picker) to route per message — see [Inference providers](../configuration/inference-providers.md#hybrid-lan-cloud-desktop-v12).
+The **device scan** (step 2) reports hardware readiness and does **not** push Ollama downloads. Model-fit / Ollama setup appears only after choosing the advanced local path on step 3.
 
 ---
 
@@ -44,9 +44,9 @@ The scanner reports:
 
 - CPU, RAM, GPU name and VRAM
 - Whether a **LAN inference server** responds at a discovered or entered URL
-- Recommended capability tiers based on hardware
+- Hardware readiness for optional helpers (e.g. local vision)
 
-If a LAN box is found, **My server** becomes the natural default for thinking while Babo Cloud can still supply cloud models.
+It does **not** push Ollama downloads. Model-fit results are kept for the **advanced local** path on the Thinking step. Default recommendation is **Babo Cloud**; if a LAN box is found, **My server** can be suggested instead.
 
 ---
 

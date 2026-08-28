@@ -136,43 +136,10 @@
                 </span>
               </div>
             </div>
-            @if (localModelFit(); as fit) {
-              <div class="model-fit-panel">
-                <p class="model-fit-gpu-line">{{ fitGpuHeadline(fit) }}</p>
-                <p class="model-fit-head">
-                  @if (fit.localViable) {
-                    Models that fit this PC
-                  } @else {
-                    Local chat models
-                  }
-                  <span class="model-fit-engine">{{ fit.engine === 'llmfit' ? 'llmfit' : 'estimate' }}</span>
-                </p>
-                @if (fit.error) {
-                  <p class="small-muted">{{ fit.error }}</p>
-                }
-                @if (fit.recommendations.length) {
-                  <p class="small-muted">Tap a model for Ollama setup steps.</p>
-                  <ul class="model-fit-list">
-                    @for (m of fit.recommendations; track m.modelId) {
-                      <li>
-                        <button
-                          type="button"
-                          class="model-fit-choice"
-                          [class.selected]="isSelectedLocalModel(m.modelId)"
-                          (click)="openLocalModelSetup(m)"
-                        >
-                          <span class="fit-level" [class]="m.fitLevel">{{ fitLevelLabel(m.fitLevel) }}</span>
-                          <strong>{{ m.displayName }}</strong>
-                          <span class="model-fit-id">{{ m.modelId }}</span>
-                        </button>
-                      </li>
-                    }
-                  </ul>
-                } @else if (!fit.localViable) {
-                  <p class="small-muted">Use Babo Cloud or a network server for chat.</p>
-                }
-              </div>
-            }
+            <p class="small-muted device-next-hint">
+              On the next screen, pick <strong>Babo Cloud</strong> for the easiest setup,
+              or choose an advanced local option if you prefer privacy or offline models.
+            </p>
             <button type="button" class="link-btn" (click)="showLanSheet.set(true)">
               I have a server on my network
             </button>
@@ -209,7 +176,7 @@
         <div class="step-body">
           <h2>How should Babo think?</h2>
           <p class="lead">
-            Where chat runs.
+            Where chat runs. Most people start with <strong>Babo Cloud</strong>.
             @if (lanInferenceFound()) {
               We found a chat server on your network — <strong>My server</strong> is suggested.
             } @else if (lanModelFit()?.localViable && lanModelFit()!.recommendations[0]) {
@@ -230,8 +197,11 @@
                 <span class="card-body">
                   <span class="card-title">
                     {{ card.title }}
-                    @if (isBrainSuggested(card.tier)) {
-                      <span class="suggested-pill">Suggested</span>
+                    @if (brainCardBadge(card.tier); as badge) {
+                      <span
+                        class="suggested-pill"
+                        [class.advanced-pill]="brainCardBadgeKind(card.tier) === 'advanced'"
+                      >{{ badge }}</span>
                     }
                   </span>
                   <span class="card-sub">{{ card.subtitle }}</span>
@@ -314,16 +284,56 @@
               </div>
               <p class="panel-hint">
                 @if (brainTier() === 'self_local') {
-                  Start Ollama on this PC, then test the connection.
-                  @if (localModelFit()?.recommendations?.length) {
-                    <button type="button" class="link-btn inline-link" (click)="openThinkingLocalSetup()">
-                      Set up Ollama for your recommended model
-                    </button>
-                  }
+                  We’ll check this PC for a reliable local model. Install Ollama, then test the connection.
                 } @else {
                   Use your vLLM or OpenAI-compatible server (port 8000), not Ollama’s 11434.
                 }
               </p>
+              @if (brainTier() === 'self_local') {
+                @if (localModelFit(); as fit) {
+                  <div class="model-fit-panel thinking-fit">
+                    <p class="model-fit-gpu-line">{{ fitGpuHeadline(fit) }}</p>
+                    <p class="model-fit-head">
+                      @if (fit.localViable) {
+                        Models that fit this PC
+                      } @else {
+                        Local chat models
+                      }
+                    </p>
+                    @if (fit.error) {
+                      <p class="small-muted">{{ fit.error }}</p>
+                    }
+                    @if (fit.recommendations.length) {
+                      <p class="small-muted">Tap a model for Ollama setup steps.</p>
+                      <ul class="model-fit-list">
+                        @for (m of fit.recommendations; track m.modelId) {
+                          <li>
+                            <button
+                              type="button"
+                              class="model-fit-choice"
+                              [class.selected]="isSelectedLocalModel(m.modelId)"
+                              (click)="openLocalModelSetup(m)"
+                            >
+                              <span class="fit-level" [class]="m.fitLevel">{{ fitLevelLabel(m.fitLevel) }}</span>
+                              <strong>{{ m.displayName }}</strong>
+                              <span class="model-fit-id">{{ m.modelId }}</span>
+                            </button>
+                          </li>
+                        }
+                      </ul>
+                    } @else if (!fit.localViable) {
+                      <p class="small-muted">
+                        This PC may not run a strong local chat model reliably.
+                        Babo Cloud is usually the better choice.
+                      </p>
+                    }
+                  </div>
+                } @else {
+                  <button type="button" class="link-btn inline-link" (click)="openThinkingLocalSetup()">
+                    Set up Ollama for a local model
+                  </button>
+                }
+              }
               <button class="action-btn secondary full" type="button" (click)="testBrain()" [disabled]="testing()">
                 {{ testing() ? 'Testing…' : 'Test connection' }}
               </button>

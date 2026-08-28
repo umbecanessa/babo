@@ -956,6 +956,10 @@
   &.lan {
     margin-top: 10px;
   }
+
+  &.thinking-fit {
+    margin: 4px 0 4px;
+  }
 }
 
 .model-fit-head {
@@ -1060,6 +1064,10 @@
     font-size: 12px;
     line-height: 1.45;
     color: var(--text-secondary);
+  }
+
+  .action-btn {
+    margin-top: 10px;
   }
 
   .setup-progress {
@@ -1337,6 +1345,17 @@
 
 .action-btn.full {
   width: 100%;
+}
+
+.sheet-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.device-next-hint {
+  margin: 4px 0 12px;
 }
 
 .device-panel {
@@ -1750,7 +1769,7 @@
   padding: 16px 18px;
   border-radius: 14px;
   border: 1px solid var(--overlay-3);
-  background: var(--overlay-1);
+  background: var(--surface-inset);
   cursor: pointer;
   transition: border-color 0.2s, transform 0.15s;
 
@@ -1818,6 +1837,11 @@
   border-radius: 999px;
   background: var(--accent-primary-glow);
   color: var(--text-primary);
+
+  &.advanced-pill {
+    background: var(--overlay-3);
+    color: var(--text-secondary);
+  }
 }
 
 .sheet-panel.inline {
@@ -2083,13 +2107,6 @@
     & + .sheet-field {
       margin-top: 14px;
     }
-  }
-
-  .sheet-actions {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    margin-top: 16px;
   }
 
   .action-btn.secondary {

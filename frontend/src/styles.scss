@@ -102,23 +102,24 @@
 }
 
 @mixin _theme-dark {
-  --glass-bg: rgba(30, 33, 48, 0.55);
-  --glass-bg-hover: rgba(40, 44, 62, 0.70);
-  --glass-border: rgba(255, 255, 255, 0.08);
-  --glass-border-strong: rgba(255, 255, 255, 0.18);
+  --glass-bg: rgba(36, 40, 58, 0.62);
+  --glass-bg-hover: rgba(48, 53, 74, 0.78);
+  --glass-border: rgba(255, 255, 255, 0.10);
+  --glass-border-strong: rgba(255, 255, 255, 0.20);
 
   --bg-primary: #0c0d14;
-  --bg-secondary: #15171f;
-  --bg-surface: rgba(20, 22, 32, 0.65);
+  /* Elevated chrome — keep contrast with primary, but avoid near-black cards/menus */
+  --bg-secondary: #1c1f2e;
+  --bg-surface: rgba(36, 40, 56, 0.72);
 
   --text-primary: #e8eaf2;
   --text-secondary: #b3b8cb;
   --text-muted: #6f7591;
 
-  --overlay-1: rgba(255, 255, 255, 0.025);
-  --overlay-2: rgba(255, 255, 255, 0.05);
-  --overlay-3: rgba(255, 255, 255, 0.08);
-  --overlay-4: rgba(255, 255, 255, 0.12);
+  --overlay-1: rgba(255, 255, 255, 0.04);
+  --overlay-2: rgba(255, 255, 255, 0.06);
+  --overlay-3: rgba(255, 255, 255, 0.09);
+  --overlay-4: rgba(255, 255, 255, 0.13);
   --overlay-5: rgba(255, 255, 255, 0.22);
 
   --shadow-glass: 0 2px 12px rgba(0, 0, 0, 0.45), 0 0 1px rgba(255, 255, 255, 0.06);
@@ -131,9 +132,14 @@
   --orb-ring-glow: color-mix(in srgb, var(--accent-primary) 10%, transparent);
   --orb-hint: var(--text-secondary);
 
-  --surface-inset: rgba(0, 0, 0, 0.22);
-  --surface-inset-strong: rgba(0, 0, 0, 0.32);
+  /* Lifted insets (white wash) so nested panels stay readable on dark */
+  --surface-inset: rgba(255, 255, 255, 0.05);
+  --surface-inset-strong: rgba(255, 255, 255, 0.08);
   --backdrop-scrim: rgba(0, 0, 0, 0.62);
+
+  --modal-bg: #242838;
+  --field-bg: var(--modal-bg);
+  --context-menu-bg: #242838;
 
   --ask-user-bg: color-mix(in srgb, var(--accent-warn) 14%, var(--bg-secondary));
   --ask-user-border: color-mix(in srgb, var(--accent-warn) 40%, transparent);

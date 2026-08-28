@@ -38,6 +38,9 @@ export function recommendProfile(
     );
   };
 
+  // Product default: Babo Cloud (everyday users). Local Ollama is an explicit
+  // advanced choice in the wizard — do not auto-select it from VRAM/model-fit.
+  // LAN still wins when a healthy inference server was discovered.
   let inference: WorkloadPlacement;
   if (inferenceLan?.url) {
     const lanPick = topFit('lan');
@@ -61,33 +64,12 @@ export function recommendProfile(
         pick?.reason ??
         'Your LAN GPU can run large models — add your vLLM server URL in setup',
     };
-  } else if (scan.modelFit?.local?.localViable) {
-    const pick = topFit('local');
-    inference = {
-      tier: 'self_local',
-      url: 'http://127.0.0.1:11434',
-      model: pick?.modelId ?? 'llama3.2:3b',
-      reason: pick?.reason ?? 'Best match for this GPU — install Ollama and pull this model',
-    };
-  } else if (scan.modelFit?.local && !scan.modelFit.local.localViable) {
-    inference = {
-      tier: 'hosted_babo',
-      model: 'google/gemini-2.5-flash',
-      reason:
-        'This PC is tight on VRAM for local chat — Babo Cloud is recommended',
-    };
-  } else if (device.vramGb >= 8) {
-    inference = {
-      tier: 'self_local',
-      url: 'http://127.0.0.1:11434',
-      model: 'llama3.2',
-      reason: 'Local GPU — try Ollama on this computer',
-    };
   } else {
     inference = {
       tier: 'hosted_babo',
       model: 'google/gemini-2.5-flash',
-      reason: 'Babo Cloud recommended for this device',
+      reason:
+        'Babo Cloud — easiest setup. Local models stay available as an advanced option.',
     };
   }
 
