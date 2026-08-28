@@ -3272,6 +3272,17 @@ class CryptexMemory:
         if today_date:
             self.upsert_environment("date", f"Today's date is {today_date}.")
 
+        # Environment language (UI/device seed) — reply language still follows the user.
+        try:
+            from nls.runtime.locale_policy import (
+                env_language_from_environ,
+                seed_environment_language,
+            )
+
+            seed_environment_language(self, env_language_from_environ())
+        except Exception:
+            pass
+
         return count
 
     def populate_behavioral_defaults(self) -> int:

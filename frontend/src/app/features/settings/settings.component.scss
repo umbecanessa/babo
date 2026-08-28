@@ -170,6 +170,10 @@ $red: var(--accent-danger);
   }
 }
 
+.language-toggle {
+  flex-wrap: wrap;
+}
+
 .toggle-icon {
   color: $text-muted;
   flex-shrink: 0;

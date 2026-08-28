@@ -2,7 +2,6 @@ import { Component, signal, OnInit, OnDestroy } from '@angular/core';
 import { RouterOutlet, RouterLink, RouterLinkActive, Router, NavigationEnd } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { Subscription, filter } from 'rxjs';
-import { TranslateService } from '@ngx-translate/core';
 import { AuthService } from './core/services/auth.service';
 import { PlatformService } from './core/services/platform.service';
 import { UpdateService } from './core/services/update.service';
@@ -11,6 +10,7 @@ import { UpdateBannerComponent } from './shared/update-banner/update-banner.comp
 import { UpdateModalComponent } from './shared/update-banner/update-modal.component';
 import { ThemeService } from './core/services/theme.service';
 import { Day1CoachComponent } from './shared/onboarding/day1-coach.component';
+import { LocaleService } from './core/locale/locale.service';
 import { environment } from '../environments/environment';
 import { openExternalUrl } from './core/services/billing-return.util';
 
@@ -51,9 +51,9 @@ export class App implements OnInit, OnDestroy {
     public updateService: UpdateService,
     public theme: ThemeService,
     private router: Router,
-    private translate: TranslateService,
+    private locale: LocaleService,
   ) {
-    this.translate.use('en');
+    void this.locale.init();
   }
 
   ngOnInit() {

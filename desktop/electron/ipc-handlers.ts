@@ -61,6 +61,9 @@ export function registerIpcHandlers(
 
   ipcMain.handle('app:version', () => app.getVersion());
 
+  /** OS / Electron preferred languages (BCP-47), e.g. it-IT */
+  ipcMain.handle('app:getLocale', () => app.getLocale());
+
   // ─── Config ───────────────────────────────────────────────────
 
   ipcMain.handle('config:get', () => config.get());

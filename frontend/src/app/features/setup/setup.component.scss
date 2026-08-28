@@ -1609,8 +1609,58 @@
 
 .welcome-lead {
   font-size: 14px;
-  margin: 0 0 28px;
+  margin: 0 0 20px;
   line-height: 1.5;
+}
+
+.welcome-lang {
+  margin: 0 0 24px;
+  text-align: center;
+}
+
+.welcome-lang-label {
+  display: block;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted, var(--text-secondary));
+  margin-bottom: 10px;
+}
+
+.welcome-lang-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.lang-chip {
+  padding: 8px 14px;
+  font-size: 13px;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border, rgba(128, 128, 128, 0.35));
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+
+  &:hover {
+    border-color: var(--accent, #6c8cff);
+    color: var(--text-primary);
+  }
+
+  &.active {
+    border-color: var(--accent, #6c8cff);
+    background: color-mix(in srgb, var(--accent, #6c8cff) 12%, transparent);
+    color: var(--text-primary);
+  }
+}
+
+.welcome-lang-hint {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--text-muted, var(--text-secondary));
 }
 
 .welcome-account-hint {

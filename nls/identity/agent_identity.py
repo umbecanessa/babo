@@ -16,6 +16,18 @@ logger = logging.getLogger(__name__)
 _NAMING_PATTERNS = [
     r"(?:your name (?:is|will be|shall be))\s+"
     r"[\"']?([A-Za-z][A-Za-z0-9\-' ]{0,30})[\"']?",
+    # Italian
+    r"(?:ti chiami|il tuo nome (?:è|e)|ti do il nome)\s+"
+    r"[\"']?([A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ0-9\-' ]{0,30})[\"']?",
+    # French
+    r"(?:tu t['’]appelles|ton nom (?:est|sera)|je t['’]appelle)\s+"
+    r"[\"']?([A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ0-9\-' ]{0,30})[\"']?",
+    # Spanish
+    r"(?:te llamas|tu nombre (?:es|será|sera)|te llamo)\s+"
+    r"[\"']?([A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ0-9\-' ]{0,30})[\"']?",
+    # German
+    r"(?:du heißt|du heisst|dein name (?:ist|wird)|ich nenne dich)\s+"
+    r"[\"']?([A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ0-9\-' ]{0,30})[\"']?",
     r"(?:(?:i(?:'ll| will) )?call you|"
     r"(?:let(?:'s|s)) call you)\s+"
     r"[\"']?([A-Z][a-zA-Z\-']{1,30})[\"']?",

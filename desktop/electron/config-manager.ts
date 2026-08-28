@@ -16,6 +16,14 @@ import {
   sanitizeCapabilityProfile,
 } from './capability-types';
 
+export type AppLocaleLanguage = 'en' | 'it' | 'fr' | 'es' | 'de';
+
+export interface AppLocaleConfig {
+  language: AppLocaleLanguage;
+  /** device = OS/app default; manual = user picked in UI */
+  source: 'device' | 'manual';
+}
+
 export interface NlsConfig {
   /** OpenAI-compatible inference API base URL */
   inferenceUrl: string;
@@ -37,6 +45,12 @@ export interface NlsConfig {
 
   /** Composable capability placements (onboarding wizard) */
   capabilityProfile?: CapabilityProfile;
+
+  /**
+   * UI + Cryptex environment language preference.
+   * Reply language still follows the user's latest message at runtime.
+   */
+  locale?: AppLocaleConfig;
 
   /** @deprecated legacy field — migrated on load */
   vllmUrl?: string;
@@ -83,6 +97,9 @@ export class ConfigManager {
     if (typeof next.inferenceUrl === 'string') {
       next.inferenceUrl = ConfigManager.normalizeInferenceUrl(next.inferenceUrl);
     }
+    if (next.locale !== undefined) {
+      next.locale = ConfigManager.sanitizeLocale(next.locale);
+    }
     if (next.capabilityProfile) {
       next.capabilityProfile = sanitizeCapabilityProfile(next.capabilityProfile);
       const p = next.capabilityProfile;
@@ -103,6 +120,25 @@ export class ConfigManager {
   static nestjsApiBase(nestjsUrl: string): string {
     const base = nestjsUrl.trim().replace(/\/+$/, '');
     return base.endsWith('/api') ? base : `${base}/api`;
+  }
+
+  static normalizeLocaleLanguage(raw: string | null | undefined): AppLocaleLanguage {
+    const primary = (raw || '').trim().toLowerCase().replace('_', '-').split('-')[0];
+    if (primary === 'it' || primary === 'fr' || primary === 'es' || primary === 'de') {
+      return primary;
+    }
+    return 'en';
+  }
+
+  /** Sanitize locale on config.set / load. */
+  static sanitizeLocale(raw: unknown): AppLocaleConfig | undefined {
+    if (!raw || typeof raw !== 'object') return undefined;
+    const obj = raw as Record<string, unknown>;
+    const language = ConfigManager.normalizeLocaleLanguage(
+      typeof obj['language'] === 'string' ? obj['language'] : undefined,
+    );
+    const source = obj['source'] === 'manual' ? 'manual' : 'device';
+    return { language, source };
   }
 
   /** Local vLLM/Ollama: host root only. Cloud providers keep a `/v1` suffix in config. */
@@ -195,6 +231,12 @@ export class ConfigManager {
       env.RUNTIME_SHARED_SECRET = sharedSecret;
     }
 
+    const localeLang = ConfigManager.normalizeLocaleLanguage(
+      this.config.locale?.language,
+    );
+    env.NLS_UI_LOCALE = localeLang;
+    env.NLS_ENV_LANGUAGE = localeLang;
+
     const p = profile;
     const needsLegacyGpuUrl =
       p.visualCortex.tier === 'hosted_babo' ||
@@ -253,6 +295,9 @@ export class ConfigManager {
         }
         if (!merged.runtimeSharedSecret?.trim()) {
           merged.runtimeSharedSecret = DEFAULT_CONFIG.runtimeSharedSecret;
+        }
+        if (merged.locale) {
+          merged.locale = ConfigManager.sanitizeLocale(merged.locale);
         }
         this.config = merged;
         this.reconcileGpuWorkerFields();

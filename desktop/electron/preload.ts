@@ -64,6 +64,11 @@ const nlsDesktopApi = {
 
   getVersion: (): Promise<string> => ipcRenderer.invoke('app:version'),
 
+  app: {
+    /** Electron `app.getLocale()` — preferred OS language for UI/Cryptex seed */
+    getLocale: (): Promise<string> => ipcRenderer.invoke('app:getLocale'),
+  },
+
   // ─── Config ───────────────────────────────────────────────────
 
   config: {

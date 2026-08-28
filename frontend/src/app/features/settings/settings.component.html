@@ -558,15 +558,38 @@
   <!-- Appearance (desktop + web) -->
   @if (activeSection() === 'appearance') {
     <section class="section">
-      <h3 class="section-title">Appearance</h3>
-      <p class="section-desc">Theme for the Babo interface. System follows your OS.</p>
+      <h3 class="section-title">{{ 'settings.appearance.title' | translate }}</h3>
+      <p class="section-desc">{{ 'settings.appearance.desc' | translate }}</p>
 
       <div class="field-group">
-        <label class="field-label">Theme</label>
+        <label class="field-label">{{ 'settings.appearance.theme' | translate }}</label>
         <div class="toggle-group compact">
-          <button class="toggle-btn small" [class.active]="themeService.mode() === 'light'" (click)="updateTheme('light')">Light</button>
-          <button class="toggle-btn small" [class.active]="themeService.mode() === 'dark'" (click)="updateTheme('dark')">Dark</button>
-          <button class="toggle-btn small" [class.active]="themeService.mode() === 'system'" (click)="updateTheme('system')">System</button>
+          <button class="toggle-btn small" [class.active]="themeService.mode() === 'light'" (click)="updateTheme('light')">{{ 'settings.appearance.themeLight' | translate }}</button>
+          <button class="toggle-btn small" [class.active]="themeService.mode() === 'dark'" (click)="updateTheme('dark')">{{ 'settings.appearance.themeDark' | translate }}</button>
+          <button class="toggle-btn small" [class.active]="themeService.mode() === 'system'" (click)="updateTheme('system')">{{ 'settings.appearance.themeSystem' | translate }}</button>
+        </div>
+      </div>
+
+      <div class="field-group">
+        <label class="field-label">{{ 'settings.appearance.language' | translate }}</label>
+        <p class="field-hint">
+          {{ 'settings.appearance.languageHint' | translate }}
+        </p>
+        <div class="toggle-group compact language-toggle">
+          @for (choice of locale.pickerChoices; track choice) {
+            <button
+              type="button"
+              class="toggle-btn small"
+              [class.active]="locale.isPickerActive(choice)"
+              (click)="setUiLanguage(choice)"
+            >
+              @if (choice === 'auto') {
+                {{ 'locale.auto' | translate }}
+              } @else {
+                {{ locale.nativeLabel(choice) }}
+              }
+            </button>
+          }
         </div>
       </div>
 

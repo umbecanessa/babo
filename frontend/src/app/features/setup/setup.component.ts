@@ -58,6 +58,9 @@ import { Day1CoachService } from '../../shared/onboarding/day1-coach.service';
 import { AnalyticsService } from '../../core/services/analytics.service';
 import { setupStepName } from '../../core/analytics/setup-steps';
 import { openExternalUrl } from '../../core/services/billing-return.util';
+import { LocaleService } from '../../core/locale/locale.service';
+import type { LocalePickerChoice } from '../../core/locale/app-locale.util';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 
 interface SetupConfig {
   inferenceUrl: string;
@@ -85,7 +88,7 @@ interface OllamaSetupStatus {
 @Component({
   selector: 'app-setup',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink],
+  imports: [CommonModule, FormsModule, RouterLink, TranslateModule],
   templateUrl: './setup.component.html',
   styleUrl: './setup.component.scss',
 })
@@ -93,10 +96,10 @@ interface OllamaSetupStatus {
 export class SetupComponent implements OnInit, OnDestroy {
   readonly cloudBasicPriceAmount = CLOUD_BASIC_PRICE_AMOUNT;
   readonly decisionSteps = [
-    { id: 'thinking', label: 'Thinking' },
-    { id: 'features', label: 'Features' },
-    { id: 'placement', label: 'Account sync' },
-    { id: 'signin', label: 'Sign in' },
+    { id: 'thinking', labelKey: 'setup.steps.thinking' },
+    { id: 'features', labelKey: 'setup.steps.features' },
+    { id: 'placement', labelKey: 'setup.steps.placement' },
+    { id: 'signin', labelKey: 'setup.steps.signin' },
   ];
 
   /** Babo Cloud inference only works through api.babo.agency — skip the placement step. */
@@ -110,28 +113,29 @@ export class SetupComponent implements OnInit, OnDestroy {
 
   readonly brainCards: {
     tier: CapabilityTier;
-    title: string;
-    subtitle: string;
+    titleKey?: string;
+    subtitleKey?: string;
+    title?: string;
+    subtitle?: string;
     glyph: string;
     gx10?: boolean;
   }[] = [
     {
       tier: 'hosted_babo',
-      title: 'Babo Cloud',
-      subtitle: 'Easiest path — hosted models and account sync. Your agent still runs on this computer.',
+      titleKey: 'setup.thinking.cards.cloud.title',
+      subtitleKey: 'setup.thinking.cards.cloud.subtitle',
       glyph: '☁',
     },
     {
       tier: 'self_local',
-      title: 'This computer',
-      subtitle:
-        'Advanced — we’ll check whether this PC can run a reliable local model (Ollama). Best for privacy or offline use.',
+      titleKey: 'setup.thinking.cards.local.title',
+      subtitleKey: 'setup.thinking.cards.local.subtitle',
       glyph: '◻',
     },
     {
       tier: 'self_lan',
-      title: 'My server',
-      subtitle: 'Advanced — vLLM or OpenAI-compatible server on your home network.',
+      titleKey: 'setup.thinking.cards.lan.title',
+      subtitleKey: 'setup.thinking.cards.lan.subtitle',
       glyph: '⎔',
     },
   ];
@@ -418,6 +422,8 @@ export class SetupComponent implements OnInit, OnDestroy {
     private toast: ToastService,
     private day1Coach: Day1CoachService,
     private analytics: AnalyticsService,
+    public locale: LocaleService,
+    private translate: TranslateService,
   ) {
     effect(() => {
       this.logLines();
@@ -900,13 +906,20 @@ export class SetupComponent implements OnInit, OnDestroy {
 
   /** Full first-run path: prepare → … → sign-in → billing (if Babo Cloud) → ready → name */
   continueFromWelcome(): void {
-    this.analytics.track('setup_welcome_continue', { path: 'new' });
+    this.analytics.track('setup_welcome_continue', {
+      path: 'new',
+      locale: this.locale.language(),
+    });
     this.goToStep(1);
     if (this.setupStage() === 'idle') {
       void this.startSetup();
     } else if (this.setupStage() === 'ready') {
       void this.goToScan();
     }
+  }
+
+  setSetupLanguage(choice: LocalePickerChoice): void {
+    void this.locale.selectPicker(choice);
   }
 
   /** Same setup as Continue; after features, jump to sign-in (placement still suggested). */
@@ -963,22 +976,23 @@ export class SetupComponent implements OnInit, OnDestroy {
   /** Chip on the Thinking cards — everyday users see Cloud as the easy path. */
   brainCardBadge(tier: CapabilityTier): string | null {
     if (tier === 'hosted_babo') {
-      return 'Easier setup';
+      return this.translate.instant('common.easier_setup');
     }
     if (this.isBrainSuggested(tier)) {
-      return 'Suggested';
+      return this.translate.instant('common.suggested');
     }
     if (tier === 'self_local' || tier === 'self_lan') {
-      return 'Advanced';
+      return this.translate.instant('common.advanced');
     }
     return null;
   }
 
   brainCardBadgeKind(tier: CapabilityTier): 'suggested' | 'advanced' | null {
-    const label = this.brainCardBadge(tier);
-    if (!label) return null;
-    if (label === 'Advanced') return 'advanced';
-    return 'suggested';
+    if (tier === 'self_local' || tier === 'self_lan') {
+      if (!this.isBrainSuggested(tier)) return 'advanced';
+    }
+    if (tier === 'hosted_babo' || this.isBrainSuggested(tier)) return 'suggested';
+    return null;
   }
 
   isBrainCardActive(card: { tier: CapabilityTier; gx10?: boolean }): boolean {
@@ -1039,7 +1053,10 @@ export class SetupComponent implements OnInit, OnDestroy {
   }
 
   brainCardTitle(tier: CapabilityTier): string {
-    return this.brainCards.find((c) => c.tier === tier)?.title ?? tier;
+    const card = this.brainCards.find((c) => c.tier === tier);
+    if (!card) return tier;
+    if (card.titleKey) return this.translate.instant(card.titleKey);
+    return card.title ?? tier;
   }
 
   useOwnApiKey(): void {

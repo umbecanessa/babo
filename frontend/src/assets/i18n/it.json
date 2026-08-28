@@ -1,0 +1,235 @@
+{
+  "common": {
+    "got_it": "Ho capito",
+    "continue": "Continua",
+    "cancel": "Annulla",
+    "save": "Salva",
+    "back": "Indietro",
+    "try_again": "Riprova",
+    "testing": "Test in corso…",
+    "test_connection": "Testa connessione",
+    "saving": "Salvataggio…",
+    "suggested": "Consigliato",
+    "advanced": "Avanzato",
+    "ready": "Pronto",
+    "optional": "Opzionale",
+    "easier_setup": "Più semplice"
+  },
+  "setup": {
+    "welcome": {
+      "title": "Benvenuto in Babo",
+      "back": "Bentornato",
+      "lead": "Il tuo agente gira su questo {{device}}.",
+      "computer": "computer",
+      "device": "dispositivo",
+      "language": "Lingua",
+      "languageHint": "Auto segue il dispositivo. L'agente risponde comunque nella lingua in cui scrivi.",
+      "continue": "Continua",
+      "haveAccount": "Ho già un account",
+      "accountHint": "Installa prima Babo su questo computer. Configurerai pensieri e funzioni, poi accederai."
+    },
+    "steps": {
+      "thinking": "Pensiero",
+      "features": "Funzioni",
+      "placement": "Account",
+      "signin": "Accedi"
+    },
+    "visionPrefetch": {
+      "fallback": "Preparazione consapevolezza schermo…",
+      "hint": "Puoi continuare — l'installazione prosegue in background."
+    },
+    "prepare": {
+      "title": "Installazione",
+      "lead": "Installiamo ciò di cui Babo ha bisogno su questo computer.",
+      "showLog": "Mostra log",
+      "hideLog": "Nascondi log",
+      "ready": "Pronto"
+    },
+    "device": {
+      "title": "Questo dispositivo",
+      "checking": "Controllo hardware…",
+      "gpu": "GPU",
+      "memory": "Memoria",
+      "localVision": "Visione locale",
+      "ready": "Pronto",
+      "limited": "Limitata",
+      "nextHint": "Nella schermata successiva, scegli <strong>Babo Cloud</strong> per la via più semplice, oppure un'opzione locale avanzata per privacy o modelli offline.",
+      "haveServer": "Ho un server sulla mia rete",
+      "venvWait": "Installazione dipendenze Python ancora in corso — attendi che il passo di preparazione finisca."
+    },
+    "thinking": {
+      "needScan": "Completa prima il passo sul dispositivo così possiamo consigliarti una configurazione.",
+      "goScan": "Vai alla scansione dispositivo",
+      "title": "Come dovrebbe pensare Babo?",
+      "lead": "Dove gira la chat. La maggior parte inizia con <strong>Babo Cloud</strong>.",
+      "lanFound": "Abbiamo trovato un server chat sulla rete — viene suggerito <strong>Il mio server</strong>.",
+      "cloudModel": "Modello chat (Babo Cloud)",
+      "cloudHint": "Modelli e accesso remoto passano da <strong>api.babo.agency</strong>. Gli agenti girano sempre su questo computer — Babo Cloud sincronizza l'account e fa da relay quando sei lontano.",
+      "useApiKey": "Usa una API key solo su questo computer",
+      "useCloud": "Usa invece Babo Cloud",
+      "provider": "Provider",
+      "apiKey": "API key",
+      "apiKeyPlaceholder": "Incolla la chiave",
+      "ollamaUrl": "URL Ollama",
+      "serverAddress": "Indirizzo server",
+      "localHint": "Controlleremo se questo PC può eseguire un modello locale affidabile. Installa Ollama, poi testa la connessione.",
+      "lanHint": "Usa il tuo server vLLM o OpenAI-compatible (porta 8000), non la 11434 di Ollama.",
+      "cards": {
+        "cloud": {
+          "title": "Babo Cloud",
+          "subtitle": "Via più semplice — modelli ospitati e sync account. L'agente gira comunque su questo computer."
+        },
+        "local": {
+          "title": "Questo computer",
+          "subtitle": "Avanzato — verifichiamo se questo PC può eseguire un modello locale affidabile (Ollama). Ideale per privacy o uso offline."
+        },
+        "lan": {
+          "title": "Il mio server",
+          "subtitle": "Avanzato — server vLLM o OpenAI-compatible sulla rete di casa."
+        }
+      }
+    },
+    "features": {
+      "title": "Funzioni opzionali",
+      "lead": "Puoi cambiarle quando vuoi in Impostazioni.",
+      "screen": "Consapevolezza schermo",
+      "screenDesc": "Vista in background del desktop",
+      "code": "Ricerca codice",
+      "codeDesc": "Trova codice per significato",
+      "voice": "Input vocale",
+      "saving": "Salvataggio preferenze…"
+    },
+    "placement": {
+      "title": "Dove si sincronizza l'account",
+      "chatRuns": "La chat gira su <strong>{{location}}</strong> — separato da questo server NestJS.",
+      "nestjsUrl": "URL server NestJS",
+      "testOptional": "Opzionale — verifica che api.babo.agency sia raggiungibile",
+      "venvWait": "Termina l'installazione di Babo su questo computer (passo di preparazione) prima di continuare."
+    },
+    "auth": {
+      "signin": "Accedi",
+      "signup": "Crea account",
+      "change": "Cambia",
+      "changeThinking": "Cambia pensiero",
+      "displayName": "Nome visualizzato",
+      "displayNamePlaceholder": "Opzionale",
+      "email": "Email",
+      "password": "Password",
+      "passwordSignupPh": "Almeno 8 caratteri",
+      "passwordSigninPh": "La tua password",
+      "signedIn": "Accesso effettuato — continua per finire l'installazione.",
+      "connecting": "Connessione a Babo Cloud…"
+    },
+    "billing": {
+      "title": "Attiva Babo Cloud",
+      "lead": "Un ultimo passo prima della prima chat — modelli ospitati, sync account e accesso remoto mentre l'agente resta su questo computer.",
+      "perMonth": "/ mese",
+      "tagline": "Relay, canali e integrazioni ospitate — modelli via BYOK o a costo",
+      "perk1": "Relay WhatsApp, Telegram, Gmail e Google Calendar",
+      "perk2": "Modelli con la tua API key o pay-as-you-go opzionale (senza markup)",
+      "perk3": "Paga con carta o Link — circa un minuto",
+      "perk4": "Rimborso 31 giorni sul primo mese",
+      "openingCheckout": "Apertura checkout sicuro…",
+      "waitingPayment": "Completa il pagamento nel browser — lo rileveremo automaticamente.",
+      "allSet": "Tutto pronto — creiamo il tuo agente.",
+      "altHint": "Preferisci le tue API key?",
+      "altLink": "Sceglilo in Pensiero"
+    },
+    "ready": {
+      "title": "Sei pronto",
+      "changeHint": "Puoi cambiare tutto in Impostazioni."
+    },
+    "name": {
+      "title": "Dai un nome al tuo agente",
+      "lead": "Così apparirà Babo nel tuo spazio di lavoro.",
+      "open": "Apri Babo"
+    }
+  },
+  "settings": {
+    "appearance": {
+      "title": "Aspetto",
+      "desc": "Tema e lingua dell'interfaccia Babo. Il tema Sistema segue il sistema operativo.",
+      "theme": "Tema",
+      "themeLight": "Chiaro",
+      "themeDark": "Scuro",
+      "themeSystem": "Sistema",
+      "language": "Lingua",
+      "languageHint": "Solo lingua dell'interfaccia. L'agente risponde nella lingua in cui scrivi. Auto segue il dispositivo."
+    }
+  },
+  "info": {
+    "neural_state": {
+      "title": "Stato neurale",
+      "p1": "Il tuo agente ha un <b>battito</b> virtuale che riflette l'attività cognitiva. I BPM salgono quando pensa, parla o esplora — e scendono a riposo o nel sonno. L'etichetta di stato (<b>Attivo</b>, <b>A riposo</b>, <b>Sonnolento</b>, <b>Sonno profondo</b>) deriva direttamente dai BPM.",
+      "p2": "<b>Valenza</b> è il tono emotivo — negativo (rosso) a positivo (verde). <b>Arousal</b> misura l'intensità di attivazione. <b>Coinvolgimento</b> quanto è immerso nel tema. <b>Legame</b> quanto si sente connesso a te. <b>Coerenza</b> quanto è allineato il ragionamento interno.",
+      "p3": "Non sono cosmetici — <b>modulano il comportamento</b>. Un agente a bassa valenza e alto cortisolo risponde diversamente da uno rilassato e ad alta dopamina. Stai guardando una mente che si regola in tempo reale."
+    },
+    "memory": {
+      "title": "Memoria e stato",
+      "p1": "I <b>fatti</b> sono elementi persistenti nella memoria a lungo termine — cose apprese da conversazioni, navigazione o esplorazione autonoma. A differenza dei trucchi di context window, sopravvivono alle sessioni.",
+      "p2": "I <b>cicli di sonno</b> contano quante volte l'agente è entrato in sonno profondo per consolidare la conoscenza. Ogni ciclo rafforza i ricordi importanti e lascia decadere i più deboli — come il sonno biologico.",
+      "p3": "Lo <b>stato ANS</b> mostra la modalità del sistema nervoso autonomo: <b>simpatico</b> (allerta, attivo) o <b>parasimpatico</b> (riposo, consolidamento). Decide se l'agente è pronto a interagire o elabora in background."
+    },
+    "hormones": {
+      "title": "Ormoni",
+      "p1": "Il comportamento è plasmato da un <b>sistema ormonale</b> virtuale ispirato alla neurochimica umana. Valori live che cambiano a ogni interazione e in autonomia — insieme creano una <b>personalità emergente</b>.",
+      "legend": {
+        "dopamine": "Dopamina",
+        "dopamine_desc": "Ricompensa e curiosità — spinge esplorazione e motivazione ad apprendere",
+        "serotonin": "Serotonina",
+        "serotonin_desc": "Stabilità dell'umore e soddisfazione — tiene l'agente emotivamente equilibrato",
+        "norepinephrine": "Norepinefrina",
+        "norepinephrine_desc": "Allerta e focus — acuisce l'attenzione nei compiti complessi",
+        "cortisol": "Cortisolo",
+        "cortisol_desc": "Risposta allo stress — sale con incertezza o fallimenti ripetuti",
+        "oxytocin": "Ossitocina",
+        "oxytocin_desc": "Legame sociale e fiducia — si approfondisce con conversazioni significative"
+      }
+    },
+    "activity": {
+      "title": "Feed attività",
+      "p1": "Questo feed mostra cosa fa l'agente in <b>autonomia</b> — azioni senza che glielo chieda. Ogni tipo è colorato nel feed.",
+      "legend": {
+        "dream": "✦ Sogno a occhi aperti",
+        "dream_desc": "Replay passivo della memoria — rivisita e ricollega esperienze passate",
+        "active_dream": "🔭 Sogno attivo",
+        "active_dream_desc": "Esplorazione attiva — naviga, pratica skill o approfondisce temi",
+        "drive": "⚡ Spinta",
+        "drive_desc": "Azione autonoma guidata dalla curiosità — ricerche, Wikipedia, indagini",
+        "reach_out": "💬 Contatto",
+        "reach_out_desc": "Iniziativa sociale proattiva — decide di contattarti da solo",
+        "finding": "📋 Scoperta",
+        "finding_desc": "Una scoperta che considera degna di essere condivisa con te"
+      }
+    },
+    "working_memory": {
+      "title": "Memoria di lavoro",
+      "p1": "Il <b>contesto attivo</b> dell'agente — a cosa sta \"pensando\" ora. Ruota con il flusso della conversazione. Puoi <b>modificare</b> o <b>eliminare</b> elementi per orientare il focus.",
+      "legend": {
+        "learn": "Apprendi",
+        "learn_desc": "Nuove conoscenze in elaborazione — fatti, insight e pattern che sta assorbendo",
+        "bond": "Legame",
+        "bond_desc": "Contesto sociale ed emotivo — segnali di relazione, preferenze e dettagli personali",
+        "evaluate": "Valuta",
+        "evaluate_desc": "Valutazione attiva — cose che sta interrogando, confrontando o esaminando criticamente"
+      }
+    },
+    "network": {
+      "title": "Dinamiche di rete",
+      "p1": "Ispirato alle neuroscienze, il cervello dell'agente passa tra tre reti neurali su larga scala che competono per il dominio, come nel cervello umano.",
+      "p2": "La <b>rete di salienza (SN)</b> fa da guardiano — rileva eventi importanti e decide quale delle altre due reti prendere il controllo.",
+      "legend": {
+        "ecn": "ECN – Controllo esecutivo",
+        "ecn_desc": "Attenzione al compito, ragionamento e problem solving. Dominante in conversazione attiva e uso di tool.",
+        "sn": "SN – Salienza",
+        "sn_desc": "Rileva eventi importanti (nuovi messaggi, info sorprendenti) e attiva il cambio di rete. Picchi quando invii un messaggio.",
+        "dmn": "DMN – Modalità default",
+        "dmn_desc": "Vagabondaggio mentale, riflessione e sogno a occhi aperti. Attiva a riposo, favorisce associazioni creative e consolidamento."
+      }
+    }
+  },
+  "locale": {
+    "auto": "Auto",
+    "autoHint": "Segue la lingua del dispositivo"
+  }
+}

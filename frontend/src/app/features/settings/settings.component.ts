@@ -18,10 +18,13 @@ import { Day1CoachService } from '../../shared/onboarding/day1-coach.service';
 import { PlatformService } from '../../core/services/platform.service';
 import { UpdateService } from '../../core/services/update.service';
 import { ThemeService, ThemeMode } from '../../core/services/theme.service';
+import { LocaleService } from '../../core/locale/locale.service';
+import type { LocalePickerChoice } from '../../core/locale/app-locale.util';
 import { CapabilitySettingsPanelComponent } from '../../shared/capability-settings-panel/capability-settings-panel.component';
 import { AgentModelService } from '../../core/services/agent-model.service';
 import { ApiService } from '../../core/services/api.service';
 import { BillingService } from '../../core/services/billing.service';
+import { TranslateModule } from '@ngx-translate/core';
 import {
   CLOUD_BASIC_PRICE_LABEL,
   formatUsdCents,
@@ -85,7 +88,7 @@ interface DebugArtifactEntry {
 @Component({
   selector: 'app-settings',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, CapabilitySettingsPanelComponent],
+  imports: [CommonModule, FormsModule, RouterLink, CapabilitySettingsPanelComponent, TranslateModule],
   templateUrl: './settings.component.html',
   styleUrl: './settings.component.scss',
 })
@@ -225,6 +228,7 @@ export class SettingsComponent implements OnInit, OnDestroy {
     public platform: PlatformService,
     public themeService: ThemeService,
     public updateService: UpdateService,
+    public locale: LocaleService,
   ) {}
 
   async checkForUpdates(): Promise<void> {
@@ -506,6 +510,10 @@ export class SettingsComponent implements OnInit, OnDestroy {
   updateTheme(mode: ThemeMode): void {
     this.webSettings.update((s) => ({ ...s, theme: mode }));
     this.themeService.setMode(mode);
+  }
+
+  setUiLanguage(choice: LocalePickerChoice): void {
+    void this.locale.selectPicker(choice);
   }
 
   updateEditorFontSize(size: number): void {

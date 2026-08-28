@@ -11,6 +11,16 @@ from nls.identity.agent_identity import (
 def test_detect_name_from_user_input_rejects_yours():
     assert detect_name_from_user_input("your name is yours") is None
     assert detect_name_from_user_input("your name is Babo") == "Babo"
+    assert detect_name_from_user_input("your name is babo") == "babo"
+
+
+def test_detect_name_multilingual_patterns():
+    assert detect_name_from_user_input("ti chiami Luna") == "Luna"
+    assert detect_name_from_user_input("il tuo nome è Marco") == "Marco"
+    assert detect_name_from_user_input("tu t'appelles Sophie") == "Sophie"
+    assert detect_name_from_user_input("te llamas Diego") == "Diego"
+    assert detect_name_from_user_input("du heißt Klaus") == "Klaus"
+    assert detect_name_from_user_input("ich nenne dich Freya") == "Freya"
 
 
 def test_learn_signal_does_not_rename_established_agent():
