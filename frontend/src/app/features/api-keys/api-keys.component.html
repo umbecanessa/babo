@@ -90,28 +90,12 @@
 
       <div class="snippet-group">
         <h3 class="snippet-label">{{ 'apiKeys.pythonSdk' | translate }}</h3>
-        <pre class="snippet-code"><code>from openai import OpenAI
-
-client = OpenAI(
-    base_url="https://nls-api.up.railway.app/v1",
-    api_key="nlsk_your_key_here"
-)
-
-response = client.chat.completions.create(
-    model="agent:your-agent-id",
-    messages=[{"role": "user", "content": "Hello!"}],
-    stream=True
-)
-for chunk in response:
-    print(chunk.choices[0].delta.content or "", end="")</code></pre>
+        <pre class="snippet-code"><code [textContent]="pythonSnippet"></code></pre>
       </div>
 
       <div class="snippet-group">
         <h3 class="snippet-label">{{ 'apiKeys.curl' | translate }}</h3>
-        <pre class="snippet-code"><code>curl https://nls-api.up.railway.app/v1/chat/completions \
-  -H "Authorization: Bearer nlsk_your_key_here" \
-  -H "Content-Type: application/json" \
-  -d '{"model":"agent:your-agent-id","messages":[{"role":"user","content":"Hello!"}]}'</code></pre>
+        <pre class="snippet-code"><code [textContent]="curlSnippet"></code></pre>
       </div>
     </div>
   </div>

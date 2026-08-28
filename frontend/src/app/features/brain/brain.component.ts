@@ -881,7 +881,7 @@ import { TranslateModule, TranslateService } from '@ngx-translate/core';
                         <span class="ep-title">{{ ep.title }}</span>
                         <span class="ep-meta-inline">
                           {{ 'brain.narrative.turnsMeta' | translate:{ count: ep.turns } }}
-                          @if (ep.duration_min) { &bull; {{ 'brain.narrative.durationMin' | translate:{ min: (ep.duration_min | number:'1.0-0') } } }
+                          @if (ep.duration_min) { &bull; {{ 'brain.narrative.durationMin' | translate:{ min: (ep.duration_min | number:'1.0-0') } }} }
                         </span>
                         <span class="ep-mood-badge" [style.background]="moodColor(moodValence(ep.dominant_emotion))">{{ ep.dominant_emotion }}</span>
                         <span class="ep-chevron">{{ expandedEpisode === ep.index ? '▾' : '▸' }}</span>

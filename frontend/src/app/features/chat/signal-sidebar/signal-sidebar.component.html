@@ -65,7 +65,7 @@
             }
             <span class="heartbeat-beats">{{ 'chat.live.beat' | translate:{ count: beatCount } }}
               @if (momentum) {
-                <span class="momentum-indicator" [title]="('chat.live.momentum' | translate:{ value: momentum })>{{ momentumIcon }}</span>
+                <span class="momentum-indicator" [title]="('chat.live.momentum' | translate:{ value: momentum })">{{ momentumIcon }}</span>
               }
             </span>
           </div>
@@ -74,7 +74,7 @@
 
         <!-- Energy bar (show at 0% too — low energy is meaningful) -->
         @if (hasEnergyReading) {
-          <div class="energy-bar-wrap" [title]="('chat.live.energy' | translate:{ percent: energyPercent }})">
+          <div class="energy-bar-wrap" [title]="('chat.live.energy' | translate:{ percent: energyPercent })">
             <span class="energy-icon">&#9889;</span>
             <div class="energy-bar-track">
               <div class="energy-bar-fill"

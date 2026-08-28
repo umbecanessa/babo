@@ -14,6 +14,26 @@ import { ToastService } from '../../shared/toast/toast.service';
   styleUrl: './api-keys.component.scss',
 })
 export class ApiKeysComponent implements OnInit {
+  readonly pythonSnippet = `from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://nls-api.up.railway.app/v1",
+    api_key="nlsk_your_key_here"
+)
+
+response = client.chat.completions.create(
+    model="agent:your-agent-id",
+    messages=[{"role": "user", "content": "Hello!"}],
+    stream=True
+)
+for chunk in response:
+    print(chunk.choices[0].delta.content or "", end="")`;
+
+  readonly curlSnippet = `curl https://nls-api.up.railway.app/v1/chat/completions \\
+  -H "Authorization: Bearer nlsk_your_key_here" \\
+  -H "Content-Type: application/json" \\
+  -d '{"model":"agent:your-agent-id","messages":[{"role":"user","content":"Hello!"}]}'`;
+
   keys = signal<ApiKey[]>([]);
   newKeyName = '';
   showCreateModal = signal(false);
