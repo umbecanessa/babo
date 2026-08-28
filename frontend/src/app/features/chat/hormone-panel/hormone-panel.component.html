@@ -3,7 +3,7 @@
     @for (h of hormoneList; track h.key) {
       <div class="hormone-row">
         <div class="hormone-header">
-          <span class="hormone-name">{{ h.name }}</span>
+          <span class="hormone-name">{{ h.nameKey | translate }}</span>
           <span class="hormone-value">{{ h.value | number:'1.1-1' }}</span>
         </div>
         <div class="hormone-bar-bg">

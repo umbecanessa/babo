@@ -1,4 +1,4 @@
-import { Component, OnInit, OnDestroy, signal, computed, ViewChild } from '@angular/core';
+import { Component, OnInit, OnDestroy, signal, computed, ViewChild, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
@@ -22,7 +22,7 @@ import type {
   NetworkDynamicsStatus,
 } from '../../core/models/agent.model';
 
-import { TranslateModule } from '@ngx-translate/core';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 
 @Component({
   selector: 'app-brain',
@@ -104,42 +104,42 @@ import { TranslateModule } from '@ngx-translate/core';
                 <span class="stat-value">{{ chain()?.sovereignty_mode ?? '-' }}</span>
               </div>
               <div class="stat-card">
-                <span class="stat-label">VRAM Status</span>
-                <span class="stat-value" [class.in-vram]="status()?.in_vram">{{ status()?.in_vram ? 'In VRAM' : 'Evicted' }}</span>
+                <span class="stat-label">{{ 'brain.stats.vram' | translate }}</span>
+                <span class="stat-value" [class.in-vram]="status()?.in_vram">{{ status()?.in_vram ? ('brain.stats.inVram' | translate) : ('brain.stats.evicted' | translate) }}</span>
               </div>
               @if (status()?.heartbeat?.energy != null) {
                 <div class="stat-card stat-card-energy">
-                  <span class="stat-label">Energy</span>
+                  <span class="stat-label">{{ 'brain.stats.energy' | translate }}</span>
                   <span class="stat-value">{{ ((status()?.heartbeat?.energy ?? 0) * 100).toFixed(0) }}%</span>
                 </div>
               }
               @if (status()?.heartbeat?.mood_label) {
                 <div class="stat-card">
-                  <span class="stat-label">Mood</span>
+                  <span class="stat-label">{{ 'brain.stats.mood' | translate }}</span>
                   <span class="stat-value">{{ status()?.heartbeat?.mood_label }}</span>
                 </div>
               }
               @if (status()?.heartbeat?.momentum) {
                 <div class="stat-card">
-                  <span class="stat-label">Momentum</span>
+                  <span class="stat-label">{{ 'brain.stats.momentum' | translate }}</span>
                   <span class="stat-value">{{ status()?.heartbeat?.momentum }}</span>
                 </div>
               }
               @if (status()?.narrative?.narrative_coherence != null) {
                 <div class="stat-card">
-                  <span class="stat-label">Coherence</span>
+                  <span class="stat-label">{{ 'brain.stats.coherence' | translate }}</span>
                   <span class="stat-value">{{ ((status()?.narrative?.narrative_coherence ?? 0) * 100).toFixed(0) }}%</span>
                 </div>
               }
               @if (status()?.predictive_processing?.average_pe != null) {
                 <div class="stat-card">
-                  <span class="stat-label">Pred. Error</span>
+                  <span class="stat-label">{{ 'brain.stats.predError' | translate }}</span>
                   <span class="stat-value">{{ (status()?.predictive_processing?.average_pe ?? 0).toFixed(3) }}</span>
                 </div>
               }
               @if (status()?.network_dynamics?.dominant_label) {
                 <div class="stat-card">
-                  <span class="stat-label">Network</span>
+                  <span class="stat-label">{{ 'brain.stats.network' | translate }}</span>
                   <span class="stat-value">{{ status()?.network_dynamics?.dominant_label }}</span>
                 </div>
               }
@@ -168,7 +168,7 @@ import { TranslateModule } from '@ngx-translate/core';
                 <span class="ans-label">{{ ansState() }}</span>
                 @if (status()?.ans) {
                   <span class="ans-meta">
-                    {{ status()?.ans?.total_signals }} signals, {{ status()?.ans?.learnable_signals }} learnable
+                    {{ 'brain.overview.signalsMeta' | translate:{ total: status()?.ans?.total_signals, learnable: status()?.ans?.learnable_signals } }}
                   </span>
                 }
               </div>
@@ -203,7 +203,7 @@ import { TranslateModule } from '@ngx-translate/core';
 
             @if (status()?.network_dynamics) {
               <section class="section network-dominance-section">
-                <h3>Network Dominance</h3>
+                <h3>{{ 'brain.overview.networkDominance' | translate }}</h3>
                 <div class="network-overview-bars">
                   <div class="network-overview-bar">
                     <span class="net-label">ECN</span>
@@ -221,14 +221,14 @@ import { TranslateModule } from '@ngx-translate/core';
                     <span class="net-val">{{ ((status()?.network_dynamics?.dmn ?? 0) * 100).toFixed(0) }}%</span>
                   </div>
                 </div>
-                <div class="net-state-label">State: {{ status()?.network_dynamics?.dominant_label }}</div>
+                <div class="net-state-label">{{ 'brain.overview.state' | translate:{ label: status()?.network_dynamics?.dominant_label } }}</div>
               </section>
             }
 
             @if (networkChartSeries().length) {
               <section class="section">
-                <h3>Network Timeline</h3>
-                <nls-line-chart [series]="networkChartSeries()" [height]="180" xLabel="Turn" [yMin]="0" [yMax]="1"></nls-line-chart>
+                <h3>{{ 'brain.overview.networkTimeline' | translate }}</h3>
+                <nls-line-chart [series]="networkChartSeries()" [height]="180" [xLabel]="('brain.overview.turn' | translate)" [yMin]="0" [yMax]="1"></nls-line-chart>
               </section>
             }
           </div>
@@ -251,8 +251,8 @@ import { TranslateModule } from '@ngx-translate/core';
             </div>
             @if (hormoneChartSeries().length) {
               <section class="section">
-                <h3>Hormone Timeline</h3>
-                <nls-line-chart [series]="hormoneChartSeries()" [height]="220" xLabel="Turn" yLabel="" [yMin]="0" [yMax]="1"></nls-line-chart>
+                <h3>{{ 'brain.overview.hormoneTimeline' | translate }}</h3>
+                <nls-line-chart [series]="hormoneChartSeries()" [height]="220" [xLabel]="('brain.overview.turn' | translate)" yLabel="" [yMin]="0" [yMax]="1"></nls-line-chart>
               </section>
             }
           </div>
@@ -264,39 +264,39 @@ import { TranslateModule } from '@ngx-translate/core';
             <div class="vc-toolbar">
               <div class="vc-toolbar-left">
                 <select class="filter-select" [ngModel]="vcChannelFilter()" (ngModelChange)="vcChannelFilter.set($event); loadVisualCortex()">
-                  <option value="">All channels</option>
-                  <option value="agent">Agent</option>
-                  <option value="user">User</option>
+                  <option value="">{{ 'brain.vc.allChannels' | translate }}</option>
+                  <option value="agent">{{ 'brain.vc.channelAgent' | translate }}</option>
+                  <option value="user">{{ 'brain.vc.channelUser' | translate }}</option>
                 </select>
-                <button class="action-btn" (click)="loadVisualCortex()">Refresh</button>
+                <button class="action-btn" (click)="loadVisualCortex()">{{ 'brain.vc.refresh' | translate }}</button>
                 <button class="action-btn" [class.active]="vcAutoRefresh()" (click)="toggleVcAutoRefresh()">
-                  {{ vcAutoRefresh() ? 'Stop Auto' : 'Auto-Refresh' }}
+                  {{ vcAutoRefresh() ? ('brain.vc.stopAuto' | translate) : ('brain.vc.autoRefresh' | translate) }}
                 </button>
               </div>
               @if (vcData(); as vc) {
                 <div class="vc-toolbar-right">
                   <span class="vc-status-pill" [class.running]="vc.running" [class.stopped]="!vc.running">
-                    {{ vc.running ? 'Running' : (vc.enabled ? 'Stopped' : 'Disabled') }}
+                    {{ vc.running ? ('brain.vc.running' | translate) : (vc.enabled ? ('brain.vc.stopped' | translate) : ('brain.vc.disabled' | translate)) }}
                   </span>
                   @if (vc.config?.agent_active) {
-                    <span class="vc-status-pill active">Agent Active</span>
+                    <span class="vc-status-pill active">{{ 'brain.vc.agentActive' | translate }}</span>
                   }
                   @if (vc.config?.model_preference) {
-                    <span class="vc-meta">Model: {{ vc.config.model_preference }}</span>
+                    <span class="vc-meta">{{ 'brain.vc.model' | translate:{ model: vc.config.model_preference } }}</span>
                   }
                   @if (vc.config?.agent_fps) {
-                    <span class="vc-meta">FPS: {{ vc.config.agent_fps | number:'1.1-1' }}/{{ vc.config.user_fps | number:'1.1-1' }}</span>
+                    <span class="vc-meta">{{ 'brain.vc.fps' | translate:{ agent: (vc.config.agent_fps | number:'1.1-1'), user: (vc.config.user_fps | number:'1.1-1') } }}</span>
                   }
-                  <span class="vc-meta">Buffer: {{ vc.total }}/{{ vc.config?.buffer_size || '?' }}</span>
+                  <span class="vc-meta">{{ 'brain.vc.buffer' | translate:{ total: vc.total, size: (vc.config?.buffer_size || '?') } }}</span>
                 </div>
               }
             </div>
 
             @if (vcData(); as vc) {
               @if (!vc.enabled) {
-                <div class="empty-state">Visual Cortex is disabled in agent configuration.</div>
+                <div class="empty-state">{{ 'brain.vc.disabledEmpty' | translate }}</div>
               } @else if (vc.events.length === 0) {
-                <div class="empty-state">No visual events in buffer{{ vcChannelFilter() ? ' for channel "' + vcChannelFilter() + '"' : '' }}.</div>
+                <div class="empty-state">{{ vcChannelFilter() ? ('brain.vc.noEventsChannel' | translate:{ channel: vcChannelFilter() }) : ('brain.vc.noEvents' | translate) }}</div>
               } @else {
                 <div class="vc-event-list">
                   @for (ev of vc.events.slice().reverse(); track $index) {
@@ -321,11 +321,11 @@ import { TranslateModule } from '@ngx-translate/core';
                         <div class="vc-description">{{ ev.description }}</div>
                       }
                       @if (ev.change_summary) {
-                        <div class="vc-change"><span class="vc-label">Changed:</span> {{ ev.change_summary }}</div>
+                        <div class="vc-change"><span class="vc-label">{{ 'brain.vc.changed' | translate }}</span> {{ ev.change_summary }}</div>
                       }
                       @if (ev.ocr_text) {
                         <details class="vc-ocr-details">
-                          <summary class="vc-label">OCR Text</summary>
+                          <summary class="vc-label">{{ 'brain.vc.ocr' | translate }}</summary>
                           <pre class="vc-ocr">{{ ev.ocr_text }}</pre>
                         </details>
                       }
@@ -334,7 +334,7 @@ import { TranslateModule } from '@ngx-translate/core';
                 </div>
               }
             } @else {
-              <div class="empty-state">Loading visual cortex data...</div>
+              <div class="empty-state">{{ 'brain.vc.loading' | translate }}</div>
             }
           </div>
         }
@@ -371,7 +371,7 @@ import { TranslateModule } from '@ngx-translate/core';
           <div class="tab-panel">
             <div class="events-toolbar">
               <select class="filter-select" [(ngModel)]="eventFilter" (ngModelChange)="loadEvents()">
-                <option value="">All events</option>
+                <option value="">{{ 'brain.events.all' | translate }}</option>
                 @for (et of eventTypes(); track et) {
                   <option [value]="et">{{ et }}</option>
                 }
@@ -403,7 +403,7 @@ import { TranslateModule } from '@ngx-translate/core';
           <div class="tab-panel">
             <div class="schedule-section">
               <h3 class="section-heading">{{ 'brain.schedule.title' | translate }}</h3>
-              <p class="section-desc">Configure when this agent sleeps and wakes. Changes apply immediately.</p>
+              <p class="section-desc">{{ 'brain.schedule.desc' | translate }}</p>
 
               <div class="schedule-grid">
                 <div class="schedule-field">
@@ -415,40 +415,40 @@ import { TranslateModule } from '@ngx-translate/core';
                   <input type="time" class="schedule-input" [(ngModel)]="scheduleWakeTime" />
                 </div>
                 <div class="schedule-field">
-                  <label class="schedule-label">Timezone</label>
+                  <label class="schedule-label">{{ 'brain.schedule.timezone' | translate }}</label>
                   <select class="schedule-input" [(ngModel)]="scheduleTimezone">
-                    <option value="UTC">UTC</option>
-                    <option value="America/New_York">Eastern (US)</option>
-                    <option value="America/Chicago">Central (US)</option>
-                    <option value="America/Denver">Mountain (US)</option>
-                    <option value="America/Los_Angeles">Pacific (US)</option>
-                    <option value="Europe/London">London</option>
-                    <option value="Europe/Berlin">Central Europe</option>
-                    <option value="Europe/Rome">Rome</option>
-                    <option value="Asia/Tokyo">Tokyo</option>
-                    <option value="Asia/Shanghai">Shanghai</option>
-                    <option value="Australia/Sydney">Sydney</option>
+                    <option value="UTC">{{ 'brain.schedule.tz.utc' | translate }}</option>
+                    <option value="America/New_York">{{ 'brain.schedule.tz.eastern' | translate }}</option>
+                    <option value="America/Chicago">{{ 'brain.schedule.tz.central' | translate }}</option>
+                    <option value="America/Denver">{{ 'brain.schedule.tz.mountain' | translate }}</option>
+                    <option value="America/Los_Angeles">{{ 'brain.schedule.tz.pacific' | translate }}</option>
+                    <option value="Europe/London">{{ 'brain.schedule.tz.london' | translate }}</option>
+                    <option value="Europe/Berlin">{{ 'brain.schedule.tz.centralEurope' | translate }}</option>
+                    <option value="Europe/Rome">{{ 'brain.schedule.tz.rome' | translate }}</option>
+                    <option value="Asia/Tokyo">{{ 'brain.schedule.tz.tokyo' | translate }}</option>
+                    <option value="Asia/Shanghai">{{ 'brain.schedule.tz.shanghai' | translate }}</option>
+                    <option value="Australia/Sydney">{{ 'brain.schedule.tz.sydney' | translate }}</option>
                   </select>
                 </div>
                 <div class="schedule-field schedule-toggle-field">
-                  <label class="schedule-label">Wake on user message</label>
+                  <label class="schedule-label">{{ 'brain.schedule.wakeOnMessage' | translate }}</label>
                   <label class="schedule-toggle">
                     <input type="checkbox" [(ngModel)]="scheduleWakeOnMessage" />
-                    <span class="schedule-toggle-label">{{ scheduleWakeOnMessage ? 'Yes' : 'No' }}</span>
+                    <span class="schedule-toggle-label">{{ scheduleWakeOnMessage ? ('brain.schedule.yes' | translate) : ('brain.schedule.no' | translate) }}</span>
                   </label>
                 </div>
               </div>
 
               <h3 class="section-heading" style="margin-top: 1.5rem">{{ 'brain.schedule.napTitle' | translate }}</h3>
-              <p class="section-desc">Optional daytime consolidation window. Leave empty to disable.</p>
+              <p class="section-desc">{{ 'brain.schedule.napDesc' | translate }}</p>
 
               <div class="schedule-grid">
                 <div class="schedule-field">
-                  <label class="schedule-label">Nap Start</label>
+                  <label class="schedule-label">{{ 'brain.schedule.napStart' | translate }}</label>
                   <input type="time" class="schedule-input" [(ngModel)]="scheduleNapStart" />
                 </div>
                 <div class="schedule-field">
-                  <label class="schedule-label">Nap End</label>
+                  <label class="schedule-label">{{ 'brain.schedule.napEnd' | translate }}</label>
                   <input type="time" class="schedule-input" [(ngModel)]="scheduleNapEnd" />
                 </div>
               </div>
@@ -1072,6 +1072,8 @@ import { TranslateModule } from '@ngx-translate/core';
   `,
 })
 export class BrainComponent implements OnInit, OnDestroy {
+  private readonly translate = inject(TranslateService);
+
   Math = Math;
   private destroy$ = new Subject<void>();
   private agentId = '';
@@ -1209,7 +1211,7 @@ export class BrainComponent implements OnInit, OnDestroy {
     };
     return Object.entries(hormones).map(([key, value]) => ({
       key,
-      label: key.charAt(0).toUpperCase() + key.slice(1),
+      label: this.translate.instant('info.hormones.legend.' + key),
       value: typeof value === 'number' ? Math.min(1, Math.max(0, value)) : 0,
       color: colors[key] ?? 'var(--accent-primary)',
     }));
@@ -1257,7 +1259,7 @@ export class BrainComponent implements OnInit, OnDestroy {
     return Object.entries(hh.hormones)
       .filter(([, pts]) => pts.length > 1)
       .map(([key, pts]) => ({
-        label: key.charAt(0).toUpperCase() + key.slice(1),
+        label: this.translate.instant('info.hormones.legend.' + key),
         color: colors[key] ?? '#94a3b8',
         data: pts.map(p => ({ x: p.turn, y: p.value })),
       }));

@@ -749,7 +749,10 @@
       "dreaming": "Sogno a occhi aperti",
       "unreachable": "Irraggiungibile",
       "desktopOffline": "Desktop offline",
-      "defaultJob": "Assistente generico"
+      "defaultJob": "Assistente generico",
+      "created": "Creato {{time}}",
+      "lastActive": "Ultima attività {{time}}",
+      "openChatBtn": "Apri chat"
     },
     "squad": {
       "checkbackTitle": "Checkback squad",
@@ -760,7 +763,10 @@
       "boardTitle": "Board squad",
       "loadingBoard": "Caricamento board…",
       "inbox": "Inbox",
-      "proposed": "Proposte"
+      "proposed": "Proposte",
+      "approved": "Approvate",
+      "openEscalations": "Escalation aperte",
+      "noTodos": "Nessun todo di squad"
     },
     "emptyHintBefore": "Clicca l'orb o premi",
     "emptyHintAfter": "per iniziare",
@@ -776,6 +782,57 @@
       "almost": "Quasi fatto...",
       "stillLoading": "Ancora in caricamento — un attimo...",
       "ready": "Runtime pronto — caricamento agenti..."
+    },
+    "loadError": "Impossibile caricare gli agenti",
+    "squads": {
+      "title": "Squad",
+      "subtitle": "Flotte persistenti con un lead, inbox condivisa e coordinamento tra membri",
+      "create": "Crea squad",
+      "cancel": "Annulla",
+      "name": "Nome",
+      "namePlaceholder": "es. Moderatori Discord",
+      "leadAgent": "Agente lead",
+      "selectLead": "Seleziona lead…",
+      "members": "Membri",
+      "createBtn": "Crea",
+      "loading": "Caricamento squad…",
+      "empty": "Nessuna squad ancora. Raggruppa gli agenti con un lead per inbox e coordinamento condivisi.",
+      "board": "Board",
+      "checkback": "Checkback",
+      "delete": "Elimina",
+      "lead": "Lead: {{name}}",
+      "autoCheckback": "Checkback automatico ogni {{minutes}} min",
+      "checkbackOff": "Checkback programmato disattivato",
+      "proposalsPending": "{{count}} proposta/e in attesa di approvazione del lead",
+      "leadRequests": "Richieste del lead — approvazione del proprietario",
+      "approve": "Approva",
+      "deny": "Nega",
+      "addMember": "Aggiungi membro",
+      "noUnassigned": "Nessun agente non assegnato. Ogni agente è già in una squad — rimuovine uno da una card per spostarlo qui.",
+      "chooseAgent": "Scegli un agente…",
+      "add": "Aggiungi",
+      "pendingDeleteAgent": "Elimina agente {{name}}",
+      "pendingPatchTrust": "Aggiorna fiducia per {{name}}",
+      "pendingPatchJob": "Aggiorna ruolo per {{name}}",
+      "cannotRemoveOnly": "Impossibile rimuovere l'unico membro. Elimina invece la squad.",
+      "removeTitle": "Rimuovere dalla squad?",
+      "removeLeadTitle": "Trasferire il lead e rimuovere il membro?",
+      "removeMessage": "Rimuovere {{name}} da questa squad?",
+      "removeLeadMessage": "Rimuovere {{name}} dalla squad? Il ruolo di lead passerà a un altro membro.",
+      "removeConfirm": "Rimuovi membro",
+      "removeLeadConfirm": "Trasferisci e rimuovi",
+      "deleteTitle": "Eliminare la squad?",
+      "deleteMessage": "Di default gli agenti restano nella flotta come indipendenti — vengono rimossi solo inbox e contesto di coordinamento della squad.",
+      "deleteConfirm": "Elimina squad",
+      "deleteAgentsOption": "Elimina anche tutti i {{count}} agenti di questa squad (permanente)",
+      "loadError": "Impossibile caricare le squad",
+      "createFailed": "Creazione non riuscita",
+      "addFailed": "Aggiunta membro non riuscita",
+      "removeFailed": "Rimozione non riuscita",
+      "actionFailed": "Azione non riuscita",
+      "boardLoadError": "Impossibile caricare la board",
+      "deleteFailed": "Eliminazione squad non riuscita",
+      "updateFailed": "Aggiornamento non riuscito"
     }
   },
   "toast": {
@@ -1108,7 +1165,16 @@
       "genesisVersion": "Versione genesis",
       "baseModel": "Modello base",
       "soulHash": "Hash Soul",
-      "sovereigntyMode": "Modalità sovranità"
+      "sovereigntyMode": "Modalità sovranità",
+      "vram": "Stato VRAM",
+      "inVram": "In VRAM",
+      "evicted": "Espulso",
+      "energy": "Energia",
+      "mood": "Umore",
+      "momentum": "Momentum",
+      "coherence": "Coerenza",
+      "predError": "Err. pred.",
+      "network": "Rete"
     },
     "schedule": {
       "title": "Programma di sonno",
@@ -1116,7 +1182,28 @@
       "saved": "Salvato",
       "bedtime": "Ora di dormire",
       "wakeTime": "Sveglia",
-      "napTitle": "Finestra pisolino"
+      "napTitle": "Finestra pisolino",
+      "desc": "Configura quando questo agente dorme e si sveglia. Le modifiche si applicano subito.",
+      "timezone": "Fuso orario",
+      "wakeOnMessage": "Sveglia su messaggio utente",
+      "yes": "Sì",
+      "no": "No",
+      "napDesc": "Finestra opzionale di consolidamento diurno. Lascia vuoto per disabilitare.",
+      "napStart": "Inizio riposo",
+      "napEnd": "Fine riposo",
+      "tz": {
+        "utc": "UTC",
+        "eastern": "Orientale (US)",
+        "central": "Centrale (US)",
+        "mountain": "Montagna (US)",
+        "pacific": "Pacifico (US)",
+        "london": "Londra",
+        "centralEurope": "Europa centrale",
+        "rome": "Roma",
+        "tokyo": "Tokyo",
+        "shanghai": "Shanghai",
+        "sydney": "Sydney"
+      }
     },
     "empty": {
       "signals": "Nessun segnale ancora",
@@ -1127,10 +1214,37 @@
     "overview": {
       "hormones": "Livelli ormonali",
       "ans": "Stato ANS",
-      "neural": "Attività neurale"
+      "neural": "Attività neurale",
+      "networkDominance": "Dominanza di rete",
+      "state": "Stato: {{label}}",
+      "networkTimeline": "Timeline di rete",
+      "hormoneTimeline": "Timeline ormoni",
+      "signalsMeta": "{{total}} segnali, {{learnable}} apprendibili",
+      "turn": "Turno"
     },
     "events": {
       "all": "Tutti gli eventi"
+    },
+    "vc": {
+      "allChannels": "Tutti i canali",
+      "channelAgent": "Agente",
+      "channelUser": "Utente",
+      "refresh": "Aggiorna",
+      "autoRefresh": "Auto-aggiorna",
+      "stopAuto": "Ferma auto",
+      "running": "In esecuzione",
+      "stopped": "Fermato",
+      "disabled": "Disabilitato",
+      "agentActive": "Agente attivo",
+      "model": "Modello: {{model}}",
+      "fps": "FPS: {{agent}}/{{user}}",
+      "buffer": "Buffer: {{total}}/{{size}}",
+      "disabledEmpty": "Il Visual Cortex è disabilitato nella configurazione dell'agente.",
+      "noEvents": "Nessun evento visivo nel buffer.",
+      "noEventsChannel": "Nessun evento visivo nel buffer per il canale \"{{channel}}\".",
+      "changed": "Modificato:",
+      "ocr": "Testo OCR",
+      "loading": "Caricamento dati Visual Cortex..."
     }
   },
   "tasks": {
@@ -1394,5 +1508,13 @@
     "active": "Attiva",
     "revoked": "Revocata",
     "delete": "Elimina"
+  },
+  "cryptex": {
+    "empty": "Nessun anello caricato",
+    "categories": {
+      "fixed": "FISSO",
+      "project": "PROGETTO",
+      "domain": "DOMINIO"
+    }
   }
 }

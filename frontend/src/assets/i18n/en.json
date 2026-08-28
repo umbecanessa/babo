@@ -749,7 +749,10 @@
       "dreaming": "Daydreaming",
       "unreachable": "Unreachable",
       "desktopOffline": "Desktop Offline",
-      "defaultJob": "General helpful assistant"
+      "defaultJob": "General helpful assistant",
+      "created": "Created {{time}}",
+      "lastActive": "Last active {{time}}",
+      "openChatBtn": "Open Chat"
     },
     "squad": {
       "checkbackTitle": "Squad checkback",
@@ -760,7 +763,10 @@
       "boardTitle": "Squad board",
       "loadingBoard": "Loading board…",
       "inbox": "Inbox",
-      "proposed": "Proposed"
+      "proposed": "Proposed",
+      "approved": "Approved",
+      "openEscalations": "Open escalations",
+      "noTodos": "No squad todos"
     },
     "emptyHintBefore": "Click the orb or press",
     "emptyHintAfter": "to begin",
@@ -776,6 +782,57 @@
       "almost": "Almost there...",
       "stillLoading": "Still loading — hang tight...",
       "ready": "Runtime ready — loading agents..."
+    },
+    "loadError": "Failed to load agents",
+    "squads": {
+      "title": "Squads",
+      "subtitle": "Persistent fleets with a lead, shared inbox, and member coordination",
+      "create": "Create squad",
+      "cancel": "Cancel",
+      "name": "Name",
+      "namePlaceholder": "e.g. Discord moderators",
+      "leadAgent": "Lead agent",
+      "selectLead": "Select lead…",
+      "members": "Members",
+      "createBtn": "Create",
+      "loading": "Loading squads…",
+      "empty": "No squads yet. Group agents with a lead for shared inbox and coordination.",
+      "board": "Board",
+      "checkback": "Checkback",
+      "delete": "Delete",
+      "lead": "Lead: {{name}}",
+      "autoCheckback": "Auto checkback every {{minutes}} min",
+      "checkbackOff": "Scheduled checkback off",
+      "proposalsPending": "{{count}} proposal(s) pending lead approval",
+      "leadRequests": "Lead requests — owner approval",
+      "approve": "Approve",
+      "deny": "Deny",
+      "addMember": "Add member",
+      "noUnassigned": "No unassigned agents. Every agent is already in a squad — remove one from a squad card to move them here.",
+      "chooseAgent": "Choose an agent…",
+      "add": "Add",
+      "pendingDeleteAgent": "Delete agent {{name}}",
+      "pendingPatchTrust": "Update trust for {{name}}",
+      "pendingPatchJob": "Update job for {{name}}",
+      "cannotRemoveOnly": "Cannot remove the only member. Delete the squad instead.",
+      "removeTitle": "Remove from squad?",
+      "removeLeadTitle": "Transfer lead and remove member?",
+      "removeMessage": "Remove {{name}} from this squad?",
+      "removeLeadMessage": "Remove {{name}} from the squad? Lead role will transfer to another member.",
+      "removeConfirm": "Remove member",
+      "removeLeadConfirm": "Transfer and remove",
+      "deleteTitle": "Delete squad?",
+      "deleteMessage": "By default, agents stay on your fleet as independents — only the shared squad inbox and coordination context are removed.",
+      "deleteConfirm": "Delete squad",
+      "deleteAgentsOption": "Also delete all {{count}} agent(s) in this squad (permanent)",
+      "loadError": "Failed to load squads",
+      "createFailed": "Create failed",
+      "addFailed": "Add member failed",
+      "removeFailed": "Remove failed",
+      "actionFailed": "Action failed",
+      "boardLoadError": "Failed to load board",
+      "deleteFailed": "Delete squad failed",
+      "updateFailed": "Update failed"
     }
   },
   "toast": {
@@ -1108,7 +1165,16 @@
       "genesisVersion": "Genesis Version",
       "baseModel": "Base Model",
       "soulHash": "Soul Hash",
-      "sovereigntyMode": "Sovereignty Mode"
+      "sovereigntyMode": "Sovereignty Mode",
+      "vram": "VRAM Status",
+      "inVram": "In VRAM",
+      "evicted": "Evicted",
+      "energy": "Energy",
+      "mood": "Mood",
+      "momentum": "Momentum",
+      "coherence": "Coherence",
+      "predError": "Pred. Error",
+      "network": "Network"
     },
     "schedule": {
       "title": "Sleep Schedule",
@@ -1116,7 +1182,28 @@
       "saved": "Saved",
       "bedtime": "Bedtime",
       "wakeTime": "Wake Time",
-      "napTitle": "Nap Window"
+      "napTitle": "Nap Window",
+      "desc": "Configure when this agent sleeps and wakes. Changes apply immediately.",
+      "timezone": "Timezone",
+      "wakeOnMessage": "Wake on user message",
+      "yes": "Yes",
+      "no": "No",
+      "napDesc": "Optional daytime consolidation window. Leave empty to disable.",
+      "napStart": "Nap Start",
+      "napEnd": "Nap End",
+      "tz": {
+        "utc": "UTC",
+        "eastern": "Eastern (US)",
+        "central": "Central (US)",
+        "mountain": "Mountain (US)",
+        "pacific": "Pacific (US)",
+        "london": "London",
+        "centralEurope": "Central Europe",
+        "rome": "Rome",
+        "tokyo": "Tokyo",
+        "shanghai": "Shanghai",
+        "sydney": "Sydney"
+      }
     },
     "empty": {
       "signals": "No signals yet",
@@ -1127,10 +1214,37 @@
     "overview": {
       "hormones": "Hormone Levels",
       "ans": "ANS State",
-      "neural": "Neural Activity"
+      "neural": "Neural Activity",
+      "networkDominance": "Network Dominance",
+      "state": "State: {{label}}",
+      "networkTimeline": "Network Timeline",
+      "hormoneTimeline": "Hormone Timeline",
+      "signalsMeta": "{{total}} signals, {{learnable}} learnable",
+      "turn": "Turn"
     },
     "events": {
       "all": "All events"
+    },
+    "vc": {
+      "allChannels": "All channels",
+      "channelAgent": "Agent",
+      "channelUser": "User",
+      "refresh": "Refresh",
+      "autoRefresh": "Auto-Refresh",
+      "stopAuto": "Stop Auto",
+      "running": "Running",
+      "stopped": "Stopped",
+      "disabled": "Disabled",
+      "agentActive": "Agent Active",
+      "model": "Model: {{model}}",
+      "fps": "FPS: {{agent}}/{{user}}",
+      "buffer": "Buffer: {{total}}/{{size}}",
+      "disabledEmpty": "Visual Cortex is disabled in agent configuration.",
+      "noEvents": "No visual events in buffer.",
+      "noEventsChannel": "No visual events in buffer for channel \"{{channel}}\".",
+      "changed": "Changed:",
+      "ocr": "OCR Text",
+      "loading": "Loading visual cortex data..."
     }
   },
   "tasks": {
@@ -1394,5 +1508,13 @@
     "active": "Active",
     "revoked": "Revoked",
     "delete": "Delete"
+  },
+  "cryptex": {
+    "empty": "No rings loaded",
+    "categories": {
+      "fixed": "FIXED",
+      "project": "PROJECT",
+      "domain": "DOMAIN"
+    }
   }
 }

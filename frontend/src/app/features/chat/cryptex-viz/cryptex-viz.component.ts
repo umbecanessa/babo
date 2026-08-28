@@ -5,8 +5,10 @@ import {
   EventEmitter,
   OnChanges,
   SimpleChanges,
+  inject,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { CryptexRingStatus, CryptexSlotDetail } from '../../../core/models/agent.model';
 
 export interface SlotPreview {
@@ -48,10 +50,10 @@ const RING_COLOR_OVERRIDES: Record<string, string> = {
 };
 
 const CATEGORY_ORDER = ['fixed', 'project', 'domain'];
-const CATEGORY_LABELS: Record<string, string> = {
-  fixed: 'FIXED',
-  project: 'PROJECT',
-  domain: 'DOMAIN',
+const CATEGORY_LABEL_KEYS: Record<string, string> = {
+  fixed: 'cryptex.categories.fixed',
+  project: 'cryptex.categories.project',
+  domain: 'cryptex.categories.domain',
 };
 
 const ACCESS_ICONS: Record<string, string> = {
@@ -78,7 +80,7 @@ function truncate(s: string, maxLen: number): string {
 @Component({
   selector: 'app-cryptex-viz',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, TranslateModule],
   templateUrl: './cryptex-viz.component.html',
   styleUrl: './cryptex-viz.component.scss',
 })
@@ -90,6 +92,8 @@ export class CryptexVizComponent implements OnChanges {
   @Output() ringSelect = new EventEmitter<string>();
 
   groups: CategoryGroup[] = [];
+
+  private readonly translate = inject(TranslateService);
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['rings'] || changes['activeProject'] || changes['selectedRingId']) {
@@ -152,7 +156,9 @@ export class CryptexVizComponent implements OnChanges {
       .filter((cat) => grouped[cat]?.length)
       .map((cat) => ({
         category: cat,
-        label: CATEGORY_LABELS[cat] || cat.toUpperCase(),
+        label: this.translate.instant(
+          CATEGORY_LABEL_KEYS[cat] || 'cryptex.categories.fixed',
+        ),
         cards: grouped[cat],
       }));
   }

@@ -150,7 +150,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       error: (err) => {
         this.loading.set(false);
         if (!silent) {
-          const msg = err?.error?.message || err?.message || 'Failed to load agents';
+          const msg = err?.error?.message || err?.message || this.translate.instant('dashboard.loadError');
           this.error.set(msg);
         }
       },

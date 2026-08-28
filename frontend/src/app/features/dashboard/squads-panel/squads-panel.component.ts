@@ -1,29 +1,17 @@
-import { Component, OnInit, signal, input, output } from '@angular/core';
-
+import { Component, OnInit, signal, input, output, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-
 import { FormsModule } from '@angular/forms';
-
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import {
-
   ApiService,
-
   Squad,
-
   SquadCreate,
-
   SquadInboxItem,
-
   SquadKanbanBoard,
-
   SquadPendingAction,
-
 } from '../../../core/services/api.service';
-
 import { Agent } from '../../../core/models/agent.model';
-
 import { CharterTab } from '../agent-charter-modal/agent-charter-modal.component';
-
 import { AgentCardComponent } from '../agent-card/agent-card.component';
 
 export type SquadConfirmAction = 'delete_squad' | 'remove_member';
@@ -48,7 +36,7 @@ export interface SquadConfirmRequest {
 
   standalone: true,
 
-  imports: [CommonModule, FormsModule, AgentCardComponent],
+  imports: [CommonModule, FormsModule, AgentCardComponent, TranslateModule],
 
   templateUrl: './squads-panel.component.html',
 
@@ -118,7 +106,10 @@ export class SquadsPanelComponent implements OnInit {
 
 
 
-  constructor(private api: ApiService) {}
+  constructor(
+    private api: ApiService,
+    private translate: TranslateService,
+  ) {}
 
 
 
@@ -146,7 +137,7 @@ export class SquadsPanelComponent implements OnInit {
 
       error: err => {
 
-        this.error.set(err?.error?.detail || err?.message || 'Failed to load squads');
+        this.error.set(err?.error?.detail || err?.message || this.translate.instant('dashboard.squads.loadError'));
 
         this.loading.set(false);
 
@@ -280,7 +271,7 @@ export class SquadsPanelComponent implements OnInit {
 
       error: err => {
 
-        this.error.set(err?.error?.detail || err?.message || 'Create failed');
+        this.error.set(err?.error?.detail || err?.message || this.translate.instant('dashboard.squads.createFailed'));
 
       },
 
@@ -316,7 +307,7 @@ export class SquadsPanelComponent implements OnInit {
 
       error: err => {
 
-        this.error.set(err?.error?.detail || err?.message || 'Add member failed');
+        this.error.set(err?.error?.detail || err?.message || this.translate.instant('dashboard.squads.addFailed'));
 
       },
 
@@ -348,19 +339,19 @@ export class SquadsPanelComponent implements OnInit {
     if (isLead) {
       const others = (sq.member_agent_ids || []).filter(id => id !== memberId);
       if (others.length === 0) {
-        this.error.set('Cannot remove the only member. Delete the squad instead.');
+        this.error.set(this.translate.instant('dashboard.squads.cannotRemoveOnly'));
         return;
       }
     }
 
     const message = isLead
-      ? `Remove ${label} from the squad? Lead role will transfer to another member.`
-      : `Remove ${label} from this squad?`;
+      ? this.translate.instant('dashboard.squads.removeLeadMessage', { name: label })
+      : this.translate.instant('dashboard.squads.removeMessage', { name: label });
 
     this.confirmDialog.set({
-      title: isLead ? 'Transfer lead and remove member?' : 'Remove from squad?',
+      title: this.translate.instant(isLead ? 'dashboard.squads.removeLeadTitle' : 'dashboard.squads.removeTitle'),
       message,
-      confirmLabel: isLead ? 'Transfer and remove' : 'Remove member',
+      confirmLabel: this.translate.instant(isLead ? 'dashboard.squads.removeLeadConfirm' : 'dashboard.squads.removeConfirm'),
       variant: 'danger',
       action: 'remove_member',
       squad: sq,
@@ -379,7 +370,7 @@ export class SquadsPanelComponent implements OnInit {
 
       if (others.length === 0) {
 
-        this.error.set('Cannot remove the only member. Delete the squad instead.');
+        this.error.set(this.translate.instant('dashboard.squads.cannotRemoveOnly'));
 
         return;
 
@@ -423,7 +414,7 @@ export class SquadsPanelComponent implements OnInit {
 
       error: err => {
 
-        this.error.set(err?.error?.detail || err?.message || 'Remove failed');
+        this.error.set(err?.error?.detail || err?.message || this.translate.instant('dashboard.squads.removeFailed'));
 
       },
 
@@ -442,27 +433,17 @@ export class SquadsPanelComponent implements OnInit {
 
 
   pendingActionLabel(pa: SquadPendingAction): string {
-
+    const name = this.agentLabel(pa.target_agent_id || '');
     if (pa.action_type === 'delete_agent') {
-
-      return `Delete agent ${this.agentLabel(pa.target_agent_id || '')}`;
-
+      return this.translate.instant('dashboard.squads.pendingDeleteAgent', { name });
     }
-
     if (pa.action_type === 'patch_trust') {
-
-      return `Update trust for ${this.agentLabel(pa.target_agent_id || '')}`;
-
+      return this.translate.instant('dashboard.squads.pendingPatchTrust', { name });
     }
-
     if (pa.action_type === 'patch_job') {
-
-      return `Update job for ${this.agentLabel(pa.target_agent_id || '')}`;
-
+      return this.translate.instant('dashboard.squads.pendingPatchJob', { name });
     }
-
     return pa.title || pa.action_type;
-
   }
 
 
@@ -481,7 +462,7 @@ export class SquadsPanelComponent implements OnInit {
 
       error: err => {
 
-        this.error.set(err?.error?.detail || err?.message || 'Action failed');
+        this.error.set(err?.error?.detail || err?.message || this.translate.instant('dashboard.squads.actionFailed'));
 
       },
 
@@ -511,7 +492,7 @@ export class SquadsPanelComponent implements OnInit {
 
       error: err => {
 
-        this.error.set(err?.error?.detail || err?.message || 'Failed to load board');
+        this.error.set(err?.error?.detail || err?.message || this.translate.instant('dashboard.squads.boardLoadError'));
 
         this.kanbanLoading.set(false);
 
@@ -551,16 +532,14 @@ export class SquadsPanelComponent implements OnInit {
     const memberIds = this.memberIdsOrdered(sq);
     const n = memberIds.length;
     this.confirmDialog.set({
-      title: 'Delete squad?',
-      message:
-        'By default, agents stay on your fleet as independents — only the shared squad inbox and coordination context are removed.',
-      confirmLabel: 'Delete squad',
+      title: this.translate.instant('dashboard.squads.deleteTitle'),
+      message: this.translate.instant('dashboard.squads.deleteMessage'),
+      confirmLabel: this.translate.instant('dashboard.squads.deleteConfirm'),
       variant: 'danger',
       action: 'delete_squad',
       squadId: sq.id,
       leadId: sq.lead_agent_id,
-      deleteAgentsOptionLabel:
-        `Also delete all ${n} agent${n === 1 ? '' : 's'} in this squad (permanent)`,
+      deleteAgentsOptionLabel: this.translate.instant('dashboard.squads.deleteAgentsOption', { count: n }),
     });
   }
 
@@ -571,7 +550,7 @@ export class SquadsPanelComponent implements OnInit {
         this.squadsChanged.emit();
       },
       error: err => {
-        this.error.set(err?.error?.detail || err?.message || 'Delete squad failed');
+        this.error.set(err?.error?.detail || err?.message || this.translate.instant('dashboard.squads.deleteFailed'));
       },
     });
   }
@@ -652,7 +631,7 @@ export class SquadsPanelComponent implements OnInit {
 
       error: err => {
 
-        this.error.set(err?.error?.detail || err?.message || 'Update failed');
+        this.error.set(err?.error?.detail || err?.message || this.translate.instant('dashboard.squads.updateFailed'));
 
       },
 

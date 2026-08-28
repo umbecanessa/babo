@@ -182,7 +182,7 @@
                 }
               </div>
               <div class="squad-kanban-col">
-                <span class="squad-col-label">Approved</span>
+                <span class="squad-col-label">{{ 'dashboard.squad.approved' | translate }}</span>
                 @for (item of board.inbox.approved; track item.id) {
                   <div class="squad-kanban-card"><strong>{{ item.title }}</strong></div>
                 } @empty {
@@ -193,7 +193,7 @@
           </section>
           @if (board.open_escalations?.length) {
             <section class="squad-kanban-escalations">
-              <h4>Open escalations</h4>
+              <h4>{{ 'dashboard.squad.openEscalations' | translate }}</h4>
               <ul>
                 @for (esc of board.open_escalations; track esc.member_agent_id) {
                   <li>{{ squadsPanel!.agentLabel(esc.member_agent_id) }}: {{ esc.reason }}</li>
@@ -215,7 +215,7 @@
                   }
                 </ul>
               } @else {
-                <p class="squad-col-empty">No squad todos</p>
+                <p class="squad-col-empty">{{ 'dashboard.squad.noTodos' | translate }}</p>
               }
             </section>
           }

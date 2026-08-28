@@ -114,17 +114,17 @@
             @if (createdLabel || lastActiveLabel) {
               <div class="meta-times">
                 @if (createdLabel) {
-                  <span [title]="createdTitle || ''">Created {{ createdLabel }}</span>
+                  <span [title]="createdTitle || ''">{{ 'dashboard.agent.created' | translate:{ time: createdLabel } }}</span>
                 }
                 @if (lastActiveLabel) {
-                  <span [title]="lastActiveTitle || ''">Last active {{ lastActiveLabel }}</span>
+                  <span [title]="lastActiveTitle || ''">{{ 'dashboard.agent.lastActive' | translate:{ time: lastActiveLabel } }}</span>
                 }
               </div>
             }
           </div>
           <a [routerLink]="['/chat', agent.id]" class="chat-btn" (click)="$event.stopPropagation()">
             <span class="chat-dot"></span>
-            Open Chat
+            {{ 'dashboard.agent.openChatBtn' | translate }}
           </a>
         </div>
       </div>
@@ -228,10 +228,10 @@
         @if (createdLabel || lastActiveLabel) {
           <div class="meta-times">
             @if (createdLabel) {
-              <span [title]="createdTitle || ''">Created {{ createdLabel }}</span>
+              <span [title]="createdTitle || ''">{{ 'dashboard.agent.created' | translate:{ time: createdLabel } }}</span>
             }
             @if (lastActiveLabel) {
-              <span [title]="lastActiveTitle || ''">Last active {{ lastActiveLabel }}</span>
+              <span [title]="lastActiveTitle || ''">{{ 'dashboard.agent.lastActive' | translate:{ time: lastActiveLabel } }}</span>
             }
           </div>
         }
@@ -239,7 +239,7 @@
 
       <a [routerLink]="['/chat', agent.id]" class="chat-btn">
         <span class="chat-dot"></span>
-        Open Chat
+        {{ 'dashboard.agent.openChatBtn' | translate }}
       </a>
     </div>
   </div>
