@@ -486,17 +486,9 @@ export class MessageListComponent implements OnChanges, AfterViewChecked, OnDest
   }
 
   driveActionLabel(actionType: string): string {
-    const labels: Record<string, string> = {
-      web_search: 'Browsing',
-      wikipedia: 'Reading Wikipedia',
-      read_page: 'Reading',
-      deep_browse: 'Deep Browsing',
-      self_test: 'Self-testing',
-      self_check: 'Self-checking',
-      reach_out: 'Reaching out',
-      reflect: 'Reflecting',
-    };
-    return labels[actionType] || actionType;
+    const key = `chat.drive.${actionType}`;
+    const translated = this.t(key);
+    return translated !== key ? translated : actionType;
   }
 
   /** Extract signal tags from a message and return the cleaned text + tags. */
@@ -682,30 +674,9 @@ export class MessageListComponent implements OnChanges, AfterViewChecked, OnDest
 
   /** Get a human-readable label for a tool name. */
   toolLabel(name: string): string {
-    const labels: Record<string, string> = {
-      browser: 'Browser',
-      terminal: 'Terminal',
-      bash: 'Terminal',
-      read: 'Read File',
-      write: 'Write File',
-      edit: 'Edit File',
-      file_read: 'Read File',
-      file_write: 'Write File',
-      file_edit: 'Edit File',
-      file_search: 'Search Files',
-      file_tree: 'File Tree',
-      git: 'Git',
-      web_search: 'Web Search',
-      web_fetch: 'Web Fetch',
-      wikipedia: 'Wikipedia',
-      arxiv_search: 'Arxiv',
-      note_memory: 'Notes',
-      calculator: 'Calculator',
-      chart_generate: 'Chart',
-      code_analyze: 'Code Analysis',
-      test_runner: 'Test Runner',
-    };
-    return labels[name] || name.replace(/_/g, ' ');
+    const key = `chat.tools.${name}`;
+    const translated = this.t(key);
+    return translated !== key ? translated : name.replace(/_/g, ' ');
   }
 
   /** Get accent CSS class based on tool type. */
@@ -768,14 +739,9 @@ export class MessageListComponent implements OnChanges, AfterViewChecked, OnDest
 
   /** Get a short name for a hormone. */
   hormoneShort(name: string): string {
-    const shorts: Record<string, string> = {
-      dopamine: 'Dop',
-      serotonin: 'Ser',
-      norepinephrine: 'Nor',
-      cortisol: 'Cor',
-      oxytocin: 'Oxy',
-    };
-    return shorts[name] || name.substring(0, 3);
+    const key = `chat.hormoneShort.${name}`;
+    const translated = this.t(key);
+    return translated !== key ? translated : name.substring(0, 3);
   }
 
   /** Return notable hormones (above 0.25) for badge display. */

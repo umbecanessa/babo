@@ -1,3 +1,5 @@
+export type TranslateFn = (key: string, params?: Record<string, unknown>) => string;
+
 /** Internal orchestrator loop exits — not user-facing failures. */
 export const SILENT_ORCH_EXIT_REASONS = new Set([
   'post_launch_yield',
@@ -70,16 +72,19 @@ export function runtimeModeForYieldExit(
 }
 
 /** User-facing label when the orchestrator yields after team launch / monitoring. */
-export function orchestratorYieldLabel(reason: string | undefined | null): string {
+export function orchestratorYieldLabel(
+  reason: string | undefined | null,
+  t?: TranslateFn,
+): string {
   const r = (reason || '').trim();
   if (r === 'post_launch_yield') {
-    return 'Wave launched — team is working';
+    return t ? t('chat.orchestration.waveLaunched') : 'Wave launched — team is working';
   }
   if (r === 'awaiting_delegates') {
-    return 'Monitoring sub-agents';
+    return t ? t('chat.orchestration.monitoringSubAgents') : 'Monitoring sub-agents';
   }
   if (isSilentOrchestrationExit(r)) {
-    return 'Coordinator check-in complete';
+    return t ? t('chat.orchestration.coordinatorCheckIn') : 'Coordinator check-in complete';
   }
   return '';
 }
@@ -139,13 +144,17 @@ export function agenticAbortLabel(
   aborted: boolean,
   abortReason?: string,
   autonomous?: boolean,
+  t?: TranslateFn,
 ): string {
   const reason = (abortReason || '').trim();
-  const yieldLabel = orchestratorYieldLabel(reason);
+  const yieldLabel = orchestratorYieldLabel(reason, t);
   if (yieldLabel) {
     return yieldLabel;
   }
   if (!aborted) {
+    if (t) {
+      return t(autonomous ? 'chat.orchestration.backgroundCompleted' : 'chat.orchestration.taskComplete');
+    }
     return autonomous ? 'Background task completed' : 'Task complete';
   }
   if (autonomous) {
@@ -153,12 +162,17 @@ export function agenticAbortLabel(
       return '';
     }
     if (!reason || reason === 'user_abort' || reason === 'orchestration_preempted') {
-      return 'Background check-in cancelled (system)';
+      return t ? t('chat.orchestration.bgCheckInCancelled') : 'Background check-in cancelled (system)';
     }
-    return `Background task stopped: ${reason}`;
+    return t
+      ? t('chat.orchestration.backgroundStopped', { reason })
+      : `Background task stopped: ${reason}`;
   }
   if (reason === 'user_abort') {
-    return 'Stopped by user';
+    return t ? t('chat.orchestration.stoppedByUser') : 'Stopped by user';
   }
-  return `Task stopped: ${reason || 'Cancelled'}`;
+  const fallbackReason = reason || (t ? t('chat.orchestration.cancelled') : 'Cancelled');
+  return t
+    ? t('chat.orchestration.taskStopped', { reason: fallbackReason })
+    : `Task stopped: ${reason || 'Cancelled'}`;
 }

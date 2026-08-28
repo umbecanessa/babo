@@ -236,7 +236,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
   terminalChipLabel = computed(() => {
     const count = this.terminalTabCount();
-    return count > 1 ? `Terminal ×${count}` : 'Terminal';
+    return count > 1 ? this.t('chat.runtime.terminalChipMulti', { count }) : this.t('chat.runtime.terminalChip');
   });
 
   /** Connected channel names for the sidebar status strip */
@@ -272,6 +272,10 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
   agentId = '';
   private readonly agentIdSignal = signal('');
   private waveformAnimFrame = 0;
+
+  private t(key: string, params?: Record<string, unknown>): string {
+    return this.translate.instant(key, params);
+  }
 
   constructor(
     private route: ActivatedRoute,
@@ -556,10 +560,10 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
   projectProcessKindLabel(kind: string): string {
     switch (kind) {
-      case 'backend': return 'Backend';
-      case 'frontend': return 'Frontend';
-      case 'interactive': return 'Interactive';
-      default: return 'Server';
+      case 'backend': return this.t('chat.runtime.processBackend');
+      case 'frontend': return this.t('chat.runtime.processFrontend');
+      case 'interactive': return this.t('chat.runtime.processInteractive');
+      default: return this.t('chat.runtime.processServer');
     }
   }
 
@@ -573,13 +577,13 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
     this.messages.update(msgs => [...msgs, {
       type: 'status',
-      content: `Starting ${friendly} setup...`,
+      content: this.t('chat.runtime.skillSetupStarting', { skill: friendly }),
       timestamp: new Date(),
     }]);
 
     const send = () => this.ws.send({
       type: 'message',
-      content: `I want to connect ${friendly}`,
+      content: this.t('chat.runtime.skillSetupConnect', { skill: friendly }),
       skill_setup: skillName,
     });
 
@@ -794,7 +798,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       const meta = this.activeThreadMeta();
       this.messages.update(msgs => [...msgs, {
         type: 'channel_outbound' as const,
-        content: displayParts.join('\n') || '(attachment)',
+        content: displayParts.join('\n') || this.t('chat.runtime.attachmentOnly'),
         channel: meta?.channel || dest.surface || '',
         sender: 'You',
         sessionKey: threadKey,
@@ -804,7 +808,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
           : undefined,
       }]);
       this.ws.sendChannelMessage(
-        text || 'Please see the attached files.',
+        text || this.t('chat.runtime.seeAttached'),
         threadKey,
         attachments.length > 0 ? attachments : undefined,
       );
@@ -838,7 +842,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       if (attachments.length > 0) {
         this.ws.send({
           type: 'message',
-          content: text || 'Please examine the attached files.',
+          content: text || this.t('chat.runtime.examineAttached'),
           attachments,
           session_key: threadKey,
           ...(branchLabel ? { branch_label: branchLabel } : {}),
@@ -868,7 +872,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       this.ws.sendCommand('sleep');
       this.messages.update(msgs => [...msgs, {
         type: 'status',
-        content: 'Requesting sleep cycle...',
+        content: this.t('chat.runtime.requestingSleep'),
         timestamp: new Date(),
       }]);
     } else if (lower === '/status') {
@@ -880,13 +884,13 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     } else if (lower === '/help') {
       this.messages.update(msgs => [...msgs, {
         type: 'status',
-        content: 'Commands: /sleep (trigger sleep cycle), /status (refresh status), /abort (stop agentic loop), /help',
+        content: this.t('chat.runtime.slashHelp'),
         timestamp: new Date(),
       }]);
     } else {
       this.messages.update(msgs => [...msgs, {
         type: 'status',
-        content: `Unknown command: ${cmd}. Type /help for available commands.`,
+        content: this.t('chat.runtime.unknownCommand', { cmd }),
         timestamp: new Date(),
       }]);
     }
@@ -1203,7 +1207,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     if (!this.agenticActive()) {
       this.messages.update(msgs => [...msgs, {
         type: 'status',
-        content: 'No agentic task running.',
+        content: this.t('chat.runtime.noAgenticTask'),
         timestamp: new Date(),
       }]);
       return;
@@ -1212,7 +1216,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     this.ws.sendAbort();
     this.messages.update(msgs => [...msgs, {
       type: 'status',
-      content: 'Stopping agent task...',
+      content: this.t('chat.runtime.stoppingAgent'),
       timestamp: new Date(),
     }]);
   }
@@ -1285,7 +1289,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       this._backgroundTaskId = Date.now();
       this.activities.update(acts => [{
         id: this._backgroundTaskId, kind: 'todo' as any,
-        text: 'Working on background task...',
+        text: this.t('chat.runtime.backgroundTask'),
         detail,
         tags: [], signals: 0, factsStored: 0, timestamp: new Date(),
         metadata: { autonomous: true, step: 0, maxSteps: 15, source: 'system' },
@@ -1371,8 +1375,8 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       this.backgroundTaskActive.set(true);
       this.activities.update(acts => [{
         id: saved.id, kind: 'todo' as any,
-        text: saved.text || 'Working on background task...',
-        detail: saved.detail || 'Reconnecting...',
+        text: saved.text || this.t('chat.runtime.backgroundTask'),
+        detail: saved.detail || this.t('chat.runtime.reconnecting'),
         tags: [], signals: 0, factsStored: 0, timestamp: new Date(saved.timestamp),
         metadata: saved.metadata || { autonomous: true },
       }, ...acts].slice(0, 20));
@@ -1462,7 +1466,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     if (!Array.isArray(planSteps) || planSteps.length === 0) return;
     this.runView.hydratePlan({
       id: String(meta['plan_id'] || ''),
-      title: String(meta['plan_title'] || 'Restored plan'),
+      title: String(meta['plan_title'] || this.t('chat.runtime.restoredPlan')),
       status: 'in_progress',
       progress: '',
       steps: planSteps.map((s: any, idx: number) => ({
@@ -1632,12 +1636,12 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         let content: string;
         if (complete) {
           content = partialCount > 0
-            ? `All ${total} sub-agents finished (${partialCount} partial) — compiling results…`
-            : `All ${total} sub-agents completed — compiling results…`;
+            ? this.t('chat.runtime.subAgentsAllFinishedPartial', { total, partial: partialCount })
+            : this.t('chat.runtime.subAgentsAllCompleted', { total });
         } else if (running > 0) {
-          content = `${running} sub-agents working in parallel · ${done}/${total} done`;
+          content = this.t('chat.runtime.subAgentsWorkingParallel', { running, done, total });
         } else {
-          content = `${done}/${total} sub-agents done`;
+          content = this.t('chat.runtime.subAgentsDone', { done, total });
         }
         return [...msgs, {
           type: 'delegate_batch_pill' as const,
@@ -1681,17 +1685,17 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       const done = Math.min(total, (m.batchDone ?? 0) + 1);
       const running = Math.max(0, total - done);
       const suffix = outcome === 'failed'
-        ? ' (1 failed)'
+        ? this.t('chat.runtime.batchFailedSuffix')
         : outcome === 'partial'
-          ? ' (1 partial)'
+          ? this.t('chat.runtime.batchPartialSuffix')
           : '';
       return {
         ...m,
         batchDone: done,
         batchRunning: running,
         content: running > 0
-          ? `${running} sub-agents working · ${done}/${total} done${suffix}`
-          : `All sub-agents finished · ${done}/${total} done${suffix}`,
+          ? this.t('chat.runtime.subAgentsWorking', { running, done, total, suffix })
+          : this.t('chat.runtime.subAgentsAllFinished', { done, total, suffix }),
       };
     }));
   }
@@ -1706,13 +1710,13 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
           batchComplete: true,
           batchDone: count,
           batchRunning: 0,
-          content: `All ${count} sub-agents completed — compiling results…`,
+          content: this.t('chat.runtime.subAgentsAllCompleted', { total: count }),
         };
         return updated;
       }
       return [...msgs, {
         type: 'delegate_batch_pill' as const,
-        content: `All ${count} sub-agents completed — compiling results…`,
+        content: this.t('chat.runtime.subAgentsAllCompleted', { total: count }),
         batchId,
         batchCount: count,
         batchDone: count,
@@ -1922,10 +1926,10 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
         if (statusText === 'sleeping') {
           this.clearAwaitingResponse();
-          const reason = msg.sleep_reason || 'consolidating memories';
+          const reason = msg.sleep_reason || this.t('chat.runtime.sleepReasonDefault');
           this.messages.update(msgs => [...msgs, {
             type: 'status',
-            content: `Agent is sleeping (${reason})...`,
+            content: this.t('chat.runtime.agentSleeping', { reason }),
             timestamp: new Date(),
           }]);
         } else if (statusText === 'alive' && msg.sleep_complete) {
@@ -1976,7 +1980,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         break;
 
       case 'daydream': {
-        const dreamParsed = parseTags(msg.content || 'Agent was daydreaming...');
+        const dreamParsed = parseTags(msg.content || this.t('chat.runtime.dreamDefault'));
         const isActive = msg.dream_type && msg.dream_type !== 'passive';
         const dreamKind = isActive ? 'active_dream' : 'dream';
         const dreamEntry = {
@@ -2015,7 +2019,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         this.activities.update(acts => [{
           id: Date.now(),
           kind: 'finding' as const,
-          text: msg.research_question || msg.summary || 'Dream finding',
+          text: msg.research_question || msg.summary || this.t('chat.runtime.dreamFinding'),
           tags: [],
           signals: msg.signals_extracted || 0,
           factsStored: msg.facts_stored || 0,
@@ -2134,12 +2138,12 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         }));
         this.activities.update(acts => [{
           id: Date.now(), kind: 'drowsy' as ActivityKind,
-          text: msg.content || 'Agent is feeling drowsy…',
+          text: msg.content || this.t('chat.runtime.drowsyDefault'),
           tags: [], signals: 0, factsStored: 0, timestamp: new Date(),
         }, ...acts].slice(0, 15));
         this.messages.update(msgs => [...msgs, {
           type: 'drowsy' as any,
-          content: msg.content || "I'm feeling drowsy...",
+          content: msg.content || this.t('chat.runtime.drowsyMessage'),
           timestamp: new Date(),
           drowsy: {
             reason: msg.reason || '',
@@ -2176,8 +2180,8 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
           this._backgroundTaskId = Date.now();
           this.activities.update(acts => [{
             id: this._backgroundTaskId, kind: 'todo' as any,
-            text: msg.task_preview || 'Working on background task...',
-            detail: `0/${msg.max_steps || 15} steps`,
+            text: msg.task_preview || this.t('chat.runtime.backgroundTask'),
+            detail: this.t('chat.runtime.bgStepInitial', { max: msg.max_steps || 15 }),
             tags: [], signals: 0, factsStored: 0, timestamp: new Date(),
             metadata: { autonomous: true, step: 0, maxSteps: msg.max_steps || 15, source: msg.source || 'system' },
           }, ...acts].slice(0, 20));
@@ -2199,7 +2203,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         this._toolTurnActive = false;
         this.messages.update(msgs => [...msgs, {
           type: 'agentic_start' as any,
-          content: `Agent starting task (up to ${msg.max_steps || 15} steps)`,
+          content: this.t('chat.runtime.agentStartingTask', { max: msg.max_steps || 15 }),
           timestamp: new Date(),
           sessionKey: this.deskSessionKey(msg.session_key),
         }]);
@@ -2226,7 +2230,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
             this._backgroundTaskId = Date.now();
             this.activities.update(acts => [{
               id: this._backgroundTaskId, kind: 'todo' as any,
-              text: msg.task_preview || 'Working on background task...',
+              text: msg.task_preview || this.t('chat.runtime.backgroundTask'),
               detail: `Step ${bgStep}/${bgMax}: ${bgTools || 'processing'}`,
               tags: [], signals: 0, factsStored: 0, timestamp: new Date(),
               metadata: { autonomous: true, step: bgStep, maxSteps: bgMax, source: msg.source || 'system' },
@@ -2234,7 +2238,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
           } else {
             this.activities.update(acts => acts.map(a =>
               a.id === this._backgroundTaskId
-                ? { ...a, detail: `Step ${bgStep}/${bgMax}: ${bgTools || 'processing'}`,
+                ? { ...a, detail: this.t('chat.runtime.bgStepDetail', { step: bgStep, max: bgMax, tools: bgTools || this.t('chat.runtime.processing') }),
                     metadata: { ...a.metadata, step: bgStep, maxSteps: bgMax } }
                 : a
             ));
@@ -2355,8 +2359,8 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
           const bgTools = msg.total_tool_calls || 0;
           const bgDur = ((msg.duration_ms || 0) / 1000).toFixed(0);
           const bgLabel = bgAborted
-            ? agenticAbortLabel(true, msg.abort_reason, true)
-            : `Task completed (${bgSteps} steps, ${bgTools} tool calls, ${bgDur}s)`;
+            ? agenticAbortLabel(true, msg.abort_reason, true, (k, p) => this.t(k, p))
+            : this.t('chat.runtime.bgTaskCompletedStats', { steps: bgSteps, tools: bgTools, duration: bgDur });
 
           if (!silentYield) {
             // Ensure activity card exists (fallback if agentic_start was missed)
@@ -2364,14 +2368,14 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
               this._backgroundTaskId = Date.now();
               this.activities.update(acts => [{
                 id: this._backgroundTaskId, kind: 'todo' as any,
-                text: bgAborted ? 'Check-in cancelled' : 'Task completed',
+                text: bgAborted ? this.t('chat.runtime.checkInCancelled') : this.t('chat.runtime.taskCompleted'),
                 detail: bgLabel, tags: [], signals: 0, factsStored: 0, timestamp: new Date(),
                 metadata: { autonomous: true, completed: true, aborted: bgAborted, source: msg.source || 'system' },
               }, ...acts].slice(0, 20));
             } else {
               this.activities.update(acts => acts.map(a =>
                 a.id === this._backgroundTaskId
-                  ? { ...a, text: a.text.replace(/Working on /, 'Completed: ').replace(/\.\.\.$/, ''),
+                  ? { ...a, text: a.text.replace(/^Working on /, this.t('chat.runtime.completedPrefix')).replace(/\.\.\.$/, ''),
                       detail: bgLabel, metadata: { ...a.metadata, completed: true, aborted: bgAborted } }
                   : a
               ));
@@ -2381,8 +2385,8 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
           const bgStatus = silentYield
             ? ''
             : bgAborted
-              ? agenticAbortLabel(true, msg.abort_reason, true)
-              : `Background task completed (${bgSteps} steps, ${bgDur}s)`;
+              ? agenticAbortLabel(true, msg.abort_reason, true, (k, p) => this.t(k, p))
+              : this.t('chat.runtime.bgTaskCompletedShort', { steps: bgSteps, duration: bgDur });
           if (bgStatus) {
             this.messages.update(msgs => [...msgs, {
               type: 'status' as any,
@@ -2439,7 +2443,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
         this.messages.update(msgs => [...msgs, {
           type: 'agentic_complete' as any,
-          content: agenticAbortLabel(aborted, exitReason, false),
+          content: agenticAbortLabel(aborted, exitReason, false, (k, p) => this.t(k, p)),
           timestamp: new Date(),
           sessionKey: this.deskSessionKey(msg.session_key),
           agenticComplete: {
@@ -2563,7 +2567,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
           }
           return [...msgs, {
             type: 'delegate_batch_pill' as const,
-            content: `${count} sub-agents working in parallel`,
+            content: this.t('chat.runtime.subAgentsParallel', { count }),
             batchId,
             batchCount: count,
             batchRunning: count,
@@ -2571,14 +2575,14 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
             timestamp: new Date(),
           }];
         });
-        this.activityStatus.set(`${count} sub-agents launched`);
+        this.activityStatus.set(this.t('chat.runtime.subAgentsLaunched', { count }));
         break;
       }
 
       case 'delegate_start': {
-        const dlgTask = msg.delegate_task || 'Sub-task';
+        const dlgTask = msg.delegate_task || this.t('chat.runtime.subTaskDefault');
         if (!msg.batch_id) {
-          this.activityStatus.set(`Delegating: ${dlgTask.slice(0, 80)}`);
+          this.activityStatus.set(this.t('chat.runtime.delegating', { task: dlgTask.slice(0, 80) }));
         }
         if (!this.runView.expanded()) {
           this.runView.setExpanded(true);
@@ -2618,13 +2622,13 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       case 'team_advanced': {
         const team = msg.team;
         if (team?.status === 'created') {
-          const name = team.name || team.id || 'Wave';
+          const name = team.name || team.id || this.t('chat.runtime.waveDefault');
           this.activities.update(acts => [{
             id: Date.now(),
             kind: 'todo' as ActivityKind,
-            text: 'Wave planned — not launched',
+            text: this.t('chat.runtime.wavePlanned'),
             detail: `${name} [${team.id}]`,
-            tags: labelTags(['Team', 'Not launched']),
+            tags: labelTags([this.t('chat.runtime.tagTeam'), this.t('chat.runtime.tagNotLaunched')]),
             signals: 0,
             factsStored: 0,
             timestamp: new Date(),
@@ -2779,7 +2783,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
             if (last && last.type === 'tool_progress' && last.toolProgress?.toolName === acc.name && !last.toolProgress?.done) {
               updated[updated.length - 1] = {
                 ...last,
-                content: filePath ? `Writing ${filePath}...` : 'Writing file...',
+                content: filePath ? this.t('chat.runtime.writingPath', { path: filePath }) : this.t('chat.runtime.writingFile'),
                 toolProgress: {
                   ...last.toolProgress,
                   arguments: { path: filePath, content: fileContent },
@@ -2790,7 +2794,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
             // Create new streaming file card
             return [...updated, {
               type: 'tool_progress' as any,
-              content: filePath ? `Writing ${filePath}...` : 'Writing file...',
+              content: filePath ? this.t('chat.runtime.writingPath', { path: filePath }) : this.t('chat.runtime.writingFile'),
               toolProgress: {
                 toolName: acc.name,
                 callId: '',
@@ -2954,7 +2958,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
           if (toolName === 'write' || toolName === 'write_file' || toolName === 'create_file') {
             bgLabel = `Writing ${args.path || args.file_path || 'file'}...`;
           } else if (toolName === 'bash') {
-            bgLabel = args.command ? `$ ${(args.command as string).slice(0, 60)}` : 'Running command...';
+            bgLabel = args.command ? `$ ${(args.command as string).slice(0, 60)}` : this.t('chat.runtime.runningCommand');
           } else if (toolName === 'read' || toolName === 'read_file') {
             bgLabel = `Reading ${args.path || args.file_path || 'file'}...`;
           } else if (toolName === 'edit') {
@@ -3010,7 +3014,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         } else if (toolName === 'bash') {
           label = normArgs['command']
             ? `$ ${normArgs['command']}`
-            : 'Running command...';
+            : this.t('chat.runtime.runningCommand');
         } else if (toolName === 'read' || toolName === 'read_file') {
           filePaths = this._enrichFilePaths(collectFilePaths(toolName, normArgs));
           const name = filePaths[0] ? fileDisplayName(filePaths[0]) : 'file';
@@ -3227,7 +3231,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         if (action === 'navigate' && url) {
           this.messages.update(msgs => [...msgs, {
             type: 'browser_preview' as any,
-            content: `Navigating to ${url}`,
+            content: this.t('chat.runtime.navigatingTo', { url }),
             browserUrl: url,
             browserTitle: '',
             browserRequestId: reqId,
@@ -3240,7 +3244,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       case 'browser_navigation': {
         this.messages.update(msgs => [...msgs, {
           type: 'browser_navigation' as any,
-          content: `${msg.action || 'navigate'}: ${msg.url || ''}`,
+          content: this.t('chat.runtime.browserNavigate', { action: msg.action || 'navigate', url: msg.url || '' }),
           browserUrl: msg.url || '',
           browserTitle: msg.title || '',
           browserAction: msg.action || '',
@@ -3254,7 +3258,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         const authReqId = msg.request_id || '';
         this.messages.update(msgs => [...msgs, {
           type: 'status' as any,
-          content: 'Opening your browser for sign-in — please complete it there, then click "Done" in the dialog.',
+          content: this.t('chat.runtime.browserSignIn'),
           timestamp: new Date(),
         }]);
         const nls = (window as any).nls;
@@ -3263,8 +3267,8 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
             this.messages.update(msgs => [...msgs, {
               type: 'status' as any,
               content: result?.success
-                ? 'Sign-in confirmed. Continuing...'
-                : 'Sign-in was cancelled or not completed.',
+                ? this.t('chat.runtime.signInConfirmed')
+                : this.t('chat.runtime.signInCancelled'),
               timestamp: new Date(),
             }]);
             this.ws.send({
@@ -3306,7 +3310,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         this.clearAwaitingResponse();
         this.messages.update(msgs => [...msgs, {
           type: 'copilot_ack' as any,
-          content: msg.message || 'Guidance received.',
+          content: msg.message || this.t('chat.runtime.guidanceReceived'),
           timestamp: new Date(),
         }]);
         break;
@@ -3317,7 +3321,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         this.askUserPending.set(true);
         this.budgetPromptPending.set(false);
         this.activityStatus.set(this.translate.instant('chat.status.waitAnswer'));
-        const question = msg.question || 'I need more information to continue.';
+        const question = msg.question || this.t('chat.runtime.needMoreInfo');
         this.messages.update(msgs => [...msgs, {
           type: 'ask_user',
           content: question,
@@ -3350,7 +3354,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         this.budgetPromptPending.set(true);
         this.askUserPending.set(false);
         this.activityStatus.set(this.translate.instant('chat.status.waitDecision'));
-        const question = msg.question || 'I need more steps to continue.';
+        const question = msg.question || this.t('chat.runtime.needMoreSteps');
         const options = Array.isArray(msg.options)
           ? msg.options.map((o: unknown) => Number(o)).filter((o: number) => o > 0)
           : [10, 20, 40];
@@ -3404,7 +3408,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
           }
           this.messages.update(msgs => [...msgs, {
             type: 'status' as any,
-            content: `Continuing with +${msg.extra_iterations || 0} steps (up to ${this.agenticMaxSteps()} total)…`,
+            content: this.t('chat.runtime.continuingSteps', { extra: msg.extra_iterations || 0, total: this.agenticMaxSteps() }),
             timestamp: new Date(),
           }]);
         }
@@ -3537,7 +3541,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         if (msg.action === 'deny') {
           this.messages.update(msgs => [...msgs, {
             type: 'status',
-            content: 'You said: "Stay awake." Agent will keep going.',
+            content: this.t('chat.runtime.stayAwakeAck'),
             timestamp: new Date(),
           }]);
           this.messages.update(msgs => msgs.filter(m => m.type !== 'drowsy'));
@@ -3557,7 +3561,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
           );
           return [...withoutSleeping, {
             type: 'status',
-            content: `Agent is back up (${signals} signals consolidated, sleep cycle #${sleepCycles}).`,
+            content: this.t('chat.runtime.agentBackUp', { signals, cycles: sleepCycles }),
             timestamp: new Date(),
           }];
         });
@@ -3578,7 +3582,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         }));
         this.activities.update(acts => [{
           id: Date.now(), kind: 'sleep_complete' as ActivityKind,
-          text: `Sleep complete — ${signals} signals`, tags: [],
+          text: this.t('chat.runtime.sleepComplete', { signals }), tags: [],
           signals, factsStored: 0, timestamp: new Date(),
         }, ...acts].slice(0, 15));
         break;
@@ -3601,7 +3605,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       case 'intention_triggered':
         this.activities.update(acts => [{
           id: Date.now(), kind: 'intention' as ActivityKind,
-          text: msg.content || 'Intention triggered', tags: [],
+          text: msg.content || this.t('chat.runtime.intentionTriggered'), tags: [],
           signals: 0, factsStored: 0, timestamp: new Date(),
           detail: msg.trigger || '',
         }, ...acts].slice(0, 15));
@@ -3612,7 +3616,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
           ...m,
           narrative: {
             ...(m?.narrative || {}),
-            current_episode: { title: msg.title || 'New episode', turns: 0, arc: '', peak_resonance: 0 },
+            current_episode: { title: msg.title || this.t('chat.runtime.newEpisode'), turns: 0, arc: '', peak_resonance: 0 },
           },
         }));
         this.activities.update(acts => [{
@@ -4100,15 +4104,22 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     const who = event.sender || event.channel || 'channel';
     switch (event.direction) {
       case 'inbound':
-        return event.subject ? `Email from ${who}: ${event.subject}` : `Received from ${who}`;
+        return event.subject
+          ? this.t('chat.runtime.channelEmailFrom', { who, subject: event.subject })
+          : this.t('chat.runtime.channelReceivedFrom', { who });
       case 'response':
-        return event.subject ? `Replied on email: ${event.subject}` : `Replied on ${event.channel || 'channel'}`;
+        return event.subject
+          ? this.t('chat.runtime.channelRepliedEmail', { subject: event.subject })
+          : this.t('chat.runtime.channelRepliedOn', { channel: event.channel || 'channel' });
       case 'ambient':
-        return `Group activity from ${who}`;
+        return this.t('chat.runtime.channelGroupActivity', { who });
       case 'skipped':
-        return `Skipped message from ${who}`;
+        return this.t('chat.runtime.channelSkipped', { who });
       default:
-        return `${event.direction || 'Channel event'} · ${who}`;
+        return this.t('chat.runtime.channelEventFmt', {
+          direction: event.direction || this.t('chat.runtime.channelEventDefault'),
+          who,
+        });
     }
   }
 
@@ -4173,7 +4184,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     const inboundContent = event.content || event.content_preview || '';
 
     if (direction === 'skipped') {
-      const reason = event.skip_reason || 'Policy blocked this message';
+      const reason = event.skip_reason || this.t('chat.runtime.policyBlocked');
       this.conversations.addInboxItem({
         sessionKey,
         kind: 'skipped',
