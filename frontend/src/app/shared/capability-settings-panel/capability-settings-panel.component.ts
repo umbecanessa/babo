@@ -1,4 +1,5 @@
 import { Component, OnInit, computed, inject, output, signal } from '@angular/core';
+import { TranslateModule, TranslateService } from '@ngx-translate/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import type {
@@ -35,7 +36,7 @@ interface SetupConfig {
 @Component({
   selector: 'app-capability-settings-panel',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, TranslateModule],
   templateUrl: './capability-settings-panel.component.html',
   styleUrl: './capability-settings-panel.component.scss',
 })
@@ -43,6 +44,7 @@ export class CapabilitySettingsPanelComponent implements OnInit {
   private readonly agentModels = inject(AgentModelService);
   private readonly cloudProvision = inject(BaboCloudProvisionService);
   private readonly platformIntegrations = inject(PlatformIntegrationsService);
+  private readonly translate = inject(TranslateService);
 
   /** Emitted after profile is saved and applied to the runtime. */
   saved = output<void>();
@@ -84,36 +86,16 @@ export class CapabilitySettingsPanelComponent implements OnInit {
   );
 
   readonly brainCards = [
-    {
-      tier: 'hosted_babo' as CapabilityTier,
-      title: 'Babo Cloud',
-      subtitle: 'Easiest path — hosted models via your Babo account',
-      glyph: '☁',
-    },
-    {
-      tier: 'self_local' as CapabilityTier,
-      title: 'This computer',
-      subtitle: 'Advanced — Ollama on this PC',
-      glyph: '◻',
-    },
-    {
-      tier: 'self_lan' as CapabilityTier,
-      title: 'My server',
-      subtitle: 'Advanced — vLLM or compatible server on your LAN',
-      glyph: '⎔',
-    },
-    {
-      tier: 'byok_cloud' as CapabilityTier,
-      title: 'Your API key',
-      subtitle: 'OpenRouter, OpenAI, Anthropic, …',
-      glyph: '🔑',
-    },
+    { tier: 'hosted_babo' as CapabilityTier, titleKey: 'capabilities.brain.cloud.title', subtitleKey: 'capabilities.brain.cloud.subtitle', glyph: '☁' },
+    { tier: 'self_local' as CapabilityTier, titleKey: 'capabilities.brain.local.title', subtitleKey: 'capabilities.brain.local.subtitle', glyph: '◻' },
+    { tier: 'self_lan' as CapabilityTier, titleKey: 'capabilities.brain.lan.title', subtitleKey: 'capabilities.brain.lan.subtitle', glyph: '⎔' },
+    { tier: 'byok_cloud' as CapabilityTier, titleKey: 'capabilities.brain.byok.title', subtitleKey: 'capabilities.brain.byok.subtitle', glyph: '🔑' },
   ];
 
   voiceOptions = [
-    { tier: 'self_local' as CapabilityTier, shortLabel: 'This PC' },
-    { tier: 'self_lan' as CapabilityTier, shortLabel: 'My server' },
-    { tier: 'off' as CapabilityTier, shortLabel: 'Off' },
+    { tier: 'self_local' as CapabilityTier, labelKey: 'setup.voice.thisPc' },
+    { tier: 'self_lan' as CapabilityTier, labelKey: 'setup.voice.myServer' },
+    { tier: 'off' as CapabilityTier, labelKey: 'setup.voice.off' },
   ];
 
   config: SetupConfig = {
@@ -135,29 +117,29 @@ export class CapabilitySettingsPanelComponent implements OnInit {
     if (!p) return [];
     const brain =
       p.inference.tier === 'off'
-        ? 'Not configured'
+        ? this.t('setup.experience.notConfigured')
         : p.inference.tier === 'hosted_babo'
           ? this.labelForModel(p.inference.model)
-          : p.inference.model || tierLabel(p.inference.tier);
-    const voice = p.transcribe.tier === 'off' ? 'Off' : tierLabel(p.transcribe.tier);
-    const ambient = this.ambientVisionOn() ? tierLabel(this.visualTier()) : 'Off';
-    const code = this.codeSearchOn() ? 'On' : 'Off';
+          : p.inference.model || this.tierLabel(p.inference.tier);
+    const voice = p.transcribe.tier === 'off' ? this.t('setup.experience.off') : this.tierLabel(p.transcribe.tier);
+    const ambient = this.ambientVisionOn() ? this.tierLabel(this.visualTier()) : this.t('setup.experience.off');
+    const code = this.codeSearchOn() ? this.t('setup.ready.on') : this.t('setup.ready.off');
     return [
       {
-        label: 'Thinking',
+        label: this.t('setup.experience.thinking'),
         value: brain,
         ok: p.inference.tier !== 'off',
       },
       {
-        label: 'Sub-agents',
+        label: this.t('capabilities.subAgents'),
         value: this.delegateUsesPrimary()
-          ? 'Same as primary'
-          : this.delegateModelLabel() || 'Custom',
+          ? this.t('capabilities.subAgentsSame')
+          : this.delegateModelLabel() || this.t('capabilities.custom'),
         ok: p.inference.tier !== 'off',
       },
-      { label: 'Voice', value: voice, ok: p.transcribe.tier !== 'off' },
-      { label: 'Screen awareness', value: ambient, ok: this.ambientVisionOn() },
-      { label: 'Code search', value: code, ok: this.codeSearchOn() },
+      { label: this.t('setup.experience.voice'), value: voice, ok: p.transcribe.tier !== 'off' },
+      { label: this.t('setup.experience.screenAwareness'), value: ambient, ok: this.ambientVisionOn() },
+      { label: this.t('setup.experience.codeSearch'), value: code, ok: this.codeSearchOn() },
     ];
   }
 
@@ -220,11 +202,11 @@ export class CapabilitySettingsPanelComponent implements OnInit {
   fitLevelLabel(level: string): string {
     switch (level) {
       case 'perfect':
-        return 'Perfect fit';
+        return this.t('setup.fit.perfect');
       case 'good':
-        return 'Good fit';
+        return this.t('setup.fit.good');
       case 'marginal':
-        return 'Tight fit';
+        return this.t('setup.fit.marginal');
       default:
         return level;
     }
@@ -241,8 +223,8 @@ export class CapabilitySettingsPanelComponent implements OnInit {
           ? `${gb} GB unified memory`
           : `${gb} GB VRAM`
         : fit.unifiedMemory
-          ? 'Unified memory'
-          : 'VRAM unknown';
+          ? this.t('setup.fitMeta.unifiedMemory')
+          : this.t('setup.fitMeta.vramUnknown');
     return `${fit.gpuName} · ${mem}`;
   }
 
@@ -541,7 +523,7 @@ export class CapabilitySettingsPanelComponent implements OnInit {
     const p = this.profile();
     if (!p) return;
     p.embeddings = on
-      ? { tier: 'self_local', reason: 'Semantic code search on this computer' }
+      ? { tier: 'self_local', reason: this.t('setup.reasons.codeSearchLocal') }
       : { tier: 'off', reason: 'Disabled' };
     this.profile.set({ ...p });
   }
@@ -584,7 +566,7 @@ export class CapabilitySettingsPanelComponent implements OnInit {
     }
     const url = stripInferenceV1Suffix(p.inference.url || this.config.inferenceUrl);
     if (!url) {
-      this.testResult.set({ ok: false, message: 'Enter a server address first', latency: 0 });
+      this.testResult.set({ ok: false, message: this.t('setup.test.enterServer'), latency: 0 });
       return;
     }
     this.testing.set(true);
@@ -604,7 +586,7 @@ export class CapabilitySettingsPanelComponent implements OnInit {
         this.profile.set({ ...p });
       }
     } catch (err: any) {
-      this.testResult.set({ ok: false, message: err?.message || 'Test failed', latency: 0 });
+      this.testResult.set({ ok: false, message: err?.message || this.t('setup.test.testFailed'), latency: 0 });
     } finally {
       this.testing.set(false);
     }
@@ -695,9 +677,28 @@ export class CapabilitySettingsPanelComponent implements OnInit {
       await this.agentModels.refreshFromConfig();
       this.saved.emit();
     } catch (err: any) {
-      this.saveError.set(err?.message || 'Could not save capabilities');
+      this.saveError.set(err?.message || this.t('capabilities.saveFailed'));
     } finally {
       this.saving.set(false);
+    }
+  }
+
+  private t(key: string, params?: Record<string, unknown>): string {
+    return this.translate.instant(key, params);
+  }
+
+  private tierLabel(tier: CapabilityTier): string {
+    switch (tier) {
+      case 'self_local':
+        return this.t('setup.tier.thisComputer');
+      case 'self_lan':
+        return this.t('setup.tier.myServer');
+      case 'byok_cloud':
+        return this.t('setup.tier.cloud');
+      case 'hosted_babo':
+        return this.t('setup.tier.baboHosted');
+      default:
+        return this.t('setup.tier.off');
     }
   }
 
@@ -706,17 +707,3 @@ export class CapabilitySettingsPanelComponent implements OnInit {
   }
 }
 
-function tierLabel(tier: CapabilityTier): string {
-  switch (tier) {
-    case 'self_local':
-      return 'This computer';
-    case 'self_lan':
-      return 'My server';
-    case 'byok_cloud':
-      return 'Cloud';
-    case 'hosted_babo':
-      return 'Babo hosted';
-    default:
-      return 'Off';
-  }
-}

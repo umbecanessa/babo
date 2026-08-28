@@ -1,12 +1,12 @@
 @if (!profile()) {
 
-  <p class="panel-muted">Loading capabilities…</p>
+  <p class="panel-muted">{{ 'capabilities.loading' | translate }}</p>
 
 } @else {
 
   @if (scanLoading()) {
 
-    <p class="panel-muted">Scanning hardware…</p>
+    <p class="panel-muted">{{ 'capabilities.scanning' | translate }}</p>
 
   } @else if (scan()) {
 
@@ -18,13 +18,13 @@
 
       <span>{{ scan()!.device.ramGb }} GB RAM</span>
 
-      <button type="button" class="link-btn" (click)="runDeviceScan()">Rescan</button>
+      <button type="button" class="link-btn" (click)="runDeviceScan()">{{ 'capabilities.rescan' | translate }}</button>
 
     </div>
 
     @if (localModelFit(); as fit) {
       <div class="model-fit-strip">
-        <span class="model-fit-title">This PC</span>
+        <span class="model-fit-title">{{ 'capabilities.thisPc' | translate }}</span>
         @for (m of fit.recommendations.slice(0, 3); track m.modelId) {
           <span class="model-fit-chip">{{ m.displayName }}</span>
         }
@@ -32,8 +32,8 @@
     }
 
     <details class="lan-model-fit-details">
-      <summary>LAN server — GPU &amp; model fit</summary>
-      <p class="panel-muted">SSH into your homelab box (e.g. GX10) to see which models fit its GPU.</p>
+      <summary>{{ 'capabilities.lanFitSummary' | translate }}</summary>
+      <p class="panel-muted">{{ 'capabilities.lanFitHint' | translate }}</p>
       <div class="form-row">
         <input type="text" [(ngModel)]="lanHost" placeholder="192.168.68.96" />
         <input type="text" [(ngModel)]="lanSshUser" placeholder="SSH user" />
@@ -48,10 +48,10 @@
           class="password-input"
         />
       </div>
-      <p class="panel-muted ssh-password-hint">Password is used only for this scan — not saved.</p>
+      <p class="panel-muted ssh-password-hint">{{ 'capabilities.sshPasswordScanHint' | translate }}</p>
       <div class="form-row actions">
         <button type="button" class="link-btn" (click)="runLanProbe()" [disabled]="lanProbing() || !lanHost.trim()">
-          {{ lanProbing() ? 'Probing…' : 'Find services' }}
+          {{ lanProbing() ? ('capabilities.probing' | translate) : ('capabilities.findServices' | translate) }}
         </button>
         <button
           type="button"
@@ -59,7 +59,7 @@
           (click)="runLanModelFit()"
           [disabled]="lanModelFitLoading() || !lanHost.trim() || !resolvedLanSshUser()"
         >
-          {{ lanModelFitLoading() ? 'Scanning…' : 'Scan GPU & models' }}
+          {{ lanModelFitLoading() ? ('capabilities.scanningGpu' | translate) : ('capabilities.scanGpuModels' | translate) }}
         </button>
       </div>
       @if (lanModelFit(); as lanFit) {
@@ -90,9 +90,9 @@
 
       <div>
 
-        <h3>Primary model (chat &amp; tools)</h3>
+        <h3>{{ 'capabilities.primaryTitle' | translate }}</h3>
 
-        <p>Default for your messages and the main agent loop.</p>
+        <p>{{ 'capabilities.primaryDesc' | translate }}</p>
 
       </div>
 
@@ -124,17 +124,17 @@
 
             <span class="card-title">
 
-              {{ card.title }}
+              {{ card.titleKey | translate }}
 
               @if (card.tier === recommendedBrainTier) {
 
-                <span class="suggested-pill">Suggested</span>
+                <span class="suggested-pill">{{ 'capabilities.suggested' | translate }}</span>
 
               }
 
             </span>
 
-            <span class="card-sub">{{ card.subtitle }}</span>
+            <span class="card-sub">{{ card.subtitleKey | translate }}</span>
 
           </span>
 
@@ -148,9 +148,9 @@
 
     @if (brainTier() === 'hosted_babo') {
 
-      <p class="field-label">Chat model (Babo Cloud)</p>
+      <p class="field-label">{{ 'capabilities.cloudChatModel' | translate }}</p>
 
-      <p class="small-muted">Routed through your Babo account after sign-in.</p>
+      <p class="small-muted">{{ 'capabilities.cloudRoutedHint' | translate }}</p>
 
       <div class="chip-row providers">
 
@@ -174,7 +174,7 @@
 
       <button type="button" class="link-btn" (click)="onBrainTierChange('byok_cloud')">
 
-        Use your own API key instead
+        {{ 'capabilities.useOwnApiKey' | translate }}
 
       </button>
 
@@ -184,7 +184,7 @@
 
     @if (brainTier() === 'byok_cloud') {
 
-      <p class="field-label">Cloud provider</p>
+      <p class="field-label">{{ 'capabilities.cloudProvider' | translate }}</p>
 
       <div class="chip-row providers">
 
@@ -208,15 +208,15 @@
 
       <div class="form-group">
 
-        <label>API key</label>
+        <label>{{ 'capabilities.apiKey' | translate }}</label>
 
-        <input type="password" [(ngModel)]="config.inferenceApiKey" placeholder="Paste your key" />
+        <input type="password" [(ngModel)]="config.inferenceApiKey" [placeholder]="'capabilities.apiKeyPlaceholder' | translate" />
 
       </div>
 
       <button type="button" class="link-btn" (click)="onBrainTierChange('hosted_babo')">
 
-        Use Babo Cloud instead
+        {{ 'capabilities.useCloudInstead' | translate }}
 
       </button>
 
@@ -228,7 +228,7 @@
 
       <div class="form-group">
 
-        <label>Server address</label>
+        <label>{{ 'capabilities.serverAddress' | translate }}</label>
 
         <input
 
@@ -242,7 +242,7 @@
 
         />
 
-        <span class="hint">No /v1 at the end — Babo adds that automatically.</span>
+        <span class="hint">{{ 'capabilities.serverHint' | translate }}</span>
 
       </div>
 
@@ -252,7 +252,7 @@
 
     @if (brainTier() === 'self_local') {
 
-      <p class="small-muted">Looks for Ollama on this computer (port 11434). Use Test to detect your model.</p>
+      <p class="small-muted">{{ 'capabilities.localOllamaHint' | translate }}</p>
 
     }
 
@@ -264,7 +264,7 @@
 
         <button class="btn-secondary small" type="button" (click)="testBrain()" [disabled]="testing()">
 
-          {{ testing() ? 'Testing…' : 'Test connection' }}
+          {{ testing() ? ('capabilities.testing' | translate) : ('capabilities.testConnection' | translate) }}
 
         </button>
 
@@ -284,7 +284,7 @@
 
       @if (brainModelLabel()) {
 
-        <p class="model-pill">Model: <strong>{{ brainModelLabel() }}</strong></p>
+        <p class="model-pill">{{ 'capabilities.modelLabel' | translate }} <strong>{{ brainModelLabel() }}</strong></p>
 
       }
 
@@ -302,9 +302,9 @@
 
       <div>
 
-        <h3>Sub-agents (delegates)</h3>
+        <h3>{{ 'capabilities.delegatesTitle' | translate }}</h3>
 
-        <p>Background workers spawned during complex tasks. Usually match the primary model.</p>
+        <p>{{ 'capabilities.delegatesDesc' | translate }}</p>
 
       </div>
 
@@ -324,7 +324,7 @@
 
       />
 
-      <span>Same model as primary</span>
+      <span>{{ 'capabilities.sameAsPrimary' | translate }}</span>
 
     </label>
 
@@ -356,9 +356,9 @@
 
       } @else if (brainModelLabel()) {
 
-        <p class="model-pill">Delegate model: <strong>{{ delegateModelLabel() }}</strong></p>
+        <p class="model-pill">{{ 'capabilities.delegateModelLabel' | translate }} <strong>{{ delegateModelLabel() }}</strong></p>
 
-        <p class="small-muted">Uses the primary connection model above. Pick a different primary tier for more options.</p>
+        <p class="small-muted">{{ 'capabilities.delegateHint' | translate }}</p>
 
       }
 
@@ -370,7 +370,7 @@
 
   <section class="feature-section secondary">
 
-    <h3 class="section-mini-title">Other capabilities</h3>
+    <h3 class="section-mini-title">{{ 'capabilities.otherCapabilities' | translate }}</h3>
 
 
 
@@ -378,9 +378,9 @@
 
       <div>
 
-        <h3>Ambient screen awareness</h3>
+        <h3>{{ 'capabilities.ambientTitle' | translate }}</h3>
 
-        <p class="small-muted">Optional background view of your desktop (small local model).</p>
+        <p class="small-muted">{{ 'capabilities.ambientDesc' | translate }}</p>
 
       </div>
 
@@ -398,9 +398,9 @@
 
       <div class="chip-row">
 
-        <button type="button" class="chip" [class.active]="visualTier() === 'self_local'" [class.disabled]="!canLocalVision()" (click)="setVisualLocal()">This PC</button>
+        <button type="button" class="chip" [class.active]="visualTier() === 'self_local'" [class.disabled]="!canLocalVision()" (click)="setVisualLocal()">{{ 'setup.voice.thisPc' | translate }}</button>
 
-        <button type="button" class="chip" [class.active]="visualTier() === 'self_lan'" [class.disabled]="!hasLanVision()" (click)="setVisualLan()">My server</button>
+        <button type="button" class="chip" [class.active]="visualTier() === 'self_lan'" [class.disabled]="!hasLanVision()" (click)="setVisualLan()">{{ 'setup.voice.myServer' | translate }}</button>
 
       </div>
 
@@ -410,13 +410,13 @@
 
     <div class="sub-block">
 
-      <h3>Voice input</h3>
+      <h3>{{ 'capabilities.voiceTitle' | translate }}</h3>
 
       <div class="chip-row">
 
         @for (opt of voiceOptions; track opt.tier) {
 
-          <button type="button" class="chip" [class.active]="voiceTier() === opt.tier" (click)="onVoiceTierChange(opt.tier)">{{ opt.shortLabel }}</button>
+          <button type="button" class="chip" [class.active]="voiceTier() === opt.tier" (click)="onVoiceTierChange(opt.tier)">{{ opt.labelKey | translate }}</button>
 
         }
 
@@ -430,9 +430,9 @@
 
       <div>
 
-        <h3>Code search</h3>
+        <h3>{{ 'capabilities.codeSearchTitle' | translate }}</h3>
 
-        <p class="small-muted">Find files by meaning in your projects.</p>
+        <p class="small-muted">{{ 'capabilities.codeSearchDesc' | translate }}</p>
 
       </div>
 
@@ -480,11 +480,11 @@
 
     <button class="btn-primary" type="button" (click)="save()" [disabled]="saving()">
 
-      {{ saving() ? 'Saving…' : 'Save & restart runtime' }}
+      {{ saving() ? ('capabilities.saving' | translate) : ('capabilities.saveRestart' | translate) }}
 
     </button>
 
-    <p class="panel-footnote">Model changes apply immediately. The runtime restarts only when tier, server URL, or vision settings change.</p>
+    <p class="panel-footnote">{{ 'capabilities.footnote' | translate }}</p>
 
   </div>
 

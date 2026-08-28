@@ -2293,5 +2293,70 @@
     "saveJob": "Salva ruolo",
     "saveTrust": "Salva fiducia",
     "requestFailed": "Richiesta non riuscita"
+  },
+  "capabilities": {
+    "loading": "Caricamento capacità…",
+    "scanning": "Scansione hardware…",
+    "rescan": "Nuova scansione",
+    "thisPc": "Questo PC",
+    "lanFitSummary": "Server LAN — GPU e modelli",
+    "lanFitHint": "Connettiti via SSH al tuo homelab (es. GX10) per vedere quali modelli entrano nella GPU.",
+    "sshPasswordScanHint": "La password serve solo per questa scansione — non viene salvata.",
+    "probing": "Ricerca…",
+    "findServices": "Trova servizi",
+    "scanningGpu": "Scansione…",
+    "scanGpuModels": "Scansiona GPU e modelli",
+    "primaryTitle": "Modello primario (chat e tool)",
+    "primaryDesc": "Predefinito per i tuoi messaggi e il loop principale dell'agente.",
+    "suggested": "Consigliato",
+    "cloudChatModel": "Modello chat (Babo Cloud)",
+    "cloudRoutedHint": "Instradato tramite il tuo account Babo dopo l'accesso.",
+    "useOwnApiKey": "Usa la tua API key",
+    "cloudProvider": "Provider cloud",
+    "apiKey": "API key",
+    "apiKeyPlaceholder": "Incolla la tua key",
+    "useCloudInstead": "Usa Babo Cloud",
+    "serverAddress": "Indirizzo server",
+    "serverHint": "Senza /v1 alla fine — Babo lo aggiunge automaticamente.",
+    "localOllamaHint": "Cerca Ollama su questo computer (porta 11434). Usa Test per rilevare il modello.",
+    "testing": "Test…",
+    "testConnection": "Test connessione",
+    "modelLabel": "Modello:",
+    "delegatesTitle": "Sub-agenti (delegati)",
+    "delegatesDesc": "Worker in background durante task complessi. Di solito uguale al modello primario.",
+    "sameAsPrimary": "Stesso modello del primario",
+    "delegateModelLabel": "Modello delegato:",
+    "delegateHint": "Usa il modello di connessione primario sopra. Scegli un tier primario diverso per più opzioni.",
+    "otherCapabilities": "Altre capacità",
+    "ambientTitle": "Screen awareness in background",
+    "ambientDesc": "Vista opzionale del desktop (piccolo modello locale).",
+    "voiceTitle": "Input vocale",
+    "codeSearchTitle": "Ricerca codice",
+    "codeSearchDesc": "Trova file per significato nei tuoi progetti.",
+    "saving": "Salvataggio…",
+    "saveRestart": "Salva e riavvia runtime",
+    "footnote": "I cambi modello si applicano subito. Il runtime riavvia solo se cambiano tier, URL server o visione.",
+    "saveFailed": "Impossibile salvare le capacità",
+    "subAgents": "Sub-agenti",
+    "subAgentsSame": "Come il primario",
+    "custom": "Personalizzato",
+    "brain": {
+      "cloud": {
+        "title": "Babo Cloud",
+        "subtitle": "Percorso più semplice — modelli hosted via account Babo"
+      },
+      "local": {
+        "title": "Questo computer",
+        "subtitle": "Avanzato — Ollama su questo PC"
+      },
+      "lan": {
+        "title": "Il mio server",
+        "subtitle": "Avanzato — vLLM o server compatibile sulla LAN"
+      },
+      "byok": {
+        "title": "La tua API key",
+        "subtitle": "OpenRouter, OpenAI, Anthropic, …"
+      }
+    }
   }
 }

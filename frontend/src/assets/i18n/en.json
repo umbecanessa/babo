@@ -2293,5 +2293,70 @@
     "saveJob": "Save job",
     "saveTrust": "Save trust",
     "requestFailed": "Request failed"
+  },
+  "capabilities": {
+    "loading": "Loading capabilities…",
+    "scanning": "Scanning hardware…",
+    "rescan": "Rescan",
+    "thisPc": "This PC",
+    "lanFitSummary": "LAN server — GPU & model fit",
+    "lanFitHint": "SSH into your homelab box (e.g. GX10) to see which models fit its GPU.",
+    "sshPasswordScanHint": "Password is used only for this scan — not saved.",
+    "probing": "Probing…",
+    "findServices": "Find services",
+    "scanningGpu": "Scanning…",
+    "scanGpuModels": "Scan GPU & models",
+    "primaryTitle": "Primary model (chat & tools)",
+    "primaryDesc": "Default for your messages and the main agent loop.",
+    "suggested": "Suggested",
+    "cloudChatModel": "Chat model (Babo Cloud)",
+    "cloudRoutedHint": "Routed through your Babo account after sign-in.",
+    "useOwnApiKey": "Use your own API key instead",
+    "cloudProvider": "Cloud provider",
+    "apiKey": "API key",
+    "apiKeyPlaceholder": "Paste your key",
+    "useCloudInstead": "Use Babo Cloud instead",
+    "serverAddress": "Server address",
+    "serverHint": "No /v1 at the end — Babo adds that automatically.",
+    "localOllamaHint": "Looks for Ollama on this computer (port 11434). Use Test to detect your model.",
+    "testing": "Testing…",
+    "testConnection": "Test connection",
+    "modelLabel": "Model:",
+    "delegatesTitle": "Sub-agents (delegates)",
+    "delegatesDesc": "Background workers spawned during complex tasks. Usually match the primary model.",
+    "sameAsPrimary": "Same model as primary",
+    "delegateModelLabel": "Delegate model:",
+    "delegateHint": "Uses the primary connection model above. Pick a different primary tier for more options.",
+    "otherCapabilities": "Other capabilities",
+    "ambientTitle": "Ambient screen awareness",
+    "ambientDesc": "Optional background view of your desktop (small local model).",
+    "voiceTitle": "Voice input",
+    "codeSearchTitle": "Code search",
+    "codeSearchDesc": "Find files by meaning in your projects.",
+    "saving": "Saving…",
+    "saveRestart": "Save & restart runtime",
+    "footnote": "Model changes apply immediately. The runtime restarts only when tier, server URL, or vision settings change.",
+    "saveFailed": "Could not save capabilities",
+    "subAgents": "Sub-agents",
+    "subAgentsSame": "Same as primary",
+    "custom": "Custom",
+    "brain": {
+      "cloud": {
+        "title": "Babo Cloud",
+        "subtitle": "Easiest path — hosted models via your Babo account"
+      },
+      "local": {
+        "title": "This computer",
+        "subtitle": "Advanced — Ollama on this PC"
+      },
+      "lan": {
+        "title": "My server",
+        "subtitle": "Advanced — vLLM or compatible server on your LAN"
+      },
+      "byok": {
+        "title": "Your API key",
+        "subtitle": "OpenRouter, OpenAI, Anthropic, …"
+      }
+    }
   }
 }
