@@ -1,36 +1,144 @@
 <div class="ctx-panel">
+
   @if (isHome()) {
+
     <div class="ctx-block">
-      <h4 class="ctx-title">Private desk</h4>
+
+      <div class="ctx-title-row">
+
+        <h4 class="ctx-title">Private desk</h4>
+
+        @if (canSetPrimaryReachability()) {
+
+          <button
+
+            type="button"
+
+            class="ctx-reachability-btn"
+
+            [class.active]="isPrimaryReachability()"
+
+            [disabled]="reachabilityBusy()"
+
+            (click)="togglePrimaryReachability()"
+
+            [title]="isPrimaryReachability() ? 'Primary reachability — Babo reports here by default' : 'Set as primary reachability'"
+
+          >
+
+            {{ isPrimaryReachability() ? '★' : '☆' }}
+
+          </button>
+
+        }
+
+      </div>
+
       <p class="ctx-body">Messages here stay on your desktop. Nothing is sent to Discord, email, or other connected surfaces unless Babo uses a channel tool explicitly.</p>
+
+      @if (canSetPrimaryReachability()) {
+
+        <p class="ctx-body ctx-reachability-hint">
+
+          Star this Home branch so Babo knows where to reach you for reports when no explicit target is set.
+
+        </p>
+
+      }
+
     </div>
+
   } @else if (isSurface()) {
+
     <div class="ctx-block">
-      <h4 class="ctx-title">{{ thread!.channel | titlecase }} conversation</h4>
+
+      <div class="ctx-title-row">
+
+        <h4 class="ctx-title">{{ thread!.channel | titlecase }} conversation</h4>
+
+        @if (canSetPrimaryReachability()) {
+
+          <button
+
+            type="button"
+
+            class="ctx-reachability-btn"
+
+            [class.active]="isPrimaryReachability()"
+
+            [disabled]="reachabilityBusy()"
+
+            (click)="togglePrimaryReachability()"
+
+            [title]="isPrimaryReachability() ? 'Primary reachability — Babo reports here by default' : 'Set as primary reachability'"
+
+          >
+
+            {{ isPrimaryReachability() ? '★' : '☆' }}
+
+          </button>
+
+        }
+
+      </div>
+
       <dl class="ctx-dl">
+
         <dt>Thread</dt>
+
         <dd>{{ thread!.label }}</dd>
+
         @if (thread!.sender) {
+
           <dt>Last speaker</dt>
+
           <dd>{{ thread!.sender }}</dd>
+
         }
+
         @if (thread!.subject) {
+
           <dt>Subject</dt>
+
           <dd>{{ thread!.subject }}</dd>
+
         }
+
         @if (isGroup()) {
+
           <dt>Type</dt>
+
           <dd>Shared channel / group</dd>
+
         } @else {
+
           <dt>Type</dt>
+
           <dd>Direct message</dd>
+
         }
+
         <dt>Session</dt>
+
         <dd class="ctx-mono">{{ thread!.key }}</dd>
+
       </dl>
+
+      <p class="ctx-body ctx-reachability-hint">
+
+        Star this thread so Babo knows where to reach you for reports and progress when no explicit target is set.
+
+      </p>
+
       <a class="ctx-link" [routerLink]="toolsLink()" [queryParams]="{ skill: thread!.channel + '-channel' }">
+
         Configure in Tools →
+
       </a>
+
     </div>
+
   }
+
 </div>
+

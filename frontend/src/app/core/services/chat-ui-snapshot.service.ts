@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { ChatMessage } from './websocket.service';
+import type { ProjectProcess } from './api.service';
 import type { WorkbenchEntry } from './chat-workbench.service';
 import type { WorkbenchDensity } from './workbench-density.util';
 import type { RunViewPersisted } from '../models/run-view.model';
@@ -40,6 +41,8 @@ export interface ChatUiSnapshot {
   sidebarOpen?: boolean;
   /** Active conversation branch */
   currentThread?: string;
+  /** Detached dev servers from bash tool */
+  projectProcesses?: ProjectProcess[];
 }
 
 @Injectable({ providedIn: 'root' })

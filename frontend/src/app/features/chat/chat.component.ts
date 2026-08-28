@@ -54,6 +54,9 @@ import { ChatPanelService } from '../../core/services/chat-panel.service';
 import { ConversationService, ConversationThread } from '../../core/services/conversation.service';
 import { composerDestination } from '../../core/services/composer-destination.util';
 import { ChatMainTranscriptService } from '../../core/services/chat-main-transcript.service';
+import { WorkspaceNavService } from '../../core/services/workspace-nav.service';
+import { WorkspaceTerminalTabsService } from '../../core/services/workspace-terminal-tabs.service';
+import { applyHomePromotionHandoff } from '../../core/utils/home-promotion.util';
 import { restoreChatMessagesFromTranscript, isChatSystemInjection, transcriptHasAgenticTrace, mergeTranscriptPreservingEphemeral, isEphemeralChatMessage } from '../../core/services/chat-transcript-restore.util';
 import { ChatLeftDockComponent } from './chat-left-dock/chat-left-dock.component';
 import { ChatRightDockComponent } from './chat-right-dock/chat-right-dock.component';
@@ -215,6 +218,20 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     this.conversations.isDefaultHome(this.currentThread(), this.agentId),
   ));
 
+  private readonly workspaceNav = inject(WorkspaceNavService);
+  readonly terminalTabs = inject(WorkspaceTerminalTabsService);
+
+  terminalTabCount = computed(() => {
+    const id = this.agentIdSignal();
+    if (!id) return 0;
+    return this.terminalTabs.openTabCount(id)();
+  });
+
+  terminalChipLabel = computed(() => {
+    const count = this.terminalTabCount();
+    return count > 1 ? `Terminal ×${count}` : 'Terminal';
+  });
+
   /** Connected channel names for the sidebar status strip */
   connectedChannels = computed(() => {
     const threads = this.activeThreads();
@@ -239,11 +256,14 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
   /** Cap runtime hydration retries when the server starts slowly after app launch. */
   private runtimeHydrateAttempts = 0;
   private static readonly MAX_RUNTIME_HYDRATE = 4;
+  /** Skip one mainTranscript pull after restoring route snapshot. */
+  private skipMainTranscriptPull = false;
 
   private sub!: Subscription;
   private routerSub?: Subscription;
   private paramSub?: Subscription;
   agentId = '';
+  private readonly agentIdSignal = signal('');
   private waveformAnimFrame = 0;
 
   constructor(
@@ -290,7 +310,9 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
   ngOnInit() {
     this.agentId = this.route.snapshot.params['agentId'];
+    this.agentIdSignal.set(this.agentId);
     this._seenLearningKeys.clear();
+    this.workspaceCtx.hydrateAgent(this.agentId);
     this.agentModels.bindAgent(this.agentId);
     this.orchProfiles.setActiveAgent(this.agentId);
     this.workbench.bindAgent(this.agentId);
@@ -375,7 +397,9 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     this.sub?.unsubscribe();
 
     this.agentId = nextId;
+    this.agentIdSignal.set(nextId);
     this._seenLearningKeys.clear();
+    this.workspaceCtx.hydrateAgent(nextId);
     this.mainTranscriptLoaded = false;
     this.mainTranscriptRows = 0;
     this.runtimeHydrateAttempts = 0;
@@ -488,6 +512,11 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     this.projectProcessesOpen.update(v => !v);
   }
 
+  openAgentTerminal(): void {
+    if (!this.agentId) return;
+    this.workspaceNav.openTerminal(this.agentId);
+  }
+
   killProjectProcess(pid: number, event?: MouseEvent): void {
     event?.stopPropagation();
     if (!this.agentId) return;
@@ -578,6 +607,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     if (!this.agentId) return;
     const snap = this.chatUiSnapshot.take(this.agentId);
     if (!snap) return;
+    this.skipMainTranscriptPull = true;
     this.messages.set(snap.messages ?? []);
     if (snap.nlsMetadata != null) {
       this.nlsMetadata.set(snap.nlsMetadata);
@@ -614,18 +644,33 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       this.currentThread.set(snap.currentThread);
       this.workbench.setActiveSessionKey(snap.currentThread);
     }
+    if (snap.projectProcesses?.length) {
+      this.projectProcesses.set(snap.projectProcesses);
+    }
   }
 
   /** Prefer shared main-thread transcript when Projects sidebar was active. */
   private mergeMainTranscriptOnInit(): void {
-    if (!this.agentId) return;
+    if (!this.agentId || this.agenticActive()) return;
+    if (this.skipMainTranscriptPull) {
+      this.skipMainTranscriptPull = false;
+      return;
+    }
     const shared = this.mainTranscript.get(this.agentId);
     const local = this.messages();
-    if (shared.length > local.length) {
-      this.messages.set(shared);
-    } else if (local.length > 0) {
-      this.syncMainTranscript();
+    if (!shared.length || shared.length <= local.length) {
+      if (local.length > 0) {
+        this.syncMainTranscript();
+      }
+      return;
     }
+    const branch = this.conversations.nonHomeMessages(local, this.agentId);
+    const localHome = this.conversations.homeMessages(local, this.agentId);
+    const merged = mergeTranscriptPreservingEphemeral(
+      structuredClone(shared),
+      localHome.filter(isEphemeralChatMessage),
+    );
+    this.messages.set([...branch, ...merged]);
   }
 
   private syncMainTranscript(): void {
@@ -640,14 +685,21 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
   /** Adopt newer home-thread transcript from Projects sidebar. */
   private pullSharedMainTranscript(): void {
-    if (!this.agentId || this.agenticActive()) return;
+    if (!this.agentId || this.agenticActive() || this.skipMainTranscriptPull) {
+      return;
+    }
     const home = this.conversations.defaultHomeKey(this.agentId);
     if (this.currentThread() !== home) return;
     const shared = this.mainTranscript.get(this.agentId);
-    const local = this.conversations.homeMessages(this.messages(), this.agentId);
-    if (shared.length <= local.length) return;
-    const branch = this.conversations.nonHomeMessages(this.messages(), this.agentId);
-    this.messages.set([...branch, ...structuredClone(shared)]);
+    const local = this.messages();
+    const localHome = this.conversations.homeMessages(local, this.agentId);
+    if (shared.length <= localHome.length) return;
+    const branch = this.conversations.nonHomeMessages(local, this.agentId);
+    const merged = mergeTranscriptPreservingEphemeral(
+      structuredClone(shared),
+      localHome.filter(isEphemeralChatMessage),
+    );
+    this.messages.set([...branch, ...merged]);
   }
 
   /** Merge heartbeat snapshots so partial WS payloads do not wipe BPM or digests. */
@@ -684,6 +736,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       workbenchDensity: this.workbench.snapshotState().density,
       sidebarOpen: this.panels.rightDockOpen(),
       currentThread: this.currentThread(),
+      projectProcesses: this.projectProcesses(),
     });
   }
 
@@ -1680,6 +1733,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       reasoning: reasoning || undefined,
       timestamp: new Date(),
       agenticStep: step,
+      sessionKey: this.deskSessionKey(),
     };
     this.messages.update(msgs => {
       const insertIdx = msgs.findIndex(m =>
@@ -2142,6 +2196,9 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         }]);
         this.panels.onAgenticStart();
         this.workbench.openPanel();
+        if (this.workbench.density() === 'focused') {
+          this.workbench.setDensity('standard');
+        }
         break;
       }
 
@@ -2231,6 +2288,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
               reasoning,
               timestamp: new Date(),
               agenticStep: step,
+              sessionKey: this.deskSessionKey(msg.session_key),
             }]);
           }
           this._iterTextCommitted = true;
@@ -2254,6 +2312,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
             ? `Step ${step}/${maxSteps}: ${toolNames} (${successes}/${toolResults.length} succeeded)`
             : `Step ${step}/${maxSteps}`,
           timestamp: new Date(),
+          sessionKey: this.deskSessionKey(msg.session_key),
           agentic: {
             step,
             maxSteps,
@@ -2338,6 +2397,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
             content: thought.response || remainingText,
             reasoning: (remainingReasoning || thought.thinking) || undefined,
             timestamp: new Date(),
+            sessionKey: this.deskSessionKey(msg.session_key),
           }]);
         }
 
@@ -2372,6 +2432,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
           type: 'agentic_complete' as any,
           content: agenticAbortLabel(aborted, exitReason, false),
           timestamp: new Date(),
+          sessionKey: this.deskSessionKey(msg.session_key),
           agenticComplete: {
             totalSteps,
             totalToolCalls,
@@ -2395,7 +2456,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
             reasoning: thought.thinking || undefined,
             timestamp: new Date(),
             nls: msg.nls,
-            sessionKey: sk2 !== 'websocket:main' ? sk2 : undefined,
+            sessionKey: this.deskSessionKey(sk2),
           }]);
         }
 
@@ -2802,6 +2863,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
             thinking: fullThinking,
             thinkingIteration: msg.iteration || 0,
             timestamp: new Date(),
+            sessionKey: this.deskSessionKey(msg.session_key),
           };
           const iter = msg.iteration || 0;
           this.messages.update(msgs => {
@@ -3371,6 +3433,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
           content: msg.message || '',
           timestamp: new Date(),
           midLoop: msg.mid_loop || false,
+          sessionKey: this.deskSessionKey(msg.session_key),
         }]);
         break;
       }
@@ -3801,7 +3864,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
   performDeleteThread(key: string): void {
     this.conversations.removeBranch(key);
     this.messages.update((msgs) => msgs.filter((m) => m.sessionKey !== key));
-    this.workbench.removeEntriesForSession(key);
+    this.workbench.removeEntriesForSession(key, { includeUntagged: true });
     if (this.agentId) {
       this.api.deleteSession(this.agentId, key).subscribe({ error: () => {} });
     }
@@ -3812,9 +3875,15 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
   performPromoteToHome(key: string): void {
     if (!this.agentId) return;
+    const outgoingHome = this.conversations.defaultHomeKey(this.agentId);
     this.api.setDefaultHomeSession(this.agentId, key).subscribe({
       next: () => {
-        this.conversations.setDefaultHomeForAgent(this.agentId, key);
+        applyHomePromotionHandoff(this.agentId, outgoingHome, key, {
+          conversations: this.conversations,
+          workbench: this.workbench,
+          mainTranscript: this.mainTranscript,
+          setMessages: (updater) => this.messages.update(updater),
+        });
         this.switchThread(key);
       },
       error: () => {},
@@ -3823,6 +3892,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
   performResetHome(): void {
     if (!this.agentId) return;
+    const outgoingHome = this.conversations.defaultHomeKey(this.agentId);
     const id = Date.now().toString(36);
     const key = `websocket:thread:${id}`;
     const count = this.conversations.threads().filter((t) => this.conversations.isWebsocketBranch(t.key)).length;
@@ -3831,7 +3901,12 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
     this.api.renameSession(this.agentId, key, label).subscribe({ error: () => {} });
     this.api.setDefaultHomeSession(this.agentId, key).subscribe({
       next: () => {
-        this.conversations.setDefaultHomeForAgent(this.agentId, key);
+        applyHomePromotionHandoff(this.agentId, outgoingHome, key, {
+          conversations: this.conversations,
+          workbench: this.workbench,
+          mainTranscript: this.mainTranscript,
+          setMessages: (updater) => this.messages.update(updater),
+        });
         this.switchThread(key);
       },
       error: () => {},
@@ -3851,6 +3926,10 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         const defaultHome = (res?.default_home_session_key || 'websocket:main').trim();
         if (defaultHome) {
           this.conversations.setDefaultHomeForAgent(this.agentId, defaultHome);
+        }
+        const primaryReachability = (res?.primary_reachability_session_key || defaultHome || 'websocket:main').trim();
+        if (primaryReachability) {
+          this.conversations.setPrimaryReachabilityForAgent(this.agentId, primaryReachability);
         }
         const sessions: Record<string, any> = res?.sessions || {};
         const restored: ConversationThread[] = [];
@@ -3910,8 +3989,18 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         const ambient = Array.isArray(res?.ambient_timeline) ? res.ambient_timeline : [];
         const sessionMsgs = Array.isArray(res?.messages) ? res.messages : [];
         if (!ambient.length && !sessionMsgs.length) {
-          if (!isChannel) {
-            this.messages.update(msgs => msgs.filter(m => m.sessionKey !== sessionKey));
+          if (!isChannel && !this.agenticActive()) {
+            this.messages.update((msgs) =>
+              msgs.filter((m) => {
+                const sk = (m.sessionKey || '').trim();
+                if (!sk) return true;
+                return !this.conversations.sessionBelongsToThread(
+                  sk,
+                  sessionKey,
+                  this.agentId,
+                );
+              }),
+            );
             this.workbench.removeEntriesForSession(sessionKey);
           }
           return;
@@ -3957,16 +4046,28 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         }
 
         this.messages.update(msgs => {
-          const other = msgs.filter(m => m.sessionKey !== sessionKey);
-          if (isChannel && restored.length > 0) {
-            return [...other, ...restored];
+          const threadOpts = (m: ChatMessage) => ({
+            messageType: m.type,
+            agenticStep: m.agenticStep,
+          });
+          const belongs = (m: ChatMessage) =>
+            this.conversations.sessionBelongsToThread(
+              m.sessionKey,
+              sessionKey,
+              this.agentId,
+              threadOpts(m),
+            );
+          const other = msgs.filter((m) => !belongs(m));
+          const sessionLive = msgs.filter((m) => belongs(m));
+          const ephemeral = sessionLive.filter(isEphemeralChatMessage);
+          const hasAgentic = transcriptHasAgenticTrace(sessionMsgs);
+          const merged = mergeTranscriptPreservingEphemeral(restored, ephemeral, {
+            skipToolProgress: hasAgentic,
+          });
+          if (isChannel && restored.length === 0 && sessionLive.length > 0) {
+            return msgs;
           }
-          if (!isChannel) {
-            return [...other, ...restored];
-          }
-          const existing = msgs.filter(m => m.sessionKey === sessionKey);
-          if (existing.length > 0) return msgs;
-          return [...other, ...restored];
+          return [...other, ...merged];
         });
 
         if (!isChannel && transcriptHasAgenticTrace(sessionMsgs)) {

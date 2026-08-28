@@ -45,6 +45,7 @@ const SURFACE_LABELS: Record<string, string> = {
 export class ConversationService {
   private _activeAgentId: string | null = null;
   private readonly _defaultHomeByAgent = signal<Record<string, string>>({});
+  private readonly _primaryReachabilityByAgent = signal<Record<string, string>>({});
   private readonly _threads = signal<ConversationThread[]>([
     { key: 'websocket:main', label: 'Main chat', channel: 'websocket' },
   ]);
@@ -283,13 +284,70 @@ export class ConversationService {
     } catch { /* ignore */ }
   }
 
+  private primaryReachabilityStorageKey(agentId: string): string {
+    return `babo:primary-reachability:${agentId}`;
+  }
+
+  loadPrimaryReachabilityLocal(agentId: string): string {
+    try {
+      return localStorage.getItem(this.primaryReachabilityStorageKey(agentId)) || '';
+    } catch {
+      return '';
+    }
+  }
+
+  primaryReachabilityKey(agentId?: string): string {
+    const id = agentId || this._activeAgentId;
+    if (!id) return 'websocket:main';
+    const mapped = this._primaryReachabilityByAgent()[id];
+    if (mapped) return mapped;
+    const local = this.loadPrimaryReachabilityLocal(id);
+    if (local) return local;
+    return this.defaultHomeKey(id);
+  }
+
+  isPrimaryReachability(key: string, agentId?: string): boolean {
+    return key === this.primaryReachabilityKey(agentId);
+  }
+
+  setPrimaryReachabilityForAgent(agentId: string, sessionKey: string): void {
+    this._primaryReachabilityByAgent.update((m) => ({ ...m, [agentId]: sessionKey }));
+    try {
+      localStorage.setItem(this.primaryReachabilityStorageKey(agentId), sessionKey);
+    } catch { /* ignore */ }
+  }
+
   messageBelongsToHome(
-    msg: { sessionKey?: string; type?: string },
+    msg: { sessionKey?: string; type?: string; agenticStep?: number },
     homeKey?: string,
     agentId?: string,
   ): boolean {
     const home = homeKey || this.defaultHomeKey(agentId);
-    return this.sessionBelongsToThread(msg.sessionKey, home, agentId, { messageType: msg.type });
+    return this.sessionBelongsToThread(msg.sessionKey, home, agentId, {
+      messageType: msg.type,
+      agenticStep: msg.agenticStep,
+    });
+  }
+
+  /** Re-tag legacy websocket:main rows onto the outgoing Home branch before promotion. */
+  pinLegacyHomeTags<T extends { sessionKey?: string; type?: string }>(
+    rows: T[],
+    outgoingHome: string,
+    agentId?: string,
+  ): T[] {
+    if (!outgoingHome || outgoingHome === 'websocket:main') {
+      return rows;
+    }
+    return rows.map((row) => {
+      const sk = (row.sessionKey || '').trim();
+      if (sk && sk !== 'websocket:main') {
+        return row;
+      }
+      if (!this.messageBelongsToHome(row, outgoingHome, agentId)) {
+        return row;
+      }
+      return { ...row, sessionKey: outgoingHome };
+    });
   }
 
   /** Match persisted or live rows to a thread, including promoted Home branch keys. */
@@ -297,7 +355,7 @@ export class ConversationService {
     storedKey: string | undefined,
     threadKey: string,
     agentId?: string,
-    opts?: { messageType?: string },
+    opts?: { messageType?: string; agenticStep?: number },
   ): boolean {
     const home = this.defaultHomeKey(agentId);
     const target = threadKey || home;
@@ -309,7 +367,15 @@ export class ConversationService {
       }
       if (sk === home) return true;
       if (sk === 'websocket:main' || !sk) {
-        return this.untaggedBelongsToPromotedHome(opts?.messageType);
+        return this.untaggedBelongsToPromotedHome(opts?.messageType, opts?.agenticStep);
+      }
+      return false;
+    }
+    if (target.startsWith('websocket:thread:')) {
+      if (sk === target) return true;
+      const home = this.defaultHomeKey(agentId);
+      if (target === home && (!sk || sk === 'websocket:main')) {
+        return this.untaggedBelongsToPromotedHome(opts?.messageType, opts?.agenticStep);
       }
       return false;
     }
@@ -317,7 +383,10 @@ export class ConversationService {
   }
 
   /** Legacy websocket:main / missing tags on live desk traffic for a promoted Home branch. */
-  untaggedBelongsToPromotedHome(messageType?: string): boolean {
+  untaggedBelongsToPromotedHome(messageType?: string, agenticStep?: number): boolean {
+    if (messageType === 'assistant' && agenticStep != null && agenticStep > 0) {
+      return true;
+    }
     if (!messageType) return true;
     return messageType === 'tool_progress'
       || messageType === 'status'
@@ -326,7 +395,11 @@ export class ConversationService {
       || messageType === 'agentic_iteration'
       || messageType === 'agentic_complete'
       || messageType === 'turn_thinking'
-      || messageType === 'thinking';
+      || messageType === 'thinking'
+      || messageType === 'communicate'
+      || messageType === 'ask_user'
+      || messageType === 'browser_navigation'
+      || messageType === 'tool_output_chunk';
   }
 
   /** Normalize WS / live message tags for the active desk thread. */
@@ -336,13 +409,18 @@ export class ConversationService {
     agentId?: string,
   ): string | undefined {
     const fromMsg = (msgSessionKey || '').trim();
-    if (fromMsg && fromMsg !== 'websocket:main') return fromMsg;
+    if (fromMsg && fromMsg !== 'websocket:main' && !fromMsg.startsWith('websocket:thread:')) {
+      return fromMsg;
+    }
+    if (currentThread.startsWith('websocket:thread:')) {
+      return currentThread;
+    }
     if (currentThread !== 'websocket:main') return currentThread;
     const home = this.defaultHomeKey(agentId);
     return home === 'websocket:main' ? undefined : home;
   }
 
-  messagesForThread<T extends { sessionKey?: string; type?: string }>(
+  messagesForThread<T extends { sessionKey?: string; type?: string; agenticStep?: number }>(
     msgs: T[],
     threadKey: string,
     agentId?: string,
@@ -350,6 +428,14 @@ export class ConversationService {
     const home = this.defaultHomeKey(agentId);
     if (threadKey === home) {
       return msgs.filter((m) => this.messageBelongsToHome(m, home, agentId));
+    }
+    if (threadKey.startsWith('websocket:thread:')) {
+      return msgs.filter((m) =>
+        this.sessionBelongsToThread(m.sessionKey, threadKey, agentId, {
+          messageType: m.type,
+          agenticStep: m.agenticStep,
+        }),
+      );
     }
     return msgs.filter((m) => m.sessionKey === threadKey);
   }

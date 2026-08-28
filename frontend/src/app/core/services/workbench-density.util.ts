@@ -59,7 +59,7 @@ export function shouldShowWorkbenchEntry(
   }
   const label = (e.toolLabel || '').toLowerCase();
   if (label === 'bash') {
-    return density === 'standard' || isErrorEntry(e);
+    return true;
   }
   if (density === 'focused') {
     if (isInternalNoise(e)) {

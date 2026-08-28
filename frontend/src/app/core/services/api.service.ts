@@ -912,6 +912,20 @@ export class ApiService {
     return this.http.post(url, { session_key: sessionKey });
   }
 
+  setPrimaryReachability(agentId: string, sessionKey: string): Observable<any> {
+    const url = this.platform.isElectron
+      ? `${this.RUNTIME}/sessions/${agentId}/primary-reachability`
+      : `${this.API}/agents/${agentId}/sessions/primary-reachability`;
+    return this.http.post(url, { session_key: sessionKey });
+  }
+
+  clearPrimaryReachability(agentId: string): Observable<any> {
+    const url = this.platform.isElectron
+      ? `${this.RUNTIME}/sessions/${agentId}/primary-reachability`
+      : `${this.API}/agents/${agentId}/sessions/primary-reachability`;
+    return this.http.delete(url);
+  }
+
   // ─── Visual Cortex ──────────────────────────────────────────────
   getVisualCortexBuffer(agentId: string, opts?: { channel?: string; limit?: number }): Observable<any> {
     let params = new HttpParams();

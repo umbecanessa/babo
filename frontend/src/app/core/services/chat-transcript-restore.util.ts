@@ -167,7 +167,47 @@ export interface MergeEphemeralOptions {
 
 /** Live-only rows that REST/WS transcript hydration must not drop. */
 export function isEphemeralChatMessage(msg: ChatMessage): boolean {
-  return msg.type === 'status' || msg.type === 'tool_progress';
+  if (msg.type === 'status' || msg.type === 'tool_progress') {
+    return true;
+  }
+  if (msg.type === 'turn_thinking') {
+    return true;
+  }
+  if (
+    msg.type === 'agentic_start'
+    || msg.type === 'agentic_iteration'
+    || msg.type === 'agentic_complete'
+  ) {
+    return true;
+  }
+  if (msg.type === 'assistant' && msg.agenticStep) {
+    return true;
+  }
+  return false;
+}
+
+function ephemeralMergeKey(msg: ChatMessage): string {
+  if (msg.type === 'tool_progress') {
+    return toolProgressKey(msg);
+  }
+  if (msg.type === 'assistant' && msg.agenticStep) {
+    return `assistant:${msg.agenticStep}:${(msg.content || '').trim()}`;
+  }
+  if (msg.type === 'turn_thinking') {
+    return `turn_thinking:${msg.thinkingIteration ?? 0}:${(msg.content || '').trim()}`;
+  }
+  return `${msg.type}:${(msg.content || '').trim()}`;
+}
+
+function messageTimestamp(msg: ChatMessage): number {
+  const ts = msg.timestamp;
+  if (ts instanceof Date) return ts.getTime();
+  if (typeof ts === 'number') return ts;
+  if (typeof ts === 'string') {
+    const parsed = Date.parse(ts);
+    return Number.isNaN(parsed) ? 0 : parsed;
+  }
+  return 0;
 }
 
 /** Keep ephemeral UI rows when replacing chat with persisted transcript. */
@@ -178,32 +218,17 @@ export function mergeTranscriptPreservingEphemeral(
 ): ChatMessage[] {
   if (!ephemeral.length) return restored;
 
-  const restoredKeys = new Set(
-    restored.map(m => `${m.type}:${(m.content || '').trim()}`),
-  );
-  const extras = ephemeral.filter(m => {
-    const key = `${m.type}:${(m.content || '').trim()}`;
-    if (restoredKeys.has(key)) return false;
+  const restoredKeys = new Set(restored.map((m) => ephemeralMergeKey(m)));
+  const extras = ephemeral.filter((m) => {
     if (m.type === 'status' && !(m.content || '').trim()) return false;
     if (options.skipToolProgress && m.type === 'tool_progress') return false;
-    return true;
+    return !restoredKeys.has(ephemeralMergeKey(m));
   });
   if (!extras.length) return restored;
 
-  const statusExtras = extras.filter(m => m.type === 'status');
-  const restoredProgressKeys = new Set(
-    restored
-      .filter(m => m.type === 'tool_progress')
-      .map(m => toolProgressKey(m as ChatMessage)),
+  return [...restored, ...extras].sort(
+    (a, b) => messageTimestamp(a) - messageTimestamp(b),
   );
-  const progressExtras = options.skipToolProgress
-    ? []
-    : extras.filter(m => {
-      if (m.type !== 'tool_progress') return false;
-      return !restoredProgressKeys.has(toolProgressKey(m));
-    });
-  const trailing = [...statusExtras, ...progressExtras];
-  return trailing.length ? [...restored, ...trailing] : restored;
 }
 
 function appendAgenticChatFromTrace(

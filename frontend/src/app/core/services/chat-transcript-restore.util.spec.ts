@@ -81,6 +81,37 @@ describe('chat-transcript-restore.util', () => {
     expect(restored.filter(m => m.type === 'tool_progress')).toHaveLength(1);
   });
 
+  it('mergeTranscriptPreservingEphemeral keeps turn_thinking and interim assistant prose', () => {
+    const restored = restoreChatMessagesFromTranscript([
+      { role: 'user', content: 'Run tests', timestamp: 1_700_000_000 },
+    ]);
+    const now = new Date(1_700_000_100);
+    const merged = mergeTranscriptPreservingEphemeral(restored, [
+      {
+        type: 'turn_thinking',
+        content: 'Planning test run…',
+        thinkingIteration: 1,
+        timestamp: now,
+      } as any,
+      {
+        type: 'assistant',
+        agenticStep: 1,
+        content: 'First I will inspect the repo.',
+        timestamp: new Date(1_700_000_120),
+      } as any,
+      {
+        type: 'tool_progress',
+        content: 'Running npm test…',
+        timestamp: new Date(1_700_000_140),
+        toolProgress: { toolName: 'bash', callId: 'call_1', done: false },
+      } as any,
+    ]);
+
+    expect(merged.some(m => m.type === 'turn_thinking')).toBe(true);
+    expect(merged.some(m => m.type === 'assistant' && m.agenticStep === 1)).toBe(true);
+    expect(merged.some(m => m.type === 'tool_progress')).toBe(true);
+  });
+
   it('mergeTranscriptPreservingEphemeral keeps recent status pills', () => {
     const restored = restoreChatMessagesFromTranscript([
       { role: 'user', content: 'Connect discord', timestamp: 1_700_000_000 },
@@ -134,8 +165,7 @@ describe('chat-transcript-restore.util', () => {
     );
 
     expect(merged.filter(m => m.type === 'tool_progress')).toHaveLength(1);
-    expect(merged[merged.length - 1].type).toBe('status');
-    expect(merged[merged.length - 1].content).toBe('Still working…');
+    expect(merged.some(m => m.type === 'status' && m.content === 'Still working…')).toBe(true);
   });
 
   it('filters system injection messages', () => {

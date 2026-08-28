@@ -38,8 +38,9 @@ import { ChatOrchestrationProfilePickerComponent } from '../../chat/chat-orchest
 import { AgentModelService } from '../../../core/services/agent-model.service';
 import { AgentOrchestrationProfileService } from '../../../core/services/agent-orchestration-profile.service';
 import { ChatMainTranscriptService } from '../../../core/services/chat-main-transcript.service';
+import { applyHomePromotionHandoff } from '../../../core/utils/home-promotion.util';
 import { ChatWorkbenchService } from '../../../core/services/chat-workbench.service';
-import { restoreChatMessagesFromTranscript, transcriptHasAgenticTrace } from '../../../core/services/chat-transcript-restore.util';
+import { restoreChatMessagesFromTranscript, transcriptHasAgenticTrace, mergeTranscriptPreservingEphemeral, isEphemeralChatMessage } from '../../../core/services/chat-transcript-restore.util';
 import { agenticAbortLabel } from '../../chat/orchestration-ui.util';
 
 @Component({
@@ -311,7 +312,7 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
   private performDeleteBranch(key: string): void {
     this.conversations.removeBranch(key);
     this.messages.update((msgs) => msgs.filter((m) => m.sessionKey !== key));
-    this.workbench.removeEntriesForSession(key);
+    this.workbench.removeEntriesForSession(key, { includeUntagged: true });
     if (this.agentId) {
       this.api.deleteSession(this.agentId, key).subscribe({ error: () => {} });
     }
@@ -320,9 +321,15 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
 
   private performPromoteToHome(key: string): void {
     if (!this.agentId) return;
+    const outgoingHome = this.conversations.defaultHomeKey(this.agentId);
     this.api.setDefaultHomeSession(this.agentId, key).subscribe({
       next: () => {
-        this.conversations.setDefaultHomeForAgent(this.agentId, key);
+        applyHomePromotionHandoff(this.agentId, outgoingHome, key, {
+          conversations: this.conversations,
+          workbench: this.workbench,
+          mainTranscript: this.mainTranscript,
+          setMessages: (updater) => this.messages.update(updater),
+        });
         this.selectThread(key);
       },
       error: () => {},
@@ -331,6 +338,7 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
 
   private performResetHome(): void {
     if (!this.agentId) return;
+    const outgoingHome = this.conversations.defaultHomeKey(this.agentId);
     const id = Date.now().toString(36);
     const key = `websocket:thread:${id}`;
     const count = this.websocketThreads().filter((t) => this.conversations.isWebsocketBranch(t.key)).length;
@@ -339,7 +347,12 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
     this.api.renameSession(this.agentId, key, label).subscribe({ error: () => {} });
     this.api.setDefaultHomeSession(this.agentId, key).subscribe({
       next: () => {
-        this.conversations.setDefaultHomeForAgent(this.agentId, key);
+        applyHomePromotionHandoff(this.agentId, outgoingHome, key, {
+          conversations: this.conversations,
+          workbench: this.workbench,
+          mainTranscript: this.mainTranscript,
+          setMessages: (updater) => this.messages.update(updater),
+        });
         this.selectThread(key);
       },
       error: () => {},
@@ -530,11 +543,15 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
     const home = this.conversations.defaultHomeKey(this.agentId);
     if (this.activeThread() !== home) return;
     const shared = this.mainTranscript.get(this.agentId);
-    const local = this.conversations.homeMessages(this.messages(), this.agentId);
-    if (shared.length > local.length) {
-      const branch = this.conversations.nonHomeMessages(this.messages(), this.agentId);
-      this.messages.set([...branch, ...structuredClone(shared)]);
-    }
+    const local = this.messages();
+    const localHome = this.conversations.homeMessages(local, this.agentId);
+    if (shared.length <= localHome.length) return;
+    const branch = this.conversations.nonHomeMessages(local, this.agentId);
+    const merged = mergeTranscriptPreservingEphemeral(
+      structuredClone(shared),
+      localHome.filter(isEphemeralChatMessage),
+    );
+    this.messages.set([...branch, ...merged]);
   }
 
   private outgoingSessionKey(threadKey: string): string | undefined {
@@ -622,6 +639,10 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
         if (defaultHome) {
           this.conversations.setDefaultHomeForAgent(this.agentId, defaultHome);
         }
+        const primaryReachability = (res?.primary_reachability_session_key || defaultHome || 'websocket:main').trim();
+        if (primaryReachability) {
+          this.conversations.setPrimaryReachabilityForAgent(this.agentId, primaryReachability);
+        }
         const sessions: Record<string, any> = res?.sessions || {};
         const restored: {
           key: string;
@@ -696,8 +717,20 @@ export class ChatSidebarComponent implements OnInit, OnDestroy, OnChanges {
           }
           this.syncMainTranscript();
         } else if (restored.length === 0 && sessionMsgs.length === 0) {
-          this.messages.update((msgs) => msgs.filter((m) => m.sessionKey !== sessionKey));
-          this.workbench.removeEntriesForSession(sessionKey);
+          if (!this.agenticActive()) {
+            this.messages.update((msgs) =>
+              msgs.filter((m) => {
+                const sk = (m.sessionKey || '').trim();
+                if (!sk) return true;
+                return !this.conversations.sessionBelongsToThread(
+                  sk,
+                  sessionKey,
+                  this.agentId,
+                );
+              }),
+            );
+            this.workbench.removeEntriesForSession(sessionKey);
+          }
         } else {
           this.messages.update((msgs) => {
             const keep = msgs.filter((m) => m.sessionKey !== sessionKey);

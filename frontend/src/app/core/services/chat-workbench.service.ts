@@ -186,11 +186,43 @@ export class ChatWorkbenchService {
     this._activeSessionKey.set(sessionKey || 'websocket:main');
   }
 
-  removeEntriesForSession(sessionKey: string): void {
+  removeEntriesForSession(
+    sessionKey: string,
+    opts?: { includeUntagged?: boolean },
+  ): void {
     if (!sessionKey) return;
     const agentId = this._agentId();
     this.entries.update((list) =>
-      list.filter((e) => !this.conversations.sessionBelongsToThread(e.sessionKey, sessionKey, agentId)),
+      list.filter((e) => {
+        const sk = (e.sessionKey || '').trim();
+        if (!sk) {
+          if (!opts?.includeUntagged) return true;
+          return !this.conversations.sessionBelongsToThread(
+            undefined,
+            sessionKey,
+            agentId,
+          );
+        }
+        return !this.conversations.sessionBelongsToThread(sk, sessionKey, agentId);
+      }),
+    );
+  }
+
+  /** Pin legacy websocket:main workbench rows onto outgoing Home before promotion. */
+  pinLegacyWorkbenchTags(outgoingHome: string): void {
+    if (!outgoingHome || outgoingHome === 'websocket:main') return;
+    const agentId = this._agentId();
+    this.entries.update((list) =>
+      list.map((entry) => {
+        const sk = (entry.sessionKey || '').trim();
+        if (sk && sk !== 'websocket:main') return entry;
+        if (!this.conversations.sessionBelongsToThread(sk, outgoingHome, agentId, {
+          messageType: entry.kind === 'agentic' ? 'agentic_iteration' : 'tool_progress',
+        })) {
+          return entry;
+        }
+        return { ...entry, sessionKey: outgoingHome };
+      }),
     );
   }
 
@@ -498,6 +530,8 @@ export class ChatWorkbenchService {
           filePaths: mergedPaths?.length ? mergedPaths : prev.filePaths,
           filePath:
             partial.filePath ?? mergedPaths?.[0] ?? prev.filePath,
+          sessionKey:
+            partial.sessionKey ?? prev.sessionKey ?? this._activeSessionKey(),
           ts: partial.status === 'running' ? prev.ts : Date.now(),
         };
         return copy;
@@ -511,6 +545,7 @@ export class ChatWorkbenchService {
         lane: partial.lane ?? 'chat',
         ...partial,
         correlationKey,
+        sessionKey: partial.sessionKey ?? this._activeSessionKey(),
       };
       return [...list, row].slice(-MAX_ENTRIES);
     });
@@ -808,6 +843,7 @@ export class ChatWorkbenchService {
           ...(filePaths.length
             ? { filePaths, filePath: filePaths[0] }
             : {}),
+          ...ctxFields,
         });
         break;
       }
@@ -917,6 +953,7 @@ export class ChatWorkbenchService {
             ...(isError && rawPreview
               ? { detail: rawPreview.slice(0, DETAIL_KEEP) }
               : {}),
+            ...ctxFields,
           });
           if (!isSubAgent && !isError) {
             const action = String(endArgs['action'] || '').trim().toLowerCase();
@@ -938,6 +975,7 @@ export class ChatWorkbenchService {
               ? { filePaths, filePath: filePaths[0] }
               : {}),
             status: isError ? 'error' : isWarn ? 'warn' : 'ok',
+            ...ctxFields,
           });
           break;
         } else if (preview) {
@@ -969,6 +1007,7 @@ export class ChatWorkbenchService {
           ...(isError && rawPreview
             ? { detail: rawPreview.slice(0, DETAIL_KEEP) }
             : {}),
+          ...ctxFields,
         });
         break;
       }
