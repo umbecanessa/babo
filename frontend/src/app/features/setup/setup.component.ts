@@ -188,7 +188,8 @@ export class SetupComponent implements OnInit, OnDestroy {
   private highestStepReached = 0;
   private setupCompletedThisSession = false;
   launching = signal(false);
-  launchMessage = signal('Starting agent runtime...');
+  launchMessage = signal('');
+  // launchMessage initialized in ngOnInit via translate
   launchError = signal<string | null>(null);
 
   scanLoading = signal(false);
@@ -303,7 +304,7 @@ export class SetupComponent implements OnInit, OnDestroy {
         ? this.translate.instant('setup.ready.baboCloud')
         : p.inference.tier === 'byok_cloud'
           ? this.translate.instant('setup.ready.yourApiKey')
-          : p.inference.model || tierLabel(p.inference.tier);
+          : p.inference.model || this.tierLabel(p.inference.tier);
     const extras = this.translate.instant('setup.ready.extrasLine', {
       code: this.codeSearchOn()
         ? this.translate.instant('setup.ready.on')
@@ -435,6 +436,7 @@ export class SetupComponent implements OnInit, OnDestroy {
     public locale: LocaleService,
     private translate: TranslateService,
   ) {
+
     effect(() => {
       this.logLines();
       setTimeout(() => {
@@ -488,6 +490,8 @@ export class SetupComponent implements OnInit, OnDestroy {
     if (this.auth.isAuthenticated()) {
       this.returningUser.set(true);
     }
+
+    this.launchMessage.set(this.t('setup.runtime.startingAgent'));
 
     if (!setupComplete) {
       this.restoreWizardDraft();
@@ -596,13 +600,32 @@ export class SetupComponent implements OnInit, OnDestroy {
   private startVisionPrefetchInBackground(): void {
     if (!this.venvReady()) return;
     this.visionPrefetchActive.set(true);
-    this.visionPrefetchMessage.set('Downloading screen awareness model…');
+    this.visionPrefetchMessage.set(this.t('setup.runtime.downloadingVision'));
     void this.nls()
       .capabilities.prefetchVision()
       .catch(() => {
-        this.visionPrefetchMessage.set('Will download on first use');
+        this.visionPrefetchMessage.set(this.t('setup.runtime.visionDeferred'));
         setTimeout(() => this.visionPrefetchActive.set(false), 4000);
       });
+  }
+
+  private t(key: string, params?: Record<string, unknown>): string {
+    return this.translate.instant(key, params);
+  }
+
+  private tierLabel(tier: CapabilityTier): string {
+    switch (tier) {
+      case 'self_local':
+        return this.t('setup.tier.thisComputer');
+      case 'self_lan':
+        return this.t('setup.tier.myServer');
+      case 'byok_cloud':
+        return this.t('setup.tier.cloud');
+      case 'hosted_babo':
+        return this.t('setup.tier.baboHosted');
+      default:
+        return this.t('setup.tier.off');
+    }
   }
 
   private nls(): any {
@@ -612,11 +635,11 @@ export class SetupComponent implements OnInit, OnDestroy {
   lanKindLabel(kind: string, port?: number): string {
     switch (kind) {
       case 'inference':
-        return port === 11434 ? 'Ollama' : 'Chat model';
+        return port === 11434 ? this.t('setup.lanLabels.ollama') : this.t('setup.lanLabels.chatModel');
       case 'vision':
-        return 'Vision';
+        return this.t('setup.lanLabels.vision');
       case 'transcribe':
-        return 'Voice';
+        return this.t('setup.lanLabels.voice');
       default:
         return kind;
     }
@@ -639,12 +662,12 @@ export class SetupComponent implements OnInit, OnDestroy {
     switch (s.kind) {
       case 'inference':
         return s.port === 11434
-          ? 'Local chat on this server'
-          : 'vLLM / OpenAI-compatible chat';
+          ? this.t('setup.lanLabels.localChatOnServer')
+          : this.t('setup.lanLabels.vllmChat');
       case 'vision':
-        return 'Screen awareness (Moondream / VLM)';
+        return this.t('setup.lanLabels.visionSubtitle');
       case 'transcribe':
-        return 'Microphone → text (Whisper)';
+        return this.t('setup.lanLabels.transcribeSubtitle');
       default:
         return s.url;
     }
@@ -654,7 +677,7 @@ export class SetupComponent implements OnInit, OnDestroy {
     if (!s.healthy) return null;
     if (s.primaryModel) {
       if (s.extraModelCount && s.extraModelCount > 0) {
-        return `${s.primaryModel} +${s.extraModelCount} more`;
+        return this.t('setup.lanLabels.modelsMore', { primary: s.primaryModel, count: s.extraModelCount });
       }
       return s.primaryModel;
     }
@@ -749,7 +772,7 @@ export class SetupComponent implements OnInit, OnDestroy {
       tier: 'hosted_babo',
       strategy: 'dedicated_vlm_lan',
       url: '',
-      reason: 'Screen awareness via Babo Cloud GPU relay',
+      reason: this.t('setup.reasons.cloudVisionRelay'),
     };
     this.visualTier.set('hosted_babo');
     this.profile.set({ ...p });
@@ -769,9 +792,9 @@ export class SetupComponent implements OnInit, OnDestroy {
       this.maybeAutoAdvanceFromPrepare();
     } catch (err: any) {
       this.setupStage.set('error');
-      this.setupError.set(err?.message || 'Setup failed');
+      this.setupError.set(err?.message || this.t('setup.errors.setupFailed'));
       this.analytics.track('setup_prepare_failed', {
-        error: (err?.message || 'Setup failed').slice(0, 120),
+        error: (err?.message || this.t('setup.errors.setupFailed')).slice(0, 120),
       });
     } finally {
       this.stopElapsedTimer();
@@ -1029,7 +1052,7 @@ export class SetupComponent implements OnInit, OnDestroy {
       } else {
         this.testResult.set({
           ok: true,
-          message: 'Sign in on the next step to connect',
+          message: this.t('setup.test.signInNext'),
           latency: 0,
         });
         this.brainTestedTier.set('hosted_babo');
@@ -1044,7 +1067,7 @@ export class SetupComponent implements OnInit, OnDestroy {
     ) {
       this.brainUndoTier.set(previous);
       this.toast.show(
-        tier === 'hosted_babo' ? 'Using Babo Cloud' : `Using ${this.brainCardTitle(tier)}`,
+        tier === 'hosted_babo' ? this.t('setup.toast.usingCloud') : this.t('setup.toast.usingTier', { tier: this.brainCardTitle(tier) }),
         'info',
         8000,
       );
@@ -1125,7 +1148,7 @@ export class SetupComponent implements OnInit, OnDestroy {
 
   async goToScan(): Promise<void> {
     if (!this.venvReady()) {
-      this.setupError.set('Wait for Python setup to finish before continuing.');
+      this.setupError.set(this.t('setup.errors.waitPython'));
       return;
     }
     this.goToStep(2);
@@ -1154,10 +1177,10 @@ export class SetupComponent implements OnInit, OnDestroy {
         recommended_tier: this.recommendedBrainTier,
       });
     } catch (err: any) {
-      this.setupError.set(err?.message || 'Scan failed');
+      this.setupError.set(err?.message || this.t('setup.errors.scanFailed'));
       this.analytics.track('setup_device_scanned', {
         ok: false,
-        error: (err?.message || 'Scan failed').slice(0, 120),
+        error: (err?.message || this.t('setup.errors.scanFailed')).slice(0, 120),
       });
     } finally {
       this.scanLoading.set(false);
@@ -1273,7 +1296,7 @@ export class SetupComponent implements OnInit, OnDestroy {
         this.recommendedBrainTier = 'self_lan';
       }
     } catch (err: any) {
-      this.setupError.set(err?.message || 'LAN model scan failed');
+      this.setupError.set(err?.message || this.t('setup.errors.lanScanFailed'));
     } finally {
       this.lanModelFitLoading.set(false);
     }
@@ -1298,7 +1321,7 @@ export class SetupComponent implements OnInit, OnDestroy {
     if (Number.isFinite(gb) && gb > 0) {
       return fit.unifiedMemory ? `${gb} GB unified memory` : `${gb} GB VRAM`;
     }
-    return fit.unifiedMemory ? 'Unified memory' : 'VRAM unknown';
+    return fit.unifiedMemory ? this.t('setup.fitMeta.unifiedMemory') : this.t('setup.fitMeta.vramUnknown');
   }
 
   fitGpuHeadline(fit: ModelFitSnapshot): string {
@@ -1387,7 +1410,7 @@ export class SetupComponent implements OnInit, OnDestroy {
         await this.refreshOllamaStatus();
       }
     } catch (err: any) {
-      this.ollamaPullError.set(err?.message || 'Download failed');
+      this.ollamaPullError.set(err?.message || this.t('setup.errors.downloadFailed'));
     } finally {
       this.ollamaPulling.set(false);
     }
@@ -1556,7 +1579,7 @@ export class SetupComponent implements OnInit, OnDestroy {
     const p = this.profile();
     if (!p) return;
     p.embeddings = on
-      ? { tier: 'self_local', reason: 'Semantic code search on this computer' }
+      ? { tier: 'self_local', reason: this.t('setup.reasons.codeSearchLocal') }
       : { tier: 'off', reason: 'Disabled' };
     this.profile.set({ ...p });
   }
@@ -1616,7 +1639,7 @@ export class SetupComponent implements OnInit, OnDestroy {
         } catch (err: any) {
           this.testResult.set({
             ok: false,
-            message: err?.error?.message || err?.message || 'Could not save API key',
+            message: err?.error?.message || err?.message || this.t('setup.errors.saveApiKeyFailed'),
             latency: 0,
           });
           this.brainTestedTier.set('byok_cloud');
@@ -1640,7 +1663,7 @@ export class SetupComponent implements OnInit, OnDestroy {
       if (!authToken) {
         this.testResult.set({
           ok: false,
-          message: 'Sign in after setup to verify Babo Cloud',
+          message: this.t('setup.test.signInAfterSetup'),
           latency: 0,
         });
         return;
@@ -1649,7 +1672,7 @@ export class SetupComponent implements OnInit, OnDestroy {
       if (this.requiresSetupSubscription()) {
         this.testResult.set({
           ok: true,
-          message: 'Subscribe on the next step to activate Babo Cloud models',
+          message: this.t('setup.test.subscribeNext'),
           latency: 0,
         });
         this.brainTestedTier.set('hosted_babo');
@@ -1658,7 +1681,7 @@ export class SetupComponent implements OnInit, OnDestroy {
     }
 
     if (!url) {
-      this.testResult.set({ ok: false, message: 'Enter a server address first', latency: 0 });
+      this.testResult.set({ ok: false, message: this.t('setup.test.enterServer'), latency: 0 });
       return;
     }
     this.testing.set(true);
@@ -1684,7 +1707,7 @@ export class SetupComponent implements OnInit, OnDestroy {
         this.profile.set({ ...p });
       }
     } catch (err: any) {
-      this.testResult.set({ ok: false, message: err?.message || 'Test failed', latency: 0 });
+      this.testResult.set({ ok: false, message: err?.message || this.t('setup.test.testFailed'), latency: 0 });
       this.brainTestedTier.set(p.inference.tier);
     }
     const result = this.testResult();
@@ -1737,7 +1760,7 @@ export class SetupComponent implements OnInit, OnDestroy {
     if (!url) {
       this.backendTestResult.set({
         ok: false,
-        message: 'Enter a server address first',
+        message: this.t('setup.test.enterServer'),
         latency: 0,
       });
       return;
@@ -1760,7 +1783,7 @@ export class SetupComponent implements OnInit, OnDestroy {
     } catch (err: any) {
       this.backendTestResult.set({
         ok: false,
-        message: err?.message || 'Test failed',
+        message: err?.message || this.t('setup.test.testFailed'),
         latency: 0,
       });
     }
@@ -1775,7 +1798,7 @@ export class SetupComponent implements OnInit, OnDestroy {
       return;
     }
     if (!this.canContinueBackend()) {
-      this.backendSaveError.set('Choose where your account syncs, or enter a valid server URL.');
+      this.backendSaveError.set(this.t('setup.errors.chooseBackend'));
       return;
     }
     this.config.nestjsUrl = normalizeNestjsUrl(this.config.nestjsUrl);
@@ -1786,7 +1809,7 @@ export class SetupComponent implements OnInit, OnDestroy {
       await this.api.whenReady();
       this.nextStep();
     } catch (err: any) {
-      this.backendSaveError.set(err?.error?.message || err?.message || 'Could not save server');
+      this.backendSaveError.set(err?.error?.message || err?.message || this.t('setup.errors.saveServerFailed'));
     } finally {
       this.savingBackend.set(false);
     }
@@ -1815,7 +1838,7 @@ export class SetupComponent implements OnInit, OnDestroy {
 
   async saveSignInAndContinue(): Promise<void> {
     if (!this.venvReady()) {
-      this.authError.set('Finish installing Babo on this computer before signing in.');
+      this.authError.set(this.t('setup.errors.installBeforeSignIn'));
       return;
     }
     const url = normalizeNestjsUrl(this.config.nestjsUrl);
@@ -1831,7 +1854,7 @@ export class SetupComponent implements OnInit, OnDestroy {
       let didAuth = false;
       if (!this.auth.isAuthenticated()) {
         if (!this.authEmail.trim() || !this.authPassword) {
-          this.authError.set('Enter your email and password, or create an account.');
+          this.authError.set(this.t('setup.errors.enterCredentials'));
           return;
         }
         this.signingIn.set(true);
@@ -1865,10 +1888,10 @@ export class SetupComponent implements OnInit, OnDestroy {
         this.goToStep(8);
       }
     } catch (err: any) {
-      this.authError.set(err?.error?.message || err?.message || 'Could not sign in');
+      this.authError.set(err?.error?.message || err?.message || this.t('setup.errors.signInFailed'));
       this.analytics.track('setup_auth_failed', {
         mode: this.authAccountMode(),
-        error: (err?.error?.message || err?.message || 'Could not sign in').slice(0, 120),
+        error: (err?.error?.message || err?.message || this.t('setup.errors.signInFailed')).slice(0, 120),
       });
     } finally {
       this.savingBackend.set(false);
@@ -1881,23 +1904,23 @@ export class SetupComponent implements OnInit, OnDestroy {
     if (!p) return [];
     const brain =
       p.inference.tier === 'off'
-        ? 'Not configured'
+        ? this.t('setup.experience.notConfigured')
         : p.inference.tier === 'hosted_babo'
-          ? 'Babo Cloud'
-          : p.inference.model || tierLabel(p.inference.tier);
+          ? this.t('setup.experience.baboCloud')
+          : p.inference.model || this.tierLabel(p.inference.tier);
     const voice =
-      p.transcribe.tier === 'off' ? 'Off' : tierLabel(p.transcribe.tier);
+      p.transcribe.tier === 'off' ? this.t('setup.experience.off') : this.tierLabel(p.transcribe.tier);
     const ambient = this.ambientVisionOn()
-      ? tierLabel(this.visualTier())
-      : 'Off';
-    const code = this.codeSearchOn() ? 'On' : 'Off';
+      ? this.tierLabel(this.visualTier())
+      : this.t('setup.experience.off');
+    const code = this.codeSearchOn() ? this.t('setup.ready.on') : this.t('setup.ready.off');
     const backend = this.backendSummaryLabel();
     return [
-      { label: 'Thinking', value: brain, ok: p.inference.tier !== 'off' },
-      { label: 'Voice', value: voice, ok: p.transcribe.tier !== 'off' },
-      { label: 'Screen awareness', value: ambient, ok: this.ambientVisionOn() },
-      { label: 'Code search', value: code, ok: this.codeSearchOn() },
-      { label: 'Account & sync', value: backend, ok: !!normalizeNestjsUrl(this.config.nestjsUrl) },
+      { label: this.t('setup.experience.thinking'), value: brain, ok: p.inference.tier !== 'off' },
+      { label: this.t('setup.experience.voice'), value: voice, ok: p.transcribe.tier !== 'off' },
+      { label: this.t('setup.experience.screenAwareness'), value: ambient, ok: this.ambientVisionOn() },
+      { label: this.t('setup.experience.codeSearch'), value: code, ok: this.codeSearchOn() },
+      { label: this.t('setup.experience.accountSync'), value: backend, ok: !!normalizeNestjsUrl(this.config.nestjsUrl) },
     ];
   }
 
@@ -1946,7 +1969,7 @@ export class SetupComponent implements OnInit, OnDestroy {
         caps: this.platformCaps(),
       });
       if (!opened) {
-        this.billingAlert.set({ kind: 'error', text: 'Could not start checkout' });
+        this.billingAlert.set({ kind: 'error', text: this.t('setup.errors.checkoutFailed') });
         return;
       }
       this.analytics.track('setup_billing_checkout_started');
@@ -1955,7 +1978,7 @@ export class SetupComponent implements OnInit, OnDestroy {
     } catch (err: any) {
       this.billingAlert.set({
         kind: 'error',
-        text: err?.error?.message || err?.message || 'Could not start checkout',
+        text: err?.error?.message || err?.message || this.t('setup.errors.checkoutFailed'),
       });
     } finally {
       this.billingCheckoutLoading.set(false);
@@ -2189,7 +2212,7 @@ export class SetupComponent implements OnInit, OnDestroy {
   async finish(): Promise<void> {
     const name = this.agentName.trim();
     if (name.length < 2) {
-      this.launchError.set('Choose a name with at least 2 characters.');
+      this.launchError.set(this.t('setup.errors.nameTooShort'));
       return;
     }
 
@@ -2198,18 +2221,18 @@ export class SetupComponent implements OnInit, OnDestroy {
       this.venvReady.set(!!check.venvReady);
       if (!check.venvReady) {
         this.launchError.set(
-          'Python environment is not ready yet. Go back to the prepare step and wait for setup to complete.',
+          this.t('setup.errors.pythonNotReady'),
         );
         return;
       }
     } catch {
-      this.launchError.set('Could not verify Python setup. Try again from the prepare step.');
+      this.launchError.set(this.t('setup.errors.pythonVerifyFailed'));
       return;
     }
 
     this.launching.set(true);
     this.launchError.set(null);
-    this.launchMessage.set('Saving configuration...');
+    this.launchMessage.set(this.t('setup.runtime.savingConfig'));
 
     try {
       let p = this.profileForSave();
@@ -2234,18 +2257,18 @@ export class SetupComponent implements OnInit, OnDestroy {
         if (this.requiresSetupSubscription()) {
           this.launching.set(false);
           this.launchError.set(
-            'Subscribe to Babo Cloud before creating your agent.',
+            this.t('setup.errors.subscribeBeforeAgent'),
           );
           this.goToStep(7);
           return;
         }
       }
 
-      this.launchMessage.set('Starting agent runtime...');
+      this.launchMessage.set(this.t('setup.runtime.startingAgent'));
       await this.nls().runtime.start();
       await this.cloudProvision.syncRuntimeAuth();
 
-      this.launchMessage.set('Creating your agent...');
+      this.launchMessage.set(this.t('setup.runtime.creatingAgent'));
       const agent = await firstValueFrom(
         this.api.createAgent({
           name,
@@ -2281,13 +2304,13 @@ export class SetupComponent implements OnInit, OnDestroy {
         brain_tier: p?.inference.tier ?? 'unknown',
         backend_choice: this.backendChoice(),
       });
-      this.launchMessage.set('Opening Babo...');
+      this.launchMessage.set(this.t('setup.runtime.openingBabo'));
       await new Promise((r) => setTimeout(r, 400));
       const chatAgentId = agent.runtimeAgentId || agent.id;
       this.router.navigate(['/chat', chatAgentId]);
     } catch (err: any) {
       this.launching.set(false);
-      this.launchError.set(err?.message || 'Failed to finish setup.');
+      this.launchError.set(err?.message || this.t('setup.errors.finishFailed'));
     }
   }
 
@@ -2323,17 +2346,3 @@ export class SetupComponent implements OnInit, OnDestroy {
   }
 }
 
-function tierLabel(tier: CapabilityTier): string {
-  switch (tier) {
-    case 'self_local':
-      return 'This computer';
-    case 'self_lan':
-      return 'My server';
-    case 'byok_cloud':
-      return 'Cloud';
-    case 'hosted_babo':
-      return 'Babo hosted';
-    default:
-      return 'Off';
-  }
-}

@@ -208,6 +208,121 @@
       "scanGpu": "Scansiona GPU e modelli",
       "scanningGpu": "Scansione GPU…",
       "servicesTitle": "Servizi su questo host"
+    },
+    "runtime": {
+      "startingAgent": "Avvio runtime agente...",
+      "savingConfig": "Salvataggio configurazione...",
+      "creatingAgent": "Creazione agente...",
+      "openingBabo": "Apertura Babo...",
+      "downloadingVision": "Download modello screen awareness…",
+      "visionDeferred": "Scaricherà al primo utilizzo"
+    },
+    "errors": {
+      "setupFailed": "Setup fallito",
+      "waitPython": "Attendi il completamento del setup Python prima di continuare.",
+      "scanFailed": "Scansione fallita",
+      "lanScanFailed": "Scansione modelli LAN fallita",
+      "downloadFailed": "Download fallito",
+      "nameTooShort": "Scegli un nome di almeno 2 caratteri.",
+      "pythonNotReady": "L'ambiente Python non è ancora pronto. Torna al passo prepare e attendi il completamento.",
+      "pythonVerifyFailed": "Impossibile verificare il setup Python. Riprova dal passo prepare.",
+      "subscribeBeforeAgent": "Abbonati a Babo Cloud prima di creare l'agente.",
+      "finishFailed": "Impossibile completare il setup.",
+      "chooseBackend": "Scegli dove sincronizzare l'account o inserisci un URL server valido.",
+      "saveServerFailed": "Impossibile salvare il server",
+      "installBeforeSignIn": "Completa l'installazione di Babo su questo computer prima di accedere.",
+      "enterCredentials": "Inserisci email e password, o crea un account.",
+      "signInFailed": "Accesso fallito",
+      "checkoutFailed": "Impossibile avviare il checkout",
+      "saveApiKeyFailed": "Impossibile salvare la API key"
+    },
+    "test": {
+      "signInNext": "Accedi nel passo successivo per connetterti",
+      "signInAfterSetup": "Accedi dopo il setup per verificare Babo Cloud",
+      "subscribeNext": "Abbonati nel passo successivo per attivare i modelli Babo Cloud",
+      "enterServer": "Inserisci prima un indirizzo server",
+      "testFailed": "Test fallito"
+    },
+    "toast": {
+      "usingCloud": "Uso Babo Cloud",
+      "usingTier": "Uso {{tier}}"
+    },
+    "lanLabels": {
+      "ollama": "Ollama",
+      "chatModel": "Modello chat",
+      "vision": "Visione",
+      "voice": "Voce",
+      "localChatOnServer": "Chat locale su questo server",
+      "vllmChat": "Chat vLLM / compatibile OpenAI",
+      "visionSubtitle": "Screen awareness (Moondream / VLM)",
+      "transcribeSubtitle": "Microfono → testo (Whisper)",
+      "modelsMore": "{{primary}} +{{count}} altri"
+    },
+    "fitMeta": {
+      "unifiedMemory": "Memoria unificata",
+      "vramUnknown": "VRAM sconosciuta"
+    },
+    "reasons": {
+      "cloudVisionRelay": "Screen awareness via relay GPU Babo Cloud",
+      "codeSearchLocal": "Ricerca semantica del codice su questo computer"
+    },
+    "experience": {
+      "notConfigured": "Non configurato",
+      "baboCloud": "Babo Cloud",
+      "off": "Off",
+      "thinking": "Pensiero",
+      "voice": "Voce",
+      "screenAwareness": "Screen awareness",
+      "codeSearch": "Ricerca codice",
+      "accountSync": "Account e sync"
+    },
+    "tier": {
+      "thisComputer": "Questo computer",
+      "myServer": "Il mio server",
+      "cloud": "Cloud",
+      "baboHosted": "Babo hosted",
+      "off": "Off"
+    },
+    "ollama": {
+      "tapModelHint": "Tocca un modello per i passi di setup Ollama.",
+      "tapServerHint": "Tocca un modello per i consigli di setup server.",
+      "done": "Fatto",
+      "setUpTitle": "Configura {{name}}",
+      "lead": "Babo usa Ollama su questo PC. Segui questi passi, poi scegli questo modello per la chat.",
+      "stepInstall": "1. Installa Ollama",
+      "installed": "Installato",
+      "notFound": "Non trovato",
+      "installBody": "Scarica ed esegui l'installer per Windows. Ollama si aggiunge al PATH.",
+      "downloadOllama": "Scarica Ollama",
+      "stepStart": "2. Avvia Ollama",
+      "checking": "Verifica…",
+      "running": "In esecuzione",
+      "notRunning": "Non in esecuzione",
+      "startBody": "Apri Ollama dal menu Start, o esegui ollama serve in un terminale.",
+      "checkAgain": "Controlla di nuovo",
+      "stepDownload": "3. Scarica modello",
+      "ready": "Pronto",
+      "pullBody": "Scarica {{modelId}} — può richiedere diversi minuti a seconda della dimensione.",
+      "downloading": "Download…",
+      "downloadModel": "Scarica {{modelId}}",
+      "useModel": "Usa questo modello",
+      "close": "Chiudi"
+    },
+    "lanGuide": {
+      "title": "{{name}} sul tuo server",
+      "lead": "La chat LAN usa un server vLLM o compatibile OpenAI sulla porta 8000, non Ollama.",
+      "stepSsh": "1. SSH nel server",
+      "sshBody": "Usa host e utente SSH sopra. Conferma che nvidia-smi mostri la GPU.",
+      "stepVllm": "2. Esegui vLLM con questo modello",
+      "vllmBody": "Servi {{modelId}} sulla porta 8000 (API compatibile OpenAI). Esempio: vllm serve {{modelId}} --host 0.0.0.0 --port 8000",
+      "stepConnect": "3. Connetti da Babo",
+      "connectBody": "Scegli Il mio server nel setup e imposta l'indirizzo su http://<server-ip>:8000, poi testa la connessione.",
+      "gotIt": "Capito"
+    },
+    "lanSheet": {
+      "sshHint": "Richiesto per la scansione GPU. Usa user@host sopra, o imposta utente + password qui.",
+      "passwordHint": "Usa quando questo PC non ha una chiave SSH sul server. Non salvato su disco.",
+      "gpuSecretHint": "Richiesto per Vision sulla porta 8443. Usa lo stesso valore di BABO_VISION_SECRET sul server (es. nls-dev-secret)."
     }
   },
   "settings": {

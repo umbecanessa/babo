@@ -327,7 +327,7 @@
                       <p class="small-muted">{{ fit.error }}</p>
                     }
                     @if (fit.recommendations.length) {
-                      <p class="small-muted">Tap a model for Ollama setup steps.</p>
+                      <p class="small-muted">{{ 'setup.ollama.tapModelHint' | translate }}</p>
                       <ul class="model-fit-list">
                         @for (m of fit.recommendations; track m.modelId) {
                           <li>
@@ -764,7 +764,7 @@
         <div class="form-group sheet-field">
           <label>{{ 'setup.lan.sshUser' | translate }}</label>
           <input type="text" [(ngModel)]="lanSshUser" placeholder="ubuntu" autocomplete="username" />
-          <span class="hint">Required for GPU scan. Use user@host above, or set user + password here.</span>
+          <span class="hint">{{ 'setup.lanSheet.sshHint' | translate }}</span>
         </div>
         <div class="form-group sheet-field">
           <label>{{ 'setup.lan.sshPort' | translate }}</label>
@@ -778,7 +778,7 @@
             placeholder="Optional — if you log in with a password"
             autocomplete="off"
           />
-          <span class="hint">Use when this PC doesn’t have an SSH key on the server. Not saved to disk.</span>
+          <span class="hint">{{ 'setup.lanSheet.passwordHint' | translate }}</span>
         </div>
         <div class="form-group sheet-field">
           <label>{{ 'setup.lan.gpuSecret' | translate }}</label>
@@ -788,7 +788,7 @@
             placeholder="Same as GX10 / Babo Cloud GPU_UPSTREAM_SECRET"
             autocomplete="off"
           />
-          <span class="hint">Required for Vision on port 8443. Use the same value as BABO_VISION_SECRET on the server (e.g. nls-dev-secret).</span>
+          <span class="hint">{{ 'setup.lanSheet.gpuSecretHint' | translate }}</span>
         </div>
         <div class="sheet-actions">
           <button
@@ -849,7 +849,7 @@
                 <p class="small-muted warn">{{ lanFit.error }}</p>
               }
               @if (lanFit.recommendations.length) {
-                <p class="small-muted">Tap a model for server setup tips.</p>
+                <p class="small-muted">{{ 'setup.ollama.tapServerHint' | translate }}</p>
                 <ul class="model-fit-list">
                   @for (m of lanFit.recommendations; track m.modelId) {
                     <li>
@@ -864,7 +864,7 @@
               }
             </div>
           }
-          <button class="action-btn full" type="button" (click)="showLanSheet.set(false)">Done</button>
+          <button class="action-btn full" type="button" (click)="showLanSheet.set(false)">{{ 'setup.ollama.done' | translate }}</button>
         </div>
       </div>
     </div>
@@ -874,57 +874,57 @@
   @if (showLocalModelSetup() && setupModel(); as model) {
     <div class="modal-dismiss-scrim setup-sheet-backdrop" (click)="closeLocalModelSetup()">
       <div class="modal-panel sheet sheet-local-setup" (click)="$event.stopPropagation()">
-        <h3>Set up {{ model.displayName }}</h3>
+        <h3>{{ 'setup.ollama.setUpTitle' | translate:{ name: model.displayName } }}</h3>
         <p class="small-muted sheet-lead">
-          Babo uses <strong>Ollama</strong> on this PC. Follow these steps, then choose this model for chat.
+          {{ 'setup.ollama.lead' | translate }}
         </p>
         <div class="local-setup-steps">
           <div class="setup-step" [class.done]="ollamaStatus()?.installed">
             <p class="setup-step-head">
-              <span>1. Install Ollama</span>
+              <span>{{ 'setup.ollama.stepInstall' | translate }}</span>
               @if (ollamaStatus()?.installed) {
-                <span class="pill ok">Installed</span>
+                <span class="pill ok">{{ 'setup.ollama.installed' | translate }}</span>
               } @else {
-                <span class="pill">Not found</span>
+                <span class="pill">{{ 'setup.ollama.notFound' | translate }}</span>
               }
             </p>
             <p class="setup-step-body">
-              Download and run the installer for Windows. Ollama adds itself to your PATH.
+              {{ 'setup.ollama.installBody' | translate }}
             </p>
             <button type="button" class="action-btn secondary full" (click)="openOllamaDownload()">
-              Download Ollama
+              {{ 'setup.ollama.downloadOllama' | translate }}
             </button>
           </div>
           <div class="setup-step" [class.done]="ollamaStatus()?.running">
             <p class="setup-step-head">
-              <span>2. Start Ollama</span>
+              <span>{{ 'setup.ollama.stepStart' | translate }}</span>
               @if (ollamaStatusLoading()) {
-                <span class="pill">Checking…</span>
+                <span class="pill">{{ 'setup.ollama.checking' | translate }}</span>
               } @else if (ollamaStatus()?.running) {
-                <span class="pill ok">Running</span>
+                <span class="pill ok">{{ 'setup.ollama.running' | translate }}</span>
               } @else {
-                <span class="pill">Not running</span>
+                <span class="pill">{{ 'setup.ollama.notRunning' | translate }}</span>
               }
             </p>
             <p class="setup-step-body">
-              Open Ollama from the Start menu, or run <code>ollama serve</code> in a terminal.
+              {{ 'setup.ollama.startBody' | translate }}
               @if (ollamaStatus()?.message && !ollamaStatus()?.running) {
                 {{ ollamaStatus()!.message }}
               }
             </p>
             <button type="button" class="action-btn secondary full" (click)="refreshOllamaStatus()" [disabled]="ollamaStatusLoading()">
-              {{ ollamaStatusLoading() ? 'Checking…' : 'Check again' }}
+              {{ ollamaStatusLoading() ? ('setup.ollama.checking' | translate) : ('setup.ollama.checkAgain' | translate) }}
             </button>
           </div>
           <div class="setup-step" [class.done]="setupModelAlreadyPulled()">
             <p class="setup-step-head">
-              <span>3. Download model</span>
+              <span>{{ 'setup.ollama.stepDownload' | translate }}</span>
               @if (setupModelAlreadyPulled()) {
-                <span class="pill ok">Ready</span>
+                <span class="pill ok">{{ 'setup.ollama.ready' | translate }}</span>
               }
             </p>
             <p class="setup-step-body">
-              Pull <code>{{ model.modelId }}</code> — this can take several minutes depending on size.
+              {{ 'setup.ollama.pullBody' | translate:{ modelId: model.modelId } }}
             </p>
             <button
               type="button"
@@ -932,7 +932,7 @@
               (click)="pullSetupModel()"
               [disabled]="ollamaPulling() || !ollamaStatus()?.installed"
             >
-              {{ ollamaPulling() ? 'Downloading…' : 'Download ' + model.modelId }}
+              {{ ollamaPulling() ? ('setup.ollama.downloading' | translate) : ('setup.ollama.downloadModel' | translate:{ modelId: model.modelId }) }}
             </button>
             @if (ollamaPullProgress()) {
               <pre class="setup-progress">{{ ollamaPullProgress() }}</pre>
@@ -948,9 +948,9 @@
             type="button"
             (click)="confirmLocalModelSetup()"
           >
-            Use this model
+            {{ 'setup.ollama.useModel' | translate }}
           </button>
-          <button class="action-btn secondary full" type="button" (click)="closeLocalModelSetup()">Close</button>
+          <button class="action-btn secondary full" type="button" (click)="closeLocalModelSetup()">{{ 'setup.ollama.close' | translate }}</button>
         </div>
       </div>
     </div>
@@ -960,34 +960,32 @@
   @if (showLanModelGuide() && setupModel(); as model) {
     <div class="modal-dismiss-scrim setup-sheet-backdrop" (click)="closeLanModelGuide()">
       <div class="modal-panel sheet sheet-local-setup" (click)="$event.stopPropagation()">
-        <h3>{{ model.displayName }} on your server</h3>
+        <h3>{{ 'setup.lanGuide.title' | translate:{ name: model.displayName } }}</h3>
         <p class="small-muted sheet-lead">
-          LAN chat uses a <strong>vLLM</strong> or OpenAI-compatible server on port <strong>8000</strong>, not Ollama.
+          {{ 'setup.lanGuide.lead' | translate }}
         </p>
         <div class="local-setup-steps">
           <div class="setup-step">
-            <p class="setup-step-head"><span>1. SSH into the server</span></p>
+            <p class="setup-step-head"><span>{{ 'setup.lanGuide.stepSsh' | translate }}</span></p>
             <p class="setup-step-body">
-              Use the host and SSH user from above. Confirm <code>nvidia-smi</code> shows your GPU.
+              {{ 'setup.lanGuide.sshBody' | translate }}
             </p>
           </div>
           <div class="setup-step">
-            <p class="setup-step-head"><span>2. Run vLLM with this model</span></p>
+            <p class="setup-step-head"><span>{{ 'setup.lanGuide.stepVllm' | translate }}</span></p>
             <p class="setup-step-body">
-              Serve <code>{{ model.modelId }}</code> on port 8000 (OpenAI-compatible API). Example:
-              <code>vllm serve {{ model.modelId }} --host 0.0.0.0 --port 8000</code>
+              {{ 'setup.lanGuide.vllmBody' | translate:{ modelId: model.modelId } }}
             </p>
           </div>
           <div class="setup-step">
-            <p class="setup-step-head"><span>3. Connect in Babo</span></p>
+            <p class="setup-step-head"><span>{{ 'setup.lanGuide.stepConnect' | translate }}</span></p>
             <p class="setup-step-body">
-              Choose <strong>My server</strong> in setup and set the address to
-              <code>http://&lt;server-ip&gt;:8000</code>, then test the connection.
+              {{ 'setup.lanGuide.connectBody' | translate }}
             </p>
           </div>
         </div>
         <div class="sheet-actions">
-          <button class="action-btn full" type="button" (click)="closeLanModelGuide()">Got it</button>
+          <button class="action-btn full" type="button" (click)="closeLanModelGuide()">{{ 'setup.lanGuide.gotIt' | translate }}</button>
         </div>
       </div>
     </div>
