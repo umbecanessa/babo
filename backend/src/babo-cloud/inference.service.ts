@@ -20,8 +20,11 @@ import type { ResolvedInferenceUpstream } from './provider-keys.service';
 export class InferenceService {
   private readonly logger = new Logger(InferenceService.name);
   private readonly defaultRpm: number;
-  /** Cached first model id from GX10 /v1/models (for ``babo-hosted`` alias). */
+  /** Short-lived cache of the live GX10 model id for ``babo-hosted``. */
   private hostedUpstreamModelCache: string | null = null;
+  private hostedUpstreamModelCacheAt = 0;
+  /** Re-probe at least this often so swapping the only GX10 model picks up. */
+  private static readonly HOSTED_MODEL_CACHE_TTL_MS = 60_000;
 
   constructor(
     private config: ConfigService,
@@ -50,42 +53,87 @@ export class InferenceService {
     return h;
   }
 
-  /** Map desktop alias ``babo-hosted`` to a real vLLM model id on GX10. */
+  private clearHostedUpstreamModelCache(): void {
+    this.hostedUpstreamModelCache = null;
+    this.hostedUpstreamModelCacheAt = 0;
+  }
+
+  /** Live model ids from GX10 ``GET /v1/models`` (excludes the babo-hosted alias). */
+  private async probeHostedUpstreamModelIds(
+    upstream: ResolvedInferenceUpstream,
+  ): Promise<string[]> {
+    const url = `${upstream.baseUrl.replace(/\/+$/, '')}/models`;
+    const res = await fetch(url, {
+      headers: this.upstreamHeaders(upstream.apiKey),
+    });
+    if (!res.ok) {
+      throw new Error(`GET /models HTTP ${res.status}`);
+    }
+    const data = (await res.json()) as {
+      data?: Array<{ id?: string }>;
+    };
+    return (data.data ?? [])
+      .map((row) => row?.id?.trim())
+      .filter((id): id is string => !!id && id.toLowerCase() !== 'babo-hosted');
+  }
+
+  /**
+   * Map desktop alias ``babo-hosted`` to whatever model GX10 is serving now.
+   * Always prefers a live ``/v1/models`` poll (TTL cache). Static
+   * ``INFERENCE_UPSTREAM_MODEL`` is fallback only when the probe fails —
+   * GX10 can only run one large model at a time, so the catalog is the source
+   * of truth when swapping teacher ↔ flash.
+   */
   private async resolveHostedUpstreamModel(
     upstream: ResolvedInferenceUpstream,
     requestedModel: string,
+    options?: { forceRefresh?: boolean },
   ): Promise<string> {
     if (upstream.placement !== 'hosted_babo') return requestedModel;
     if (requestedModel.toLowerCase() !== 'babo-hosted') return requestedModel;
 
+    const now = Date.now();
+    const cacheFresh =
+      !options?.forceRefresh &&
+      !!this.hostedUpstreamModelCache &&
+      now - this.hostedUpstreamModelCacheAt <
+        InferenceService.HOSTED_MODEL_CACHE_TTL_MS;
+
+    if (cacheFresh) {
+      return this.hostedUpstreamModelCache as string;
+    }
+
+    try {
+      const ids = await this.probeHostedUpstreamModelIds(upstream);
+      if (ids.length) {
+        // Prefer previous id if still listed (avoids thrashing mid-request);
+        // otherwise take the first live model — typically the only one.
+        const next =
+          (this.hostedUpstreamModelCache &&
+            ids.includes(this.hostedUpstreamModelCache) &&
+            this.hostedUpstreamModelCache) ||
+          ids[0];
+        if (next !== this.hostedUpstreamModelCache) {
+          this.logger.log(`GX10 upstream model for babo-hosted: ${next}`);
+        }
+        this.hostedUpstreamModelCache = next;
+        this.hostedUpstreamModelCacheAt = now;
+        return next;
+      }
+    } catch (err: any) {
+      this.logger.warn(`GX10 model catalog probe failed: ${err.message}`);
+    }
+
     if (this.upstream.inferenceUpstreamModel) {
+      this.logger.warn(
+        `GX10 /v1/models empty; falling back to INFERENCE_UPSTREAM_MODEL=` +
+          this.upstream.inferenceUpstreamModel,
+      );
       return this.upstream.inferenceUpstreamModel;
     }
 
     if (this.hostedUpstreamModelCache) {
       return this.hostedUpstreamModelCache;
-    }
-
-    try {
-      const url = `${upstream.baseUrl.replace(/\/+$/, '')}/models`;
-      const res = await fetch(url, {
-        headers: this.upstreamHeaders(upstream.apiKey),
-      });
-      if (res.ok) {
-        const data = (await res.json()) as {
-          data?: Array<{ id?: string }>;
-        };
-        const ids = (data.data ?? [])
-          .map((row) => row?.id?.trim())
-          .filter((id): id is string => !!id && id !== 'babo-hosted');
-        if (ids.length) {
-          this.hostedUpstreamModelCache = ids[0];
-          this.logger.log(`GX10 upstream model for babo-hosted: ${ids[0]}`);
-          return ids[0];
-        }
-      }
-    } catch (err: any) {
-      this.logger.warn(`GX10 model catalog probe failed: ${err.message}`);
     }
 
     return requestedModel;
@@ -114,6 +162,14 @@ export class InferenceService {
     );
     if (gx10Enabled && this.config.get<string>('INFERENCE_UPSTREAM_URL')) {
       const rows = Array.isArray(data.data) ? data.data : [];
+      // Refresh hosted alias cache from the live catalog while we're here.
+      const liveIds = rows
+        .map((row) => String(row?.id || '').trim())
+        .filter((id) => id && id.toLowerCase() !== 'babo-hosted');
+      if (liveIds.length) {
+        this.hostedUpstreamModelCache = liveIds[0];
+        this.hostedUpstreamModelCacheAt = Date.now();
+      }
       if (!rows.some((row) => row?.id === 'babo-hosted')) {
         rows.unshift({
           id: 'babo-hosted',
@@ -145,16 +201,43 @@ export class InferenceService {
       auth.userId,
       upstream.placement,
     );
-    const upstreamModel = await this.resolveHostedUpstreamModel(upstream, model);
-    const payload =
+    let upstreamModel = await this.resolveHostedUpstreamModel(upstream, model);
+    let payload =
       upstreamModel !== model ? { ...body, model: upstreamModel } : body;
     const url = `${upstream.baseUrl.replace(/\/+$/, '')}/chat/completions`;
 
-    const upstreamRes = await fetch(url, {
+    let upstreamRes = await fetch(url, {
       method: 'POST',
       headers: this.upstreamHeaders(upstream.apiKey),
       body: JSON.stringify(payload),
     });
+
+    // Model swap on GX10 (teacher → flash): stale cache / env override → 404.
+    // Re-probe once and retry with the live id.
+    if (
+      upstreamRes.status === 404 &&
+      upstream.placement === 'hosted_babo' &&
+      model.toLowerCase() === 'babo-hosted'
+    ) {
+      this.clearHostedUpstreamModelCache();
+      const refreshed = await this.resolveHostedUpstreamModel(
+        upstream,
+        model,
+        { forceRefresh: true },
+      );
+      if (refreshed && refreshed !== upstreamModel) {
+        this.logger.warn(
+          `GX10 model 404 for ${upstreamModel}; retrying as ${refreshed}`,
+        );
+        upstreamModel = refreshed;
+        payload = { ...body, model: refreshed };
+        upstreamRes = await fetch(url, {
+          method: 'POST',
+          headers: this.upstreamHeaders(upstream.apiKey),
+          body: JSON.stringify(payload),
+        });
+      }
+    }
 
     if (!stream) {
       const text = await upstreamRes.text();

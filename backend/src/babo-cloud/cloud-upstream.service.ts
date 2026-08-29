@@ -24,7 +24,7 @@ export class CloudUpstreamService {
   readonly cloudMode: boolean;
   /** Babo-operated OpenRouter key for resold inference (Railway secret). */
   readonly platformOpenRouterKey: string;
-  /** vLLM model id on GX10 when desktop sends ``babo-hosted``. */
+  /** Fallback vLLM model id if GX10 /v1/models probe fails (live catalog preferred). */
   readonly inferenceUpstreamModel: string;
 
   constructor(private config: ConfigService) {
