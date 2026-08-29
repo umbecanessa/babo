@@ -1,9 +1,4 @@
-import {
-  HttpException,
-  HttpStatus,
-  Injectable,
-  Logger,
-} from '@nestjs/common';
+import { HttpException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'crypto';
 import type { Response } from 'express';
@@ -15,12 +10,17 @@ import { EntitlementsService } from './entitlements.service';
 import { CloudUpstreamService } from './cloud-upstream.service';
 import { ProviderKeysService } from './provider-keys.service';
 import type { ResolvedInferenceUpstream } from './provider-keys.service';
+import {
+  BABO_BRAIN_LABEL,
+  BABO_BRAIN_MODEL_ID,
+  isBaboBrainModelId,
+} from './babo-brain.constants';
 
 @Injectable()
 export class InferenceService {
   private readonly logger = new Logger(InferenceService.name);
   private readonly defaultRpm: number;
-  /** Short-lived cache of the live GX10 model id for ``babo-hosted``. */
+  /** Short-lived cache of the live GX10 served model id behind Babo Brain. */
   private hostedUpstreamModelCache: string | null = null;
   private hostedUpstreamModelCacheAt = 0;
   /** Re-probe at least this often so swapping the only GX10 model picks up. */
@@ -58,13 +58,21 @@ export class InferenceService {
     this.hostedUpstreamModelCacheAt = 0;
   }
 
-  /** Live model ids from GX10 ``GET /v1/models`` (excludes the babo-hosted alias). */
-  private async probeHostedUpstreamModelIds(
-    upstream: ResolvedInferenceUpstream,
-  ): Promise<string[]> {
-    const url = `${upstream.baseUrl.replace(/\/+$/, '')}/models`;
+  private baboBrainCatalogRow(): Record<string, unknown> {
+    return {
+      id: BABO_BRAIN_MODEL_ID,
+      object: 'model',
+      owned_by: 'babo',
+      name: BABO_BRAIN_LABEL,
+    };
+  }
+
+  /** Live served ids from GX10 ``GET /v1/models`` (never the product id). */
+  private async probeGx10ServedModelIds(): Promise<string[]> {
+    if (!this.upstream.isInferenceConfigured()) return [];
+    const url = `${this.upstream.inferenceApiBase().replace(/\/+$/, '')}/models`;
     const res = await fetch(url, {
-      headers: this.upstreamHeaders(upstream.apiKey),
+      headers: this.upstreamHeaders(this.upstream.inferenceUpstreamKey),
     });
     if (!res.ok) {
       throw new Error(`GET /models HTTP ${res.status}`);
@@ -74,23 +82,22 @@ export class InferenceService {
     };
     return (data.data ?? [])
       .map((row) => row?.id?.trim())
-      .filter((id): id is string => !!id && id.toLowerCase() !== 'babo-hosted');
+      .filter(
+        (id): id is string => !!id && !isBaboBrainModelId(id),
+      );
   }
 
   /**
-   * Map desktop alias ``babo-hosted`` to whatever model GX10 is serving now.
-   * Always prefers a live ``/v1/models`` poll (TTL cache). Static
-   * ``INFERENCE_UPSTREAM_MODEL`` is fallback only when the probe fails —
-   * GX10 can only run one large model at a time, so the catalog is the source
-   * of truth when swapping teacher ↔ flash.
+   * Babo Brain → whatever single model GX10 is serving right now.
+   * OpenRouter / BYOK model ids are never rewritten.
    */
-  private async resolveHostedUpstreamModel(
+  private async resolveBaboBrainUpstreamModel(
     upstream: ResolvedInferenceUpstream,
     requestedModel: string,
     options?: { forceRefresh?: boolean },
   ): Promise<string> {
     if (upstream.placement !== 'hosted_babo') return requestedModel;
-    if (requestedModel.toLowerCase() !== 'babo-hosted') return requestedModel;
+    if (!isBaboBrainModelId(requestedModel)) return requestedModel;
 
     const now = Date.now();
     const cacheFresh =
@@ -104,17 +111,15 @@ export class InferenceService {
     }
 
     try {
-      const ids = await this.probeHostedUpstreamModelIds(upstream);
+      const ids = await this.probeGx10ServedModelIds();
       if (ids.length) {
-        // Prefer previous id if still listed (avoids thrashing mid-request);
-        // otherwise take the first live model — typically the only one.
         const next =
           (this.hostedUpstreamModelCache &&
             ids.includes(this.hostedUpstreamModelCache) &&
             this.hostedUpstreamModelCache) ||
           ids[0];
         if (next !== this.hostedUpstreamModelCache) {
-          this.logger.log(`GX10 upstream model for babo-hosted: ${next}`);
+          this.logger.log(`Babo Brain → GX10 served model: ${next}`);
         }
         this.hostedUpstreamModelCache = next;
         this.hostedUpstreamModelCacheAt = now;
@@ -139,6 +144,18 @@ export class InferenceService {
     return requestedModel;
   }
 
+  private async refreshBaboBrainUpstreamCache(): Promise<void> {
+    try {
+      const ids = await this.probeGx10ServedModelIds();
+      if (ids.length) {
+        this.hostedUpstreamModelCache = ids[0];
+        this.hostedUpstreamModelCacheAt = Date.now();
+      }
+    } catch (err: any) {
+      this.logger.debug(`GX10 catalog refresh skipped: ${err.message}`);
+    }
+  }
+
   async listModels(auth: CloudAuthContext): Promise<unknown> {
     await this.assertRateLimit(auth);
     const upstream = await this.providerKeys.resolveInferenceUpstream(
@@ -148,6 +165,21 @@ export class InferenceService {
       auth.userId,
       upstream.placement,
     );
+
+    const gx10Enabled = await this.entitlements.getHostedGx10Enabled(
+      auth.userId,
+    );
+    const gx10Configured = this.upstream.isInferenceConfigured();
+
+    // Pure GX10 placement: expose only Babo Brain — never the raw served id.
+    if (upstream.placement === 'hosted_babo' && gx10Configured) {
+      void this.refreshBaboBrainUpstreamCache();
+      return {
+        object: 'list',
+        data: [this.baboBrainCatalogRow()],
+      };
+    }
+
     const url = `${upstream.baseUrl.replace(/\/+$/, '')}/models`;
     const res = await fetch(url, {
       headers: this.upstreamHeaders(upstream.apiKey),
@@ -157,29 +189,22 @@ export class InferenceService {
       throw new HttpException(text || res.statusText, res.status);
     }
     const data = JSON.parse(text) as { data?: Array<Record<string, unknown>> };
-    const gx10Enabled = await this.entitlements.getHostedGx10Enabled(
-      auth.userId,
-    );
-    if (gx10Enabled && this.config.get<string>('INFERENCE_UPSTREAM_URL')) {
-      const rows = Array.isArray(data.data) ? data.data : [];
-      // Refresh hosted alias cache from the live catalog while we're here.
-      const liveIds = rows
-        .map((row) => String(row?.id || '').trim())
-        .filter((id) => id && id.toLowerCase() !== 'babo-hosted');
-      if (liveIds.length) {
-        this.hostedUpstreamModelCache = liveIds[0];
-        this.hostedUpstreamModelCacheAt = Date.now();
-      }
-      if (!rows.some((row) => row?.id === 'babo-hosted')) {
-        rows.unshift({
-          id: 'babo-hosted',
-          object: 'model',
-          owned_by: 'babo',
-        });
-      }
-      return { ...data, data: rows };
+    const rows = Array.isArray(data.data) ? [...data.data] : [];
+
+    // Lifetime / GX10 entitlement on a resold catalog: keep OpenRouter names,
+    // add a single Babo Brain product entry (no GX10 served-id aliases).
+    if (gx10Enabled && gx10Configured) {
+      void this.refreshBaboBrainUpstreamCache();
+      const withoutBrain = rows.filter(
+        (row) => !isBaboBrainModelId(String(row?.id || '')),
+      );
+      return {
+        ...data,
+        data: [this.baboBrainCatalogRow(), ...withoutBrain],
+      };
     }
-    return data;
+
+    return { ...data, data: rows };
   }
 
   async proxyChatCompletions(
@@ -201,7 +226,10 @@ export class InferenceService {
       auth.userId,
       upstream.placement,
     );
-    let upstreamModel = await this.resolveHostedUpstreamModel(upstream, model);
+    let upstreamModel = await this.resolveBaboBrainUpstreamModel(
+      upstream,
+      model,
+    );
     let payload =
       upstreamModel !== model ? { ...body, model: upstreamModel } : body;
     const url = `${upstream.baseUrl.replace(/\/+$/, '')}/chat/completions`;
@@ -212,15 +240,14 @@ export class InferenceService {
       body: JSON.stringify(payload),
     });
 
-    // Model swap on GX10 (teacher → flash): stale cache / env override → 404.
-    // Re-probe once and retry with the live id.
+    // Model swap on GX10: stale cache → 404. Re-probe once and retry.
     if (
       upstreamRes.status === 404 &&
       upstream.placement === 'hosted_babo' &&
-      model.toLowerCase() === 'babo-hosted'
+      isBaboBrainModelId(model)
     ) {
       this.clearHostedUpstreamModelCache();
-      const refreshed = await this.resolveHostedUpstreamModel(
+      const refreshed = await this.resolveBaboBrainUpstreamModel(
         upstream,
         model,
         { forceRefresh: true },
@@ -257,6 +284,10 @@ export class InferenceService {
           provider: upstream.provider,
           usage: this.usage.normalizeUsage(data.usage),
         });
+      }
+      // Always report the product id to clients, not the served GX10 name.
+      if (isBaboBrainModelId(model) && data && typeof data === 'object') {
+        data.model = BABO_BRAIN_MODEL_ID;
       }
       res.status(upstreamRes.status).json(data);
       return;
@@ -342,7 +373,10 @@ export class InferenceService {
             requestId,
             workload: 'inference',
             placement: upstream.placement,
-            model: json.model || model,
+            // Bill / attribute as Babo Brain, not the served flash/teacher id.
+            model: isBaboBrainModelId(model)
+              ? BABO_BRAIN_MODEL_ID
+              : json.model || model,
             route,
             provider: upstream.provider,
             usage: this.usage.normalizeUsage(json.usage),

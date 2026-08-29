@@ -59,7 +59,7 @@ export class PlatformCapabilitiesController {
       inference: {
         resoldAvailable: this.upstream.isResoldInferenceConfigured(),
         hostedGx10Available: subView.hostedGx10Enabled,
-        hostedGx10Label: 'Babo Brain (GX10)',
+        hostedGx10Label: 'Babo Brain',
       },
       email: {
         available: emailAvailable,

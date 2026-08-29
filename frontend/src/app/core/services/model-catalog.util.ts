@@ -84,7 +84,7 @@ export function providerDefaultModelOptions(providerId: string): ModelPickerOpti
 export function labelForModelId(modelId: string): string {
   const id = (modelId ?? '').trim();
   if (!id) return 'Default';
-  if (id === BABO_HOSTED_MODEL_ID) return 'Babo Brain (GX10)';
+  if (id === BABO_HOSTED_MODEL_ID) return 'Babo Brain';
   const cloud = BABO_CLOUD_MODELS.find((m) => m.id === id);
   if (cloud) return cloud.label;
   const slash = id.lastIndexOf('/');

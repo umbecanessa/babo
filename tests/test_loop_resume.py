@@ -92,6 +92,70 @@ def test_resolve_resume_context_keeps_journal_on_explicit_resume(tmp_path: Path)
     assert read_interrupted_loop(agent_dir, "a1") is not None
 
 
+def test_resolve_resume_uses_pending_when_journal_stale(tmp_path: Path):
+    """Continue must still recover the original task after journal max-age."""
+    from datetime import datetime, timedelta, timezone
+
+    agent_dir = tmp_path / "agent"
+    logs = agent_dir / "agentic_logs"
+    logs.mkdir(parents=True)
+    journal = logs / "loop_journal_a1.jsonl"
+    stale_ts = (datetime.now(timezone.utc) - timedelta(hours=3)).isoformat()
+    journal.write_text(
+        json.dumps({
+            "ts": stale_ts,
+            "iteration": 11,
+            "n_messages": 20,
+            "messages": [
+                {"role": "user", "content": "study World of Kogaea"},
+                {"role": "user", "content": "continue"},
+            ],
+        })
+        + "\n",
+        encoding="utf-8",
+    )
+    save_pending_loop_resume(
+        agent_dir,
+        agent_id="a1",
+        user_input="study World of Kogaea BR repo",
+        iteration=11,
+        interrupted_at=stale_ts,
+    )
+
+    recover, text = resolve_resume_context(
+        agent_dir,
+        "a1",
+        "continue",
+        explicit_resume=True,
+    )
+    assert recover is True
+    assert "World of Kogaea BR" in text
+    # Bare "continue" in the journal must not win over pending.
+    assert text.strip().lower() != "continue"
+
+
+def test_extract_last_user_task_skips_resume_phrases(tmp_path: Path):
+    from nls.agentic.interrupt_recovery import extract_last_user_task_from_journal
+
+    agent_dir = tmp_path / "agent"
+    logs = agent_dir / "agentic_logs"
+    logs.mkdir(parents=True)
+    journal = logs / "loop_journal_a1.jsonl"
+    journal.write_text(
+        json.dumps({
+            "ts": recent_journal_ts(),
+            "iteration": 2,
+            "messages": [
+                {"role": "user", "content": "real task about kogaea"},
+                {"role": "user", "content": "continue"},
+            ],
+        })
+        + "\n",
+        encoding="utf-8",
+    )
+    assert extract_last_user_task_from_journal(agent_dir, "a1") == "real task about kogaea"
+
+
 def test_build_resume_user_input_includes_original_task():
     text = build_resume_user_input(last_task="run the backend locally")
     assert "run the backend locally" in text

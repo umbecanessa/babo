@@ -99,6 +99,39 @@ def test_chat_history_tool_search(tmp_path: Path):
     assert not result.is_error
 
 
+def test_chat_history_formats_agentic_tools(tmp_path: Path):
+    agent_dir = tmp_path / "agent"
+    agent_dir.mkdir()
+    append_chat_transcript_turn(
+        agent_dir,
+        user="study the kogaea repo",
+        assistant="",
+        metadata={
+            "agentic": True,
+            "iterations": 2,
+            "tool_calls": 3,
+            "aborted": True,
+            "abort_reason": "user_abort",
+            "events": [
+                {
+                    "step": 1,
+                    "tool_calls": [{"name": "bash"}, {"name": "list_dir"}],
+                    "prose": "Looking at the repo layout.",
+                },
+            ],
+        },
+    )
+    tool = create_chat_history_tool(agent_dir)
+    import asyncio
+
+    result = asyncio.run(tool.execute({"action": "recent", "limit": 5}))
+    body = result.content.lower()
+    assert "kogaea" in body
+    assert "bash" in body
+    assert "looking at the repo layout" in body
+    assert "user_abort" in body
+
+
 def test_migrate_transcript_from_conversation_history(tmp_path: Path):
     agent_dir = tmp_path / "agent"
     agent_dir.mkdir()

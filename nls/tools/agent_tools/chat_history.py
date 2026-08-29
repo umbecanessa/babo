@@ -42,8 +42,47 @@ def _format_message(row: dict) -> str:
     if isinstance(meta, dict) and meta.get("agentic"):
         parts.append(
             f"(agentic: {meta.get('iterations', '?')} steps, "
-            f"{meta.get('tool_calls', '?')} tool calls)"
+            f"{meta.get('tool_calls', '?')} tool calls"
+            + (
+                f", aborted={meta.get('abort_reason')}"
+                if meta.get("aborted")
+                else ""
+            )
+            + ")"
         )
+        events = meta.get("events") or []
+        if isinstance(events, list) and events:
+            prose_bits: list[str] = []
+            tool_names: list[str] = []
+            for ev in events:
+                if not isinstance(ev, dict):
+                    continue
+                prose = str(ev.get("prose") or "").strip()
+                if prose:
+                    prose_bits.append(prose)
+                for tc in ev.get("tool_calls") or []:
+                    if isinstance(tc, dict) and tc.get("name"):
+                        tool_names.append(str(tc["name"]))
+            if tool_names:
+                # Dedupe while preserving order
+                seen: set[str] = set()
+                ordered: list[str] = []
+                for name in tool_names:
+                    if name in seen:
+                        continue
+                    seen.add(name)
+                    ordered.append(name)
+                parts.append("tools: " + ", ".join(ordered[:24]))
+            if prose_bits:
+                joined = "\n---\n".join(prose_bits)
+                if len(joined) > _PREVIEW_CHARS:
+                    joined = joined[:_PREVIEW_CHARS].rstrip() + "\n... (truncated)"
+                parts.append("assistant prose during task:\n" + joined)
+            elif not content:
+                parts.append(
+                    "(no assistant prose saved for this agentic turn — "
+                    "use working_memory / file tools for task state)"
+                )
     return "\n".join(parts)
 
 

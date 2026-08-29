@@ -19,9 +19,12 @@ describe('ChatPanelService', () => {
     expect(service.leftDock()).toBe('closed');
   });
 
-  it('opens workbench on agentic start', () => {
+  it('badges workbench on agentic start without opening it', () => {
     service.onAgenticStart();
-    expect(service.leftDock()).toBe('workbench');
+    expect(service.leftDock()).toBe('closed');
+    expect(service.workbenchUnread()).toBeTrue();
+    service.openLeft('workbench');
+    expect(service.workbenchUnread()).toBeFalse();
   });
 
   it('focus mode closes docks', () => {

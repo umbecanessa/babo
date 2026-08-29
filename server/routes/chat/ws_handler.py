@@ -701,6 +701,9 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                     explicit_resume=_explicit_resume,
                 )
                 if _should_recover:
+                    # Visible transcript must store the resumed task, not the
+                    # literal Continue button text ("continue").
+                    user_content_raw = user_input
                     logger.info(
                         "Agent %s: resuming interrupted loop from journal",
                         agent_id,
@@ -1419,6 +1422,26 @@ async def websocket_chat(websocket: WebSocket, agent_id: str):
                         ),
                         **_foreground_ws_tags(websocket, runtime),
                     })
+
+                    # Persist the user task immediately so chat_history / UI
+                    # restore still see it if the runtime crashes mid-loop.
+                    try:
+                        _eager_user = _strip_internal_blocks(user_content_raw)
+                        if _eager_user.strip():
+                            record_visible_chat_turn(
+                                runtime,
+                                user=_eager_user,
+                                attachments=attachments or None,
+                                session_key=getattr(
+                                    websocket.state, "session_key", "websocket:main",
+                                ),
+                            )
+                    except Exception:
+                        logger.debug(
+                            "Agent %s: eager user transcript write failed",
+                            agent_id,
+                            exc_info=True,
+                        )
 
                     _eager_events: list[dict] = []
                     websocket.state._pending_agentic_transcript = {

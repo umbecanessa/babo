@@ -7,6 +7,7 @@ import {
   InferenceProviderId,
   PROVIDER_OPENAI_BASE_URLS,
 } from './cloud-upstream.service';
+import { isBaboBrainModelId } from './babo-brain.constants';
 
 export interface ResolvedInferenceUpstream {
   baseUrl: string;
@@ -134,7 +135,7 @@ export class ProviderKeysService {
     const keys =
       (data.provider_keys_encrypted as Record<string, string>) || {};
 
-    const wantsGx10 = (modelId ?? '').trim().toLowerCase() === 'babo-hosted';
+    const wantsGx10 = isBaboBrainModelId(modelId);
     const gx10Enabled = await this.entitlements.getHostedGx10Enabled(userId);
     if (
       wantsGx10 &&

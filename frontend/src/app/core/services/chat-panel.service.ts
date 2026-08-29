@@ -35,6 +35,7 @@ export class ChatPanelService {
   private readonly _mobileSheetTab = signal<RightDockTab>('live');
   private readonly _inboxBadge = signal(0);
   private readonly _inboxPulse = signal(false);
+  private readonly _workbenchUnread = signal(false);
 
   readonly leftDock = this._leftDock.asReadonly();
   readonly rightDock = this._rightDock.asReadonly();
@@ -43,6 +44,7 @@ export class ChatPanelService {
   readonly mobileSheetTab = this._mobileSheetTab.asReadonly();
   readonly inboxBadge = this._inboxBadge.asReadonly();
   readonly inboxPulse = this._inboxPulse.asReadonly();
+  readonly workbenchUnread = this._workbenchUnread.asReadonly();
 
   readonly rightDockOpen = computed(() => this._rightDock() !== 'closed');
   readonly leftDockOpen = computed(() => this._leftDock() !== 'closed');
@@ -58,12 +60,31 @@ export class ChatPanelService {
   /** Open or toggle a left-dock tab (Workbench / Browser). */
   toggleLeft(tab: LeftDockTab): void {
     this._leftDock.update((cur) => (cur === tab ? 'closed' : tab));
+    if (this._leftDock() === 'workbench') {
+      this.clearWorkbenchUnread();
+    }
     this.persist();
   }
 
   openLeft(tab: LeftDockTab): void {
     this._leftDock.set(tab);
+    if (tab === 'workbench') {
+      this.clearWorkbenchUnread();
+    }
     this.persist();
+  }
+
+  clearWorkbenchUnread(): void {
+    this._workbenchUnread.set(false);
+  }
+
+  /** Soft attention for Workbench without stealing focus. */
+  suggestWorkbench(): void {
+    if (this._leftDock() === 'workbench' || this._focusMode()) {
+      this._workbenchUnread.set(false);
+      return;
+    }
+    this._workbenchUnread.set(true);
   }
 
   closeLeft(): void {
@@ -146,11 +167,9 @@ export class ChatPanelService {
     this.persist();
   }
 
-  /** Agentic run started — prefer Workbench on left. */
+  /** Agentic run started — badge the Workbench button; do not auto-open. */
   onAgenticStart(): void {
-    if (!this._focusMode()) {
-      this.openLeft('workbench');
-    }
+    this.suggestWorkbench();
   }
 
   /** Browser navigation — switch left dock to Browser. */

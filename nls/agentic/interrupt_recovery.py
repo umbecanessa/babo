@@ -92,9 +92,29 @@ def extract_last_user_task_from_journal(
         if msg.get("role") != "user":
             continue
         content = str(msg.get("content") or "").strip()
-        if content and not content.startswith("[BUDGET"):
-            return content[:2000]
+        if not content or content.startswith("[BUDGET"):
+            continue
+        # Skip bare resume button text — not the original task.
+        if wants_loop_resume(content) and len(content) <= 120:
+            continue
+        if content.lower().startswith("continue the interrupted task"):
+            # Prefer the "Original request:" block when present.
+            marker = "Original request:\n"
+            idx = content.find(marker)
+            if idx >= 0:
+                rest = content[idx + len(marker):].strip()
+                if rest:
+                    return rest[:2000]
+            continue
+        return content[:2000]
     return None
+
+
+def read_pending_task_for_resume(agent_dir: str | Path) -> str | None:
+    """Original user task from pending_loop_resume.json, if any."""
+    pending = read_pending_loop_resume(agent_dir) or {}
+    text = str(pending.get("last_user_input") or "").strip()
+    return text[:4000] if text else None
 
 
 def read_interrupted_loop(
@@ -106,7 +126,26 @@ def read_interrupted_loop(
     """Return metadata when a recent crash journal exists from an unfinished loop."""
     entry = _read_journal_entry(agent_dir, agent_id)
     if not entry:
-        return None
+        # Journal gone/stale file — still surface Continue from pending resume.
+        pending = read_pending_loop_resume(agent_dir)
+        if not pending:
+            return None
+        last_task = str(pending.get("last_user_input") or "").strip()
+        return {
+            "iteration": int(pending.get("iteration") or 0) or 1,
+            "interrupted_at": pending.get("interrupted_at") or pending.get("saved_at") or "",
+            "message_count": None,
+            "recoverable": True,
+            "journal_path": str(pending.get("journal_path") or ""),
+            "age_seconds": _journal_age_seconds(
+                str(pending.get("interrupted_at") or pending.get("saved_at") or "") or None,
+            ),
+            "last_task_preview": last_task[:240],
+            "resume_token": str(
+                pending.get("interrupted_at") or pending.get("saved_at") or ""
+            ),
+            "from_pending": True,
+        }
     try:
         iteration = int(entry.get("iteration") or 0)
         if iteration <= 0:
@@ -114,13 +153,40 @@ def read_interrupted_loop(
         ts = entry.get("ts")
         age = _journal_age_seconds(ts)
         if age is not None and age > max_age_seconds:
+            # Journal too old for checkpoint replay, but pending may still
+            # carry the original task for an explicit Continue.
+            pending = read_pending_loop_resume(agent_dir)
+            if pending:
+                last_task = (
+                    str(pending.get("last_user_input") or "").strip()
+                    or extract_last_user_task_from_journal(agent_dir, agent_id)
+                    or ""
+                )
+                return {
+                    "iteration": int(pending.get("iteration") or iteration),
+                    "interrupted_at": pending.get("interrupted_at") or ts,
+                    "message_count": entry.get("n_messages"),
+                    "recoverable": True,
+                    "journal_path": str(
+                        pending.get("journal_path")
+                        or loop_journal_path(agent_dir, agent_id)
+                    ),
+                    "age_seconds": age,
+                    "last_task_preview": last_task[:240],
+                    "resume_token": str(pending.get("interrupted_at") or ts or ""),
+                    "from_pending": True,
+                    "journal_stale": True,
+                }
             logger.debug(
                 "Ignoring stale loop journal (age=%.0fs > %.0fs)",
                 age,
                 max_age_seconds,
             )
             return None
-        last_task = extract_last_user_task_from_journal(agent_dir, agent_id)
+        last_task = (
+            read_pending_task_for_resume(agent_dir)
+            or extract_last_user_task_from_journal(agent_dir, agent_id)
+        )
         return {
             "iteration": iteration,
             "interrupted_at": ts,
@@ -320,26 +386,32 @@ def resolve_resume_context(
     """Decide whether to recover the crash journal for this user turn.
 
     Returns ``(should_recover_journal, effective_user_input)``.
+
+    Explicit Continue / short resume phrases still work when the journal has
+    aged out, as long as ``pending_loop_resume.json`` still holds the task.
     """
     interrupted = read_interrupted_loop(agent_dir, agent_id)
-    if not interrupted:
+    pending_task = read_pending_task_for_resume(agent_dir)
+    wants = explicit_resume or wants_loop_resume(user_input)
+
+    if not wants:
+        if interrupted or pending_task:
+            abandon_interrupted_loop(agent_dir, agent_id)
         return False, user_input
 
-    if explicit_resume or wants_loop_resume(user_input):
-        pending = read_pending_loop_resume(agent_dir) or {}
-        last_task = (
-            pending.get("last_user_input")
-            or interrupted.get("last_task_preview")
-            or extract_last_user_task_from_journal(agent_dir, agent_id)
-        )
-        effective = build_resume_user_input(
-            last_task=last_task,
-            user_input=user_input if not explicit_resume else "",
-        )
-        return True, effective
+    if not interrupted and not pending_task:
+        return False, user_input
 
-    abandon_interrupted_loop(agent_dir, agent_id)
-    return False, user_input
+    last_task = (
+        pending_task
+        or (interrupted or {}).get("last_task_preview")
+        or extract_last_user_task_from_journal(agent_dir, agent_id)
+    )
+    effective = build_resume_user_input(
+        last_task=last_task,
+        user_input=user_input if not explicit_resume else "",
+    )
+    return True, effective
 
 
 def format_interrupted_loop_status(payload: dict[str, Any]) -> str:

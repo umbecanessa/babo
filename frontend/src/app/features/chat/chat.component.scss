@@ -265,6 +265,18 @@
   pointer-events: none;
 }
 
+.panel-header-dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent-danger, #ef4444);
+  box-shadow: 0 0 0 2px var(--bg-primary, #0f1115);
+  pointer-events: none;
+}
+
 .left-dock-backdrop {
   position: absolute;
   inset: 0;

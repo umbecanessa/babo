@@ -25,7 +25,7 @@ export interface BaboCloudModelOption {
 /** Private GX10 inference (lifetime / comp users only). */
 export const BABO_GX10_MODEL: BaboCloudModelOption = {
   id: BABO_HOSTED_MODEL_ID,
-  label: 'Babo Brain (GX10)',
+  label: 'Babo Brain',
 };
 
 /** Partner models available through Babo Cloud (api.babo.agency relay). */

@@ -1579,7 +1579,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         sessionKey: home,
       });
       if (needsWorkbench || hasNewRows) {
-        this.panels.openLeft('workbench');
+        this.panels.suggestWorkbench();
       }
     }
   }
@@ -1813,6 +1813,90 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
       }
       return [...msgs, assistantMsg];
     });
+  }
+
+  /**
+   * Index of the first tool_progress for `iter`, walking back through contiguous
+   * trailing tool cards (and tool_output_chunk) so Pensiero stays above tools.
+   */
+  private _thinkingInsertIndex(msgs: ChatMessage[], iter: number): number {
+    let insertIdx = msgs.length;
+    for (let i = msgs.length - 1; i >= 0; i--) {
+      const m = msgs[i] as any;
+      if (
+        (m.type === 'tool_progress' && m.toolProgress?.iteration === iter)
+        || m.type === 'tool_output_chunk'
+      ) {
+        insertIdx = i;
+        continue;
+      }
+      break;
+    }
+    return insertIdx;
+  }
+
+  /**
+   * Commit or refresh a Pensiero for this iteration, always before its tool chips.
+   * Closing the live Ragionamento box here keeps think → tools → think order.
+   */
+  private _upsertTurnThinking(
+    iteration: number,
+    thinking: string,
+    sessionKey?: string,
+  ): void {
+    const fullThinking = (thinking || '').trim();
+    if (!fullThinking) return;
+    const thinkingMsg = {
+      type: 'turn_thinking' as any,
+      content: fullThinking,
+      thinking: fullThinking,
+      thinkingIteration: iteration,
+      timestamp: new Date(),
+      sessionKey: this.deskSessionKey(sessionKey),
+    };
+    this.messages.update(msgs => {
+      const existingIdx = msgs.findIndex(m =>
+        m.type === 'turn_thinking'
+        && (m as any).thinkingIteration === iteration,
+      );
+      if (existingIdx >= 0) {
+        const prev = (msgs[existingIdx] as any).thinking || msgs[existingIdx].content || '';
+        // Prefer the longer snapshot (final turn_thinking is usually complete).
+        if (fullThinking.length < String(prev).trim().length) {
+          return msgs;
+        }
+        const updated = [...msgs];
+        updated[existingIdx] = {
+          ...msgs[existingIdx],
+          ...thinkingMsg,
+          timestamp: msgs[existingIdx].timestamp || thinkingMsg.timestamp,
+        };
+        return updated;
+      }
+      const insertIdx = this._thinkingInsertIndex(msgs, iteration);
+      const updated = [...msgs];
+      updated.splice(insertIdx, 0, thinkingMsg);
+      return updated;
+    });
+  }
+
+  /**
+   * Close the live streaming reasoning box into a Pensiero before tools render.
+   * Without this, tool pills land in `messages` while Ragionamento stays as a
+   * bottom-of-list live signal — so pills appear above thinking, and the next
+   * iteration's thoughts append into the same open box.
+   */
+  private _flushLiveReasoningBeforeTools(
+    iteration: number,
+    sessionKey?: string,
+  ): void {
+    const live = this.streamingReasoning().trim();
+    const pre = this._preToolReasoning.trim();
+    const combined = [live, pre].filter(Boolean).join('\n\n').trim();
+    this.streamingReasoning.set('');
+    this._preToolReasoning = '';
+    if (!combined) return;
+    this._upsertTurnThinking(iteration, combined, sessionKey);
   }
 
   /** Commit pre-tool prose before the tool chip appears (avoids hold_prose loss). */
@@ -2261,7 +2345,6 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
           sessionKey: this.deskSessionKey(msg.session_key),
         }]);
         this.panels.onAgenticStart();
-        this.workbench.openPanel();
         if (this.workbench.density() === 'focused') {
           this.workbench.setDensity('standard');
         }
@@ -2359,7 +2442,9 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
           }
           this._iterTextCommitted = true;
         } else if (iterReasoning) {
-          this._preToolReasoning = iterReasoning;
+          // Commit leftover reasoning for this step instead of merging into the
+          // next Pensiero (that made post-tool thoughts look like one box).
+          this._upsertTurnThinking(step, iterReasoning, msg.session_key);
         }
         this.streamingText.set('');
         this.streamingReasoning.set('');
@@ -2780,13 +2865,15 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
         const acc = this._toolCallArgsAcc[idx];
 
-        // On first delta: capture any pre-tool content from streamingText.
-        // This fires BEFORE turn_thinking and tool_execution_start, so we need
-        // to separate actual <think> content (→ _preToolReasoning) from visible
-        // response text (→ _pendingIterText) so they're rendered correctly:
-        // thinking as expandable "Thought" cards, response text as assistant messages.
+        // On first delta: close live Ragionamento into a Pensiero *before* any
+        // tool chips appear, then capture pre-tool prose from streamingText.
+        // turn_thinking may still arrive later with the full snapshot — upsert.
         if (isFirstDelta && idx === 0) {
           this._toolTurnActive = true;
+          this._flushLiveReasoningBeforeTools(
+            msg.iteration || 0,
+            msg.session_key,
+          );
           const raw = this.streamingText();
           if (raw) {
             const thinkRe = /<think>([\s\S]*?)<\/think>/g;
@@ -2801,7 +2888,12 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
               .trim();
 
             if (thinkParts.length) {
-              this._preToolReasoning = thinkParts.join('\n\n');
+              // Prefer a Pensiero card over stashing for later merge.
+              this._upsertTurnThinking(
+                msg.iteration || 0,
+                thinkParts.join('\n\n'),
+                msg.session_key,
+              );
             }
             if (visibleText) {
               this._pendingIterText = visibleText;
@@ -2900,8 +2992,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         const current = this.streamingText();
 
         // For text-only iterations (no tools), keep response in streamingText.
-        // For tool iterations, tool_call_delta already captured pre-tool text
-        // into _preToolReasoning and cleared streamingText.
+        // For tool iterations, tool_call_delta already flushed live reasoning.
         let postThinkReasoning = '';
         if (current) {
           const thinkEnd = current.indexOf('</think>');
@@ -2913,7 +3004,7 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
           }
         }
 
-        // Merge any pre-tool reasoning captured by tool_call_delta
+        // Merge any leftover pre-tool reasoning (legacy path / no tool_call_delta)
         if (this._preToolReasoning) {
           postThinkReasoning = postThinkReasoning
             ? postThinkReasoning + '\n\n' + this._preToolReasoning
@@ -2923,31 +3014,11 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
         const fullThinking = [thinkingText, postThinkReasoning].filter(Boolean).join('\n\n');
         if (fullThinking.trim()) {
-          const thinkingMsg = {
-            type: 'turn_thinking' as any,
-            content: fullThinking,
-            thinking: fullThinking,
-            thinkingIteration: msg.iteration || 0,
-            timestamp: new Date(),
-            sessionKey: this.deskSessionKey(msg.session_key),
-          };
-          const iter = msg.iteration || 0;
-          this.messages.update(msgs => {
-            // Insert thinking BEFORE any tool_progress cards from
-            // the same iteration so the UI shows think-then-act order.
-            let insertIdx = msgs.length;
-            for (let i = msgs.length - 1; i >= 0; i--) {
-              const m = msgs[i] as any;
-              if (m.type === 'tool_progress' && m.toolProgress?.iteration === iter) {
-                insertIdx = i;
-              } else {
-                break;
-              }
-            }
-            const updated = [...msgs];
-            updated.splice(insertIdx, 0, thinkingMsg);
-            return updated;
-          });
+          this._upsertTurnThinking(
+            msg.iteration || 0,
+            fullThinking,
+            msg.session_key,
+          );
         }
         break;
       }
@@ -3027,6 +3098,14 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
 
         this._flushPendingIterProse(msg.iteration || 0);
 
+        // Close any remaining live reasoning before the tool chip appears
+        // (covers races where tool_execution_start arrives without tool_call_delta,
+        // or thinking tokens arrived after the first delta).
+        this._flushLiveReasoningBeforeTools(
+          msg.iteration || 0,
+          msg.session_key,
+        );
+
         const normArgs = normalizeToolArguments(args);
         let filePaths: string[] = [];
         let label = toolName;
@@ -3079,14 +3158,11 @@ export class ChatComponent implements OnInit, AfterViewInit, OnDestroy, AfterVie
         if (this._preToolReasoning) {
           const reasoning = this._preToolReasoning;
           this._preToolReasoning = '';
-          this.messages.update(msgs => [...msgs, {
-            type: 'turn_thinking' as any,
-            content: reasoning,
-            thinking: reasoning,
-            thinkingIteration: msg.iteration || 0,
-            timestamp: new Date(),
-            sessionKey: this.deskSessionKey(msg.session_key),
-          }]);
+          this._upsertTurnThinking(
+            msg.iteration || 0,
+            reasoning,
+            msg.session_key,
+          );
         }
 
         // Pre-tool prose is committed at agentic_iteration (turn_end) so it
