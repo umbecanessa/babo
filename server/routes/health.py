@@ -14,21 +14,44 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["health"])
 
 
+@router.get("/ready")
+async def ready() -> dict:
+    """Lightweight readiness probe for Electron startup (no heavy status work)."""
+    return {"status": "ok"}
+
+
 @router.get("/health")
 async def health(request: Request) -> dict:
     """Health check with system status."""
     app = request.app
 
-    model_status = app.state.model_manager.get_status()
-    sleep_status = app.state.sleep_scheduler.get_status()
-    agent_overview = app.state.agent_manager.get_overview()
+    try:
+        model_status = app.state.model_manager.get_status()
+    except Exception as exc:
+        logger.warning("health: model status failed: %s", exc)
+        model_status = {"loaded": False, "error": str(exc)}
+
+    try:
+        sleep_status = app.state.sleep_scheduler.get_status()
+    except Exception as exc:
+        logger.warning("health: sleep status failed: %s", exc)
+        sleep_status = {"error": str(exc)}
+
+    try:
+        agent_overview = app.state.agent_manager.get_overview()
+    except Exception as exc:
+        logger.warning("health: agent overview failed: %s", exc)
+        agent_overview = {"error": str(exc)}
 
     consciousness_status = None
     consciousness_scheduler = getattr(
         app.state, "consciousness_scheduler", None,
     )
     if consciousness_scheduler is not None:
-        consciousness_status = consciousness_scheduler.get_status()
+        try:
+            consciousness_status = consciousness_scheduler.get_status()
+        except Exception as exc:
+            logger.warning("health: consciousness status failed: %s", exc)
 
     agent_energy: dict[str, Any] = {}
     agent_mgr = getattr(app.state, "agent_manager", None)
@@ -71,7 +94,7 @@ async def health(request: Request) -> dict:
     agentic_loops_active = max(agentic_loops_ws, agentic_loops_disk)
 
     return {
-        "status": "healthy" if model_status["loaded"] else "loading",
+        "status": "healthy" if model_status.get("loaded") else "loading",
         "model": model_status,
         "sleep_queue": sleep_status,
         "consciousness": consciousness_status,

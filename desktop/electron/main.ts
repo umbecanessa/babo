@@ -183,13 +183,19 @@ function buildAppMenu(): void {
 async function autoStartRuntime(): Promise<void> {
   if (!configManager || !runtimeManager || !venvManager) return;
   if (!configManager.isSetupComplete()) return;
-  if (!venvManager.isReady()) return;
 
   try {
-    // Sync pip dependencies if requirements-desktop.txt changed (e.g. after an app update)
-    await venvManager.checkDepsSync();
+    if (!venvManager.isReady()) {
+      // Setup already marked complete (reinstall / interrupted finish) but
+      // Python env is missing — rebuild it instead of silently skipping start.
+      console.warn('Venv missing after setupComplete; running setup before auto-start');
+      await venvManager.setup({ prefetchVision: false });
+    } else {
+      // Sync pip dependencies if requirements-desktop.txt changed (e.g. after an app update)
+      await venvManager.checkDepsSync();
+    }
   } catch (err: any) {
-    console.error('Dependency sync failed:', err.message);
+    console.error('Dependency sync / venv setup failed:', err.message);
   }
 
   try {

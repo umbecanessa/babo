@@ -25,7 +25,7 @@ import { VenvManager } from './venv-manager';
 // ---------------------------------------------------------------------------
 
 const HEALTH_CHECK_INTERVAL = 5_000;
-const STARTUP_TIMEOUT = 180_000;
+const STARTUP_TIMEOUT = 300_000;
 const LEASE_HEARTBEAT_INTERVAL = 60_000;
 const AUTO_RESTART_DELAY_MS = 3_000;
 const MAX_AUTO_RESTARTS = 5;
@@ -72,6 +72,11 @@ export class RuntimeManager {
   private _stoppingIntentionally = false;
   private _autoRestartAttempts = 0;
   private _deferRestartTimer: ReturnType<typeof setTimeout> | null = null;
+  private startPromise: Promise<void> | null = null;
+  /** Set when the child logs "Server ready" — lifespan finished, socket about to accept. */
+  private _serverReadyLogged = false;
+  /** Consecutive failed health probes while the child process is still alive. */
+  private _consecutiveHealthFailures = 0;
   shouldAutoRestart: () => boolean = () => true;
 
   constructor(
@@ -88,20 +93,56 @@ export class RuntimeManager {
    * Start the Python agent runtime.
    */
   async start(): Promise<void> {
+    if (this._running) {
+      return;
+    }
+    if (this.startPromise) {
+      return this.startPromise;
+    }
+
+    this.startPromise = this.startInternal();
+    try {
+      await this.startPromise;
+    } finally {
+      this.startPromise = null;
+    }
+  }
+
+  private async startInternal(): Promise<void> {
+    const cfg = this.config.get();
+
+    // Another caller may have spawned the process; wait for it to become healthy.
     if (this.process) {
-      return; // Already running
+      await this.waitForHealth(cfg.runtimePort);
+      if (!this._running) {
+        this._running = true;
+        this._startedAt = Date.now();
+        this._autoRestartAttempts = 0;
+        this.startHealthCheck(cfg.runtimePort);
+        this.startLeaseHeartbeat();
+        this.broadcastStatus();
+      }
+      return;
     }
 
     if (!this.venv.isReady()) {
-      throw new Error('Python environment not set up. Run setup first.');
+      // Fresh install / wiped venv: don't leave the UI waiting forever with no process.
+      this.broadcastLog(
+        'system',
+        'Python environment missing — running first-time setup before starting runtime…',
+      );
+      await this.venv.setup({ prefetchVision: false });
+      if (!this.venv.isReady()) {
+        throw new Error('Python environment not set up. Run setup first.');
+      }
     }
 
     const pythonBin = this.venv.getVenvPython();
     const nlsRoot = this.venv.getNlsRoot();
-    const cfg = this.config.get();
     const env = this.config.getRuntimeEnv();
 
     this._lastError = null;
+    this._serverReadyLogged = false;
 
     // Open persistent log file
     const logPath = path.join(app.getPath('userData'), 'runtime.log');
@@ -329,8 +370,11 @@ export class RuntimeManager {
 
     while (Date.now() - start < STARTUP_TIMEOUT) {
       attempts++;
-      const result = await this.checkHealth(port);
-      if (result) return;
+
+      // Prefer lightweight /ready — /health can hang while Discord/channel work saturates the loop.
+      const requestTimeout = this._serverReadyLogged ? 10_000 : 3_000;
+      if (await this.checkHttpOk(port, '/ready', requestTimeout)) return;
+      if (await this.checkHealth(port, requestTimeout)) return;
 
       // Check that the process hasn't crashed while we wait
       if (!this.process || this.process.exitCode !== null) {
@@ -342,22 +386,53 @@ export class RuntimeManager {
 
       if (attempts % 5 === 0) {
         const elapsed = Math.round((Date.now() - start) / 1000);
-        this.broadcastLog('system', `Still waiting for runtime to start (${elapsed}s elapsed)...`);
+        const hint = this._serverReadyLogged
+          ? 'server ready logged, waiting for HTTP…'
+          : 'loading channels/agents…';
+        this.broadcastLog(
+          'system',
+          `Still waiting for runtime to start (${elapsed}s elapsed, ${hint})`,
+        );
       }
-      await this.sleep(2_000);
+      await this.sleep(this._serverReadyLogged ? 500 : 2_000);
+    }
+
+    // Final HTTP attempt with a long timeout before giving up.
+    if (await this.checkHttpOk(port, '/ready', 15_000) || await this.checkHealth(port, 15_000)) {
+      return;
     }
 
     throw new Error(
       `Agent runtime failed to start within ${STARTUP_TIMEOUT / 1000}s. ` +
-      'Check that Python dependencies are installed and the runtime is reachable.',
+      'The local Python server is still loading (channels, agents, models). ' +
+      `Check ${path.join(app.getPath('userData'), 'runtime.log')} — ` +
+      `last log: ${this.logBuffer.slice(-3).join(' | ') || 'none'}`,
     );
   }
 
-  private checkHealth(port: number): Promise<boolean> {
+  private checkHttpOk(port: number, pathName: string, timeoutMs = 3_000): Promise<boolean> {
+    return new Promise((resolve) => {
+      const req = http.get(
+        `http://127.0.0.1:${port}${pathName}`,
+        { timeout: timeoutMs },
+        (res) => {
+          res.resume();
+          resolve(res.statusCode === 200);
+        },
+      );
+      req.on('error', () => resolve(false));
+      req.on('timeout', () => {
+        req.destroy();
+        resolve(false);
+      });
+    });
+  }
+
+  private checkHealth(port: number, timeoutMs = 3_000): Promise<boolean> {
     return new Promise((resolve) => {
       const req = http.get(
         `http://127.0.0.1:${port}/health`,
-        { timeout: 3_000 },
+        { timeout: timeoutMs },
         (res) => {
           if (res.statusCode === 200) {
             let body = '';
@@ -469,33 +544,82 @@ export class RuntimeManager {
   }
 
   private startHealthCheck(port: number): void {
+    this._consecutiveHealthFailures = 0;
     this.healthTimer = setInterval(async () => {
-      const healthy = await this.checkHealth(port);
-      if (!healthy && this._running) {
-        if (this.process) {
-          const agenticActive = await this.checkAgenticActive(port);
-          const diskActive = this.countAgenticMarkersOnDisk();
-          if (agenticActive || diskActive > 0) {
-            this.broadcastLog(
-              'system',
-              'Health check failed but an agent task is still running — deferring restart',
-            );
-            return;
-          }
+      const healthy =
+        (await this.checkHttpOk(port, '/ready', 3_000)) ||
+        (await this.checkHealth(port, 3_000));
+      if (healthy) {
+        this._consecutiveHealthFailures = 0;
+        if (!this._running) {
+          this._running = true;
+          this._lastError = null;
+          this.broadcastStatus();
         }
-        this._running = false;
-        this._lastError = 'Health check failed';
-        this.broadcastStatus();
-        this.broadcastLog('system', 'Agent runtime health check failed');
-        if (!this.process) {
-          this.scheduleAutoRestart('Health check failed', null);
+        return;
+      }
+
+      if (!this._running && !this.process) {
+        return;
+      }
+
+      if (this.process) {
+        const agenticActive = await this.checkAgenticActive(port);
+        const diskActive = this.countAgenticMarkersOnDisk();
+        if (agenticActive || diskActive > 0) {
+          this.broadcastLog(
+            'system',
+            'Health check failed but an agent task is still running — deferring restart',
+          );
+          return;
         }
-      } else if (healthy && !this._running) {
-        this._running = true;
-        this._lastError = null;
-        this.broadcastStatus();
+      }
+
+      this._consecutiveHealthFailures += 1;
+      this._running = false;
+      this._lastError = 'Health check failed';
+      this.broadcastStatus();
+      this.broadcastLog(
+        'system',
+        `Agent runtime health check failed (${this._consecutiveHealthFailures}/3)`,
+      );
+
+      // Zombie case: child still alive (Discord threads etc.) but HTTP is dead — kill and restart.
+      if (!this.process) {
+        this.scheduleAutoRestart('Health check failed', null);
+        return;
+      }
+      if (this._consecutiveHealthFailures >= 3) {
+        this.broadcastLog(
+          'system',
+          'Runtime process is alive but not serving HTTP — forcing restart',
+        );
+        await this.forceKillProcessTree('zombie-no-http');
+        this.scheduleAutoRestart('Zombie runtime (no HTTP)', null);
       }
     }, HEALTH_CHECK_INTERVAL);
+  }
+
+  private async forceKillProcessTree(reason: string): Promise<void> {
+    const proc = this.process;
+    if (!proc?.pid) {
+      this.process = null;
+      return;
+    }
+    this.logShutdownEvent('runtime.force_kill', `reason=${reason} runtimePid=${proc.pid}`);
+    try {
+      if (process.platform === 'win32') {
+        execSync(`taskkill /F /T /PID ${proc.pid}`, { timeout: 5_000 });
+      } else {
+        proc.kill('SIGKILL');
+      }
+    } catch {
+      // already gone
+    }
+    this.process = null;
+    this._running = false;
+    this.killStaleProcess(this.config.get().runtimePort);
+    this.killStaleProcess(9223);
   }
 
   private scheduleAutoRestart(reason: string, exitCode: number | null): void {
@@ -639,6 +763,9 @@ export class RuntimeManager {
   }
 
   private appendLog(message: string): void {
+    if (/Server ready/i.test(message)) {
+      this._serverReadyLogged = true;
+    }
     const lines = message.split('\n').filter(Boolean);
     this.logBuffer.push(...lines);
     if (this.logBuffer.length > this.maxLogLines) {

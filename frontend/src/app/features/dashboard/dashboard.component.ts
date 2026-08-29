@@ -2,7 +2,6 @@ import { Component, OnInit, OnDestroy, signal, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import { firstValueFrom } from 'rxjs';
 import { ApiService } from '../../core/services/api.service';
 import { PlatformService } from '../../core/services/platform.service';
 import { WebSocketService } from '../../core/services/websocket.service';
@@ -87,11 +86,25 @@ export class DashboardComponent implements OnInit, OnDestroy {
         return;
       }
       this.runtimeStarting.set(true);
+      // Ensure Electron actually starts the Python runtime (auto-start can no-op
+      // if the venv was missing, or still be mid-boot after an update).
+      let startError = '';
+      try {
+        const nls = (window as any).nls;
+        await nls?.runtime?.start?.();
+      } catch (err: any) {
+        startError = String(err?.message || err || '').trim();
+        // waitForRuntime may still succeed if auto-start is racing in parallel
+      }
       const ready = await this.waitForRuntime();
       this.runtimeStarting.set(false);
       if (!ready) {
         this.loading.set(false);
-        this.error.set(this.t('dashboard.runtimeFailed'));
+        this.error.set(
+          startError
+            ? `${this.t('dashboard.runtimeFailed')} (${startError})`
+            : this.t('dashboard.runtimeFailed'),
+        );
         return;
       }
       this.api.markRuntimeReady();
@@ -99,7 +112,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
     this.loadAgents(hasCachedAgents);
   }
 
-  private async waitForRuntime(maxWait = 180_000, interval = 2_000): Promise<boolean> {
+  /** Match Electron RuntimeManager STARTUP_TIMEOUT (5 min) for first-boot venv/npm. */
+  private async waitForRuntime(maxWait = 300_000, interval = 2_000): Promise<boolean> {
     const start = Date.now();
     const stages = [
       { at: 0, key: 'dashboard.runtime.connecting' },
@@ -111,6 +125,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
       { at: 75_000, key: 'dashboard.runtime.warmup' },
       { at: 100_000, key: 'dashboard.runtime.almost' },
       { at: 140_000, key: 'dashboard.runtime.stillLoading' },
+      { at: 200_000, key: 'dashboard.runtime.stillLoading' },
     ];
     let stageIdx = 0;
     let attempt = 0;
@@ -123,14 +138,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
       this.runtimeStatus.set(this.t(stages[stageIdx].key));
       this.runtimeAttempts.set(++attempt);
 
-      try {
-        await firstValueFrom(this.api.getHealth());
+      if (await this.api.probeRuntimeReady(3_000)) {
         this.api.markRuntimeReady();
         this.runtimeStatus.set(this.t('dashboard.runtime.ready'));
         return true;
-      } catch {
-        await new Promise(r => setTimeout(r, interval));
       }
+      await new Promise(r => setTimeout(r, interval));
     }
     return false;
   }

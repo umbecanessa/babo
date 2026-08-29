@@ -172,6 +172,12 @@ export class ApiService {
       return true;
     }
     try {
+      // Prefer lightweight /ready — /health can stall while channels boot.
+      if (await this.probeRuntimeReady(4_000)) {
+        this.runtimeHealthy = true;
+        this.runtimeHealthCheckedAt = now;
+        return true;
+      }
       await firstValueFrom(this.getHealth());
       this.runtimeHealthy = true;
       this.runtimeHealthCheckedAt = now;
@@ -179,6 +185,24 @@ export class ApiService {
     } catch {
       this.runtimeHealthy = false;
       this.runtimeHealthCheckedAt = now;
+      return false;
+    }
+  }
+
+  /**
+   * Lightweight readiness probe (matches Electron RuntimeManager).
+   * Uses fetch + AbortSignal so a hung event loop cannot block forever.
+   */
+  async probeRuntimeReady(timeoutMs = 3_000): Promise<boolean> {
+    const base = (this.RUNTIME || '').replace(/\/+$/, '');
+    if (!base) return false;
+    try {
+      const res = await fetch(`${base}/ready`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      return res.ok;
+    } catch {
       return false;
     }
   }
