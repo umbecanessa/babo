@@ -18,7 +18,11 @@ from typing import Any
 
 logger = logging.getLogger("babo.shutdown_trace")
 
-_LOCK = threading.Lock()
+# RLock: install_shutdown_tracing() may call _patch_uvicorn_signal_handler()
+# while already holding the lock on the idempotent re-entry path. A plain Lock
+# deadlocks there; with uvicorn >=0.49 that hang is before lifespan yield, so
+# the HTTP server never binds.
+_LOCK = threading.RLock()
 _INITIATOR: str | None = None
 _DETAIL: dict[str, Any] = {}
 _SIGNAL_LOGGED: set[int] = set()
@@ -240,11 +244,16 @@ def _patch_uvicorn_signal_handler() -> None:
 def install_shutdown_tracing() -> None:
     """Register signal handlers and atexit hook (idempotent)."""
     global _HANDLERS_INSTALLED
+    already_installed = False
     with _LOCK:
-        if _HANDLERS_INSTALLED:
-            _patch_uvicorn_signal_handler()
-            return
+        already_installed = _HANDLERS_INSTALLED
         _HANDLERS_INSTALLED = True
+
+    # Patch / early-return outside the critical section so we never nest
+    # lock acquisition on a non-reentrant path (defense in depth with RLock).
+    if already_installed:
+        _patch_uvicorn_signal_handler()
+        return
 
     for sig in (signal.SIGINT, signal.SIGTERM):
         try:

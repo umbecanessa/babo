@@ -276,7 +276,9 @@ async def lifespan(app: FastAPI):
     logger.info("=" * 60)
 
     # Re-register after import time (uvicorn may replace handlers at serve time).
+    # Must not block: uvicorn >=0.49 only binds HTTP after this yield.
     install_shutdown_tracing()
+    logger.info("Lifespan startup complete — yielding to uvicorn bind")
 
     yield
 
