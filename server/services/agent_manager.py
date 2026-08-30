@@ -204,15 +204,31 @@ _MODEL_ALIASES: dict[str, re.Pattern[str]] = {
     "Llama-3.1-70B": re.compile(r"Llama-3[._-]1-70B", re.IGNORECASE),
 }
 
+# Desktop / cloud agents use a placeholder base_model; the live inference id
+# (babo-hosted, OpenRouter slug, etc.) is not a local HF architecture name.
+_REMOTE_MODEL_TOKENS = frozenset({
+    "bring-your-own",
+    "byo",
+    "babo-hosted",
+    "babo-brain",
+})
+
 
 def _models_compatible(agent_model: str, server_model: str) -> bool:
     """Check if two model names refer to the same base architecture.
 
-    Exact match is always True.  Otherwise, checks if both models
-    match the same architecture pattern (e.g. Qwen3-32B regardless
-    of quantization provider like unsloth, nvidia, etc.).
+    Exact match is always True.  Remote/BYO product ids are always compatible
+    with each other (and with any server model) — they are not local HF
+    checkpoints.  Otherwise, checks if both models match the same architecture
+    pattern (e.g. Qwen3-32B regardless of quantization provider).
     """
     if agent_model == server_model:
+        return True
+    a = (agent_model or "").strip().lower()
+    s = (server_model or "").strip().lower()
+    if not a or not s:
+        return True
+    if a in _REMOTE_MODEL_TOKENS or s in _REMOTE_MODEL_TOKENS:
         return True
     for _alias, pattern in _MODEL_ALIASES.items():
         if pattern.search(agent_model) and pattern.search(server_model):
@@ -817,11 +833,18 @@ class AgentManager:
                                     "base_model", "",
                                 )
 
-                    if agent_model and not _models_compatible(
-                        agent_model, current_model,
+                    # Product / remote runtime: never block auto-load on HF
+                    # architecture names (agents are stamped bring-your-own).
+                    product_mode = bool(
+                        getattr(self.model_manager, "product_mode", False),
+                    )
+                    if (
+                        agent_model
+                        and not product_mode
+                        and not _models_compatible(agent_model, current_model)
                     ):
                         skipped_compat += 1
-                        logger.debug(
+                        logger.warning(
                             "Skipping agent %s: model mismatch "
                             "(agent=%s, server=%s)",
                             agent_id, agent_model, current_model,
